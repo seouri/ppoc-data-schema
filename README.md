@@ -19,7 +19,7 @@ This repository describes eight de-identified pediatric EHR CSV resources with a
 | [`patients.csv`](docs/patients.md) | 250,588 | 11 | Patient demographics |
 | [`patients_augmented.csv`](docs/patients_augmented.md) | 250,588 | 87 | Patient-level growth and diagnosis summaries |
 | [`visits.csv`](docs/visits.md) | 6,494,473 | 43 | Visit-level measurements and diagnoses |
-| [`visits_augmented.csv`](docs/visits_augmented.md) | 6,494,473 | 82 | Visit-level derived growth metrics and flags |
+| [`visits_augmented-20251209150512.csv`](docs/visits_augmented.md) | 6,494,473 | 82 | Visit-level derived growth metrics and flags |
 | [`labs.csv`](docs/labs.md) | 17,230,681 | 12 | Laboratory result components |
 | [`medications.csv`](docs/medications.md) | 3,823,049 | 8 | Medication records |
 | [`problem_list.csv`](docs/problem_list.md) | 1,709,584 | 5 | Problem-list entries |
@@ -30,7 +30,7 @@ The package expects these CSVs beside `datapackage.json`. To keep the descriptor
 ## Relationships
 
 - `patients.csv` and `patients_augmented.csv` contain one row per `patient_id`.
-- `visits.csv` and `visits_augmented.csv` contain `patient_id` and `visit_id`.
+- `visits.csv` and `visits_augmented-20251209150512.csv` contain `patient_id` and `visit_id`.
 - `labs.csv`, `medications.csv`, and `referrals.csv` link to patients through `patient_id`; their `visit_id` values are nullable and may not match a visit row.
 - `problem_list.csv` links to patients through `patient_id` and has no direct visit key.
 

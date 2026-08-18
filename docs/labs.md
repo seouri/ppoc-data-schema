@@ -87,7 +87,7 @@
 9. **result_component_name** (Character/String):
 - Name of the result component.
 - Null if no results are available for the procedure.
-- Unique values: 12,901
+- Unique values: 12,902 nonblank values.
 - Most common values:
      | Result component name                                       | Count   |
      |-------------------------------------------------------------|---------|
@@ -148,8 +148,8 @@
 - Missing: 2,494,261 (14.5%)
 
 12. **result_flag** (Character/String):
-    - HL7 category for the result if the result is abnormal.
-    - Values: "(NONE)" indicates a normal result; any other value indicates abnormal.
+    - HL7 result interpretation/status flag.
+    - Values include `(NONE)` (5,881 rows), `Normal` (4,273 rows), and other qualitative or abnormal interpretations; do not classify a flag as abnormal solely because it is not `(NONE)`.
     - Null or empty if no flag is assigned.
     - Unique values: 35
       | Result flag                                   | Count   |
@@ -195,7 +195,7 @@
 - **De-identification**: `lab_order_date_age_in_days` and `lab_result_date_age_in_days` replace dates to protect privacy; no time span data available.
 - **Missing Data**: Fields like `lab_result_date_age_in_days`, `result_component_name`, `result_loinc_code`, `result_value`, and `result_flag` may be null if no result record exists or if data is incomplete.
 - **Row Identity**: No row-level primary key is asserted; `lab_order_id` repeats across result components and `result_line_num` is blank in 2,283,186 rows.
-- **Data Quality**: Ensure consistency in `result_flag` values; "(NONE)" denotes normal, while other values indicate abnormalities. Validate LOINC codes for accuracy.
+- **Data Quality**: Interpret `result_flag` values using their source meanings; both `(NONE)` and `Normal` occur, so other values are not automatically abnormal. Validate LOINC codes for accuracy.
 - **Linkage**: `patient_id` is a complete foreign key to `patients.csv`. `visit_id` is a logical link to `visits.csv`: 805 rows are null and 5,201,657 non-null lab rows have visit identifiers absent from `visits.csv`.
 
 **Example Use Cases for LLMs**:

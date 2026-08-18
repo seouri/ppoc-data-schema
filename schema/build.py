@@ -390,7 +390,7 @@ LAB_FIELDS = [
     field("lab_procedure_name", "string", "Epic lab procedure name.", **{"x-uniqueValueCount": 3742}),
     field("lab_procedure_description", "string", "Additional procedure description, especially for external labs."),
     age_field("lab_result_date_age_in_days", "lab result", **{"x-missingCount": 2283186}),
-    field("result_component_name", "string", "Name of the result component; null when no result is available.", **{"x-uniqueValueCount": 12901, "x-missingCount": 2283186}),
+    field("result_component_name", "string", "Name of the result component; null when no result is available.", **{"x-uniqueValueCount": 12902, "x-missingCount": 2283186}),
     field("result_loinc_code", "string", "LOINC code for the result component when available.", **{"x-codeSystem": "LOINC", "x-uniqueValueCount": 2194, "x-missingCount": 15880579}),
     field("result_value", "string", "Result represented as text; it may be numeric, categorical, or narrative.", **{"x-missingCount": 2494261}),
     field("result_flag", "string", "HL7 result interpretation flag; blank when unassigned.", **{"x-uniqueValueCount": 35, "x-missingCount": 15550985}),
@@ -420,7 +420,7 @@ PROBLEM_FIELDS = [
     identifier("problem_list_id", "problem-list entry"),
     age_field("noted_date_age_in_days", "first problem notation"),
     age_field("resolved_date_age_in_days", "problem resolution"),
-    field("pl_diag", "string", "Problem-list diagnosis code.", required=True, **{"x-codeSystem": "ICD-10-CM", "x-uniqueValueCount": 4740}),
+    field("pl_diag", "string", "Problem-list diagnosis code.", required=True, **{"x-codeSystem": "ICD-10-CM", "x-uniqueValueCount": 4739}),
 ]
 
 
@@ -429,7 +429,7 @@ REFERRAL_FIELDS = [
     field("visit_id", "string", "Associated visit identifier; nullable when the referral is not linked to a visit.", **{"x-deidentified": True}),
     identifier("referral_id", "referral"),
     age_field("referral_date_age_in_days", "referral", required=True),
-    field("requested_specialty", "string", "Requested referral specialty; nullable.", **{"x-uniqueValueCount": 121}),
+    field("requested_specialty", "string", "Requested referral specialty; nullable.", **{"x-uniqueValueCount": 119}),
     field("referral_number_of_visits", "integer", "Authorized or associated visit count; nullable.", constraints={"minimum": 1, "maximum": 10}),
 ]
 
@@ -447,6 +447,7 @@ def resource(
     fields: list[dict[str, Any]],
     row_count: int,
     *,
+    path: str | None = None,
     primary_key: str | None = None,
     foreign_keys: list[dict[str, Any]] | None = None,
     encoding: str = "utf-8",
@@ -461,7 +462,7 @@ def resource(
     result: dict[str, Any] = {
         "profile": "tabular-data-resource",
         "name": name,
-        "path": f"{name}.csv",
+        "path": path or f"{name}.csv",
         "title": name.replace("_", " ").title(),
         "description": description,
         "format": "csv",
@@ -476,6 +477,9 @@ def resource(
         result["x-derivedFrom"] = derived_from
     result.update(metadata)
     return result
+
+
+VISITS_AUGMENTED_PATH = "visits_augmented-20251209150512.csv"
 
 
 RESOURCES = [
@@ -510,6 +514,7 @@ RESOURCES = [
         "Visit records augmented with demographics, standardized growth metrics, velocities, and clinical flags.",
         VISIT_AUGMENTED_FIELDS,
         6494473,
+        path=VISITS_AUGMENTED_PATH,
         primary_key="visit_id",
         foreign_keys=[
             foreign_key("patient_id", "patients", "patient_id"),
@@ -555,7 +560,7 @@ RESOURCES = [
         primary_key="problem_list_id",
         foreign_keys=[foreign_key("patient_id", "patients", "patient_id")],
         **{
-            "x-uniquePatientCount": 238824,
+            "x-uniquePatientCount": 238823,
         },
     ),
     resource(
@@ -569,7 +574,7 @@ RESOURCES = [
         ],
         **{
             "x-uniquePatientCount": 138071,
-            "x-uniqueVisitIdCount": 298616,
+            "x-uniqueVisitIdCount": 298615,
             "x-logicalForeignKeys": [{"fields": "visit_id", "reference": {"resource": "visits", "fields": "visit_id"}, "orphanRows": 98623, "nullRows": 24830}],
         },
     ),

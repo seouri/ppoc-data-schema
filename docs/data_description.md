@@ -23,7 +23,7 @@ This dataset contains de-identified electronic health record (EHR) data for 250,
 The datasets are interconnected via unique identifiers for multi-level analysis:
 
 - **Patients** (`patients.csv`, `patients_augmented.csv`): Core demographics (sex, ethnicity, race). Linked to ALL other files via `patient_id`.
-- **Visits** (`visits.csv`, `visits_augmented.csv`): Visit-level records (anthropometrics, diagnoses, encounter types). Linked to patients via `patient_id`; the augmented file also has a complete `visit_id` link to `visits.csv`.
+- **Visits** (`visits.csv`, `visits_augmented-20251209150512.csv`): Visit-level records (anthropometrics, diagnoses, encounter types). Linked to patients via `patient_id`; the augmented file also has a complete `visit_id` link to `visits.csv`.
 - **Labs** (`labs.csv`): Lab orders/results. Linked completely to patients via `patient_id`; `visit_id` is a logical but incomplete link to `visits.csv`.
 - **Medications** (`medications.csv`): Prescriptions/administrations. Linked completely to patients via `patient_id`; `visit_id` is a logical but incomplete link to `visits.csv`.
 - **Problem List** (`problem_list.csv`): Chronic/resolved conditions. Linked ONLY to patients via `patient_id` (not directly to visits; combine with visits for full diagnosis history).
@@ -39,14 +39,14 @@ Patients (patient_id)
 └── Problem List (patient_id)
 ```
 
-**Augmented Files:** `patients_augmented.csv` and `visits_augmented.csv` add computed metrics (e.g., growth velocities, malnutrition flags) derived from base files.
+**Augmented Files:** `patients_augmented.csv` and `visits_augmented-20251209150512.csv` add computed metrics (e.g., growth velocities, malnutrition flags) derived from base files.
 
 ## Dataset Summaries
 
 ### [Patients (`patients.csv`)](patients.md)
 - **Rows:** 250,588 (one per patient)
 - **Key Columns:** `patient_id` (unique), `sex` (F/M/U), `ethnicity` (6 recorded categories plus blank), `race_1` to `race_8` (up to 8 races)
-- **Highlights:** Demographics for all patients; ~20.5% missing ethnicity, ~17.5% missing race_1; multiracial support.
+- **Highlights:** Demographics for all patients; ~20.5% missing ethnicity, including ~16.5% race_1 non-response plus ~3.5% blank race_1 cells; multiracial support.
 - **LLM Uses:** Cohort stratification by demographics; analyze health disparities; join with visits for demographic-linked outcomes.
 
 ### [Patients Augmented (`patients_augmented.csv`)](patients_augmented.md)
@@ -61,7 +61,7 @@ Patients (patient_id)
 - **Highlights:** Anthropometrics and diagnoses per visit; 72.8% "Office Visit"; up to 33 diagnoses; missing data in measurements.
 - **LLM Uses:** Growth trend analysis; diagnosis prevalence; join with demographics for stratified insights.
 
-### [Visits Augmented (`visits_augmented.csv`)](visits_augmented.md)
+### [Visits Augmented (`visits_augmented-20251209150512.csv`)](visits_augmented.md)
 - **Rows:** 6,494,473 (one per visit)
 - **Key Additions:** Converted units (kg, cm), Z-scores/percentiles (CDC LMS), velocities (kg/year, cm/year), flags (stunting, obesity), BMI categories
 - **Highlights:** Clinically validated growth metrics; BIV filtering; outlier detection; malnutrition flags.
@@ -69,8 +69,8 @@ Patients (patient_id)
 
 ### [Labs (`labs.csv`)](labs.md)
 - **Rows:** 17,230,681 (one per result component)
-- **Key Columns:** `patient_id`, `visit_id`, `lab_order_id`, `lab_procedure_name` (3,742 types, e.g., "CBC"), `result_component_name`, `result_value`, `result_flag` (abnormal indicators)
-- **Highlights:** Detailed lab results; LOINC codes; 92.2% missing LOINC; flags for abnormalities.
+- **Key Columns:** `patient_id`, `visit_id`, `lab_order_id`, `lab_procedure_name` (3,742 types, e.g., "CBC"), `result_component_name`, `result_value`, `result_flag` (result interpretation/status flags)
+- **Highlights:** Detailed lab results; LOINC codes; 92.2% missing LOINC; result interpretation/status flags.
 - **LLM Uses:** Lab trend analysis; correlate with diagnoses/medications; identify abnormal patterns.
 
 ### [Medications (`medications.csv`)](medications.md)
@@ -81,13 +81,13 @@ Patients (patient_id)
 
 ### [Problem List (`problem_list.csv`)](problem_list.md)
 - **Rows:** 1,709,584 (one per entry)
-- **Key Columns:** `patient_id`, `problem_list_id`, `noted_date_age_in_days`, `resolved_date_age_in_days`, `pl_diag` (ICD-10, 4,740 unique)
+- **Key Columns:** `patient_id`, `problem_list_id`, `noted_date_age_in_days`, `resolved_date_age_in_days`, `pl_diag` (ICD-10, 4,739 unique)
 - **Highlights:** Chronic conditions; top: COVID-19, anxiety, constipation; not complete (combine with visits).
 - **LLM Uses:** Chronic disease tracking; resolution analysis; supplement visit diagnoses.
 
 ### [Referrals (`referrals.csv`)](referrals.md)
 - **Rows:** 349,827 (one per referral)
-- **Key Columns:** `patient_id`, `visit_id`, `referral_id`, `referral_date_age_in_days`, `requested_specialty` (121 types, e.g., "Otolaryngology"), `referral_number_of_visits`
+- **Key Columns:** `patient_id`, `visit_id`, `referral_id`, `referral_date_age_in_days`, `requested_specialty` (119 unique nonblank values, e.g., "Otolaryngology"), `referral_number_of_visits`
 - **Highlights:** Specialty consultations; top: ENT, ophthalmology; most have 1 or 6 visits.
 - **LLM Uses:** Referral pattern analysis; specialty utilization; care pathway modeling.
 
@@ -96,11 +96,11 @@ Patients (patient_id)
 For schema-driven Python loading, see [`schema/README.md`](../schema/README.md) for examples that read `datapackage.json`, resolve resource paths, apply declared encodings and nullable types, and inspect keys.
 
 When using this dataset in prompts:
-- **Specify Files:** "Analyze visits_augmented.csv for growth velocities by sex from patients.csv."
+- **Specify Files:** "Analyze visits_augmented-20251209150512.csv for growth velocities by sex from patients.csv."
 - **Linkages:** "Join problem_list.csv with visits.csv via patient_id to get full diagnosis history."
 - **Calculations:** "Convert age_in_days to years: age_years = age_in_days / 365.25."
 - **Missing Data:** "Handle NaNs in anthropometrics; use flags for malnutrition detection."
-- **Augmented Insights:** "Use Z-scores from visits_augmented.csv for standardized growth comparisons."
+- **Augmented Insights:** "Use Z-scores from visits_augmented-20251209150512.csv for standardized growth comparisons."
 
 ## Important Considerations
 - **Data Quality:** Outliers in measurements; non-response in demographics; BIV-filtered values in augmented files.

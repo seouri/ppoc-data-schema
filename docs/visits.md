@@ -61,13 +61,13 @@
      - `Nurse Only`: 3,786 (0.06%)
      - `Nutrition`: 5,406 (0.08%)
      - `Office Visit`: 4,725,643 (72.76%)
-     - `Ophth Examiner`: 11 (0.00%)
+     - `Ophth Exam`: 11 (0.00%)
      - `Orders Only`: 273 (0.00%)
      - `OurPractice Advisory`: 1 (0.00%)
      - `Patient Care Review`: 3 (0.00%)
      - `Patient Message`: 209 (0.00%)
      - `Pre-op/Pre-procedure Orders`: 575 (0.01%)
-     - `Procedure Visit`: 678 (0.01%)
+     - `Procedure visit`: 678 (0.01%)
      - `Refill`: 12 (0.00%)
      - `Routine Prenatal`: 4 (0.00%)
      - `Scanned Document`: 23 (0.00%)
@@ -121,7 +121,7 @@
 - **Missing Data**: Fields like `weight_oz`, `height_in`, `head_circ_cm`, `BMI`, `bmi_percentile`, and diagnosis codes may have missing values (NA/NULL) based on visit type. Converted legacy EMR data (`orig_enc_source_Epic_yn = 'N'`) may lack diagnoses.
 - **Data Quality**: Outliers in anthropometric fields (e.g., extreme `BMI` values) may indicate data entry errors; cleaning is recommended.
 - **Diagnosis Codes**: ICD-10 codes follow standard medical conventions, with `enc_diag_1` as primary or first listed.
-- **Demographic Linkage**: Joining with `patients.csv` via `patient_id` enables analysis of visit patterns by sex (e.g., Male: 51.0%, Female: 49.0%), ethnicity (e.g., Not Hispanic or Latino: 68.1%, Hispanic or Latino: 11.4%), or race (e.g., White: 62.0% in `race_1`, Black or African American: 4.9% in `race_1`). Note that `patients.csv` has ~20.5% non-response in `ethnicity` and ~17.5% in `race_1`, which may affect demographic analyses.
+- **Demographic Linkage**: Joining with `patients.csv` via `patient_id` enables analysis of visit patterns by sex (e.g., Male: 51.0%, Female: 49.0%), ethnicity (e.g., Not Hispanic or Latino: 68.1%, Hispanic or Latino: 11.4%), or race (e.g., White: 62.0% in `race_1`, Black or African American: 4.9% in `race_1`). Note that `patients.csv` has ~20.5% non-response in `ethnicity` and ~16.5% non-response plus ~3.5% blank cells in `race_1`, which may affect demographic analyses.
 
 **Example Use Cases for LLMs**:
 - Summarize visit patterns by `encounter_type` or age group (`age_in_days`).
@@ -137,7 +137,7 @@
 - Handle missing data and validate outliers in anthropometric measures before analysis.
 - Convert `age_in_days` to years (divide by 365.25) for age-based analyses.
 - Verify ICD-10 code consistency (e.g., format, validity) for accurate results.
-- Account for missing demographic data in `patients.csv` (e.g., 20.5% non-response in `ethnicity`, 17.5% in `race_1`) when joining datasets.
+- Account for missing demographic data in `patients.csv` (e.g., 20.5% non-response in `ethnicity`, 16.5% non-response plus 3.5% blank cells in `race_1`) when joining datasets.
 - Respect de-identification; avoid re-identification attempts.
 - Computational requirements: Processing may need parallelization or chunking for efficiency, especially when joining with `patients.csv`.
 

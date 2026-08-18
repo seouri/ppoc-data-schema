@@ -1,21 +1,21 @@
 ### Data Description for `problem_list.csv`
 
 **Quick Reference**:
-- **Dataset**: Pediatric problem list records for 238,824 unique children (0–18 years).
+- **Dataset**: Pediatric problem list records for 238,823 unique children (0–18 years).
 - **Rows**: 1,709,584 (one row per problem list entry).
-- **Unique Patients**: 238,824 (unique `patient_id`).
+- **Unique Patients**: 238,823 (unique `patient_id`).
 - **Unique Problem List Entries**: 1,709,584 (unique `problem_list_id`).
 - **Columns**: 5 (patient, problem list, dates, diagnosis).
 - **Key Uses**: Chronic and resolved condition tracking, diagnosis prevalence, longitudinal patient analysis, linkage with visits and demographics.
 - **Tools**: Optimized for R (`dplyr`, `data.table`) or Python (`pandas`).
 - **Time Span**: Not directly available; dates are de-identified as age in days.
 
-**Dataset Overview**: The `problem_list.csv` file contains pediatric problem list records for 238,824 unique children aged 0 to 18 years, totaling 1,709,584 entries. Each row represents a single problem list entry for a patient, including identifiers, de-identified dates (as age in days), and diagnosis codes. The dataset can be joined with `patients.csv` (demographics) using `patient_id`.
+**Dataset Overview**: The `problem_list.csv` file contains pediatric problem list records for 238,823 unique children aged 0 to 18 years, totaling 1,709,584 entries. Each row represents a single problem list entry for a patient, including identifiers, de-identified dates (as age in days), and diagnosis codes. The dataset can be joined with `patients.csv` (demographics) using `patient_id`.
 
 **File Structure**:
 - **Format**: CSV (Comma-Separated Values)
 - **Rows**: 1,709,584 (one row per problem list entry)
-- **Unique Patients**: 238,824 (unique `patient_id`)
+- **Unique Patients**: 238,823 (unique `patient_id`)
 - **Unique Problem List Entries**: 1,709,584 (unique `problem_list_id`)
 - **Columns**: 5 (detailed below)
 
@@ -23,7 +23,7 @@
 1. **patient_id** (Character/String):
 - Unique identifier for each patient (blinded).
 - Joins with `patients.csv` for demographic data (sex, ethnicity, race_1 to race_8).
-- 238,824 unique values.
+- 238,823 unique values.
 
 2. **problem_list_id** (Character/String):
 - Unique identifier for each problem list entry (blinded).
@@ -41,7 +41,7 @@
 
 5. **pl_diag** (Character/String):
 - ICD-10 diagnosis code for the problem list entry.
-- 4,740 unique values.
+- 4,739 unique values.
 
 **Top 10 Most Frequent pl_diag Values**:
 
@@ -63,7 +63,7 @@
 - **De-identification**: Dates are converted to age in days to protect privacy; no absolute dates available.
 - **Missing Data**: `noted_date_age_in_days` is null in 7,284 rows, and `resolved_date_age_in_days` may be missing for ongoing problems or incomplete records. Negative values in date fields may indicate anomalies.
 - **Data Quality**: Outliers in date fields (e.g., negative ages) may represent data entry errors; cleaning is recommended.
-- **Diagnosis Codes**: `pl_diag` contains 4,740 unique ICD-10 values. Validate code formats for analysis.
+- **Diagnosis Codes**: `pl_diag` contains 4,739 unique ICD-10 values. Validate code formats for analysis.
 - **Linkage**: `patient_id` enables joining with `patients.csv` for demographics.
 
 **Example Use Cases for LLMs**:
@@ -76,10 +76,10 @@
 
 **Important Considerations**:
 - **Dataset Size**: 1.7M rows require efficient processing (e.g., `data.table` or chunking in Python).
-- **Unique Patients**: 238,824 unique `patient_id` values enable longitudinal analyses, joinable with `patients.csv`.
+- **Unique Patients**: 238,823 unique `patient_id` values enable longitudinal analyses, joinable with `patients.csv`.
 - **Date Ranges**: Wide and occasionally negative ranges suggest data cleaning needed; convert to years if grouping (divide by 365.25).
 - **Missing Data**: Handle blanks in `resolved_date_age_in_days` carefully (e.g., assume ongoing if missing).
-- **Diagnosis Variance**: 4,740 unique `pl_diag` values; focus on high-frequency diagnoses for summary statistics.
+- **Diagnosis Variance**: 4,739 unique `pl_diag` values; focus on high-frequency diagnoses for summary statistics.
 - **Privacy**: Respect de-identification; avoid re-identification attempts.
 - **Computational Notes**: Memory-effective processing recommended; possible need for parallelization.
 

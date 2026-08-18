@@ -4,7 +4,7 @@
 - **Dataset**: Referral records for pediatric patients (0–18 years) linking visits to specialty consultations.
 - **Rows**: 349,827 (one row per referral).
 - **Unique Patients**: 138,071 (unique `patient_id`).
-- **Unique Visit IDs**: 298,616 (distinct `visit_id` values; not all resolve to `visits.csv`).
+- **Unique Visit IDs**: 298,615 nonblank values (not all resolve to `visits.csv`).
 - **Unique Referrals**: 349,827 (unique `referral_id`).
 - **Columns**: 6 (patient, visit, referral identifiers, date, specialty, visit count).
 - **Key Uses**: Referral pattern analysis, specialty utilization, longitudinal care tracking, demographic-linked referral studies.
@@ -17,7 +17,7 @@
 - **Format**: CSV (Comma-Separated Values)
 - **Rows**: 349,827 (one row per referral)
 - **Unique Patients**: 138,071 (unique `patient_id`)
-- **Unique Visit IDs**: 298,616 (distinct `visit_id` values; not all resolve to `visits.csv`)
+- **Unique Visit IDs**: 298,615 nonblank values (not all resolve to `visits.csv`)
 - **Unique Referrals**: 349,827 (unique `referral_id`)
 - **Columns**: 6 (detailed below)
 
@@ -30,7 +30,7 @@
 2. **visit_id** (Character/String):
 - Unique identifier for the visit associated with the referral (blinded).
 - Logically links to `visits.csv` for visit context, including encounter type, age, and diagnoses; the link is incomplete.
-- 298,616 unique values.
+- 298,615 unique nonblank values; 24,830 rows are blank.
 
 3. **referral_id** (Character/String):
 - Unique identifier for each referral (blinded).
@@ -43,7 +43,7 @@
 
 5. **requested_specialty** (Character/String):
 - Medical specialty to which the patient was referred.
-- 121 unique values.
+- 119 unique nonblank values.
 - Nullable; 27,452 rows are blank.
 - Top specialties by referral count (based on 349,827 referrals):
      - `Otolaryngology`: 35,723 (10.2%)
@@ -184,7 +184,7 @@
 - **De-identification**: `referral_date_age_in_days` replaces dates to protect privacy; no absolute dates available.
 - **Missing Data**: There are 24,830 blank `visit_id` values, 27,452 blank `requested_specialty` values, and 26,601 blank `referral_number_of_visits` values.
 - **Data Quality**: Specialty names are standardized; validate for consistency. Age range (1–6,567 days) aligns with pediatric focus.
-- **Unique Counts**: Not all patients have referrals (138,071 of 250,588 total). There are 298,616 distinct referral visit IDs, but 98,623 non-null referral rows do not resolve to `visits.csv`, so this is not a complete visit-coverage count.
+- **Unique Counts**: Not all patients have referrals (138,071 of 250,588 total). There are 298,615 distinct nonblank referral visit IDs, but 98,623 non-null referral rows do not resolve to `visits.csv`, so this is not a complete visit-coverage count.
 - **Linkage**: `patient_id` is a complete foreign key to `patients.csv`. `visit_id` is a logical but incomplete link to `visits.csv`; 98,623 non-null referral rows have visit identifiers absent from `visits.csv`, in addition to the 24,830 null visit IDs.
 
 **Example Use Cases for LLMs**:
@@ -198,9 +198,9 @@
 
 **Important Considerations**:
 - **Dataset Size**: 349,827 rows are manageable with standard tools (`pandas`, `dplyr`), but joining with larger datasets (e.g., `visits.csv` at 6.5M rows) may require efficient processing (e.g., chunking or `data.table`).
-- **Unique Patients/Visit IDs**: 138,071 patients and 298,616 distinct `visit_id` values support longitudinal analyses; visit-level enrichment is conditional on the incomplete link to `visits.csv`.
+- **Unique Patients/Visit IDs**: 138,071 patients and 298,615 distinct nonblank `visit_id` values support longitudinal analyses; visit-level enrichment is conditional on the incomplete link to `visits.csv`.
 - **Age Ranges**: Convert `referral_date_age_in_days` to years (divide by 365.25) for age-based groupings.
-- **Specialty Variance**: 121 unique specialties; focus on top categories for summary analyses.
+- **Specialty Variance**: 119 unique nonblank specialties; focus on top categories for summary analyses.
 - **Visit Count Interpretation**: Most referrals have 1 or 6 visits; investigate if 6 represents a protocol or data artifact.
 - **Privacy**: Respect de-identification; avoid re-identification attempts.
 - **Computational Notes**: Memory-effective processing recommended; possible need for parallelization when joining large datasets.
@@ -215,7 +215,7 @@ dtype_dict = {
     "visit_id": "string",                      # Character/String for unique visit identifier
     "referral_id": "string",                   # Character/String for unique referral identifier
     "referral_date_age_in_days": "int32",      # Integer for age in days (1 to 6,567)
-    "requested_specialty": "category",         # Categorical for 121 specialty types
+    "requested_specialty": "category",         # Categorical for 119 nonblank specialty values
     "referral_number_of_visits": "Int8",       # Nullable integer for visit count (1 to 10)
 }
 

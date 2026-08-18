@@ -46,17 +46,17 @@
 4–11. **race_1** to **race_8** (Character/String):
 - Up to eight race categories associated with each patient to accommodate multiracial individuals.
 - Values (11, with record counts):
-     - `American Indian or Alaska Native`: 711 (0.28%)
-     - `Another Race`: 17,155 (6.8%)
-     - `Asian`: 16,244 (6.5%)
-     - `Black or African American`: 13,028 (5.2%)
-     - `Choose not to answer`: 24,566 (9.8%)
-     - `Middle Eastern or Northern African`: 606 (0.24%)
-     - `Native Hawaiian or Other Pacific Islander`: 351 (0.14%)
-     - `Patient does not know`: 181 (0.07%)
-     - `Unable to collect`: 595 (0.24%)
-     - `Unknown`: 31865 (12.7%)
-     - `White`: 164137 (65.5%)
+     - `American Indian or Alaska Native`: 625 (0.25%)
+     - `Another Race`: 15,950 (6.4%)
+     - `Asian`: 15,661 (6.3%)
+     - `Black or African American`: 12,162 (4.9%)
+     - `Choose not to answer`: 17,534 (7.0%)
+     - `Middle Eastern or Northern African`: 512 (0.20%)
+     - `Native Hawaiian or Other Pacific Islander`: 248 (0.10%)
+     - `Patient does not know`: 126 (0.05%)
+     - `Unable to collect`: 492 (0.20%)
+     - `Unknown`: 23,085 (9.2%)
+     - `White`: 155,375 (62.0%)
 - Distribution of values across columns (record counts):
      | Value                                    | race_1 | race_2 | race_3 | race_4 | race_5 | race_6 | race_7 | race_8 |
      |------------------------------------------|--------|--------|--------|--------|--------|--------|--------|--------|
@@ -73,13 +73,13 @@
      | "" (empty string)                        | 8,818  | 237,397| 249,967| 250,550| 250,582| 250,585| 250,586| 250,587|
      | Unable to collect                        | 492    | 11     | 0      | 0      | 0      | 0      | 0      | 0      |
 
-- Note: Non-applicable fields (e.g., for patients with fewer than eight race categories) are recorded as "" (empty string). Most patients (94.7% in `race_2`, 99.8% in `race_3`, etc.) have empty strings in higher-numbered race columns, indicating that multiracial identification is rare. Race uses `Choose not to answer` (lowercase a), while ethnicity uses `Choose not to Answer` (uppercase A). Non-response categories are more prevalent in `race_1` (17.5%) than in `ethnicity` (20.5%), but diminish significantly in `race_2` and beyond.
+- Note: Non-applicable fields (e.g., for patients with fewer than eight race categories) are recorded as "" (empty string). Most patients (94.7% in `race_2`, 99.8% in `race_3`, etc.) have empty strings in higher-numbered race columns, indicating that multiracial identification is rare. Race uses `Choose not to answer` (lowercase a), while ethnicity uses `Choose not to Answer` (uppercase A). Race-1 non-response categories account for ~16.5% of patients, with a further ~3.5% blank; both diminish significantly in `race_2` and beyond.
 
 **Key Notes**:
 - **De-identification**: `patient_id` is blinded to protect privacy; no temporal data (e.g., birth dates) is included.
 - **Missing Data**:
 - The `ethnicity` column has ~20.5% non-response values ("Choose not to Answer," "Unknown," "Unable to collect," "Patient does not know," empty string).
-- The `race_1` column has ~17.5% non-response values (`Choose not to answer`, `Patient does not know`, `Unable to collect`, `Unknown`) and 3.5% empty strings. Higher-numbered race columns (`race_2` to `race_8`) are predominantly empty strings (e.g., 99.9% in `race_8`), reflecting that most patients report one or no race categories.
+- The `race_1` column has ~16.5% non-response values (`Choose not to answer`, `Patient does not know`, `Unable to collect`, `Unknown`) and 3.5% empty strings. Higher-numbered race columns (`race_2` to `race_8`) are predominantly empty strings (e.g., 99.9% in `race_8`), reflecting that most patients report one or no race categories.
 - The `sex` column has minimal missing data, with only 6 records (<0.01%) marked as 'U' (Unknown).
 - **Data Quality**: Empty strings in `ethnicity` (5,464 records) and `race_1` to `race_8` (especially in higher-numbered columns) suggest potential data entry errors or incomplete records; cleaning is recommended. Non-response categories in `ethnicity` and `race_1` should be handled carefully (e.g., grouped as "missing" or analyzed separately based on use case).
 - **Linkage**: `patient_id` enables joining with `visits.csv` for analyses combining demographic and visit data (e.g., diagnosis patterns by race, ethnicity, or sex).
@@ -96,7 +96,7 @@
 **Important Considerations**:
 - **Dataset Size**: 250,588 rows are manageable with standard tools (`pandas`, `dplyr`), but joining with `visits.csv` (6.5M rows) may require efficient processing (e.g., chunking or `data.table`).
 - **Unique Patients**: 250,588 unique `patient_id` values confirm one row per patient, enabling straightforward demographic analyses.
-- **Missing Data Handling**: Non-response categories in `ethnicity` (20.5%) and `race_1` (17.5%) and empty strings in `race_2` to `race_8` require careful handling to avoid bias in analyses. Consider grouping non-response categories or using imputation techniques for specific use cases. The `sex` column is nearly complete, with minimal impact from missing data.
+- **Missing Data Handling**: Non-response categories in `ethnicity` (20.5%) and `race_1` (16.5%), plus blank `race_1` cells (3.5%), and empty strings in `race_2` to `race_8` require careful handling to avoid bias in analyses. Consider grouping non-response categories or using imputation techniques for specific use cases. The `sex` column is nearly complete, with minimal impact from missing data.
 - **Race Fields**: The structure of `race_1` to `race_8` supports multiracial patients, but the predominance of empty strings in higher-numbered columns suggests most patients report one or no race. Validate race category consistency during analysis.
 - **Data Validation**: Verify consistency of `sex`, `ethnicity`, and race values. Cross-check with `visits.csv` to ensure `patient_id` alignment.
 - **Privacy**: Respect de-identification; avoid attempts to re-identify patients.
