@@ -82,7 +82,7 @@
 - Note: Common types include “Well Visit (Conv.)” (routine check-ups), “Sick” (illness-related), “Office Visit” (general visits).
 
 5. **orig_enc_source_Epic_yn** (Character/String):
-- Indicates if encounter was originally documented in Epic (“Y”) or converted from a legacy EMR system (“N”).
+- Indicates if encounter originated in Epic (“Y”) or was converted from a legacy EMR system (“N”).
 - Converted encounters (“N”) may lack diagnosis information due to variable data conversion quality.
 - Values: `Y` (Yes) or `N` (No).
 
@@ -155,7 +155,7 @@ dtype_dict = {
     'weight_oz': 'float32',                # Numeric, float to handle decimals and potential NaNs
     'height_in': 'float32',                # Numeric, float to handle decimals and potential NaNs
     'head_circ_cm': 'float32',             # Numeric, float to handle decimals and potential NaNs
-    'bmi': 'float32',                      # Numeric, float to handle decimals and potential NaNs
+    'BMI': 'float32',                      # Numeric, float to handle decimals and potential NaNs
     'bmi_percentile': 'float32',           # Numeric, float to handle decimals and potential NaNs
     'enc_diag_1': 'string',                # Character/String for ICD-10 codes
     'enc_diag_2': 'string',

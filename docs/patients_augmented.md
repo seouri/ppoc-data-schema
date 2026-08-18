@@ -4,21 +4,21 @@
 - **Dataset**: Augmented demographic data for 250,588 unique pediatric patients (0–18 years) with visit summary statistics.
 - **Rows**: 250,588 (one row per unique patient).
 - **Unique Patients**: 250,588.
-- **Columns**: 72
+- **Columns**: 87 (11 original demographic fields plus 76 derived fields)
 - **Key Uses**: Cohort selection, patient stratification, feature engineering for patient-level predictive modeling.
 - **Tools**: Optimized for R (`dplyr`) or Python (`pandas`).
-- **Augmentation Source**: Generated from `scripts/augment.py` by summarizing `visits_augmented.csv`.
+- **Augmentation**: Generated from `scripts/augment.py` using `visits_augmented.csv` and `problem_list.csv`.
 
-**Dataset Overview**: The `patients_augmented.csv` file contains enhanced demographic data for 250,588 unique pediatric patients. It is created by augmenting the original `patients.csv` with longitudinal summary statistics derived from each patient's visit history in `visits.csv`. Each row represents a single patient and includes all original demographic data plus new columns summarizing their clinical interactions, such as the total number of visits, the time span of their care, and summary statistics for various growth metrics. This dataset is ideal for patient-level analysis, cohort building, and creating features for predictive models.
+**Dataset Overview**: The `patients_augmented.csv` file contains enhanced demographic data for 250,588 unique pediatric patients. It is created by augmenting the original `patients.csv` with longitudinal summaries derived from `visits_augmented.csv` and diagnosis information from `problem_list.csv`. Each row represents a single patient and includes all original demographic data plus new columns summarizing their clinical interactions, such as the total number of visits, the time span of their care, and summary statistics for various growth metrics. This dataset is ideal for patient-level analysis, cohort building, and creating features for predictive models.
 
 **File Structure**:
 - **Format**: CSV (Comma-Separated Values)
 - **Rows**: 250,588
 - **Unique Patients**: 250,588
-- **Columns**: 72 (original 11 + 61 new augmented columns)
+- **Columns**: 87 (original 11 + 76 new augmented columns)
 - **Generation**: Created by running `python scripts/augment.py input_dir [--output_dir output] [--output_format {csv,parquet}]`
 
-**Column Descriptions (New and Augmented Columns)**: This dataset preserves all original columns from `patients.csv` and adds the following new columns, all computed as described in the `augment_patients` function in `scripts/augment.py`:
+**Column Descriptions (New and Augmented Columns)**: This dataset preserves all original columns from `patients.csv` and adds 76 derived columns, all computed as described in the `augment_patients` function in `scripts/augment.py`.
 
 #### Healthy Flag
 
@@ -32,7 +32,7 @@
 
 - **visits_count** (Integer): Total number of recorded visits for the patient (0 for patients with no visits).
 
-- **visits_count_pre_dx** (Integer): Number of visits for the patient where `age_in_years` is less than `dx_age_years` (the minimum age at which any growth-related diagnosis was made). If `dx_age_years` is not present (NaN), this value is equal to `visits_count`. This column is useful for analyzing patient history prior to the first growth-related diagnosis.
+- **visits_count_pre_dx** (Integer): Number of visits for the patient where `age_in_years` is less than `dx_age_years` (the minimum age at which any growth-related diagnosis was made). If `dx_age_years` is null, this value is equal to `visits_count`. This column is useful for analyzing patient history prior to the first growth-related diagnosis.
 
 - **min_visit_age_days** (Integer): Age in days at the patient's first recorded visit (NaN if no visits).
 
@@ -55,7 +55,7 @@
 - **dx_age_years** (Float): Minimum age in years at which any growth-related ICD-10 code (from the set below) was diagnosed (from visits or problem list); NaN if none diagnosed.
 
 - **dx_age_years_<code>** (Float):
-  For each ICD-10 code in the growth-related disorders set (`ICD10_CODES_GROWTH`), a column named `dx_age_years_<code>` is created, where `<code>` is the ICD-10 code lowercased and with dots replaced by underscores (e.g., `E03.9` → `dx_age_years_e03_9`).  
+  For each ICD-10 code in the growth-related disorders set (`ICD10_CODES_GROWTH`), a column named `dx_age_years_<code>` is created, where `<code>` is the ICD-10 code lowercased and with dots replaced by underscores (e.g., `E03.9` → `dx_age_years_e03_9`).
 Each such column contains the minimum age in years at which the patient was first diagnosed with any code that *starts with* that ICD-10 code, from either visit-level diagnosis codes (`enc_diag_*`) or problem list diagnoses (`pl_diag`). If the patient was never diagnosed with a code starting with that prefix, the value is NaN.
 
 The full set of growth-related ICD-10 codes (with descriptions) is:
@@ -93,7 +93,6 @@ The full set of growth-related ICD-10 codes (with descriptions) is:
 - Q98.0: Klinefelter syndrome karyotype 47, XXY
 - Q98.4: Klinefelter syndrome, unspecified
 - Q98.5: Karyotype 47, XYY
-- R62: Lack of expected normal physiological development in childhood and adults
 
 #### Z-Score Summary Statistics
 
@@ -121,7 +120,7 @@ These statistics are calculated for:
 
 **Key Notes**:
 - **Patient-Level Summary**: This dataset provides a high-level summary of each patient's clinical history, complementing the granular data in `visits_augmented.csv`.
-- **Data Cleaning**: The `ethnicity` and `race_*` columns are cleaned as part of the augmentation process, converting values like "Unknown" or "Choose not to answer" to `NA`.
+- **Data Cleaning**: The `ethnicity` and `race_*` columns are cleaned as part of the augmentation process, converting values like `Unknown` or `Choose not to Answer` (ethnicity) and `Choose not to answer` (race) to `NA`.
 - **Handling of No-Visit Patients**: Patients present in `patients.csv` but not in `visits.csv` will have a `visits_count` of 0 and `NaN` for all other added columns.
 
 **Example Use Cases for LLMs**:
@@ -202,7 +201,6 @@ dtype_dict = {
     "dx_age_years_q98_0": "float32",      # Klinefelter syndrome karyotype 47, XXY
     "dx_age_years_q98_4": "float32",      # Klinefelter syndrome, unspecified
     "dx_age_years_q98_5": "float32",      # Karyotype 47, XYY
-    "dx_age_years_r62": "float32",        # Lack of expected normal physiological development in childhood and adults
     # Z-score statistics columns
     "count_weight_z_score": "Int16",
     "mean_weight_z_score": "float32",

@@ -4,19 +4,19 @@
 - **Dataset**: Augmented pediatric doctor visit data for 250,588 unique children (0–18 years) with comprehensive growth metrics, velocities, and clinical indicators.
 - **Rows**: 6,494,473 visits.
 - **Unique Patients**: 250,588 (unique `patient_id`).
-- **Columns**: 70+ (original visit data plus 30+ new augmented columns for demographics, conversions, growth metrics, velocities, outlier flags, and clinical flags).
+- **Columns**: 82.
 - **Key Uses**: Advanced growth monitoring, nutritional assessment, longitudinal pediatric analysis, ML modeling for health outcomes, clinical decision support.
 - **Tools**: Optimized for R (`dplyr`, `data.table`, `ggplot2`) or Python (`pandas`, `matplotlib`, `scikit-learn`).
 - **Time Span**: Unavailable due to de-identification (no visit dates; only `age_in_days` is used).
-- **Augmentation Source**: Generated from `scripts/augment.py` using CDC LMS reference standards, clinical velocity calculations, and outlier detection.
+- **Augmentation**: Generated from `scripts/augment.py` using CDC LMS reference standards, clinical velocity calculations, and outlier detection.
 
-**Dataset Overview**: The `visits_augmented.csv` file contains enhanced pediatric doctor visit data for 250,588 unique children aged 0 to 18 years, totaling 6,494,473 visits. Each row represents a single augmented visit with all original data plus comprehensive demographic information, unit conversions, advanced growth metrics (Z-scores and percentiles), longitudinal growth velocities, outlier flags, and clinical health indicators. The augmentation is performed using `scripts/augment.py`, which applies CDC LMS reference standards, calculates age-specific growth velocities, generates nutritional status flags for malnutrition detection, and includes biologically implausible value (BIV) filtering to ensure data quality. The dataset can be joined with `patients.csv` for additional demographic data, though most demographics are already included.
+**Dataset Overview**: The `visits_augmented.csv` file contains enhanced pediatric doctor visit data for 250,588 unique children aged 0 to 18 years, totaling 6,494,473 visits. Each row represents a single augmented visit with the original visit concepts plus comprehensive demographic information, unit conversions, advanced growth metrics (Z-scores and percentiles), longitudinal growth velocities, outlier flags, and clinical health indicators. The base `visits.csv` field `BMI` is represented by the derived lowercase `bmi`. The augmentation is performed using `scripts/augment.py`, which applies CDC LMS reference standards, calculates age-specific growth velocities, generates nutritional status flags for malnutrition detection, and includes biologically implausible value (BIV) filtering to ensure data quality. The dataset can be joined completely to `patients.csv` through `patient_id` and to `visits.csv` through `visit_id`.
 
 **File Structure**:
-- **Format**: CSV (Comma-Separated Values) or Parquet
+- **Format**: CSV (Comma-Separated Values) for the packaged resource; the augmentation pipeline can also emit Parquet.
 - **Rows**: 6,494,473 (one row per visit)
 - **Unique Patients**: 250,588 (unique `patient_id`)
-- **Columns**: 70+ (original columns plus new augmented columns)
+- **Columns**: 82
 - **Generation**: Created by running `python scripts/augment.py input_dir [--output_dir output] [--output_format {csv,parquet}] [--filter_errors|--no_filter_errors]`
 
 ---
@@ -39,7 +39,7 @@
 
 3. **Outlier Detection**:
 - Uses the Harrall algorithm to flag statistical outliers in height and weight for each patient.
-- Adds `weight_outlier_flag` and `height_outlier_flag` columns (1 = outlier, 0 = not outlier).
+- Adds nullable `weight_outlier_flag` and `height_outlier_flag` columns (1 = outlier, 0 = not outlier; null when the corresponding measurement is absent).
 
 4. **Biologically Implausible Value (BIV) Filtering**:
 - Calculates CDC LMS Z-scores for weight and height.
@@ -57,13 +57,13 @@
 - Computes delta values (difference and interval) for audit trails: `delta_weight_kg`, `delta_age_in_days_weight`, `delta_height_cm`, `delta_age_in_days_height`.
 
 7. **Clinical Classification & Flags**:
-- Categorizes BMI into CDC categories using percentile bins: underweight (<5), normal (5–85), overweight (85–95), obese (95–120), severe_obesity (≥120).
+- Categorizes BMI into the controlled labels `underweight`, `normal`, `overweight`, `obese`, and `severe_obesity`.
 - Generates binary flags for stunting, wasting, obesity, and underweight based on clinical thresholds.
 
 8. **Data Optimization & Column Reordering**:
 - Optimizes dtypes for memory efficiency.
-- Reorders columns to group similar features and preserve original visit columns.
-- Output columns are ordered: identifiers (`patient_id`, `visit_id`), grouped new columns, then remaining original columns.
+- Reorders columns into the output order defined in `datapackage.json`.
+- The base `BMI` field is emitted as lowercase derived `bmi`; the remaining base visit concepts are retained under their original names.
 
 **Clinical and Analytical Rationale:**
 - The pipeline enforces pediatric clinical standards for growth assessment, malnutrition detection, and longitudinal monitoring.
@@ -82,14 +82,16 @@
 - **BMI**: `bmi`, `bmi_category`
 - **Growth Velocities**: `weight_velocity`, `height_velocity`, `delta_weight_kg`, `delta_age_in_days_weight`, `delta_height_cm`, `delta_age_in_days_height`
 - **Flags**: `stunting_flag`, `wasting_flag`, `obesity_flag`, `underweight_flag`
-- **Original Visit Columns**: All columns from `visits.csv` (e.g., `encounter_type`, `orig_enc_source_Epic_yn`, `enc_diag_1` to `enc_diag_33`)
+- **Base Visit Concepts**: `encounter_type`, `orig_enc_source_Epic_yn`, `enc_diag_1` to `enc_diag_33`, and the base BMI concept represented as derived `bmi`.
+
+- **Column Order**: `patient_id`, `visit_id`, `sex`, `ethnicity`, `race_1`, `age_in_days`, `age_in_months`, `age_in_years`, `weight_oz`, `weight_kg`, `weight_outlier_flag`, `delta_weight_kg`, `delta_age_in_days_weight`, `weight_velocity`, `weight_z_score`, `weight_percentile`, `weight_for_length_z_score`, `weight_for_length_percentile`, `weight_for_stature_z_score`, `weight_for_stature_percentile`, `wasting_flag`, `height_in`, `height_cm`, `height_outlier_flag`, `delta_height_cm`, `delta_age_in_days_height`, `height_velocity`, `height_velocity_z_score`, `height_velocity_z_score_ep`, `height_velocity_z_score_ap`, `height_velocity_z_score_lp`, `height_velocity_percentile`, `height_velocity_percentile_ep`, `height_velocity_percentile_ap`, `height_velocity_percentile_lp`, `height_z_score`, `height_percentile`, `stunting_flag`, `head_circ_cm`, `head_circ_z_score`, `head_circ_percentile`, `bmi`, `bmi_z_score`, `bmi_percentile`, `bmi_category`, `underweight_flag`, `obesity_flag`, `encounter_type`, `orig_enc_source_Epic_yn`, and `enc_diag_1` through `enc_diag_33`.
 
 **Integration Notes:**
 - The visits-level file is generated by running `scripts/augment.py` and is designed for large-scale, high-performance analysis.
-- All original visit columns are preserved for backward compatibility.
+- All base visit concepts are retained for backward compatibility; the base `BMI` header is normalized to derived lowercase `bmi` in this augmented file.
 - Use in combination with `patients_augmented.csv` for multi-level and longitudinal analyses.
 
-**Column Descriptions** (New and Augmented Columns): All original `visits.csv` columns are preserved (see [`visits.md`](visits.md) for details). The following new columns are added through augmentation:
+**Column Descriptions** (New and Augmented Columns): The augmented file contains the base visit concepts described in [`visits.md`](visits.md), with base `BMI` represented as lowercase derived `bmi`, plus the following augmented columns:
 
 - **sex** (Categorical): Patient sex ('M', 'F', 'U'). Joined from `patients.csv`.
 - **ethnicity** (Categorical): Patient ethnicity, with invalid responses converted to NA.
@@ -98,8 +100,8 @@
 - **age_in_years** (Numeric): Age in years, `age_in_days / 365.25`, rounded to 3 decimals.
 - **weight_kg** (Numeric): Weight in kg, converted from `weight_oz`, rounded to 3 decimals. Set to NA if BIV.
 - **height_cm** (Numeric): Height in cm, converted from `height_in`, rounded to 3 decimals. Set to NA if BIV.
-- **weight_outlier_flag** (Integer): 1 if weight is a statistical outlier (Harrall algorithm), else 0.
-- **height_outlier_flag** (Integer): 1 if height is a statistical outlier (Harrall algorithm), else 0.
+- **weight_outlier_flag** (Nullable Integer): 1 if weight is a statistical outlier (Harrall algorithm), 0 otherwise, and null when no usable weight is present.
+- **height_outlier_flag** (Nullable Integer): 1 if height is a statistical outlier (Harrall algorithm), 0 otherwise, and null when no usable height is present.
 - **bmi** (Numeric): BMI, calculated as `weight_kg / (height_cm/100)^2`, only for age_in_months >= 24.
 - **weight_z_score** (Numeric): CDC LMS Z-score for weight.
 - **height_z_score** (Numeric): CDC LMS Z-score for height.
@@ -113,7 +115,7 @@
 - **head_circ_percentile** (Numeric): Percentile for head circumference.
 - **weight_for_length_percentile** (Numeric): Percentile for weight-for-length.
 - **weight_for_stature_percentile** (Numeric): Percentile for weight-for-stature.
-- **bmi_category** (Categorical): BMI category by percentile: underweight (<5), normal (5–85), overweight (85–95), obese (95–120), severe_obesity (≥120).
+- **bmi_category** (Categorical): BMI category label derived from BMI percentile; allowed labels are `underweight`, `normal`, `overweight`, `obese`, and `severe_obesity`.
 - **weight_velocity** (Numeric): Weight growth rate (kg/year), age-specific intervals.
 - **height_velocity** (Numeric): Height growth rate (cm/year), age-specific intervals.
 - **delta_weight_kg** (Numeric): Weight difference from reference measurement (kg).
@@ -133,7 +135,7 @@
 - **obesity_flag** (Integer): 1 if BMI percentile >= 95.
 - **underweight_flag** (Integer): 1 if BMI percentile < 5.
 
-**Original Columns Preserved**: All original columns from `visits.csv` (patient_id, visit_id, age_in_days, encounter_type, etc. through enc_diag_33) are retained unchanged. See [`visits.md`](visits.md) for detailed descriptions.
+**Base Concepts Preserved**: Base visit concepts from `visits.csv` are retained; the uppercase `BMI` column is represented by the augmented lowercase `bmi` field. See [`visits.md`](visits.md) for detailed descriptions.
 
 **Key Notes**:
 - **Augmentation Process**: Run via `scripts/augment.py` requires `visits.csv`, `patients.csv`, and CDC data files in `data/` directory. Output saved to `output/visits_augmented-<timestamp>.csv` or `.parquet`.
@@ -166,12 +168,12 @@
 - **Privacy/Respecification**: `age_in_days` maintains de-identification; respect HIPAA-like compliance in analyses.
 - **Computational Scaling**: Efficient for 6.5M rows but parallel processing recommended for ML training on full dataset.
 - **Version Control**: Output filename includes timestamp; compare `visits_augmented.csv` differences after script updates.
-- **Integration**: Seamlessly compatible with downstream ML pipelines; all original columns preserved for backward compatibility.
+- **Integration**: Seamlessly compatible with downstream ML pipelines; base visit concepts are preserved, with the BMI header normalization described above.
 
 **Processing Status**:
 - **Generation Command**: `python scripts/augment.py input --output_dir output --output_format csv`
 - **Output Path**: `output/visits_augmented-<timestamp>.csv` (or `.parquet`)
-- **Dependencies Verified**: CDC files present in `data/`, input files in `input/`
+- **Dependencies**: CDC files in `data/`, input files in `input/`
 - **Last Generated**: Check file timestamp; re-run if newer input data available
 - **Validation**: Z-scores sum to ~0 by age/sex, percentiles follow expected distributions
 
@@ -217,8 +219,16 @@ dtype_dict_augmented = {
     'delta_height_cm': 'float32',
     'delta_age_in_days_height': 'Int16',  # Nullable
     'height_velocity': 'float32',
-    'weight_outlier_flag': 'int8',
-    'height_outlier_flag': 'int8',
+    'height_velocity_z_score': 'float32',
+    'height_velocity_z_score_ep': 'float32',
+    'height_velocity_z_score_ap': 'float32',
+    'height_velocity_z_score_lp': 'float32',
+    'height_velocity_percentile': 'float32',
+    'height_velocity_percentile_ep': 'float32',
+    'height_velocity_percentile_ap': 'float32',
+    'height_velocity_percentile_lp': 'float32',
+    'weight_outlier_flag': 'Int8',       # Nullable when weight is absent
+    'height_outlier_flag': 'Int8',       # Nullable when height is absent
     # Integer flags
     'stunting_flag': 'int8',
     'wasting_flag': 'int8',
@@ -272,3 +282,4 @@ print(velocity_summary)
 features = ['age_in_years', 'sex', 'weight_z_score', 'height_z_score', 'stunting_flag', 'wasting_flag']
 X = pd.get_dummies(df_aug[features], drop_first=True)
 y = df_aug['obesity_flag']
+```

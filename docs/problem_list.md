@@ -2,9 +2,9 @@
 
 **Quick Reference**:
 - **Dataset**: Pediatric problem list records for 238,824 unique children (0–18 years).
-- **Rows**: 1,709,585 (one row per problem list entry, including header).
+- **Rows**: 1,709,584 (one row per problem list entry).
 - **Unique Patients**: 238,824 (unique `patient_id`).
-- **Unique Problem List Entries**: 1,709,585 (unique `problem_list_id`).
+- **Unique Problem List Entries**: 1,709,584 (unique `problem_list_id`).
 - **Columns**: 5 (patient, problem list, dates, diagnosis).
 - **Key Uses**: Chronic and resolved condition tracking, diagnosis prevalence, longitudinal patient analysis, linkage with visits and demographics.
 - **Tools**: Optimized for R (`dplyr`, `data.table`) or Python (`pandas`).
@@ -14,9 +14,9 @@
 
 **File Structure**:
 - **Format**: CSV (Comma-Separated Values)
-- **Rows**: 1,709,585 (one row per problem list entry, including header)
+- **Rows**: 1,709,584 (one row per problem list entry)
 - **Unique Patients**: 238,824 (unique `patient_id`)
-- **Unique Problem List Entries**: 1,709,585 (unique `problem_list_id`)
+- **Unique Problem List Entries**: 1,709,584 (unique `problem_list_id`)
 - **Columns**: 5 (detailed below)
 
 **Column Descriptions**:
@@ -27,14 +27,14 @@
 
 2. **problem_list_id** (Character/String):
 - Unique identifier for each problem list entry (blinded).
-- Primary key (1,709,585 unique values).
+- Primary key (1,709,584 unique values).
 
-3. **noted_date_age_in_days** (Integer):
+3. **noted_date_age_in_days** (Nullable Integer):
 - Age in days when the problem was first noted (problem start date - date of birth).
 - Range: -44,891 to 6,601 days.
-- Negative values may indicate data entry errors or pre-birth documentation.
+- Null values occur in 7,284 rows; negative values may indicate data entry errors or pre-birth records.
 
-4. **resolved_date_age_in_days** (Integer):
+4. **resolved_date_age_in_days** (Nullable Integer):
 - Age in days when the problem was resolved (problem end date - date of birth).
 - Range: -84 to 6,605 days.
 - Null or missing values may indicate ongoing problems or incomplete records.
@@ -61,7 +61,7 @@
 **Key Notes**:
 - **Problem List is not a complete record**: Not all ICD-10 codes appearing in `visits.csv` (`enc_diag_*` columns) are listed in the Problem List, and the age fields may not be consistent between files. The Problem List may omit acute or transient diagnoses, and some chronic conditions may only appear in visit-level data. For a comprehensive view of each patient’s diagnoses and history, it is highly recommended to combine `problem_list.csv` and `visits.csv`.
 - **De-identification**: Dates are converted to age in days to protect privacy; no absolute dates available.
-- **Missing Data**: `resolved_date_age_in_days` may be missing for ongoing problems or incomplete records. Negative values in date fields may indicate anomalies.
+- **Missing Data**: `noted_date_age_in_days` is null in 7,284 rows, and `resolved_date_age_in_days` may be missing for ongoing problems or incomplete records. Negative values in date fields may indicate anomalies.
 - **Data Quality**: Outliers in date fields (e.g., negative ages) may represent data entry errors; cleaning is recommended.
 - **Diagnosis Codes**: `pl_diag` contains 4,740 unique ICD-10 values. Validate code formats for analysis.
 - **Linkage**: `patient_id` enables joining with `patients.csv` for demographics.
@@ -91,7 +91,7 @@ import pandas as pd
 dtype_dict = {
     "patient_id": "string",                    # Character/String for unique patient identifier
     "problem_list_id": "string",               # Character/String for unique problem list entry
-    "noted_date_age_in_days": "int32",         # Integer for age in days when problem was noted
+    "noted_date_age_in_days": "Int32",         # Nullable integer for age in days when problem was noted
     "resolved_date_age_in_days": "Int32",      # Nullable integer for age in days when problem was resolved
     "pl_diag": "string",                       # Character/String for diagnosis code
 }

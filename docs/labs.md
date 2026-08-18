@@ -4,33 +4,33 @@
 - **Dataset**: Lab order and result data for pediatric patients (0–18 years).
 - **Rows**: 17,230,681.
 - **Unique Patients**: 247,271 (unique `patient_id`).
-- **Unique Visits**: 2,859,084 (unique `visit_id`).
+- **Unique Visit IDs**: 2,859,084 (distinct `visit_id` values; not all resolve to `visits.csv`).
 - **Unique Lab orders**: 6,578,838 (unique `lab_order_id`).
 - **Columns**: 12 (patient, visit, lab order, and result data).
 - **Key Uses**: Lab result analysis, diagnostic trends, longitudinal patient analysis, demographic-linked studies.
 - **Tools**: Optimized for R (`dplyr`, `data.table`, `ggplot2`) or Python (`pandas`, `matplotlib`).
 - **Time Span**: Unavailable due to de-identification (no order or result dates).
 
-**Dataset Overview**: The `labs.csv` file contains lab order and result data for pediatric patients aged 0 to 18 years. Each row represents a single result component within a lab procedure ordered during a visit, including identifiers, procedure details, and result values. No time span is available due to de-identification (absence of order and result dates). The dataset can be joined with `patients.csv` (250,588 unique patients) using `patient_id` and with `visits.csv` (6,494,473 visits) using `visit_id` and `patient_id` for enhanced analyses incorporating demographic and visit data.
+**Dataset Overview**: The `labs.csv` file contains lab order and result data for pediatric patients aged 0 to 18 years. Each row represents a single result component within a lab procedure ordered during a visit, including identifiers, procedure details, and result values. No time span is available due to de-identification (absence of order and result dates). The dataset joins completely to `patients.csv` through `patient_id`; its `visit_id` relationship to `visits.csv` is logical but incomplete.
 
 **File Structure**:
 - **Format**: CSV (Comma-Separated Values)
 - **Rows**: 17,230,681 (one row per result component)
 - **Unique Patients**: 247,271 (unique `patient_id`)
-- **Unique Visits**: 2,859,084 (unique `visit_id`).
+- **Unique Visit IDs**: 2,859,084 (distinct `visit_id` values; not all resolve to `visits.csv`).
 - **Unique Lab orders**: 6,578,838 (unique `lab_order_id`).
 - **Columns**: 12 (detailed below)
 
 **Column Descriptions**:
 1. **patient_id** (Character/String):
 - Unique identifier for each patient.
-- Joins with `patients.csv` for demographic data (sex, ethnicity, race_1 to race_8) and with `visits.csv` for visit details.
+- Joins completely with `patients.csv` for demographic data (sex, ethnicity, race_1 to race_8). The `visit_id` field is a logical but incomplete link to `visits.csv` for visit details.
 - Tracks 247,271 unique patients across lab orders and results.
 
 2. **visit_id** (Character/String):
 - Unique identifier for the visit associated with the lab order.
-- Joins with `visits.csv` for additional visit-level data (e.g., encounter_type, age_in_days).
-- Tracks 2,859,084 unique visits across lab orders and results.
+- Logically links with `visits.csv` for additional visit-level data (e.g., encounter_type, age_in_days); 5,201,657 non-null lab rows have visit IDs absent from `visits.csv`.
+- Tracks 2,859,084 distinct `visit_id` values across lab orders and results; not all resolve to `visits.csv`.
 - There are 805 missing visit_id values if the lab was ordered outside a visit.
 
 3. **lab_order_id** (Character/String):
@@ -78,7 +78,7 @@
 7. **lab_procedure_description** (Character/String):
 - Description of the lab procedure, providing additional information (especially for Care Everywhere labs where `lab_procedure_name` = "CE EXTERNAL LAB").
 
-8. **lab_result_date_age_in_days** (Numeric):
+8. **lab_result_date_age_in_days** (Nullable Integer):
 - Age of the patient in days at the time of result (result date - date of birth).
 - Null if no result record is available.
 - Range: -44378 to 6570 days when available.
@@ -111,7 +111,7 @@
      | LEUKOCYTE EST, POC                                          |  94,532 |
      | KETONES, POC                                                |  94,458 |
      | NITRITE, POC                                                |  94,186 |
-- Missing: 2,283,469 (13.3%)
+- Missing: 2,283,186 (13.3%)
 
 10. **result_loinc_code** (Character/String):
     - LOINC code for the result component (for identification), if available.
@@ -145,7 +145,7 @@
 11. **result_value** (Character/String):
     - Value for the result component.
     - May be numeric, text, or other formats depending on the component.
-    - Missing: 2,531,187 (14.7%)
+- Missing: 2,494,261 (14.5%)
 
 12. **result_flag** (Character/String):
     - HL7 category for the result if the result is abnormal.
@@ -194,8 +194,9 @@
 **Key Notes**:
 - **De-identification**: `lab_order_date_age_in_days` and `lab_result_date_age_in_days` replace dates to protect privacy; no time span data available.
 - **Missing Data**: Fields like `lab_result_date_age_in_days`, `result_component_name`, `result_loinc_code`, `result_value`, and `result_flag` may be null if no result record exists or if data is incomplete.
+- **Row Identity**: No row-level primary key is asserted; `lab_order_id` repeats across result components and `result_line_num` is blank in 2,283,186 rows.
 - **Data Quality**: Ensure consistency in `result_flag` values; "(NONE)" denotes normal, while other values indicate abnormalities. Validate LOINC codes for accuracy.
-- **Linkage**: `patient_id` and `visit_id` enable joining with `patients.csv` and `visits.csv` for comprehensive analyses (e.g., lab results by demographics or visit types).
+- **Linkage**: `patient_id` is a complete foreign key to `patients.csv`. `visit_id` is a logical link to `visits.csv`: 805 rows are null and 5,201,657 non-null lab rows have visit identifiers absent from `visits.csv`.
 
 **Example Use Cases for LLMs**:
 - Summarize lab result patterns by `lab_procedure_name` or `result_component_name`.
@@ -207,7 +208,7 @@
 
 **Important Considerations**:
 - **Dataset Size**: 17,230,681 rows may require efficient processing (e.g., `data.table` or `dplyr` in R, chunking for large datasets).
-- **Unique Patients**: 247,271 unique `patient_id` values enable longitudinal analyses, joinable with `patients.csv` and `visits.csv`.
+- **Unique Patients**: 247,271 unique `patient_id` values enable longitudinal analyses, joinable with `patients.csv`; visit-level enrichment is conditional on the incomplete `visit_id` link.
 - `lab_order_date_age_in_days` and `lab_result_date_age_in_days` have 47 and 121 negative values respectively.
 - There are 583,055 (3.901%) Results before orders.
 - Handle null values in result-related fields carefully to avoid bias in analyses.
@@ -230,13 +231,14 @@ dtype_dict = {
     "lab_order_date_age_in_days": "int32",     # Integer for age in days at order
     "lab_procedure_name": "string",            # Character/String for procedure name
     "lab_procedure_description": "string",     # Character/String for procedure description
-    "lab_result_date_age_in_days": "Int32",    # Numeric, float to handle NaNs
+    "lab_result_date_age_in_days": "Int32",    # Nullable integer for age in days at result
     "result_component_name": "string",         # Character/String for component name
     "result_loinc_code": "string",             # Character/String for LOINC code
     "result_value": "string",                  # Character/String for result value
     "result_flag": "category"                  # Character/String for result flag
 }
 
-# Read the CSV file with specified dtypes. Make sure to use 'latin1' encoding to avoid errors.
+# Read the CSV file with specified dtypes. The file contains mixed UTF-8 and
+# single-byte text; ISO-8859-1/latin1 decoding preserves all file bytes.
 df = pd.read_csv("/path/to/labs.csv", dtype=dtype_dict, encoding='latin1')
 ```

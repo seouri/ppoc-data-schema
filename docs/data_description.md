@@ -23,19 +23,19 @@ This dataset contains de-identified electronic health record (EHR) data for 250,
 The datasets are interconnected via unique identifiers for multi-level analysis:
 
 - **Patients** (`patients.csv`, `patients_augmented.csv`): Core demographics (sex, ethnicity, race). Linked to ALL other files via `patient_id`.
-- **Visits** (`visits.csv`, `visits_augmented.csv`): Visit-level records (anthropometrics, diagnoses, encounter types). Linked to patients via `patient_id`, and to labs, medications, referrals via `visit_id`.
-- **Labs** (`labs.csv`): Lab orders/results. Linked to visits via `visit_id`, patients via `patient_id`.
-- **Medications** (`medications.csv`): Prescriptions/administrations. Linked to visits via `visit_id`, patients via patient_id.
+- **Visits** (`visits.csv`, `visits_augmented.csv`): Visit-level records (anthropometrics, diagnoses, encounter types). Linked to patients via `patient_id`; the augmented file also has a complete `visit_id` link to `visits.csv`.
+- **Labs** (`labs.csv`): Lab orders/results. Linked completely to patients via `patient_id`; `visit_id` is a logical but incomplete link to `visits.csv`.
+- **Medications** (`medications.csv`): Prescriptions/administrations. Linked completely to patients via `patient_id`; `visit_id` is a logical but incomplete link to `visits.csv`.
 - **Problem List** (`problem_list.csv`): Chronic/resolved conditions. Linked ONLY to patients via `patient_id` (not directly to visits; combine with visits for full diagnosis history).
-- **Referrals** (`referrals.csv`): Specialty referrals. Linked to visits via `visit_id`, patients via `patient_id`.
+- **Referrals** (`referrals.csv`): Specialty referrals. Linked completely to patients via `patient_id`; `visit_id` is a logical but incomplete link to `visits.csv`.
 
 **Relationship Diagram:**
 ```
 Patients (patient_id)
 ├── Visits (patient_id, visit_id)
-│   ├── Labs (patient_id, visit_id)
-│   ├── Medications (patient_id, visit_id)
-│   └── Referrals (patient_id, visit_id)
+│   ├── Labs (patient_id; logical/incomplete visit_id)
+│   ├── Medications (patient_id; logical/incomplete visit_id)
+│   └── Referrals (patient_id; logical/incomplete visit_id)
 └── Problem List (patient_id)
 ```
 
@@ -45,7 +45,7 @@ Patients (patient_id)
 
 ### [Patients (`patients.csv`)](patients.md)
 - **Rows:** 250,588 (one per patient)
-- **Key Columns:** `patient_id` (unique), `sex` (F/M/U), `ethnicity` (7 categories), `race_1` to `race_8` (up to 8 races)
+- **Key Columns:** `patient_id` (unique), `sex` (F/M/U), `ethnicity` (6 recorded categories plus blank), `race_1` to `race_8` (up to 8 races)
 - **Highlights:** Demographics for all patients; ~20.5% missing ethnicity, ~17.5% missing race_1; multiracial support.
 - **LLM Uses:** Cohort stratification by demographics; analyze health disparities; join with visits for demographic-linked outcomes.
 
@@ -57,7 +57,7 @@ Patients (patient_id)
 
 ### [Visits (`visits.csv`)](visits.md)
 - **Rows:** 6,494,473 (one per visit)
-- **Key Columns:** `patient_id`, `visit_id`, `age_in_days`, `encounter_type` (44 types, e.g., "Office Visit"), `weight_oz`, `height_in`, `bmi_percentile`, `enc_diag_1` to `enc_diag_33` (ICD-10 codes)
+- **Key Columns:** `patient_id`, `visit_id`, `age_in_days`, `encounter_type` (44 types, e.g., "Office Visit"), `weight_oz`, `height_in`, `BMI`, `bmi_percentile`, `enc_diag_1` to `enc_diag_33` (ICD-10 codes)
 - **Highlights:** Anthropometrics and diagnoses per visit; 72.8% "Office Visit"; up to 33 diagnoses; missing data in measurements.
 - **LLM Uses:** Growth trend analysis; diagnosis prevalence; join with demographics for stratified insights.
 
@@ -80,7 +80,7 @@ Patients (patient_id)
 - **LLM Uses:** Medication adherence; pharmacoepidemiology; adverse event detection via diagnosis links.
 
 ### [Problem List (`problem_list.csv`)](problem_list.md)
-- **Rows:** 1,709,585 (one per entry)
+- **Rows:** 1,709,584 (one per entry)
 - **Key Columns:** `patient_id`, `problem_list_id`, `noted_date_age_in_days`, `resolved_date_age_in_days`, `pl_diag` (ICD-10, 4,740 unique)
 - **Highlights:** Chronic conditions; top: COVID-19, anxiety, constipation; not complete (combine with visits).
 - **LLM Uses:** Chronic disease tracking; resolution analysis; supplement visit diagnoses.
@@ -92,6 +92,8 @@ Patients (patient_id)
 - **LLM Uses:** Referral pattern analysis; specialty utilization; care pathway modeling.
 
 ## Example LLM Prompt Integration
+
+For schema-driven Python loading, see [`schema/README.md`](../schema/README.md) for examples that read `datapackage.json`, resolve resource paths, apply declared encodings and nullable types, and inspect keys.
 
 When using this dataset in prompts:
 - **Specify Files:** "Analyze visits_augmented.csv for growth velocities by sex from patients.csv."

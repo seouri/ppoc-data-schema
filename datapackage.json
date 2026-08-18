@@ -1,0 +1,2442 @@
+{
+  "profile": "tabular-data-package",
+  "name": "ppoc-pediatric-ehr",
+  "title": "PPOC Pediatric EHR Data Package",
+  "description": "Machine-readable schema for de-identified pediatric EHR data. Absolute dates are replaced by patient age in days.",
+  "x-schemaVersion": "1.0.0",
+  "keywords": [
+    "pediatrics",
+    "electronic-health-records",
+    "growth",
+    "de-identified"
+  ],
+  "resources": [
+    {
+      "profile": "tabular-data-resource",
+      "name": "patients",
+      "path": "patients.csv",
+      "title": "Patients",
+      "description": "One demographic record per de-identified pediatric patient.",
+      "format": "csv",
+      "mediatype": "text/csv",
+      "encoding": "utf-8",
+      "dialect": {
+        "header": true,
+        "delimiter": ",",
+        "quoteChar": "\"",
+        "doubleQuote": true
+      },
+      "schema": {
+        "fields": [
+          {
+            "name": "patient_id",
+            "type": "string",
+            "description": "Blinded unique identifier for the patient.",
+            "constraints": {
+              "required": true
+            },
+            "x-deidentified": true
+          },
+          {
+            "name": "sex",
+            "type": "string",
+            "description": "Recorded patient sex; U means unknown.",
+            "constraints": {
+              "enum": [
+                "F",
+                "M",
+                "U"
+              ],
+              "required": true
+            }
+          },
+          {
+            "name": "ethnicity",
+            "type": "string",
+            "description": "Recorded patient ethnicity; non-response is retained as a category in the base file.",
+            "constraints": {
+              "enum": [
+                "Not Hispanic or Latino",
+                "Hispanic or Latino",
+                "Choose not to Answer",
+                "Unknown",
+                "Unable to collect",
+                "Patient does not know"
+              ]
+            }
+          },
+          {
+            "name": "race_1",
+            "type": "string",
+            "description": "Recorded race category at position 1; blank when no category is present.",
+            "constraints": {
+              "enum": [
+                "American Indian or Alaska Native",
+                "Another Race",
+                "Asian",
+                "Black or African American",
+                "Choose not to answer",
+                "Middle Eastern or Northern African",
+                "Native Hawaiian or Other Pacific Islander",
+                "Patient does not know",
+                "Unable to collect",
+                "Unknown",
+                "White"
+              ]
+            }
+          },
+          {
+            "name": "race_2",
+            "type": "string",
+            "description": "Recorded race category at position 2; blank when no category is present.",
+            "constraints": {
+              "enum": [
+                "American Indian or Alaska Native",
+                "Another Race",
+                "Asian",
+                "Black or African American",
+                "Choose not to answer",
+                "Middle Eastern or Northern African",
+                "Native Hawaiian or Other Pacific Islander",
+                "Patient does not know",
+                "Unable to collect",
+                "Unknown",
+                "White"
+              ]
+            }
+          },
+          {
+            "name": "race_3",
+            "type": "string",
+            "description": "Recorded race category at position 3; blank when no category is present.",
+            "constraints": {
+              "enum": [
+                "American Indian or Alaska Native",
+                "Another Race",
+                "Asian",
+                "Black or African American",
+                "Choose not to answer",
+                "Middle Eastern or Northern African",
+                "Native Hawaiian or Other Pacific Islander",
+                "Patient does not know",
+                "Unable to collect",
+                "Unknown",
+                "White"
+              ]
+            }
+          },
+          {
+            "name": "race_4",
+            "type": "string",
+            "description": "Recorded race category at position 4; blank when no category is present.",
+            "constraints": {
+              "enum": [
+                "American Indian or Alaska Native",
+                "Another Race",
+                "Asian",
+                "Black or African American",
+                "Choose not to answer",
+                "Middle Eastern or Northern African",
+                "Native Hawaiian or Other Pacific Islander",
+                "Patient does not know",
+                "Unable to collect",
+                "Unknown",
+                "White"
+              ]
+            }
+          },
+          {
+            "name": "race_5",
+            "type": "string",
+            "description": "Recorded race category at position 5; blank when no category is present.",
+            "constraints": {
+              "enum": [
+                "American Indian or Alaska Native",
+                "Another Race",
+                "Asian",
+                "Black or African American",
+                "Choose not to answer",
+                "Middle Eastern or Northern African",
+                "Native Hawaiian or Other Pacific Islander",
+                "Patient does not know",
+                "Unable to collect",
+                "Unknown",
+                "White"
+              ]
+            }
+          },
+          {
+            "name": "race_6",
+            "type": "string",
+            "description": "Recorded race category at position 6; blank when no category is present.",
+            "constraints": {
+              "enum": [
+                "American Indian or Alaska Native",
+                "Another Race",
+                "Asian",
+                "Black or African American",
+                "Choose not to answer",
+                "Middle Eastern or Northern African",
+                "Native Hawaiian or Other Pacific Islander",
+                "Patient does not know",
+                "Unable to collect",
+                "Unknown",
+                "White"
+              ]
+            }
+          },
+          {
+            "name": "race_7",
+            "type": "string",
+            "description": "Recorded race category at position 7; blank when no category is present.",
+            "constraints": {
+              "enum": [
+                "American Indian or Alaska Native",
+                "Another Race",
+                "Asian",
+                "Black or African American",
+                "Choose not to answer",
+                "Middle Eastern or Northern African",
+                "Native Hawaiian or Other Pacific Islander",
+                "Patient does not know",
+                "Unable to collect",
+                "Unknown",
+                "White"
+              ]
+            }
+          },
+          {
+            "name": "race_8",
+            "type": "string",
+            "description": "Recorded race category at position 8; blank when no category is present.",
+            "constraints": {
+              "enum": [
+                "American Indian or Alaska Native",
+                "Another Race",
+                "Asian",
+                "Black or African American",
+                "Choose not to answer",
+                "Middle Eastern or Northern African",
+                "Native Hawaiian or Other Pacific Islander",
+                "Patient does not know",
+                "Unable to collect",
+                "Unknown",
+                "White"
+              ]
+            }
+          }
+        ],
+        "missingValues": [
+          ""
+        ],
+        "primaryKey": "patient_id"
+      },
+      "x-rowCount": 250588,
+      "x-fieldCount": 11,
+      "x-uniquePatientCount": 250588
+    },
+    {
+      "profile": "tabular-data-resource",
+      "name": "patients_augmented",
+      "path": "patients_augmented.csv",
+      "title": "Patients Augmented",
+      "description": "Patient demographics plus longitudinal diagnosis and growth summaries.",
+      "format": "csv",
+      "mediatype": "text/csv",
+      "encoding": "utf-8",
+      "dialect": {
+        "header": true,
+        "delimiter": ",",
+        "quoteChar": "\"",
+        "doubleQuote": true
+      },
+      "schema": {
+        "fields": [
+          {
+            "name": "patient_id",
+            "type": "string",
+            "description": "Blinded unique identifier for the patient.",
+            "constraints": {
+              "required": true
+            },
+            "x-deidentified": true
+          },
+          {
+            "name": "sex",
+            "type": "string",
+            "description": "Recorded patient sex; U means unknown.",
+            "constraints": {
+              "enum": [
+                "F",
+                "M",
+                "U"
+              ],
+              "required": true
+            }
+          },
+          {
+            "name": "ethnicity",
+            "type": "string",
+            "description": "Recorded patient ethnicity; non-response is retained as a category in the base file.",
+            "constraints": {
+              "enum": [
+                "Not Hispanic or Latino",
+                "Hispanic or Latino"
+              ]
+            }
+          },
+          {
+            "name": "race_1",
+            "type": "string",
+            "description": "Recorded race category at position 1; blank when no category is present.",
+            "constraints": {
+              "enum": [
+                "American Indian or Alaska Native",
+                "Another Race",
+                "Asian",
+                "Black or African American",
+                "Middle Eastern or Northern African",
+                "Native Hawaiian or Other Pacific Islander",
+                "White"
+              ]
+            }
+          },
+          {
+            "name": "race_2",
+            "type": "string",
+            "description": "Recorded race category at position 2; blank when no category is present.",
+            "constraints": {
+              "enum": [
+                "American Indian or Alaska Native",
+                "Another Race",
+                "Asian",
+                "Black or African American",
+                "Middle Eastern or Northern African",
+                "Native Hawaiian or Other Pacific Islander",
+                "White"
+              ]
+            }
+          },
+          {
+            "name": "race_3",
+            "type": "string",
+            "description": "Recorded race category at position 3; blank when no category is present.",
+            "constraints": {
+              "enum": [
+                "American Indian or Alaska Native",
+                "Another Race",
+                "Asian",
+                "Black or African American",
+                "Middle Eastern or Northern African",
+                "Native Hawaiian or Other Pacific Islander",
+                "White"
+              ]
+            }
+          },
+          {
+            "name": "race_4",
+            "type": "string",
+            "description": "Recorded race category at position 4; blank when no category is present.",
+            "constraints": {
+              "enum": [
+                "American Indian or Alaska Native",
+                "Another Race",
+                "Asian",
+                "Black or African American",
+                "Middle Eastern or Northern African",
+                "Native Hawaiian or Other Pacific Islander",
+                "White"
+              ]
+            }
+          },
+          {
+            "name": "race_5",
+            "type": "string",
+            "description": "Recorded race category at position 5; blank when no category is present.",
+            "constraints": {
+              "enum": [
+                "American Indian or Alaska Native",
+                "Another Race",
+                "Asian",
+                "Black or African American",
+                "Middle Eastern or Northern African",
+                "Native Hawaiian or Other Pacific Islander",
+                "White"
+              ]
+            }
+          },
+          {
+            "name": "race_6",
+            "type": "string",
+            "description": "Recorded race category at position 6; blank when no category is present.",
+            "constraints": {
+              "enum": [
+                "American Indian or Alaska Native",
+                "Another Race",
+                "Asian",
+                "Black or African American",
+                "Middle Eastern or Northern African",
+                "Native Hawaiian or Other Pacific Islander",
+                "White"
+              ]
+            }
+          },
+          {
+            "name": "race_7",
+            "type": "string",
+            "description": "Recorded race category at position 7; blank when no category is present.",
+            "constraints": {
+              "enum": [
+                "American Indian or Alaska Native",
+                "Another Race",
+                "Asian",
+                "Black or African American",
+                "Middle Eastern or Northern African",
+                "Native Hawaiian or Other Pacific Islander",
+                "White"
+              ]
+            }
+          },
+          {
+            "name": "race_8",
+            "type": "string",
+            "description": "Recorded race category at position 8; blank when no category is present.",
+            "constraints": {
+              "enum": [
+                "American Indian or Alaska Native",
+                "Another Race",
+                "Asian",
+                "Black or African American",
+                "Middle Eastern or Northern African",
+                "Native Hawaiian or Other Pacific Islander",
+                "White"
+              ]
+            }
+          },
+          {
+            "name": "healthy_flag",
+            "type": "integer",
+            "description": "1 only when all diagnosis and adverse-growth history flags are 0.",
+            "constraints": {
+              "enum": [
+                0,
+                1
+              ],
+              "required": true
+            }
+          },
+          {
+            "name": "chronic_dx_flag",
+            "type": "integer",
+            "description": "1 when any visit or problem-list diagnosis is in the chronic diagnosis set.",
+            "constraints": {
+              "enum": [
+                0,
+                1
+              ],
+              "required": true
+            }
+          },
+          {
+            "name": "growth_dx_flag",
+            "type": "integer",
+            "description": "1 when any visit or problem-list diagnosis starts with a growth-disorder prefix.",
+            "constraints": {
+              "enum": [
+                0,
+                1
+              ],
+              "required": true
+            }
+          },
+          {
+            "name": "ever_stunting_flag",
+            "type": "integer",
+            "description": "1 when any visit has height_z_score below -2.",
+            "constraints": {
+              "enum": [
+                0,
+                1
+              ],
+              "required": true
+            }
+          },
+          {
+            "name": "ever_wasting_flag",
+            "type": "integer",
+            "description": "1 when any visit meets the wasting threshold.",
+            "constraints": {
+              "enum": [
+                0,
+                1
+              ],
+              "required": true
+            }
+          },
+          {
+            "name": "ever_underweight_flag",
+            "type": "integer",
+            "description": "1 when any visit has bmi_percentile below 5.",
+            "constraints": {
+              "enum": [
+                0,
+                1
+              ],
+              "required": true
+            }
+          },
+          {
+            "name": "ever_obesity_flag",
+            "type": "integer",
+            "description": "1 when any visit has bmi_percentile at least 95.",
+            "constraints": {
+              "enum": [
+                0,
+                1
+              ],
+              "required": true
+            }
+          },
+          {
+            "name": "visits_count",
+            "type": "integer",
+            "description": "Total recorded visits; 0 for a patient with no visits.",
+            "constraints": {
+              "minimum": 0,
+              "required": true
+            }
+          },
+          {
+            "name": "visits_count_pre_dx",
+            "type": "integer",
+            "description": "Visits before the first growth-related diagnosis, or all visits when none exists.",
+            "constraints": {
+              "minimum": 0,
+              "required": true
+            }
+          },
+          {
+            "name": "min_visit_age_days",
+            "type": "integer",
+            "description": "Patient age in days at the first recorded visit, replacing the absolute date for de-identification.",
+            "x-unit": "day",
+            "x-deidentifiedDate": true
+          },
+          {
+            "name": "max_visit_age_days",
+            "type": "integer",
+            "description": "Patient age in days at the last recorded visit, replacing the absolute date for de-identification.",
+            "x-unit": "day",
+            "x-deidentifiedDate": true
+          },
+          {
+            "name": "visits_span_days",
+            "type": "integer",
+            "description": "Days between first and last visit; null with no visits.",
+            "constraints": {
+              "minimum": 0
+            },
+            "x-unit": "day"
+          },
+          {
+            "name": "dx_age_years",
+            "type": "number",
+            "description": "Minimum age in years at any growth-related diagnosis.",
+            "x-unit": "year"
+          },
+          {
+            "name": "dx_age_years_e03_9",
+            "type": "number",
+            "description": "Minimum age in years at a diagnosis starting with E03.9: Hypothyroidism, unspecified.",
+            "x-unit": "year",
+            "x-diagnosisPrefix": "E03.9",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "dx_age_years_e10",
+            "type": "number",
+            "description": "Minimum age in years at a diagnosis starting with E10: Type 1 diabetes mellitus.",
+            "x-unit": "year",
+            "x-diagnosisPrefix": "E10",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "dx_age_years_e22_0",
+            "type": "number",
+            "description": "Minimum age in years at a diagnosis starting with E22.0: Acromegaly and pituitary gigantism.",
+            "x-unit": "year",
+            "x-diagnosisPrefix": "E22.0",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "dx_age_years_e23_0",
+            "type": "number",
+            "description": "Minimum age in years at a diagnosis starting with E23.0: Hypopituitarism.",
+            "x-unit": "year",
+            "x-diagnosisPrefix": "E23.0",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "dx_age_years_e23_6",
+            "type": "number",
+            "description": "Minimum age in years at a diagnosis starting with E23.6: Other disorders of pituitary gland.",
+            "x-unit": "year",
+            "x-diagnosisPrefix": "E23.6",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "dx_age_years_e24",
+            "type": "number",
+            "description": "Minimum age in years at a diagnosis starting with E24: Cushing's syndrome.",
+            "x-unit": "year",
+            "x-diagnosisPrefix": "E24",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "dx_age_years_e30_0",
+            "type": "number",
+            "description": "Minimum age in years at a diagnosis starting with E30.0: Delayed puberty.",
+            "x-unit": "year",
+            "x-diagnosisPrefix": "E30.0",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "dx_age_years_e30_1",
+            "type": "number",
+            "description": "Minimum age in years at a diagnosis starting with E30.1: Precocious puberty.",
+            "x-unit": "year",
+            "x-diagnosisPrefix": "E30.1",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "dx_age_years_e34_3",
+            "type": "number",
+            "description": "Minimum age in years at a diagnosis starting with E34.3: Short stature due to endocrine disorder.",
+            "x-unit": "year",
+            "x-diagnosisPrefix": "E34.3",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "dx_age_years_e34_4",
+            "type": "number",
+            "description": "Minimum age in years at a diagnosis starting with E34.4: Constitutional tall stature.",
+            "x-unit": "year",
+            "x-diagnosisPrefix": "E34.4",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "dx_age_years_e72_11",
+            "type": "number",
+            "description": "Minimum age in years at a diagnosis starting with E72.11: Homocystinuria.",
+            "x-unit": "year",
+            "x-diagnosisPrefix": "E72.11",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "dx_age_years_k50",
+            "type": "number",
+            "description": "Minimum age in years at a diagnosis starting with K50: Crohn's disease [regional enteritis].",
+            "x-unit": "year",
+            "x-diagnosisPrefix": "K50",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "dx_age_years_k51",
+            "type": "number",
+            "description": "Minimum age in years at a diagnosis starting with K51: Ulcerative colitis.",
+            "x-unit": "year",
+            "x-diagnosisPrefix": "K51",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "dx_age_years_k90_0",
+            "type": "number",
+            "description": "Minimum age in years at a diagnosis starting with K90.0: Celiac disease.",
+            "x-unit": "year",
+            "x-diagnosisPrefix": "K90.0",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "dx_age_years_n18",
+            "type": "number",
+            "description": "Minimum age in years at a diagnosis starting with N18: Chronic kidney disease.",
+            "x-unit": "year",
+            "x-diagnosisPrefix": "N18",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "dx_age_years_n25_0",
+            "type": "number",
+            "description": "Minimum age in years at a diagnosis starting with N25.0: Renal osteodystrophy.",
+            "x-unit": "year",
+            "x-diagnosisPrefix": "N25.0",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "dx_age_years_p04_3",
+            "type": "number",
+            "description": "Minimum age in years at a diagnosis starting with P04.3: Newborn affected by maternal use of alcohol.",
+            "x-unit": "year",
+            "x-diagnosisPrefix": "P04.3",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "dx_age_years_p05",
+            "type": "number",
+            "description": "Minimum age in years at a diagnosis starting with P05: Slow fetal growth and fetal malnutrition.",
+            "x-unit": "year",
+            "x-diagnosisPrefix": "P05",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "dx_age_years_p07",
+            "type": "number",
+            "description": "Minimum age in years at a diagnosis starting with P07: Short gestation and low birth weight.",
+            "x-unit": "year",
+            "x-diagnosisPrefix": "P07",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "dx_age_years_p70",
+            "type": "number",
+            "description": "Minimum age in years at a diagnosis starting with P70: Transitory newborn carbohydrate-metabolism disorder.",
+            "x-unit": "year",
+            "x-diagnosisPrefix": "P70",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "dx_age_years_p92_6",
+            "type": "number",
+            "description": "Minimum age in years at a diagnosis starting with P92.6: Failure to thrive in newborn.",
+            "x-unit": "year",
+            "x-diagnosisPrefix": "P92.6",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "dx_age_years_q77",
+            "type": "number",
+            "description": "Minimum age in years at a diagnosis starting with Q77: Osteochondrodysplasia with defects of growth.",
+            "x-unit": "year",
+            "x-diagnosisPrefix": "Q77",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "dx_age_years_q78_0",
+            "type": "number",
+            "description": "Minimum age in years at a diagnosis starting with Q78.0: Osteogenesis imperfecta.",
+            "x-unit": "year",
+            "x-diagnosisPrefix": "Q78.0",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "dx_age_years_q78_1",
+            "type": "number",
+            "description": "Minimum age in years at a diagnosis starting with Q78.1: Polyostotic fibrous dysplasia.",
+            "x-unit": "year",
+            "x-diagnosisPrefix": "Q78.1",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "dx_age_years_q87_1",
+            "type": "number",
+            "description": "Minimum age in years at a diagnosis starting with Q87.1: Congenital syndrome associated with short stature.",
+            "x-unit": "year",
+            "x-diagnosisPrefix": "Q87.1",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "dx_age_years_q87_2",
+            "type": "number",
+            "description": "Minimum age in years at a diagnosis starting with Q87.2: Congenital syndrome predominantly involving limbs.",
+            "x-unit": "year",
+            "x-diagnosisPrefix": "Q87.2",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "dx_age_years_q87_3",
+            "type": "number",
+            "description": "Minimum age in years at a diagnosis starting with Q87.3: Congenital syndrome involving early overgrowth.",
+            "x-unit": "year",
+            "x-diagnosisPrefix": "Q87.3",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "dx_age_years_q87_4",
+            "type": "number",
+            "description": "Minimum age in years at a diagnosis starting with Q87.4: Marfan syndrome.",
+            "x-unit": "year",
+            "x-diagnosisPrefix": "Q87.4",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "dx_age_years_q90",
+            "type": "number",
+            "description": "Minimum age in years at a diagnosis starting with Q90: Down syndrome.",
+            "x-unit": "year",
+            "x-diagnosisPrefix": "Q90",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "dx_age_years_q96",
+            "type": "number",
+            "description": "Minimum age in years at a diagnosis starting with Q96: Turner syndrome.",
+            "x-unit": "year",
+            "x-diagnosisPrefix": "Q96",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "dx_age_years_q98_0",
+            "type": "number",
+            "description": "Minimum age in years at a diagnosis starting with Q98.0: Klinefelter syndrome, 47 XXY.",
+            "x-unit": "year",
+            "x-diagnosisPrefix": "Q98.0",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "dx_age_years_q98_4",
+            "type": "number",
+            "description": "Minimum age in years at a diagnosis starting with Q98.4: Klinefelter syndrome, unspecified.",
+            "x-unit": "year",
+            "x-diagnosisPrefix": "Q98.4",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "dx_age_years_q98_5",
+            "type": "number",
+            "description": "Minimum age in years at a diagnosis starting with Q98.5: Karyotype 47 XYY.",
+            "x-unit": "year",
+            "x-diagnosisPrefix": "Q98.5",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "count_weight_z_score",
+            "type": "integer",
+            "description": "Count of non-null visit-level weight_z_score values.",
+            "constraints": {
+              "minimum": 0
+            }
+          },
+          {
+            "name": "mean_weight_z_score",
+            "type": "number",
+            "description": "Mean visit-level weight_z_score."
+          },
+          {
+            "name": "std_weight_z_score",
+            "type": "number",
+            "description": "Standard deviation of visit-level weight_z_score values.",
+            "constraints": {
+              "minimum": 0
+            }
+          },
+          {
+            "name": "min_weight_z_score",
+            "type": "number",
+            "description": "Minimum visit-level weight_z_score."
+          },
+          {
+            "name": "max_weight_z_score",
+            "type": "number",
+            "description": "Maximum visit-level weight_z_score."
+          },
+          {
+            "name": "count_height_z_score",
+            "type": "integer",
+            "description": "Count of non-null visit-level height_z_score values.",
+            "constraints": {
+              "minimum": 0
+            }
+          },
+          {
+            "name": "mean_height_z_score",
+            "type": "number",
+            "description": "Mean visit-level height_z_score."
+          },
+          {
+            "name": "std_height_z_score",
+            "type": "number",
+            "description": "Standard deviation of visit-level height_z_score values.",
+            "constraints": {
+              "minimum": 0
+            }
+          },
+          {
+            "name": "min_height_z_score",
+            "type": "number",
+            "description": "Minimum visit-level height_z_score."
+          },
+          {
+            "name": "max_height_z_score",
+            "type": "number",
+            "description": "Maximum visit-level height_z_score."
+          },
+          {
+            "name": "count_bmi_z_score",
+            "type": "integer",
+            "description": "Count of non-null visit-level bmi_z_score values.",
+            "constraints": {
+              "minimum": 0
+            }
+          },
+          {
+            "name": "mean_bmi_z_score",
+            "type": "number",
+            "description": "Mean visit-level bmi_z_score."
+          },
+          {
+            "name": "std_bmi_z_score",
+            "type": "number",
+            "description": "Standard deviation of visit-level bmi_z_score values.",
+            "constraints": {
+              "minimum": 0
+            }
+          },
+          {
+            "name": "min_bmi_z_score",
+            "type": "number",
+            "description": "Minimum visit-level bmi_z_score."
+          },
+          {
+            "name": "max_bmi_z_score",
+            "type": "number",
+            "description": "Maximum visit-level bmi_z_score."
+          },
+          {
+            "name": "count_head_circ_z_score",
+            "type": "integer",
+            "description": "Count of non-null visit-level head_circ_z_score values.",
+            "constraints": {
+              "minimum": 0
+            }
+          },
+          {
+            "name": "mean_head_circ_z_score",
+            "type": "number",
+            "description": "Mean visit-level head_circ_z_score."
+          },
+          {
+            "name": "std_head_circ_z_score",
+            "type": "number",
+            "description": "Standard deviation of visit-level head_circ_z_score values.",
+            "constraints": {
+              "minimum": 0
+            }
+          },
+          {
+            "name": "min_head_circ_z_score",
+            "type": "number",
+            "description": "Minimum visit-level head_circ_z_score."
+          },
+          {
+            "name": "max_head_circ_z_score",
+            "type": "number",
+            "description": "Maximum visit-level head_circ_z_score."
+          },
+          {
+            "name": "count_weight_for_length_z_score",
+            "type": "integer",
+            "description": "Count of non-null visit-level weight_for_length_z_score values.",
+            "constraints": {
+              "minimum": 0
+            }
+          },
+          {
+            "name": "mean_weight_for_length_z_score",
+            "type": "number",
+            "description": "Mean visit-level weight_for_length_z_score."
+          },
+          {
+            "name": "std_weight_for_length_z_score",
+            "type": "number",
+            "description": "Standard deviation of visit-level weight_for_length_z_score values.",
+            "constraints": {
+              "minimum": 0
+            }
+          },
+          {
+            "name": "min_weight_for_length_z_score",
+            "type": "number",
+            "description": "Minimum visit-level weight_for_length_z_score."
+          },
+          {
+            "name": "max_weight_for_length_z_score",
+            "type": "number",
+            "description": "Maximum visit-level weight_for_length_z_score."
+          },
+          {
+            "name": "count_weight_for_stature_z_score",
+            "type": "integer",
+            "description": "Count of non-null visit-level weight_for_stature_z_score values.",
+            "constraints": {
+              "minimum": 0
+            }
+          },
+          {
+            "name": "mean_weight_for_stature_z_score",
+            "type": "number",
+            "description": "Mean visit-level weight_for_stature_z_score."
+          },
+          {
+            "name": "std_weight_for_stature_z_score",
+            "type": "number",
+            "description": "Standard deviation of visit-level weight_for_stature_z_score values.",
+            "constraints": {
+              "minimum": 0
+            }
+          },
+          {
+            "name": "min_weight_for_stature_z_score",
+            "type": "number",
+            "description": "Minimum visit-level weight_for_stature_z_score."
+          },
+          {
+            "name": "max_weight_for_stature_z_score",
+            "type": "number",
+            "description": "Maximum visit-level weight_for_stature_z_score."
+          }
+        ],
+        "missingValues": [
+          ""
+        ],
+        "primaryKey": "patient_id",
+        "foreignKeys": [
+          {
+            "fields": "patient_id",
+            "reference": {
+              "resource": "patients",
+              "fields": "patient_id"
+            }
+          }
+        ]
+      },
+      "x-rowCount": 250588,
+      "x-fieldCount": 87,
+      "x-derivedFrom": [
+        "patients",
+        "visits_augmented",
+        "problem_list"
+      ]
+    },
+    {
+      "profile": "tabular-data-resource",
+      "name": "visits",
+      "path": "visits.csv",
+      "title": "Visits",
+      "description": "One de-identified pediatric encounter with anthropometrics and up to 33 diagnoses per row.",
+      "format": "csv",
+      "mediatype": "text/csv",
+      "encoding": "utf-8",
+      "dialect": {
+        "header": true,
+        "delimiter": ",",
+        "quoteChar": "\"",
+        "doubleQuote": true
+      },
+      "schema": {
+        "fields": [
+          {
+            "name": "patient_id",
+            "type": "string",
+            "description": "Blinded unique identifier for the patient.",
+            "constraints": {
+              "required": true
+            },
+            "x-deidentified": true
+          },
+          {
+            "name": "visit_id",
+            "type": "string",
+            "description": "Blinded unique identifier for the visit.",
+            "constraints": {
+              "required": true
+            },
+            "x-deidentified": true
+          },
+          {
+            "name": "age_in_days",
+            "type": "integer",
+            "description": "Patient age in days at the visit, replacing the absolute date for de-identification.",
+            "constraints": {
+              "required": true
+            },
+            "x-unit": "day",
+            "x-deidentifiedDate": true
+          },
+          {
+            "name": "encounter_type",
+            "type": "string",
+            "description": "Encounter classification; 44 values occur in the data.",
+            "x-uniqueValueCount": 44
+          },
+          {
+            "name": "orig_enc_source_Epic_yn",
+            "type": "string",
+            "description": "Y when the encounter originated in Epic; N when converted from a legacy EMR.",
+            "constraints": {
+              "enum": [
+                "Y",
+                "N"
+              ]
+            }
+          },
+          {
+            "name": "weight_oz",
+            "type": "number",
+            "description": "Recorded weight in ounces; may contain outliers.",
+            "x-unit": "ounce"
+          },
+          {
+            "name": "height_in",
+            "type": "number",
+            "description": "Recorded height or length in inches; may contain outliers.",
+            "x-unit": "inch"
+          },
+          {
+            "name": "head_circ_cm",
+            "type": "number",
+            "description": "Recorded head circumference in centimeters; may contain outliers.",
+            "x-unit": "centimeter"
+          },
+          {
+            "name": "BMI",
+            "type": "number",
+            "description": "Body mass index recorded by Epic in the base visits file.",
+            "x-unit": "kg/m2"
+          },
+          {
+            "name": "bmi_percentile",
+            "type": "number",
+            "description": "BMI-for-age percentile recorded by Epic.",
+            "constraints": {
+              "minimum": 0,
+              "maximum": 100
+            },
+            "x-unit": "percentile"
+          },
+          {
+            "name": "enc_diag_1",
+            "type": "string",
+            "description": "Primary or first-listed encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_2",
+            "type": "string",
+            "description": "Diagnosis position 2 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_3",
+            "type": "string",
+            "description": "Diagnosis position 3 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_4",
+            "type": "string",
+            "description": "Diagnosis position 4 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_5",
+            "type": "string",
+            "description": "Diagnosis position 5 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_6",
+            "type": "string",
+            "description": "Diagnosis position 6 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_7",
+            "type": "string",
+            "description": "Diagnosis position 7 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_8",
+            "type": "string",
+            "description": "Diagnosis position 8 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_9",
+            "type": "string",
+            "description": "Diagnosis position 9 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_10",
+            "type": "string",
+            "description": "Diagnosis position 10 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_11",
+            "type": "string",
+            "description": "Diagnosis position 11 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_12",
+            "type": "string",
+            "description": "Diagnosis position 12 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_13",
+            "type": "string",
+            "description": "Diagnosis position 13 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_14",
+            "type": "string",
+            "description": "Diagnosis position 14 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_15",
+            "type": "string",
+            "description": "Diagnosis position 15 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_16",
+            "type": "string",
+            "description": "Diagnosis position 16 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_17",
+            "type": "string",
+            "description": "Diagnosis position 17 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_18",
+            "type": "string",
+            "description": "Diagnosis position 18 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_19",
+            "type": "string",
+            "description": "Diagnosis position 19 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_20",
+            "type": "string",
+            "description": "Diagnosis position 20 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_21",
+            "type": "string",
+            "description": "Diagnosis position 21 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_22",
+            "type": "string",
+            "description": "Diagnosis position 22 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_23",
+            "type": "string",
+            "description": "Diagnosis position 23 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_24",
+            "type": "string",
+            "description": "Diagnosis position 24 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_25",
+            "type": "string",
+            "description": "Diagnosis position 25 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_26",
+            "type": "string",
+            "description": "Diagnosis position 26 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_27",
+            "type": "string",
+            "description": "Diagnosis position 27 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_28",
+            "type": "string",
+            "description": "Diagnosis position 28 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_29",
+            "type": "string",
+            "description": "Diagnosis position 29 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_30",
+            "type": "string",
+            "description": "Diagnosis position 30 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_31",
+            "type": "string",
+            "description": "Diagnosis position 31 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_32",
+            "type": "string",
+            "description": "Diagnosis position 32 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_33",
+            "type": "string",
+            "description": "Diagnosis position 33 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          }
+        ],
+        "missingValues": [
+          ""
+        ],
+        "primaryKey": "visit_id",
+        "foreignKeys": [
+          {
+            "fields": "patient_id",
+            "reference": {
+              "resource": "patients",
+              "fields": "patient_id"
+            }
+          }
+        ]
+      },
+      "x-rowCount": 6494473,
+      "x-fieldCount": 43,
+      "x-uniquePatientCount": 250588
+    },
+    {
+      "profile": "tabular-data-resource",
+      "name": "visits_augmented",
+      "path": "visits_augmented.csv",
+      "title": "Visits Augmented",
+      "description": "Visit records augmented with demographics, standardized growth metrics, velocities, and clinical flags.",
+      "format": "csv",
+      "mediatype": "text/csv",
+      "encoding": "utf-8",
+      "dialect": {
+        "header": true,
+        "delimiter": ",",
+        "quoteChar": "\"",
+        "doubleQuote": true
+      },
+      "schema": {
+        "fields": [
+          {
+            "name": "patient_id",
+            "type": "string",
+            "description": "Blinded unique identifier for the patient.",
+            "constraints": {
+              "required": true
+            },
+            "x-deidentified": true
+          },
+          {
+            "name": "visit_id",
+            "type": "string",
+            "description": "Blinded unique identifier for the visit.",
+            "constraints": {
+              "required": true
+            },
+            "x-deidentified": true
+          },
+          {
+            "name": "sex",
+            "type": "string",
+            "description": "Recorded patient sex joined from patients.csv.",
+            "constraints": {
+              "enum": [
+                "F",
+                "M",
+                "U"
+              ],
+              "required": true
+            }
+          },
+          {
+            "name": "ethnicity",
+            "type": "string",
+            "description": "Informative ethnicity joined from patients.csv; non-response values are null.",
+            "constraints": {
+              "enum": [
+                "Not Hispanic or Latino",
+                "Hispanic or Latino"
+              ]
+            }
+          },
+          {
+            "name": "race_1",
+            "type": "string",
+            "description": "Informative primary race joined from patients.csv; non-response values are null.",
+            "constraints": {
+              "enum": [
+                "American Indian or Alaska Native",
+                "Another Race",
+                "Asian",
+                "Black or African American",
+                "Middle Eastern or Northern African",
+                "Native Hawaiian or Other Pacific Islander",
+                "White"
+              ]
+            }
+          },
+          {
+            "name": "age_in_days",
+            "type": "integer",
+            "description": "Patient age in days at the visit, replacing the absolute date for de-identification.",
+            "constraints": {
+              "required": true
+            },
+            "x-unit": "day",
+            "x-deidentifiedDate": true
+          },
+          {
+            "name": "age_in_months",
+            "type": "number",
+            "description": "age_in_days divided by 30.4375 and rounded to 2 decimals.",
+            "x-unit": "month",
+            "x-derivedFrom": [
+              "age_in_days"
+            ]
+          },
+          {
+            "name": "age_in_years",
+            "type": "number",
+            "description": "age_in_days divided by 365.25 and rounded to 3 decimals.",
+            "x-unit": "year",
+            "x-derivedFrom": [
+              "age_in_days"
+            ]
+          },
+          {
+            "name": "weight_oz",
+            "type": "number",
+            "description": "Recorded weight in ounces; may contain outliers.",
+            "x-unit": "ounce"
+          },
+          {
+            "name": "weight_kg",
+            "type": "number",
+            "description": "Weight converted from ounces and set to null when biologically implausible.",
+            "x-unit": "kilogram",
+            "x-derivedFrom": [
+              "weight_oz"
+            ]
+          },
+          {
+            "name": "weight_outlier_flag",
+            "type": "integer",
+            "description": "1 when the Harrall algorithm flags weight as a statistical outlier.",
+            "constraints": {
+              "enum": [
+                0,
+                1
+              ]
+            }
+          },
+          {
+            "name": "delta_weight_kg",
+            "type": "number",
+            "description": "Weight difference from the reference measurement.",
+            "x-unit": "kilogram"
+          },
+          {
+            "name": "delta_age_in_days_weight",
+            "type": "integer",
+            "description": "Age interval used for weight velocity.",
+            "constraints": {
+              "minimum": 0
+            },
+            "x-unit": "day"
+          },
+          {
+            "name": "weight_velocity",
+            "type": "number",
+            "description": "Longitudinal weight growth rate.",
+            "x-unit": "kg/year"
+          },
+          {
+            "name": "weight_z_score",
+            "type": "number",
+            "description": "CDC LMS weight-for-age Z-score."
+          },
+          {
+            "name": "weight_percentile",
+            "type": "number",
+            "description": "Weight-for-age percentile.",
+            "constraints": {
+              "minimum": 0,
+              "maximum": 100
+            },
+            "x-unit": "percentile"
+          },
+          {
+            "name": "weight_for_length_z_score",
+            "type": "number",
+            "description": "CDC LMS weight-for-length Z-score for heights 45-103.5 cm."
+          },
+          {
+            "name": "weight_for_length_percentile",
+            "type": "number",
+            "description": "Weight-for-length percentile.",
+            "constraints": {
+              "minimum": 0,
+              "maximum": 100
+            },
+            "x-unit": "percentile"
+          },
+          {
+            "name": "weight_for_stature_z_score",
+            "type": "number",
+            "description": "CDC LMS weight-for-stature Z-score for heights 77-121.5 cm."
+          },
+          {
+            "name": "weight_for_stature_percentile",
+            "type": "number",
+            "description": "Weight-for-stature percentile.",
+            "constraints": {
+              "minimum": 0,
+              "maximum": 100
+            },
+            "x-unit": "percentile"
+          },
+          {
+            "name": "wasting_flag",
+            "type": "integer",
+            "description": "1 when weight-for-length or weight-for-stature Z-score is below -2.",
+            "constraints": {
+              "enum": [
+                0,
+                1
+              ],
+              "required": true
+            }
+          },
+          {
+            "name": "height_in",
+            "type": "number",
+            "description": "Recorded height or length in inches; may contain outliers.",
+            "x-unit": "inch"
+          },
+          {
+            "name": "height_cm",
+            "type": "number",
+            "description": "Height converted from inches and set to null when biologically implausible.",
+            "x-unit": "centimeter",
+            "x-derivedFrom": [
+              "height_in"
+            ]
+          },
+          {
+            "name": "height_outlier_flag",
+            "type": "integer",
+            "description": "1 when the Harrall algorithm flags height as a statistical outlier.",
+            "constraints": {
+              "enum": [
+                0,
+                1
+              ]
+            }
+          },
+          {
+            "name": "delta_height_cm",
+            "type": "number",
+            "description": "Height difference from the reference measurement.",
+            "x-unit": "centimeter"
+          },
+          {
+            "name": "delta_age_in_days_height",
+            "type": "integer",
+            "description": "Age interval used for height velocity.",
+            "constraints": {
+              "minimum": 0
+            },
+            "x-unit": "day"
+          },
+          {
+            "name": "height_velocity",
+            "type": "number",
+            "description": "Longitudinal height growth rate.",
+            "x-unit": "cm/year"
+          },
+          {
+            "name": "height_velocity_z_score",
+            "type": "number",
+            "description": "Height-velocity Z-score with no pubertal-onset adjustment."
+          },
+          {
+            "name": "height_velocity_z_score_ep",
+            "type": "number",
+            "description": "Height-velocity Z-score with earlier pubertal onset."
+          },
+          {
+            "name": "height_velocity_z_score_ap",
+            "type": "number",
+            "description": "Height-velocity Z-score with average pubertal onset."
+          },
+          {
+            "name": "height_velocity_z_score_lp",
+            "type": "number",
+            "description": "Height-velocity Z-score with later pubertal onset."
+          },
+          {
+            "name": "height_velocity_percentile",
+            "type": "number",
+            "description": "Height-velocity percentile with no pubertal-onset adjustment.",
+            "constraints": {
+              "minimum": 0,
+              "maximum": 100
+            },
+            "x-unit": "percentile"
+          },
+          {
+            "name": "height_velocity_percentile_ep",
+            "type": "number",
+            "description": "Height-velocity percentile with earlier pubertal onset.",
+            "constraints": {
+              "minimum": 0,
+              "maximum": 100
+            },
+            "x-unit": "percentile"
+          },
+          {
+            "name": "height_velocity_percentile_ap",
+            "type": "number",
+            "description": "Height-velocity percentile with average pubertal onset.",
+            "constraints": {
+              "minimum": 0,
+              "maximum": 100
+            },
+            "x-unit": "percentile"
+          },
+          {
+            "name": "height_velocity_percentile_lp",
+            "type": "number",
+            "description": "Height-velocity percentile with later pubertal onset.",
+            "constraints": {
+              "minimum": 0,
+              "maximum": 100
+            },
+            "x-unit": "percentile"
+          },
+          {
+            "name": "height_z_score",
+            "type": "number",
+            "description": "CDC LMS height-for-age Z-score."
+          },
+          {
+            "name": "height_percentile",
+            "type": "number",
+            "description": "Height-for-age percentile.",
+            "constraints": {
+              "minimum": 0,
+              "maximum": 100
+            },
+            "x-unit": "percentile"
+          },
+          {
+            "name": "stunting_flag",
+            "type": "integer",
+            "description": "1 when height_z_score is below -2.",
+            "constraints": {
+              "enum": [
+                0,
+                1
+              ],
+              "required": true
+            }
+          },
+          {
+            "name": "head_circ_cm",
+            "type": "number",
+            "description": "Recorded head circumference in centimeters; may contain outliers.",
+            "x-unit": "centimeter"
+          },
+          {
+            "name": "head_circ_z_score",
+            "type": "number",
+            "description": "CDC LMS head-circumference Z-score."
+          },
+          {
+            "name": "head_circ_percentile",
+            "type": "number",
+            "description": "Head-circumference percentile.",
+            "constraints": {
+              "minimum": 0,
+              "maximum": 100
+            },
+            "x-unit": "percentile"
+          },
+          {
+            "name": "bmi",
+            "type": "number",
+            "description": "BMI recalculated from filtered weight_kg and height_cm for ages of at least 24 months.",
+            "x-unit": "kg/m2",
+            "x-derivedFrom": [
+              "weight_kg",
+              "height_cm",
+              "age_in_months"
+            ]
+          },
+          {
+            "name": "bmi_z_score",
+            "type": "number",
+            "description": "CDC LMS BMI-for-age Z-score."
+          },
+          {
+            "name": "bmi_percentile",
+            "type": "number",
+            "description": "BMI-for-age percentile recalculated from the CDC LMS Z-score.",
+            "constraints": {
+              "minimum": 0,
+              "maximum": 100
+            },
+            "x-unit": "percentile"
+          },
+          {
+            "name": "bmi_category",
+            "type": "string",
+            "description": "CDC BMI classification derived from bmi_percentile.",
+            "constraints": {
+              "enum": [
+                "underweight",
+                "normal",
+                "overweight",
+                "obese",
+                "severe_obesity"
+              ]
+            },
+            "x-derivedFrom": [
+              "bmi_percentile"
+            ]
+          },
+          {
+            "name": "underweight_flag",
+            "type": "integer",
+            "description": "1 when bmi_percentile is below 5.",
+            "constraints": {
+              "enum": [
+                0,
+                1
+              ],
+              "required": true
+            }
+          },
+          {
+            "name": "obesity_flag",
+            "type": "integer",
+            "description": "1 when bmi_percentile is at least 95.",
+            "constraints": {
+              "enum": [
+                0,
+                1
+              ],
+              "required": true
+            }
+          },
+          {
+            "name": "encounter_type",
+            "type": "string",
+            "description": "Encounter classification; 44 values occur in the data.",
+            "x-uniqueValueCount": 44
+          },
+          {
+            "name": "orig_enc_source_Epic_yn",
+            "type": "string",
+            "description": "Y when the encounter originated in Epic; N when converted from a legacy EMR.",
+            "constraints": {
+              "enum": [
+                "Y",
+                "N"
+              ]
+            }
+          },
+          {
+            "name": "enc_diag_1",
+            "type": "string",
+            "description": "Primary or first-listed encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_2",
+            "type": "string",
+            "description": "Diagnosis position 2 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_3",
+            "type": "string",
+            "description": "Diagnosis position 3 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_4",
+            "type": "string",
+            "description": "Diagnosis position 4 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_5",
+            "type": "string",
+            "description": "Diagnosis position 5 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_6",
+            "type": "string",
+            "description": "Diagnosis position 6 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_7",
+            "type": "string",
+            "description": "Diagnosis position 7 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_8",
+            "type": "string",
+            "description": "Diagnosis position 8 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_9",
+            "type": "string",
+            "description": "Diagnosis position 9 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_10",
+            "type": "string",
+            "description": "Diagnosis position 10 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_11",
+            "type": "string",
+            "description": "Diagnosis position 11 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_12",
+            "type": "string",
+            "description": "Diagnosis position 12 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_13",
+            "type": "string",
+            "description": "Diagnosis position 13 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_14",
+            "type": "string",
+            "description": "Diagnosis position 14 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_15",
+            "type": "string",
+            "description": "Diagnosis position 15 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_16",
+            "type": "string",
+            "description": "Diagnosis position 16 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_17",
+            "type": "string",
+            "description": "Diagnosis position 17 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_18",
+            "type": "string",
+            "description": "Diagnosis position 18 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_19",
+            "type": "string",
+            "description": "Diagnosis position 19 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_20",
+            "type": "string",
+            "description": "Diagnosis position 20 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_21",
+            "type": "string",
+            "description": "Diagnosis position 21 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_22",
+            "type": "string",
+            "description": "Diagnosis position 22 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_23",
+            "type": "string",
+            "description": "Diagnosis position 23 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_24",
+            "type": "string",
+            "description": "Diagnosis position 24 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_25",
+            "type": "string",
+            "description": "Diagnosis position 25 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_26",
+            "type": "string",
+            "description": "Diagnosis position 26 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_27",
+            "type": "string",
+            "description": "Diagnosis position 27 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_28",
+            "type": "string",
+            "description": "Diagnosis position 28 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_29",
+            "type": "string",
+            "description": "Diagnosis position 29 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_30",
+            "type": "string",
+            "description": "Diagnosis position 30 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_31",
+            "type": "string",
+            "description": "Diagnosis position 31 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_32",
+            "type": "string",
+            "description": "Diagnosis position 32 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          },
+          {
+            "name": "enc_diag_33",
+            "type": "string",
+            "description": "Diagnosis position 33 encounter diagnosis code.",
+            "x-codeSystem": "ICD-10-CM"
+          }
+        ],
+        "missingValues": [
+          ""
+        ],
+        "primaryKey": "visit_id",
+        "foreignKeys": [
+          {
+            "fields": "patient_id",
+            "reference": {
+              "resource": "patients",
+              "fields": "patient_id"
+            }
+          },
+          {
+            "fields": "visit_id",
+            "reference": {
+              "resource": "visits",
+              "fields": "visit_id"
+            }
+          }
+        ]
+      },
+      "x-rowCount": 6494473,
+      "x-fieldCount": 82,
+      "x-derivedFrom": [
+        "visits",
+        "patients"
+      ]
+    },
+    {
+      "profile": "tabular-data-resource",
+      "name": "labs",
+      "path": "labs.csv",
+      "title": "Labs",
+      "description": "One lab result component per row; orders without results remain represented.",
+      "format": "csv",
+      "mediatype": "text/csv",
+      "encoding": "iso-8859-1",
+      "dialect": {
+        "header": true,
+        "delimiter": ",",
+        "quoteChar": "\"",
+        "doubleQuote": true
+      },
+      "schema": {
+        "fields": [
+          {
+            "name": "patient_id",
+            "type": "string",
+            "description": "Blinded unique identifier for the patient.",
+            "constraints": {
+              "required": true
+            },
+            "x-deidentified": true
+          },
+          {
+            "name": "visit_id",
+            "type": "string",
+            "description": "Associated visit identifier; blank for 805 rows and absent from visits.csv for some otherwise non-null values.",
+            "x-deidentified": true,
+            "x-missingCount": 805
+          },
+          {
+            "name": "lab_order_id",
+            "type": "string",
+            "description": "Blinded unique identifier for the lab order.",
+            "constraints": {
+              "required": true
+            },
+            "x-deidentified": true
+          },
+          {
+            "name": "result_line_num",
+            "type": "integer",
+            "description": "Sequential result-component line within a lab order.",
+            "constraints": {
+              "minimum": 1,
+              "maximum": 149
+            },
+            "x-missingCount": 2283186
+          },
+          {
+            "name": "lab_order_date_age_in_days",
+            "type": "integer",
+            "description": "Patient age in days at lab order, replacing the absolute date for de-identification.",
+            "constraints": {
+              "required": true
+            },
+            "x-unit": "day",
+            "x-deidentifiedDate": true
+          },
+          {
+            "name": "lab_procedure_name",
+            "type": "string",
+            "description": "Epic lab procedure name.",
+            "x-uniqueValueCount": 3742
+          },
+          {
+            "name": "lab_procedure_description",
+            "type": "string",
+            "description": "Additional procedure description, especially for external labs."
+          },
+          {
+            "name": "lab_result_date_age_in_days",
+            "type": "integer",
+            "description": "Patient age in days at lab result, replacing the absolute date for de-identification.",
+            "x-unit": "day",
+            "x-deidentifiedDate": true,
+            "x-missingCount": 2283186
+          },
+          {
+            "name": "result_component_name",
+            "type": "string",
+            "description": "Name of the result component; null when no result is available.",
+            "x-uniqueValueCount": 12901,
+            "x-missingCount": 2283186
+          },
+          {
+            "name": "result_loinc_code",
+            "type": "string",
+            "description": "LOINC code for the result component when available.",
+            "x-codeSystem": "LOINC",
+            "x-uniqueValueCount": 2194,
+            "x-missingCount": 15880579
+          },
+          {
+            "name": "result_value",
+            "type": "string",
+            "description": "Result represented as text; it may be numeric, categorical, or narrative.",
+            "x-missingCount": 2494261
+          },
+          {
+            "name": "result_flag",
+            "type": "string",
+            "description": "HL7 result interpretation flag; blank when unassigned.",
+            "x-uniqueValueCount": 35,
+            "x-missingCount": 15550985
+          }
+        ],
+        "missingValues": [
+          ""
+        ],
+        "foreignKeys": [
+          {
+            "fields": "patient_id",
+            "reference": {
+              "resource": "patients",
+              "fields": "patient_id"
+            }
+          }
+        ]
+      },
+      "x-rowCount": 17230681,
+      "x-fieldCount": 12,
+      "x-uniquePatientCount": 247271,
+      "x-uniqueVisitIdCount": 2859084,
+      "x-uniqueLabOrderCount": 6578838,
+      "x-logicalForeignKeys": [
+        {
+          "fields": "visit_id",
+          "reference": {
+            "resource": "visits",
+            "fields": "visit_id"
+          },
+          "orphanRows": 5201657,
+          "nullRows": 805
+        }
+      ],
+      "x-keyDescription": "No row-level primary key: lab_order_id repeats and result_line_num is missing in 2,283,186 rows."
+    },
+    {
+      "profile": "tabular-data-resource",
+      "name": "medications",
+      "path": "medications.csv",
+      "title": "Medications",
+      "description": "One pediatric prescription, administration, or historical medication record per row.",
+      "format": "csv",
+      "mediatype": "text/csv",
+      "encoding": "utf-8",
+      "dialect": {
+        "header": true,
+        "delimiter": ",",
+        "quoteChar": "\"",
+        "doubleQuote": true
+      },
+      "schema": {
+        "fields": [
+          {
+            "name": "patient_id",
+            "type": "string",
+            "description": "Blinded unique identifier for the patient.",
+            "constraints": {
+              "required": true
+            },
+            "x-deidentified": true
+          },
+          {
+            "name": "visit_id",
+            "type": "string",
+            "description": "Blinded unique identifier for the visit.",
+            "constraints": {
+              "required": true
+            },
+            "x-deidentified": true
+          },
+          {
+            "name": "med_record_id",
+            "type": "string",
+            "description": "Blinded unique identifier for the medication record.",
+            "constraints": {
+              "required": true
+            },
+            "x-deidentified": true
+          },
+          {
+            "name": "med_order_date_age_in_days",
+            "type": "integer",
+            "description": "Patient age in days at medication order, replacing the absolute date for de-identification.",
+            "constraints": {
+              "required": true
+            },
+            "x-unit": "day",
+            "x-deidentifiedDate": true
+          },
+          {
+            "name": "med_start_date_age_in_days",
+            "type": "integer",
+            "description": "Patient age in days at medication start, replacing the absolute date for de-identification.",
+            "x-unit": "day",
+            "x-deidentifiedDate": true
+          },
+          {
+            "name": "med_end_date_age_in_days",
+            "type": "integer",
+            "description": "Patient age in days at medication end, replacing the absolute date for de-identification.",
+            "x-unit": "day",
+            "x-deidentifiedDate": true
+          },
+          {
+            "name": "med_record_type",
+            "type": "string",
+            "description": "Internal for a PPOC-provider order; External for a historical or outside record.",
+            "constraints": {
+              "enum": [
+                "Internal",
+                "External"
+              ],
+              "required": true
+            }
+          },
+          {
+            "name": "med_simple_generic_name",
+            "type": "string",
+            "description": "Simplified generic medication name.",
+            "constraints": {
+              "required": true
+            },
+            "x-uniqueValueCount": 1073
+          }
+        ],
+        "missingValues": [
+          ""
+        ],
+        "primaryKey": "med_record_id",
+        "foreignKeys": [
+          {
+            "fields": "patient_id",
+            "reference": {
+              "resource": "patients",
+              "fields": "patient_id"
+            }
+          }
+        ]
+      },
+      "x-rowCount": 3823049,
+      "x-fieldCount": 8,
+      "x-uniquePatientCount": 236323,
+      "x-uniqueVisitIdCount": 2757560,
+      "x-logicalForeignKeys": [
+        {
+          "fields": "visit_id",
+          "reference": {
+            "resource": "visits",
+            "fields": "visit_id"
+          },
+          "orphanRows": 1592437
+        }
+      ]
+    },
+    {
+      "profile": "tabular-data-resource",
+      "name": "problem_list",
+      "path": "problem_list.csv",
+      "title": "Problem List",
+      "description": "One patient problem-list diagnosis entry per row.",
+      "format": "csv",
+      "mediatype": "text/csv",
+      "encoding": "utf-8",
+      "dialect": {
+        "header": true,
+        "delimiter": ",",
+        "quoteChar": "\"",
+        "doubleQuote": true
+      },
+      "schema": {
+        "fields": [
+          {
+            "name": "patient_id",
+            "type": "string",
+            "description": "Blinded unique identifier for the patient.",
+            "constraints": {
+              "required": true
+            },
+            "x-deidentified": true
+          },
+          {
+            "name": "problem_list_id",
+            "type": "string",
+            "description": "Blinded unique identifier for the problem-list entry.",
+            "constraints": {
+              "required": true
+            },
+            "x-deidentified": true
+          },
+          {
+            "name": "noted_date_age_in_days",
+            "type": "integer",
+            "description": "Patient age in days at first problem notation, replacing the absolute date for de-identification.",
+            "x-unit": "day",
+            "x-deidentifiedDate": true
+          },
+          {
+            "name": "resolved_date_age_in_days",
+            "type": "integer",
+            "description": "Patient age in days at problem resolution, replacing the absolute date for de-identification.",
+            "x-unit": "day",
+            "x-deidentifiedDate": true
+          },
+          {
+            "name": "pl_diag",
+            "type": "string",
+            "description": "Problem-list diagnosis code.",
+            "constraints": {
+              "required": true
+            },
+            "x-codeSystem": "ICD-10-CM",
+            "x-uniqueValueCount": 4740
+          }
+        ],
+        "missingValues": [
+          ""
+        ],
+        "primaryKey": "problem_list_id",
+        "foreignKeys": [
+          {
+            "fields": "patient_id",
+            "reference": {
+              "resource": "patients",
+              "fields": "patient_id"
+            }
+          }
+        ]
+      },
+      "x-rowCount": 1709584,
+      "x-fieldCount": 5,
+      "x-uniquePatientCount": 238824
+    },
+    {
+      "profile": "tabular-data-resource",
+      "name": "referrals",
+      "path": "referrals.csv",
+      "title": "Referrals",
+      "description": "One specialty referral associated with a pediatric visit per row.",
+      "format": "csv",
+      "mediatype": "text/csv",
+      "encoding": "utf-8",
+      "dialect": {
+        "header": true,
+        "delimiter": ",",
+        "quoteChar": "\"",
+        "doubleQuote": true
+      },
+      "schema": {
+        "fields": [
+          {
+            "name": "patient_id",
+            "type": "string",
+            "description": "Blinded unique identifier for the patient.",
+            "constraints": {
+              "required": true
+            },
+            "x-deidentified": true
+          },
+          {
+            "name": "visit_id",
+            "type": "string",
+            "description": "Associated visit identifier; nullable when the referral is not linked to a visit.",
+            "x-deidentified": true
+          },
+          {
+            "name": "referral_id",
+            "type": "string",
+            "description": "Blinded unique identifier for the referral.",
+            "constraints": {
+              "required": true
+            },
+            "x-deidentified": true
+          },
+          {
+            "name": "referral_date_age_in_days",
+            "type": "integer",
+            "description": "Patient age in days at referral, replacing the absolute date for de-identification.",
+            "constraints": {
+              "required": true
+            },
+            "x-unit": "day",
+            "x-deidentifiedDate": true
+          },
+          {
+            "name": "requested_specialty",
+            "type": "string",
+            "description": "Requested referral specialty; nullable.",
+            "x-uniqueValueCount": 121
+          },
+          {
+            "name": "referral_number_of_visits",
+            "type": "integer",
+            "description": "Authorized or associated visit count; nullable.",
+            "constraints": {
+              "minimum": 1,
+              "maximum": 10
+            }
+          }
+        ],
+        "missingValues": [
+          ""
+        ],
+        "primaryKey": "referral_id",
+        "foreignKeys": [
+          {
+            "fields": "patient_id",
+            "reference": {
+              "resource": "patients",
+              "fields": "patient_id"
+            }
+          }
+        ]
+      },
+      "x-rowCount": 349827,
+      "x-fieldCount": 6,
+      "x-uniquePatientCount": 138071,
+      "x-uniqueVisitIdCount": 298616,
+      "x-logicalForeignKeys": [
+        {
+          "fields": "visit_id",
+          "reference": {
+            "resource": "visits",
+            "fields": "visit_id"
+          },
+          "orphanRows": 98623,
+          "nullRows": 24830
+        }
+      ]
+    }
+  ]
+}

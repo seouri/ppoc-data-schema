@@ -1,0 +1,46 @@
+# PPOC Pediatric EHR Data Package
+
+This repository describes eight de-identified pediatric EHR CSV resources with a machine-readable [Frictionless Data Package](https://specs.frictionlessdata.io/tabular-data-package/) descriptor. The data uses `patient_id` for patient-level linkage, and absolute dates are represented as patient age in days.
+
+## Contents
+
+- [`datapackage.json`](datapackage.json): field types, nullability, constraints, keys, encodings, and resource metadata.
+- [`docs/data_description.md`](docs/data_description.md): dataset overview, relationships, and analysis guidance.
+- [`docs/`](docs/): resource-specific field descriptions.
+- [`schema/README.md`](schema/README.md): Python loading examples.
+- [`schema/build.py`](schema/build.py): regenerate and validate `datapackage.json`.
+
+## Resources
+
+| Resource | Rows | Fields | Description |
+| --- | ---: | ---: | --- |
+| [`patients.csv`](docs/patients.md) | 250,588 | 11 | Patient demographics |
+| [`patients_augmented.csv`](docs/patients_augmented.md) | 250,588 | 87 | Patient-level growth and diagnosis summaries |
+| [`visits.csv`](docs/visits.md) | 6,494,473 | 43 | Visit-level measurements and diagnoses |
+| [`visits_augmented.csv`](docs/visits_augmented.md) | 6,494,473 | 82 | Visit-level derived growth metrics and flags |
+| [`labs.csv`](docs/labs.md) | 17,230,681 | 12 | Laboratory result components |
+| [`medications.csv`](docs/medications.md) | 3,823,049 | 8 | Medication records |
+| [`problem_list.csv`](docs/problem_list.md) | 1,709,584 | 5 | Problem-list entries |
+| [`referrals.csv`](docs/referrals.md) | 349,827 | 6 | Specialty referrals |
+
+The package expects these CSVs beside `datapackage.json`. To keep the descriptor in this repository while reading CSVs from another directory, set `PPOC_DATA_ROOT` for the Python example in [`schema/README.md`](schema/README.md).
+
+## Relationships
+
+- `patients.csv` and `patients_augmented.csv` contain one row per `patient_id`.
+- `visits.csv` and `visits_augmented.csv` contain `patient_id` and `visit_id`.
+- `labs.csv`, `medications.csv`, and `referrals.csv` link to patients through `patient_id`; their `visit_id` values are nullable and may not match a visit row.
+- `problem_list.csv` links to patients through `patient_id` and has no direct visit key.
+
+Use the `foreignKeys` and `x-logicalForeignKeys` entries in `datapackage.json` for the declared join relationships and their row-level link statistics.
+
+## Validate or regenerate the descriptor
+
+From the repository root:
+
+```sh
+python3 schema/build.py
+python3 schema/build.py --check
+```
+
+The Python usage example includes schema-driven pandas loading, declared CSV encodings, nullable types, column selection, and key inspection.
