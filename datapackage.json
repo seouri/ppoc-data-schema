@@ -12,7 +12,12 @@
     "growth",
     "de-identified"
   ],
-  "x-statisticsSource": "Row, missing-value, unique-value, and category counts are transcribed from the docs/ snapshot summaries; they are not recomputed from the CSVs by schema/build.py.",
+  "x-statisticsSource": {
+    "description": "Row, missing-value, unique-value, range, and category statistics are computed from the CSV snapshot by schema/profile.py and stored in schema/stats.json.",
+    "snapshot": "2026-08-24",
+    "profiledWith": "v1.5.5 (Variegata) d8cdaa33fd",
+    "categoryLimit": 130
+  },
   "licenses": [
     {
       "name": "other-closed",
@@ -80,18 +85,19 @@
             },
             "x-categories": [
               {
-                "value": "F",
-                "count": 122883
-              },
-              {
                 "value": "M",
                 "count": 127699
+              },
+              {
+                "value": "F",
+                "count": 122883
               },
               {
                 "value": "U",
                 "count": 6
               }
-            ]
+            ],
+            "x-uniqueValueCount": 3
           },
           {
             "name": "ethnicity",
@@ -107,6 +113,7 @@
                 "Patient does not know"
               ]
             },
+            "x-missingCount": 5464,
             "x-categories": [
               {
                 "value": "Not Hispanic or Latino",
@@ -133,7 +140,7 @@
                 "count": 131
               }
             ],
-            "x-missingCount": 5464
+            "x-uniqueValueCount": 6
           },
           {
             "name": "race_1",
@@ -154,10 +161,19 @@
                 "White"
               ]
             },
+            "x-missingCount": 8818,
             "x-categories": [
               {
-                "value": "American Indian or Alaska Native",
-                "count": 625
+                "value": "White",
+                "count": 155375
+              },
+              {
+                "value": "Unknown",
+                "count": 23085
+              },
+              {
+                "value": "Choose not to answer",
+                "count": 17534
               },
               {
                 "value": "Another Race",
@@ -172,12 +188,16 @@
                 "count": 12162
               },
               {
-                "value": "Choose not to answer",
-                "count": 17534
+                "value": "American Indian or Alaska Native",
+                "count": 625
               },
               {
                 "value": "Middle Eastern or Northern African",
                 "count": 512
+              },
+              {
+                "value": "Unable to collect",
+                "count": 492
               },
               {
                 "value": "Native Hawaiian or Other Pacific Islander",
@@ -186,21 +206,9 @@
               {
                 "value": "Patient does not know",
                 "count": 126
-              },
-              {
-                "value": "Unable to collect",
-                "count": 492
-              },
-              {
-                "value": "Unknown",
-                "count": 23085
-              },
-              {
-                "value": "White",
-                "count": 155375
               }
             ],
-            "x-missingCount": 8818
+            "x-uniqueValueCount": 11
           },
           {
             "name": "race_2",
@@ -221,22 +229,27 @@
                 "White"
               ]
             },
+            "x-missingCount": 237397,
             "x-categories": [
               {
-                "value": "American Indian or Alaska Native",
-                "count": 71
+                "value": "White",
+                "count": 8327
+              },
+              {
+                "value": "Unknown",
+                "count": 1554
               },
               {
                 "value": "Another Race",
                 "count": 1137
               },
               {
-                "value": "Asian",
-                "count": 566
-              },
-              {
                 "value": "Black or African American",
                 "count": 835
+              },
+              {
+                "value": "Asian",
+                "count": 566
               },
               {
                 "value": "Choose not to answer",
@@ -251,23 +264,19 @@
                 "count": 86
               },
               {
-                "value": "Patient does not know",
-                "count": 1
+                "value": "American Indian or Alaska Native",
+                "count": 71
               },
               {
                 "value": "Unable to collect",
                 "count": 11
               },
               {
-                "value": "Unknown",
-                "count": 1554
-              },
-              {
-                "value": "White",
-                "count": 8327
+                "value": "Patient does not know",
+                "count": 1
               }
             ],
-            "x-missingCount": 237397
+            "x-uniqueValueCount": 11
           },
           {
             "name": "race_3",
@@ -288,18 +297,19 @@
                 "White"
               ]
             },
+            "x-missingCount": 249967,
             "x-categories": [
               {
-                "value": "American Indian or Alaska Native",
-                "count": 15
+                "value": "White",
+                "count": 402
               },
               {
                 "value": "Another Race",
                 "count": 63
               },
               {
-                "value": "Asian",
-                "count": 15
+                "value": "Unknown",
+                "count": 59
               },
               {
                 "value": "Black or African American",
@@ -310,23 +320,27 @@
                 "count": 19
               },
               {
-                "value": "Middle Eastern or Northern African",
-                "count": 7
+                "value": "American Indian or Alaska Native",
+                "count": 15
+              },
+              {
+                "value": "Asian",
+                "count": 15
               },
               {
                 "value": "Native Hawaiian or Other Pacific Islander",
                 "count": 10
               },
               {
-                "value": "Unknown",
-                "count": 59
-              },
-              {
-                "value": "White",
-                "count": 402
+                "value": "Middle Eastern or Northern African",
+                "count": 7
               }
             ],
-            "x-missingCount": 249967
+            "x-unobservedEnumValues": [
+              "Patient does not know",
+              "Unable to collect"
+            ],
+            "x-uniqueValueCount": 9
           },
           {
             "name": "race_4",
@@ -347,7 +361,16 @@
                 "White"
               ]
             },
+            "x-missingCount": 250550,
             "x-categories": [
+              {
+                "value": "White",
+                "count": 27
+              },
+              {
+                "value": "Native Hawaiian or Other Pacific Islander",
+                "count": 6
+              },
               {
                 "value": "Another Race",
                 "count": 2
@@ -359,17 +382,17 @@
               {
                 "value": "Choose not to answer",
                 "count": 1
-              },
-              {
-                "value": "Native Hawaiian or Other Pacific Islander",
-                "count": 6
-              },
-              {
-                "value": "White",
-                "count": 27
               }
             ],
-            "x-missingCount": 250550
+            "x-unobservedEnumValues": [
+              "American Indian or Alaska Native",
+              "Black or African American",
+              "Middle Eastern or Northern African",
+              "Patient does not know",
+              "Unable to collect",
+              "Unknown"
+            ],
+            "x-uniqueValueCount": 5
           },
           {
             "name": "race_5",
@@ -390,7 +413,12 @@
                 "White"
               ]
             },
+            "x-missingCount": 250582,
             "x-categories": [
+              {
+                "value": "White",
+                "count": 3
+              },
               {
                 "value": "Another Race",
                 "count": 2
@@ -398,13 +426,19 @@
               {
                 "value": "Native Hawaiian or Other Pacific Islander",
                 "count": 1
-              },
-              {
-                "value": "White",
-                "count": 3
               }
             ],
-            "x-missingCount": 250582
+            "x-unobservedEnumValues": [
+              "American Indian or Alaska Native",
+              "Asian",
+              "Black or African American",
+              "Choose not to answer",
+              "Middle Eastern or Northern African",
+              "Patient does not know",
+              "Unable to collect",
+              "Unknown"
+            ],
+            "x-uniqueValueCount": 3
           },
           {
             "name": "race_6",
@@ -425,6 +459,7 @@
                 "White"
               ]
             },
+            "x-missingCount": 250585,
             "x-categories": [
               {
                 "value": "Another Race",
@@ -439,7 +474,17 @@
                 "count": 1
               }
             ],
-            "x-missingCount": 250585
+            "x-unobservedEnumValues": [
+              "American Indian or Alaska Native",
+              "Asian",
+              "Black or African American",
+              "Choose not to answer",
+              "Middle Eastern or Northern African",
+              "Native Hawaiian or Other Pacific Islander",
+              "Patient does not know",
+              "Unable to collect"
+            ],
+            "x-uniqueValueCount": 3
           },
           {
             "name": "race_7",
@@ -460,6 +505,7 @@
                 "White"
               ]
             },
+            "x-missingCount": 250586,
             "x-categories": [
               {
                 "value": "Unknown",
@@ -470,7 +516,18 @@
                 "count": 1
               }
             ],
-            "x-missingCount": 250586
+            "x-unobservedEnumValues": [
+              "American Indian or Alaska Native",
+              "Another Race",
+              "Asian",
+              "Black or African American",
+              "Choose not to answer",
+              "Middle Eastern or Northern African",
+              "Native Hawaiian or Other Pacific Islander",
+              "Patient does not know",
+              "Unable to collect"
+            ],
+            "x-uniqueValueCount": 2
           },
           {
             "name": "race_8",
@@ -491,13 +548,26 @@
                 "White"
               ]
             },
+            "x-missingCount": 250587,
             "x-categories": [
               {
                 "value": "White",
                 "count": 1
               }
             ],
-            "x-missingCount": 250587
+            "x-unobservedEnumValues": [
+              "American Indian or Alaska Native",
+              "Another Race",
+              "Asian",
+              "Black or African American",
+              "Choose not to answer",
+              "Middle Eastern or Northern African",
+              "Native Hawaiian or Other Pacific Islander",
+              "Patient does not know",
+              "Unable to collect",
+              "Unknown"
+            ],
+            "x-uniqueValueCount": 1
           }
         ],
         "missingValues": [
@@ -550,18 +620,19 @@
             },
             "x-categories": [
               {
-                "value": "F",
-                "count": 122883
-              },
-              {
                 "value": "M",
                 "count": 127699
+              },
+              {
+                "value": "F",
+                "count": 122883
               },
               {
                 "value": "U",
                 "count": 6
               }
-            ]
+            ],
+            "x-uniqueValueCount": 3
           },
           {
             "name": "ethnicity",
@@ -573,6 +644,7 @@
                 "Hispanic or Latino"
               ]
             },
+            "x-missingCount": 51445,
             "x-categories": [
               {
                 "value": "Not Hispanic or Latino",
@@ -583,7 +655,7 @@
                 "count": 28549
               }
             ],
-            "x-missingCount": 51445
+            "x-uniqueValueCount": 2
           },
           {
             "name": "race_1",
@@ -600,10 +672,11 @@
                 "White"
               ]
             },
+            "x-missingCount": 50055,
             "x-categories": [
               {
-                "value": "American Indian or Alaska Native",
-                "count": 625
+                "value": "White",
+                "count": 155375
               },
               {
                 "value": "Another Race",
@@ -618,19 +691,19 @@
                 "count": 12162
               },
               {
+                "value": "American Indian or Alaska Native",
+                "count": 625
+              },
+              {
                 "value": "Middle Eastern or Northern African",
                 "count": 512
               },
               {
                 "value": "Native Hawaiian or Other Pacific Islander",
                 "count": 248
-              },
-              {
-                "value": "White",
-                "count": 155375
               }
             ],
-            "x-missingCount": 50055
+            "x-uniqueValueCount": 7
           },
           {
             "name": "race_2",
@@ -647,22 +720,23 @@
                 "White"
               ]
             },
+            "x-missingCount": 239479,
             "x-categories": [
               {
-                "value": "American Indian or Alaska Native",
-                "count": 71
+                "value": "White",
+                "count": 8327
               },
               {
                 "value": "Another Race",
                 "count": 1137
               },
               {
-                "value": "Asian",
-                "count": 566
-              },
-              {
                 "value": "Black or African American",
                 "count": 835
+              },
+              {
+                "value": "Asian",
+                "count": 566
               },
               {
                 "value": "Middle Eastern or Northern African",
@@ -673,11 +747,11 @@
                 "count": 86
               },
               {
-                "value": "White",
-                "count": 8327
+                "value": "American Indian or Alaska Native",
+                "count": 71
               }
             ],
-            "x-missingCount": 239479
+            "x-uniqueValueCount": 7
           },
           {
             "name": "race_3",
@@ -694,37 +768,38 @@
                 "White"
               ]
             },
+            "x-missingCount": 250045,
             "x-categories": [
               {
-                "value": "American Indian or Alaska Native",
-                "count": 15
+                "value": "White",
+                "count": 402
               },
               {
                 "value": "Another Race",
                 "count": 63
               },
               {
-                "value": "Asian",
-                "count": 15
-              },
-              {
                 "value": "Black or African American",
                 "count": 31
               },
               {
-                "value": "Middle Eastern or Northern African",
-                "count": 7
+                "value": "American Indian or Alaska Native",
+                "count": 15
+              },
+              {
+                "value": "Asian",
+                "count": 15
               },
               {
                 "value": "Native Hawaiian or Other Pacific Islander",
                 "count": 10
               },
               {
-                "value": "White",
-                "count": 402
+                "value": "Middle Eastern or Northern African",
+                "count": 7
               }
             ],
-            "x-missingCount": 250045
+            "x-uniqueValueCount": 7
           },
           {
             "name": "race_4",
@@ -741,7 +816,16 @@
                 "White"
               ]
             },
+            "x-missingCount": 250551,
             "x-categories": [
+              {
+                "value": "White",
+                "count": 27
+              },
+              {
+                "value": "Native Hawaiian or Other Pacific Islander",
+                "count": 6
+              },
               {
                 "value": "Another Race",
                 "count": 2
@@ -749,17 +833,14 @@
               {
                 "value": "Asian",
                 "count": 2
-              },
-              {
-                "value": "Native Hawaiian or Other Pacific Islander",
-                "count": 6
-              },
-              {
-                "value": "White",
-                "count": 27
               }
             ],
-            "x-missingCount": 250551
+            "x-unobservedEnumValues": [
+              "American Indian or Alaska Native",
+              "Black or African American",
+              "Middle Eastern or Northern African"
+            ],
+            "x-uniqueValueCount": 4
           },
           {
             "name": "race_5",
@@ -776,7 +857,12 @@
                 "White"
               ]
             },
+            "x-missingCount": 250582,
             "x-categories": [
+              {
+                "value": "White",
+                "count": 3
+              },
               {
                 "value": "Another Race",
                 "count": 2
@@ -784,13 +870,15 @@
               {
                 "value": "Native Hawaiian or Other Pacific Islander",
                 "count": 1
-              },
-              {
-                "value": "White",
-                "count": 3
               }
             ],
-            "x-missingCount": 250582
+            "x-unobservedEnumValues": [
+              "American Indian or Alaska Native",
+              "Asian",
+              "Black or African American",
+              "Middle Eastern or Northern African"
+            ],
+            "x-uniqueValueCount": 3
           },
           {
             "name": "race_6",
@@ -807,6 +895,7 @@
                 "White"
               ]
             },
+            "x-missingCount": 250586,
             "x-categories": [
               {
                 "value": "Another Race",
@@ -817,7 +906,14 @@
                 "count": 1
               }
             ],
-            "x-missingCount": 250586
+            "x-unobservedEnumValues": [
+              "American Indian or Alaska Native",
+              "Asian",
+              "Black or African American",
+              "Middle Eastern or Northern African",
+              "Native Hawaiian or Other Pacific Islander"
+            ],
+            "x-uniqueValueCount": 2
           },
           {
             "name": "race_7",
@@ -834,13 +930,22 @@
                 "White"
               ]
             },
+            "x-missingCount": 250587,
             "x-categories": [
               {
                 "value": "White",
                 "count": 1
               }
             ],
-            "x-missingCount": 250587
+            "x-unobservedEnumValues": [
+              "American Indian or Alaska Native",
+              "Another Race",
+              "Asian",
+              "Black or African American",
+              "Middle Eastern or Northern African",
+              "Native Hawaiian or Other Pacific Islander"
+            ],
+            "x-uniqueValueCount": 1
           },
           {
             "name": "race_8",
@@ -857,13 +962,22 @@
                 "White"
               ]
             },
+            "x-missingCount": 250587,
             "x-categories": [
               {
                 "value": "White",
                 "count": 1
               }
             ],
-            "x-missingCount": 250587
+            "x-unobservedEnumValues": [
+              "American Indian or Alaska Native",
+              "Another Race",
+              "Asian",
+              "Black or African American",
+              "Middle Eastern or Northern African",
+              "Native Hawaiian or Other Pacific Islander"
+            ],
+            "x-uniqueValueCount": 1
           },
           {
             "name": "healthy_flag",
@@ -875,7 +989,21 @@
                 1
               ],
               "required": true
-            }
+            },
+            "x-observedRange": {
+              "minimum": 0,
+              "maximum": 1
+            },
+            "x-categories": [
+              {
+                "value": 0,
+                "count": 226117
+              },
+              {
+                "value": 1,
+                "count": 24471
+              }
+            ]
           },
           {
             "name": "chronic_dx_flag",
@@ -887,7 +1015,21 @@
                 1
               ],
               "required": true
-            }
+            },
+            "x-observedRange": {
+              "minimum": 0,
+              "maximum": 1
+            },
+            "x-categories": [
+              {
+                "value": 1,
+                "count": 203935
+              },
+              {
+                "value": 0,
+                "count": 46653
+              }
+            ]
           },
           {
             "name": "growth_dx_flag",
@@ -899,7 +1041,21 @@
                 1
               ],
               "required": true
-            }
+            },
+            "x-observedRange": {
+              "minimum": 0,
+              "maximum": 1
+            },
+            "x-categories": [
+              {
+                "value": 0,
+                "count": 214681
+              },
+              {
+                "value": 1,
+                "count": 35907
+              }
+            ]
           },
           {
             "name": "ever_stunting_flag",
@@ -911,7 +1067,21 @@
                 1
               ],
               "required": true
-            }
+            },
+            "x-observedRange": {
+              "minimum": 0,
+              "maximum": 1
+            },
+            "x-categories": [
+              {
+                "value": 0,
+                "count": 232699
+              },
+              {
+                "value": 1,
+                "count": 17889
+              }
+            ]
           },
           {
             "name": "ever_wasting_flag",
@@ -923,7 +1093,21 @@
                 1
               ],
               "required": true
-            }
+            },
+            "x-observedRange": {
+              "minimum": 0,
+              "maximum": 1
+            },
+            "x-categories": [
+              {
+                "value": 0,
+                "count": 183884
+              },
+              {
+                "value": 1,
+                "count": 66704
+              }
+            ]
           },
           {
             "name": "ever_underweight_flag",
@@ -935,7 +1119,21 @@
                 1
               ],
               "required": true
-            }
+            },
+            "x-observedRange": {
+              "minimum": 0,
+              "maximum": 1
+            },
+            "x-categories": [
+              {
+                "value": 0,
+                "count": 216980
+              },
+              {
+                "value": 1,
+                "count": 33608
+              }
+            ]
           },
           {
             "name": "ever_obesity_flag",
@@ -947,15 +1145,33 @@
                 1
               ],
               "required": true
-            }
+            },
+            "x-observedRange": {
+              "minimum": 0,
+              "maximum": 1
+            },
+            "x-categories": [
+              {
+                "value": 0,
+                "count": 200590
+              },
+              {
+                "value": 1,
+                "count": 49998
+              }
+            ]
           },
           {
             "name": "visits_count",
             "type": "integer",
-            "description": "Total recorded visits; 0 for a patient with no visits.",
+            "description": "Total recorded visits.",
             "constraints": {
               "minimum": 0,
               "required": true
+            },
+            "x-observedRange": {
+              "minimum": 1,
+              "maximum": 244
             }
           },
           {
@@ -965,6 +1181,10 @@
             "constraints": {
               "minimum": 0,
               "required": true
+            },
+            "x-observedRange": {
+              "minimum": 0,
+              "maximum": 244
             }
           },
           {
@@ -972,29 +1192,47 @@
             "type": "integer",
             "description": "Patient age in days at the first recorded visit, replacing the absolute date for de-identification.",
             "x-unit": "day",
-            "x-deidentifiedDate": true
+            "x-deidentifiedDate": true,
+            "x-observedRange": {
+              "minimum": 1,
+              "maximum": 5377
+            }
           },
           {
             "name": "max_visit_age_days",
             "type": "integer",
             "description": "Patient age in days at the last recorded visit, replacing the absolute date for de-identification.",
             "x-unit": "day",
-            "x-deidentifiedDate": true
+            "x-deidentifiedDate": true,
+            "x-observedRange": {
+              "minimum": 2,
+              "maximum": 6571
+            }
           },
           {
             "name": "visits_span_days",
             "type": "integer",
-            "description": "Days between first and last visit; null with no visits.",
+            "description": "Days between first and last visit; 0 for a patient with a single visit.",
             "constraints": {
-              "minimum": 0
+              "minimum": 0,
+              "required": true
             },
-            "x-unit": "day"
+            "x-unit": "day",
+            "x-observedRange": {
+              "minimum": 0,
+              "maximum": 5653
+            }
           },
           {
             "name": "dx_age_years",
             "type": "number",
-            "description": "Minimum age in years at any growth-related diagnosis.",
-            "x-unit": "year"
+            "description": "Minimum age in years at any growth-related diagnosis; negative when the source diagnosis date precedes birth.",
+            "x-unit": "year",
+            "x-missingCount": 214698,
+            "x-observedRange": {
+              "minimum": -114.667,
+              "maximum": 17.462
+            }
           },
           {
             "name": "dx_age_years_e03_9",
@@ -1002,7 +1240,12 @@
             "description": "Minimum age in years at a diagnosis starting with E03.9: Hypothyroidism, unspecified.",
             "x-unit": "year",
             "x-diagnosisPrefix": "E03.9",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 250279,
+            "x-observedRange": {
+              "minimum": 0.008,
+              "maximum": 16.92
+            }
           },
           {
             "name": "dx_age_years_e10",
@@ -1010,7 +1253,12 @@
             "description": "Minimum age in years at a diagnosis starting with E10: Type 1 diabetes mellitus.",
             "x-unit": "year",
             "x-diagnosisPrefix": "E10",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 250097,
+            "x-observedRange": {
+              "minimum": 0.873,
+              "maximum": 16.553
+            }
           },
           {
             "name": "dx_age_years_e22_0",
@@ -1018,7 +1266,12 @@
             "description": "Minimum age in years at a diagnosis starting with E22.0: Acromegaly and pituitary gigantism.",
             "x-unit": "year",
             "x-diagnosisPrefix": "E22.0",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 250585,
+            "x-observedRange": {
+              "minimum": 1.804,
+              "maximum": 6.064
+            }
           },
           {
             "name": "dx_age_years_e23_0",
@@ -1026,7 +1279,12 @@
             "description": "Minimum age in years at a diagnosis starting with E23.0: Hypopituitarism.",
             "x-unit": "year",
             "x-diagnosisPrefix": "E23.0",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 250438,
+            "x-observedRange": {
+              "minimum": 0.036,
+              "maximum": 16.047
+            }
           },
           {
             "name": "dx_age_years_e23_6",
@@ -1034,7 +1292,12 @@
             "description": "Minimum age in years at a diagnosis starting with E23.6: Other disorders of pituitary gland.",
             "x-unit": "year",
             "x-diagnosisPrefix": "E23.6",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 250557,
+            "x-observedRange": {
+              "minimum": 0.022,
+              "maximum": 17.421
+            }
           },
           {
             "name": "dx_age_years_e24",
@@ -1042,7 +1305,12 @@
             "description": "Minimum age in years at a diagnosis starting with E24: Cushing's syndrome.",
             "x-unit": "year",
             "x-diagnosisPrefix": "E24",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 250587,
+            "x-observedRange": {
+              "minimum": 15.644,
+              "maximum": 15.644
+            }
           },
           {
             "name": "dx_age_years_e30_0",
@@ -1050,7 +1318,12 @@
             "description": "Minimum age in years at a diagnosis starting with E30.0: Delayed puberty.",
             "x-unit": "year",
             "x-diagnosisPrefix": "E30.0",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 250169,
+            "x-observedRange": {
+              "minimum": 6.075,
+              "maximum": 17.035
+            }
           },
           {
             "name": "dx_age_years_e30_1",
@@ -1058,7 +1331,12 @@
             "description": "Minimum age in years at a diagnosis starting with E30.1: Precocious puberty.",
             "x-unit": "year",
             "x-diagnosisPrefix": "E30.1",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 247183,
+            "x-observedRange": {
+              "minimum": 0.016,
+              "maximum": 17.046
+            }
           },
           {
             "name": "dx_age_years_e34_3",
@@ -1066,7 +1344,12 @@
             "description": "Minimum age in years at a diagnosis starting with E34.3: Short stature due to endocrine disorder.",
             "x-unit": "year",
             "x-diagnosisPrefix": "E34.3",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 250141,
+            "x-observedRange": {
+              "minimum": 0.019,
+              "maximum": 16.78
+            }
           },
           {
             "name": "dx_age_years_e34_4",
@@ -1074,7 +1357,12 @@
             "description": "Minimum age in years at a diagnosis starting with E34.4: Constitutional tall stature.",
             "x-unit": "year",
             "x-diagnosisPrefix": "E34.4",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 250505,
+            "x-observedRange": {
+              "minimum": 0.088,
+              "maximum": 14.891
+            }
           },
           {
             "name": "dx_age_years_e72_11",
@@ -1082,7 +1370,12 @@
             "description": "Minimum age in years at a diagnosis starting with E72.11: Homocystinuria.",
             "x-unit": "year",
             "x-diagnosisPrefix": "E72.11",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 250587,
+            "x-observedRange": {
+              "minimum": 4.635,
+              "maximum": 4.635
+            }
           },
           {
             "name": "dx_age_years_k50",
@@ -1090,7 +1383,12 @@
             "description": "Minimum age in years at a diagnosis starting with K50: Crohn's disease [regional enteritis].",
             "x-unit": "year",
             "x-diagnosisPrefix": "K50",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 250475,
+            "x-observedRange": {
+              "minimum": 0.679,
+              "maximum": 17.268
+            }
           },
           {
             "name": "dx_age_years_k51",
@@ -1098,7 +1396,12 @@
             "description": "Minimum age in years at a diagnosis starting with K51: Ulcerative colitis.",
             "x-unit": "year",
             "x-diagnosisPrefix": "K51",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 250526,
+            "x-observedRange": {
+              "minimum": 0.096,
+              "maximum": 16.389
+            }
           },
           {
             "name": "dx_age_years_k90_0",
@@ -1106,7 +1409,12 @@
             "description": "Minimum age in years at a diagnosis starting with K90.0: Celiac disease.",
             "x-unit": "year",
             "x-diagnosisPrefix": "K90.0",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 249690,
+            "x-observedRange": {
+              "minimum": 0.027,
+              "maximum": 17.462
+            }
           },
           {
             "name": "dx_age_years_n18",
@@ -1114,7 +1422,12 @@
             "description": "Minimum age in years at a diagnosis starting with N18: Chronic kidney disease.",
             "x-unit": "year",
             "x-diagnosisPrefix": "N18",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 250518,
+            "x-observedRange": {
+              "minimum": 0.025,
+              "maximum": 16.334
+            }
           },
           {
             "name": "dx_age_years_n25_0",
@@ -1122,7 +1435,12 @@
             "description": "Minimum age in years at a diagnosis starting with N25.0: Renal osteodystrophy.",
             "x-unit": "year",
             "x-diagnosisPrefix": "N25.0",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 250587,
+            "x-observedRange": {
+              "minimum": 6.842,
+              "maximum": 6.842
+            }
           },
           {
             "name": "dx_age_years_p04_3",
@@ -1130,7 +1448,12 @@
             "description": "Minimum age in years at a diagnosis starting with P04.3: Newborn affected by maternal use of alcohol.",
             "x-unit": "year",
             "x-diagnosisPrefix": "P04.3",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 250535,
+            "x-observedRange": {
+              "minimum": 0.0,
+              "maximum": 11.387
+            }
           },
           {
             "name": "dx_age_years_p05",
@@ -1138,7 +1461,12 @@
             "description": "Minimum age in years at a diagnosis starting with P05: Slow fetal growth and fetal malnutrition.",
             "x-unit": "year",
             "x-diagnosisPrefix": "P05",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 246519,
+            "x-observedRange": {
+              "minimum": 0.0,
+              "maximum": 14.757
+            }
           },
           {
             "name": "dx_age_years_p07",
@@ -1146,7 +1474,12 @@
             "description": "Minimum age in years at a diagnosis starting with P07: Short gestation and low birth weight.",
             "x-unit": "year",
             "x-diagnosisPrefix": "P07",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 239574,
+            "x-observedRange": {
+              "minimum": -114.667,
+              "maximum": 16.569
+            }
           },
           {
             "name": "dx_age_years_p70",
@@ -1154,7 +1487,12 @@
             "description": "Minimum age in years at a diagnosis starting with P70: Transitory newborn carbohydrate-metabolism disorder.",
             "x-unit": "year",
             "x-diagnosisPrefix": "P70",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 247235,
+            "x-observedRange": {
+              "minimum": -0.003,
+              "maximum": 7.162
+            }
           },
           {
             "name": "dx_age_years_p92_6",
@@ -1162,7 +1500,12 @@
             "description": "Minimum age in years at a diagnosis starting with P92.6: Failure to thrive in newborn.",
             "x-unit": "year",
             "x-diagnosisPrefix": "P92.6",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 236160,
+            "x-observedRange": {
+              "minimum": -0.12,
+              "maximum": 11.91
+            }
           },
           {
             "name": "dx_age_years_q77",
@@ -1170,7 +1513,12 @@
             "description": "Minimum age in years at a diagnosis starting with Q77: Osteochondrodysplasia with defects of growth.",
             "x-unit": "year",
             "x-diagnosisPrefix": "Q77",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 250573,
+            "x-observedRange": {
+              "minimum": 0.014,
+              "maximum": 12.553
+            }
           },
           {
             "name": "dx_age_years_q78_0",
@@ -1178,7 +1526,12 @@
             "description": "Minimum age in years at a diagnosis starting with Q78.0: Osteogenesis imperfecta.",
             "x-unit": "year",
             "x-diagnosisPrefix": "Q78.0",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 250578,
+            "x-observedRange": {
+              "minimum": 0.008,
+              "maximum": 10.119
+            }
           },
           {
             "name": "dx_age_years_q78_1",
@@ -1186,7 +1539,12 @@
             "description": "Minimum age in years at a diagnosis starting with Q78.1: Polyostotic fibrous dysplasia.",
             "x-unit": "year",
             "x-diagnosisPrefix": "Q78.1",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 250586,
+            "x-observedRange": {
+              "minimum": 1.188,
+              "maximum": 9.517
+            }
           },
           {
             "name": "dx_age_years_q87_1",
@@ -1194,7 +1552,12 @@
             "description": "Minimum age in years at a diagnosis starting with Q87.1: Congenital syndrome associated with short stature.",
             "x-unit": "year",
             "x-diagnosisPrefix": "Q87.1",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 250530,
+            "x-observedRange": {
+              "minimum": 0.0,
+              "maximum": 15.329
+            }
           },
           {
             "name": "dx_age_years_q87_2",
@@ -1202,7 +1565,12 @@
             "description": "Minimum age in years at a diagnosis starting with Q87.2: Congenital syndrome predominantly involving limbs.",
             "x-unit": "year",
             "x-diagnosisPrefix": "Q87.2",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 250556,
+            "x-observedRange": {
+              "minimum": 0.0,
+              "maximum": 12.947
+            }
           },
           {
             "name": "dx_age_years_q87_3",
@@ -1210,7 +1578,12 @@
             "description": "Minimum age in years at a diagnosis starting with Q87.3: Congenital syndrome involving early overgrowth.",
             "x-unit": "year",
             "x-diagnosisPrefix": "Q87.3",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 250542,
+            "x-observedRange": {
+              "minimum": 0.038,
+              "maximum": 11.967
+            }
           },
           {
             "name": "dx_age_years_q87_4",
@@ -1218,7 +1591,12 @@
             "description": "Minimum age in years at a diagnosis starting with Q87.4: Marfan syndrome.",
             "x-unit": "year",
             "x-diagnosisPrefix": "Q87.4",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 250571,
+            "x-observedRange": {
+              "minimum": 0.011,
+              "maximum": 15.981
+            }
           },
           {
             "name": "dx_age_years_q90",
@@ -1226,7 +1604,12 @@
             "description": "Minimum age in years at a diagnosis starting with Q90: Down syndrome.",
             "x-unit": "year",
             "x-diagnosisPrefix": "Q90",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 250383,
+            "x-observedRange": {
+              "minimum": 0.0,
+              "maximum": 14.3
+            }
           },
           {
             "name": "dx_age_years_q96",
@@ -1234,7 +1617,12 @@
             "description": "Minimum age in years at a diagnosis starting with Q96: Turner syndrome.",
             "x-unit": "year",
             "x-diagnosisPrefix": "Q96",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 250552,
+            "x-observedRange": {
+              "minimum": 0.0,
+              "maximum": 15.485
+            }
           },
           {
             "name": "dx_age_years_q98_0",
@@ -1242,7 +1630,12 @@
             "description": "Minimum age in years at a diagnosis starting with Q98.0: Klinefelter syndrome, 47 XXY.",
             "x-unit": "year",
             "x-diagnosisPrefix": "Q98.0",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 250562,
+            "x-observedRange": {
+              "minimum": 0.0,
+              "maximum": 13.53
+            }
           },
           {
             "name": "dx_age_years_q98_4",
@@ -1250,7 +1643,12 @@
             "description": "Minimum age in years at a diagnosis starting with Q98.4: Klinefelter syndrome, unspecified.",
             "x-unit": "year",
             "x-diagnosisPrefix": "Q98.4",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 250546,
+            "x-observedRange": {
+              "minimum": 0.0,
+              "maximum": 15.704
+            }
           },
           {
             "name": "dx_age_years_q98_5",
@@ -1258,7 +1656,12 @@
             "description": "Minimum age in years at a diagnosis starting with Q98.5: Karyotype 47 XYY.",
             "x-unit": "year",
             "x-diagnosisPrefix": "Q98.5",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 250571,
+            "x-observedRange": {
+              "minimum": 0.0,
+              "maximum": 5.971
+            }
           },
           {
             "name": "count_weight_z_score",
@@ -1266,12 +1669,21 @@
             "description": "Count of non-null visit-level weight_z_score values.",
             "constraints": {
               "minimum": 0
+            },
+            "x-observedRange": {
+              "minimum": 0,
+              "maximum": 244
             }
           },
           {
             "name": "mean_weight_z_score",
             "type": "number",
-            "description": "Mean visit-level weight_z_score."
+            "description": "Mean visit-level weight_z_score.",
+            "x-missingCount": 11,
+            "x-observedRange": {
+              "minimum": -4.7721,
+              "maximum": 4.6004
+            }
           },
           {
             "name": "std_weight_z_score",
@@ -1279,17 +1691,32 @@
             "description": "Standard deviation of visit-level weight_z_score values.",
             "constraints": {
               "minimum": 0
+            },
+            "x-missingCount": 993,
+            "x-observedRange": {
+              "minimum": 0.0001,
+              "maximum": 3.6504
             }
           },
           {
             "name": "min_weight_z_score",
             "type": "number",
-            "description": "Minimum visit-level weight_z_score."
+            "description": "Minimum visit-level weight_z_score.",
+            "x-missingCount": 11,
+            "x-observedRange": {
+              "minimum": -4.9991,
+              "maximum": 4.5973
+            }
           },
           {
             "name": "max_weight_z_score",
             "type": "number",
-            "description": "Maximum visit-level weight_z_score."
+            "description": "Maximum visit-level weight_z_score.",
+            "x-missingCount": 11,
+            "x-observedRange": {
+              "minimum": -4.7285,
+              "maximum": 4.9995
+            }
           },
           {
             "name": "count_height_z_score",
@@ -1297,12 +1724,411 @@
             "description": "Count of non-null visit-level height_z_score values.",
             "constraints": {
               "minimum": 0
-            }
+            },
+            "x-observedRange": {
+              "minimum": 0,
+              "maximum": 138
+            },
+            "x-categories": [
+              {
+                "value": 12,
+                "count": 15805
+              },
+              {
+                "value": 13,
+                "count": 15603
+              },
+              {
+                "value": 11,
+                "count": 15594
+              },
+              {
+                "value": 14,
+                "count": 15412
+              },
+              {
+                "value": 15,
+                "count": 15013
+              },
+              {
+                "value": 10,
+                "count": 14784
+              },
+              {
+                "value": 16,
+                "count": 13511
+              },
+              {
+                "value": 9,
+                "count": 13047
+              },
+              {
+                "value": 17,
+                "count": 12301
+              },
+              {
+                "value": 8,
+                "count": 11687
+              },
+              {
+                "value": 18,
+                "count": 11026
+              },
+              {
+                "value": 7,
+                "count": 10537
+              },
+              {
+                "value": 6,
+                "count": 9997
+              },
+              {
+                "value": 19,
+                "count": 9486
+              },
+              {
+                "value": 5,
+                "count": 8342
+              },
+              {
+                "value": 20,
+                "count": 8165
+              },
+              {
+                "value": 21,
+                "count": 6842
+              },
+              {
+                "value": 4,
+                "count": 6049
+              },
+              {
+                "value": 22,
+                "count": 5451
+              },
+              {
+                "value": 23,
+                "count": 4006
+              },
+              {
+                "value": 3,
+                "count": 3748
+              },
+              {
+                "value": 24,
+                "count": 2997
+              },
+              {
+                "value": 2,
+                "count": 2729
+              },
+              {
+                "value": 25,
+                "count": 2363
+              },
+              {
+                "value": 1,
+                "count": 2089
+              },
+              {
+                "value": 26,
+                "count": 1866
+              },
+              {
+                "value": 27,
+                "count": 1598
+              },
+              {
+                "value": 28,
+                "count": 1301
+              },
+              {
+                "value": 29,
+                "count": 1048
+              },
+              {
+                "value": 30,
+                "count": 976
+              },
+              {
+                "value": 31,
+                "count": 809
+              },
+              {
+                "value": 32,
+                "count": 725
+              },
+              {
+                "value": 33,
+                "count": 629
+              },
+              {
+                "value": 34,
+                "count": 563
+              },
+              {
+                "value": 35,
+                "count": 477
+              },
+              {
+                "value": 36,
+                "count": 424
+              },
+              {
+                "value": 37,
+                "count": 389
+              },
+              {
+                "value": 0,
+                "count": 327
+              },
+              {
+                "value": 38,
+                "count": 318
+              },
+              {
+                "value": 39,
+                "count": 301
+              },
+              {
+                "value": 40,
+                "count": 245
+              },
+              {
+                "value": 41,
+                "count": 230
+              },
+              {
+                "value": 42,
+                "count": 183
+              },
+              {
+                "value": 44,
+                "count": 163
+              },
+              {
+                "value": 43,
+                "count": 161
+              },
+              {
+                "value": 46,
+                "count": 131
+              },
+              {
+                "value": 45,
+                "count": 126
+              },
+              {
+                "value": 47,
+                "count": 122
+              },
+              {
+                "value": 48,
+                "count": 94
+              },
+              {
+                "value": 49,
+                "count": 90
+              },
+              {
+                "value": 51,
+                "count": 69
+              },
+              {
+                "value": 50,
+                "count": 64
+              },
+              {
+                "value": 52,
+                "count": 54
+              },
+              {
+                "value": 54,
+                "count": 51
+              },
+              {
+                "value": 53,
+                "count": 47
+              },
+              {
+                "value": 55,
+                "count": 43
+              },
+              {
+                "value": 56,
+                "count": 43
+              },
+              {
+                "value": 57,
+                "count": 32
+              },
+              {
+                "value": 59,
+                "count": 26
+              },
+              {
+                "value": 58,
+                "count": 25
+              },
+              {
+                "value": 62,
+                "count": 24
+              },
+              {
+                "value": 61,
+                "count": 22
+              },
+              {
+                "value": 60,
+                "count": 21
+              },
+              {
+                "value": 63,
+                "count": 19
+              },
+              {
+                "value": 64,
+                "count": 17
+              },
+              {
+                "value": 65,
+                "count": 15
+              },
+              {
+                "value": 66,
+                "count": 15
+              },
+              {
+                "value": 68,
+                "count": 13
+              },
+              {
+                "value": 67,
+                "count": 12
+              },
+              {
+                "value": 72,
+                "count": 10
+              },
+              {
+                "value": 70,
+                "count": 9
+              },
+              {
+                "value": 74,
+                "count": 9
+              },
+              {
+                "value": 69,
+                "count": 8
+              },
+              {
+                "value": 71,
+                "count": 7
+              },
+              {
+                "value": 73,
+                "count": 7
+              },
+              {
+                "value": 75,
+                "count": 7
+              },
+              {
+                "value": 76,
+                "count": 6
+              },
+              {
+                "value": 81,
+                "count": 5
+              },
+              {
+                "value": 84,
+                "count": 4
+              },
+              {
+                "value": 80,
+                "count": 3
+              },
+              {
+                "value": 79,
+                "count": 2
+              },
+              {
+                "value": 88,
+                "count": 2
+              },
+              {
+                "value": 96,
+                "count": 2
+              },
+              {
+                "value": 99,
+                "count": 2
+              },
+              {
+                "value": 104,
+                "count": 1
+              },
+              {
+                "value": 109,
+                "count": 1
+              },
+              {
+                "value": 111,
+                "count": 1
+              },
+              {
+                "value": 118,
+                "count": 1
+              },
+              {
+                "value": 138,
+                "count": 1
+              },
+              {
+                "value": 77,
+                "count": 1
+              },
+              {
+                "value": 78,
+                "count": 1
+              },
+              {
+                "value": 83,
+                "count": 1
+              },
+              {
+                "value": 85,
+                "count": 1
+              },
+              {
+                "value": 86,
+                "count": 1
+              },
+              {
+                "value": 87,
+                "count": 1
+              },
+              {
+                "value": 92,
+                "count": 1
+              },
+              {
+                "value": 94,
+                "count": 1
+              }
+            ]
           },
           {
             "name": "mean_height_z_score",
             "type": "number",
-            "description": "Mean visit-level height_z_score."
+            "description": "Mean visit-level height_z_score.",
+            "x-missingCount": 327,
+            "x-observedRange": {
+              "minimum": -4.8684,
+              "maximum": 2.9938
+            }
           },
           {
             "name": "std_height_z_score",
@@ -1310,17 +2136,32 @@
             "description": "Standard deviation of visit-level height_z_score values.",
             "constraints": {
               "minimum": 0
+            },
+            "x-missingCount": 2416,
+            "x-observedRange": {
+              "minimum": 0.0,
+              "maximum": 4.3468
             }
           },
           {
             "name": "min_height_z_score",
             "type": "number",
-            "description": "Minimum visit-level height_z_score."
+            "description": "Minimum visit-level height_z_score.",
+            "x-missingCount": 327,
+            "x-observedRange": {
+              "minimum": -4.9992,
+              "maximum": 2.9938
+            }
           },
           {
             "name": "max_height_z_score",
             "type": "number",
-            "description": "Maximum visit-level height_z_score."
+            "description": "Maximum visit-level height_z_score.",
+            "x-missingCount": 327,
+            "x-observedRange": {
+              "minimum": -4.8684,
+              "maximum": 3.0
+            }
           },
           {
             "name": "count_bmi_z_score",
@@ -1328,12 +2169,391 @@
             "description": "Count of non-null visit-level bmi_z_score values.",
             "constraints": {
               "minimum": 0
-            }
+            },
+            "x-observedRange": {
+              "minimum": 0,
+              "maximum": 136
+            },
+            "x-categories": [
+              {
+                "value": 0,
+                "count": 37535
+              },
+              {
+                "value": 6,
+                "count": 16005
+              },
+              {
+                "value": 5,
+                "count": 15968
+              },
+              {
+                "value": 7,
+                "count": 15603
+              },
+              {
+                "value": 4,
+                "count": 15292
+              },
+              {
+                "value": 8,
+                "count": 15152
+              },
+              {
+                "value": 9,
+                "count": 13873
+              },
+              {
+                "value": 3,
+                "count": 13372
+              },
+              {
+                "value": 1,
+                "count": 13360
+              },
+              {
+                "value": 10,
+                "count": 12226
+              },
+              {
+                "value": 2,
+                "count": 11453
+              },
+              {
+                "value": 11,
+                "count": 10966
+              },
+              {
+                "value": 12,
+                "count": 10036
+              },
+              {
+                "value": 13,
+                "count": 8675
+              },
+              {
+                "value": 14,
+                "count": 7853
+              },
+              {
+                "value": 15,
+                "count": 6617
+              },
+              {
+                "value": 16,
+                "count": 4598
+              },
+              {
+                "value": 17,
+                "count": 3322
+              },
+              {
+                "value": 18,
+                "count": 2622
+              },
+              {
+                "value": 19,
+                "count": 2136
+              },
+              {
+                "value": 20,
+                "count": 1740
+              },
+              {
+                "value": 21,
+                "count": 1514
+              },
+              {
+                "value": 22,
+                "count": 1331
+              },
+              {
+                "value": 23,
+                "count": 1107
+              },
+              {
+                "value": 24,
+                "count": 955
+              },
+              {
+                "value": 25,
+                "count": 856
+              },
+              {
+                "value": 26,
+                "count": 763
+              },
+              {
+                "value": 27,
+                "count": 679
+              },
+              {
+                "value": 28,
+                "count": 549
+              },
+              {
+                "value": 29,
+                "count": 515
+              },
+              {
+                "value": 30,
+                "count": 450
+              },
+              {
+                "value": 31,
+                "count": 386
+              },
+              {
+                "value": 32,
+                "count": 349
+              },
+              {
+                "value": 33,
+                "count": 326
+              },
+              {
+                "value": 34,
+                "count": 260
+              },
+              {
+                "value": 35,
+                "count": 228
+              },
+              {
+                "value": 36,
+                "count": 226
+              },
+              {
+                "value": 37,
+                "count": 191
+              },
+              {
+                "value": 39,
+                "count": 162
+              },
+              {
+                "value": 38,
+                "count": 158
+              },
+              {
+                "value": 40,
+                "count": 124
+              },
+              {
+                "value": 42,
+                "count": 114
+              },
+              {
+                "value": 41,
+                "count": 107
+              },
+              {
+                "value": 44,
+                "count": 97
+              },
+              {
+                "value": 43,
+                "count": 75
+              },
+              {
+                "value": 45,
+                "count": 56
+              },
+              {
+                "value": 48,
+                "count": 56
+              },
+              {
+                "value": 46,
+                "count": 53
+              },
+              {
+                "value": 47,
+                "count": 47
+              },
+              {
+                "value": 49,
+                "count": 41
+              },
+              {
+                "value": 50,
+                "count": 41
+              },
+              {
+                "value": 51,
+                "count": 40
+              },
+              {
+                "value": 52,
+                "count": 37
+              },
+              {
+                "value": 54,
+                "count": 27
+              },
+              {
+                "value": 57,
+                "count": 25
+              },
+              {
+                "value": 53,
+                "count": 23
+              },
+              {
+                "value": 56,
+                "count": 23
+              },
+              {
+                "value": 55,
+                "count": 21
+              },
+              {
+                "value": 62,
+                "count": 19
+              },
+              {
+                "value": 58,
+                "count": 14
+              },
+              {
+                "value": 63,
+                "count": 14
+              },
+              {
+                "value": 59,
+                "count": 12
+              },
+              {
+                "value": 60,
+                "count": 12
+              },
+              {
+                "value": 68,
+                "count": 11
+              },
+              {
+                "value": 61,
+                "count": 10
+              },
+              {
+                "value": 64,
+                "count": 10
+              },
+              {
+                "value": 66,
+                "count": 9
+              },
+              {
+                "value": 67,
+                "count": 7
+              },
+              {
+                "value": 65,
+                "count": 6
+              },
+              {
+                "value": 71,
+                "count": 6
+              },
+              {
+                "value": 72,
+                "count": 6
+              },
+              {
+                "value": 70,
+                "count": 5
+              },
+              {
+                "value": 74,
+                "count": 4
+              },
+              {
+                "value": 69,
+                "count": 3
+              },
+              {
+                "value": 77,
+                "count": 2
+              },
+              {
+                "value": 80,
+                "count": 2
+              },
+              {
+                "value": 81,
+                "count": 2
+              },
+              {
+                "value": 83,
+                "count": 2
+              },
+              {
+                "value": 97,
+                "count": 2
+              },
+              {
+                "value": 98,
+                "count": 2
+              },
+              {
+                "value": 104,
+                "count": 1
+              },
+              {
+                "value": 109,
+                "count": 1
+              },
+              {
+                "value": 136,
+                "count": 1
+              },
+              {
+                "value": 73,
+                "count": 1
+              },
+              {
+                "value": 75,
+                "count": 1
+              },
+              {
+                "value": 76,
+                "count": 1
+              },
+              {
+                "value": 78,
+                "count": 1
+              },
+              {
+                "value": 82,
+                "count": 1
+              },
+              {
+                "value": 87,
+                "count": 1
+              },
+              {
+                "value": 88,
+                "count": 1
+              },
+              {
+                "value": 90,
+                "count": 1
+              },
+              {
+                "value": 96,
+                "count": 1
+              }
+            ]
           },
           {
             "name": "mean_bmi_z_score",
             "type": "number",
-            "description": "Mean visit-level bmi_z_score."
+            "description": "Mean visit-level bmi_z_score.",
+            "x-missingCount": 37535,
+            "x-observedRange": {
+              "minimum": -5.6992,
+              "maximum": 6.7026
+            }
           },
           {
             "name": "std_bmi_z_score",
@@ -1341,17 +2561,32 @@
             "description": "Standard deviation of visit-level bmi_z_score values.",
             "constraints": {
               "minimum": 0
+            },
+            "x-missingCount": 50895,
+            "x-observedRange": {
+              "minimum": 0.0001,
+              "maximum": 6.4692
             }
           },
           {
             "name": "min_bmi_z_score",
             "type": "number",
-            "description": "Minimum visit-level bmi_z_score."
+            "description": "Minimum visit-level bmi_z_score.",
+            "x-missingCount": 37535,
+            "x-observedRange": {
+              "minimum": -18.7803,
+              "maximum": 6.7026
+            }
           },
           {
             "name": "max_bmi_z_score",
             "type": "number",
-            "description": "Maximum visit-level bmi_z_score."
+            "description": "Maximum visit-level bmi_z_score.",
+            "x-missingCount": 37535,
+            "x-observedRange": {
+              "minimum": -5.1273,
+              "maximum": 6.7026
+            }
           },
           {
             "name": "count_head_circ_z_score",
@@ -1359,12 +2594,143 @@
             "description": "Count of non-null visit-level head_circ_z_score values.",
             "constraints": {
               "minimum": 0
-            }
+            },
+            "x-observedRange": {
+              "minimum": 0,
+              "maximum": 33
+            },
+            "x-categories": [
+              {
+                "value": 0,
+                "count": 50004
+              },
+              {
+                "value": 10,
+                "count": 45436
+              },
+              {
+                "value": 11,
+                "count": 28192
+              },
+              {
+                "value": 9,
+                "count": 27042
+              },
+              {
+                "value": 8,
+                "count": 14873
+              },
+              {
+                "value": 1,
+                "count": 12521
+              },
+              {
+                "value": 12,
+                "count": 11618
+              },
+              {
+                "value": 7,
+                "count": 10596
+              },
+              {
+                "value": 5,
+                "count": 8953
+              },
+              {
+                "value": 6,
+                "count": 8858
+              },
+              {
+                "value": 2,
+                "count": 8463
+              },
+              {
+                "value": 4,
+                "count": 8198
+              },
+              {
+                "value": 3,
+                "count": 7764
+              },
+              {
+                "value": 13,
+                "count": 4553
+              },
+              {
+                "value": 14,
+                "count": 1911
+              },
+              {
+                "value": 15,
+                "count": 822
+              },
+              {
+                "value": 16,
+                "count": 374
+              },
+              {
+                "value": 17,
+                "count": 172
+              },
+              {
+                "value": 18,
+                "count": 110
+              },
+              {
+                "value": 19,
+                "count": 61
+              },
+              {
+                "value": 20,
+                "count": 25
+              },
+              {
+                "value": 21,
+                "count": 15
+              },
+              {
+                "value": 22,
+                "count": 14
+              },
+              {
+                "value": 23,
+                "count": 5
+              },
+              {
+                "value": 25,
+                "count": 2
+              },
+              {
+                "value": 26,
+                "count": 2
+              },
+              {
+                "value": 24,
+                "count": 1
+              },
+              {
+                "value": 27,
+                "count": 1
+              },
+              {
+                "value": 30,
+                "count": 1
+              },
+              {
+                "value": 33,
+                "count": 1
+              }
+            ]
           },
           {
             "name": "mean_head_circ_z_score",
             "type": "number",
-            "description": "Mean visit-level head_circ_z_score."
+            "description": "Mean visit-level head_circ_z_score.",
+            "x-missingCount": 50004,
+            "x-observedRange": {
+              "minimum": -1457.3407,
+              "maximum": 25519.8835
+            }
           },
           {
             "name": "std_head_circ_z_score",
@@ -1372,17 +2738,32 @@
             "description": "Standard deviation of visit-level head_circ_z_score values.",
             "constraints": {
               "minimum": 0
+            },
+            "x-missingCount": 62525,
+            "x-observedRange": {
+              "minimum": 0.0,
+              "maximum": 88395.2809
             }
           },
           {
             "name": "min_head_circ_z_score",
             "type": "number",
-            "description": "Minimum visit-level head_circ_z_score."
+            "description": "Minimum visit-level head_circ_z_score.",
+            "x-missingCount": 50004,
+            "x-observedRange": {
+              "minimum": -17485.9115,
+              "maximum": 8999.2033
+            }
           },
           {
             "name": "max_head_circ_z_score",
             "type": "number",
-            "description": "Maximum visit-level head_circ_z_score."
+            "description": "Maximum visit-level head_circ_z_score.",
+            "x-missingCount": 50004,
+            "x-observedRange": {
+              "minimum": -52.9953,
+              "maximum": 306212.5991
+            }
           },
           {
             "name": "count_weight_for_length_z_score",
@@ -1390,12 +2771,267 @@
             "description": "Count of non-null visit-level weight_for_length_z_score values.",
             "constraints": {
               "minimum": 0
-            }
+            },
+            "x-observedRange": {
+              "minimum": 0,
+              "maximum": 68
+            },
+            "x-categories": [
+              {
+                "value": 11,
+                "count": 31257
+              },
+              {
+                "value": 0,
+                "count": 30139
+              },
+              {
+                "value": 12,
+                "count": 30086
+              },
+              {
+                "value": 10,
+                "count": 20153
+              },
+              {
+                "value": 13,
+                "count": 19024
+              },
+              {
+                "value": 9,
+                "count": 13091
+              },
+              {
+                "value": 1,
+                "count": 12457
+              },
+              {
+                "value": 2,
+                "count": 12425
+              },
+              {
+                "value": 3,
+                "count": 10238
+              },
+              {
+                "value": 14,
+                "count": 10222
+              },
+              {
+                "value": 8,
+                "count": 10061
+              },
+              {
+                "value": 5,
+                "count": 9185
+              },
+              {
+                "value": 7,
+                "count": 9160
+              },
+              {
+                "value": 4,
+                "count": 9109
+              },
+              {
+                "value": 6,
+                "count": 9100
+              },
+              {
+                "value": 15,
+                "count": 5343
+              },
+              {
+                "value": 16,
+                "count": 2967
+              },
+              {
+                "value": 17,
+                "count": 1755
+              },
+              {
+                "value": 18,
+                "count": 1184
+              },
+              {
+                "value": 19,
+                "count": 830
+              },
+              {
+                "value": 20,
+                "count": 589
+              },
+              {
+                "value": 21,
+                "count": 410
+              },
+              {
+                "value": 22,
+                "count": 372
+              },
+              {
+                "value": 23,
+                "count": 274
+              },
+              {
+                "value": 24,
+                "count": 202
+              },
+              {
+                "value": 25,
+                "count": 177
+              },
+              {
+                "value": 26,
+                "count": 138
+              },
+              {
+                "value": 27,
+                "count": 116
+              },
+              {
+                "value": 28,
+                "count": 73
+              },
+              {
+                "value": 29,
+                "count": 69
+              },
+              {
+                "value": 31,
+                "count": 63
+              },
+              {
+                "value": 30,
+                "count": 53
+              },
+              {
+                "value": 33,
+                "count": 46
+              },
+              {
+                "value": 34,
+                "count": 39
+              },
+              {
+                "value": 32,
+                "count": 27
+              },
+              {
+                "value": 35,
+                "count": 22
+              },
+              {
+                "value": 36,
+                "count": 19
+              },
+              {
+                "value": 38,
+                "count": 18
+              },
+              {
+                "value": 37,
+                "count": 13
+              },
+              {
+                "value": 41,
+                "count": 11
+              },
+              {
+                "value": 39,
+                "count": 9
+              },
+              {
+                "value": 42,
+                "count": 8
+              },
+              {
+                "value": 43,
+                "count": 7
+              },
+              {
+                "value": 46,
+                "count": 7
+              },
+              {
+                "value": 40,
+                "count": 5
+              },
+              {
+                "value": 44,
+                "count": 5
+              },
+              {
+                "value": 45,
+                "count": 5
+              },
+              {
+                "value": 51,
+                "count": 5
+              },
+              {
+                "value": 54,
+                "count": 3
+              },
+              {
+                "value": 55,
+                "count": 3
+              },
+              {
+                "value": 53,
+                "count": 2
+              },
+              {
+                "value": 56,
+                "count": 2
+              },
+              {
+                "value": 58,
+                "count": 2
+              },
+              {
+                "value": 47,
+                "count": 1
+              },
+              {
+                "value": 48,
+                "count": 1
+              },
+              {
+                "value": 50,
+                "count": 1
+              },
+              {
+                "value": 60,
+                "count": 1
+              },
+              {
+                "value": 61,
+                "count": 1
+              },
+              {
+                "value": 62,
+                "count": 1
+              },
+              {
+                "value": 63,
+                "count": 1
+              },
+              {
+                "value": 68,
+                "count": 1
+              }
+            ]
           },
           {
             "name": "mean_weight_for_length_z_score",
             "type": "number",
-            "description": "Mean visit-level weight_for_length_z_score."
+            "description": "Mean visit-level weight_for_length_z_score.",
+            "x-missingCount": 30139,
+            "x-observedRange": {
+              "minimum": -9.6117,
+              "maximum": 6.2246
+            }
           },
           {
             "name": "std_weight_for_length_z_score",
@@ -1403,17 +3039,32 @@
             "description": "Standard deviation of visit-level weight_for_length_z_score values.",
             "constraints": {
               "minimum": 0
+            },
+            "x-missingCount": 42596,
+            "x-observedRange": {
+              "minimum": 0.0,
+              "maximum": 33.9735
             }
           },
           {
             "name": "min_weight_for_length_z_score",
             "type": "number",
-            "description": "Minimum visit-level weight_for_length_z_score."
+            "description": "Minimum visit-level weight_for_length_z_score.",
+            "x-missingCount": 30139,
+            "x-observedRange": {
+              "minimum": -145.6016,
+              "maximum": 6.2246
+            }
           },
           {
             "name": "max_weight_for_length_z_score",
             "type": "number",
-            "description": "Maximum visit-level weight_for_length_z_score."
+            "description": "Maximum visit-level weight_for_length_z_score.",
+            "x-missingCount": 30139,
+            "x-observedRange": {
+              "minimum": -5.7851,
+              "maximum": 7.6285
+            }
           },
           {
             "name": "count_weight_for_stature_z_score",
@@ -1421,12 +3072,275 @@
             "description": "Count of non-null visit-level weight_for_stature_z_score values.",
             "constraints": {
               "minimum": 0
-            }
+            },
+            "x-observedRange": {
+              "minimum": 0,
+              "maximum": 90
+            },
+            "x-categories": [
+              {
+                "value": 0,
+                "count": 35434
+              },
+              {
+                "value": 7,
+                "count": 33298
+              },
+              {
+                "value": 8,
+                "count": 28063
+              },
+              {
+                "value": 6,
+                "count": 26131
+              },
+              {
+                "value": 5,
+                "count": 22154
+              },
+              {
+                "value": 4,
+                "count": 21560
+              },
+              {
+                "value": 3,
+                "count": 18348
+              },
+              {
+                "value": 9,
+                "count": 14940
+              },
+              {
+                "value": 2,
+                "count": 14742
+              },
+              {
+                "value": 1,
+                "count": 11960
+              },
+              {
+                "value": 10,
+                "count": 6965
+              },
+              {
+                "value": 11,
+                "count": 3974
+              },
+              {
+                "value": 12,
+                "count": 2698
+              },
+              {
+                "value": 13,
+                "count": 2003
+              },
+              {
+                "value": 14,
+                "count": 1547
+              },
+              {
+                "value": 15,
+                "count": 1203
+              },
+              {
+                "value": 16,
+                "count": 978
+              },
+              {
+                "value": 17,
+                "count": 816
+              },
+              {
+                "value": 18,
+                "count": 644
+              },
+              {
+                "value": 19,
+                "count": 509
+              },
+              {
+                "value": 20,
+                "count": 449
+              },
+              {
+                "value": 21,
+                "count": 353
+              },
+              {
+                "value": 22,
+                "count": 309
+              },
+              {
+                "value": 23,
+                "count": 245
+              },
+              {
+                "value": 24,
+                "count": 184
+              },
+              {
+                "value": 25,
+                "count": 164
+              },
+              {
+                "value": 26,
+                "count": 129
+              },
+              {
+                "value": 27,
+                "count": 110
+              },
+              {
+                "value": 28,
+                "count": 99
+              },
+              {
+                "value": 30,
+                "count": 87
+              },
+              {
+                "value": 29,
+                "count": 75
+              },
+              {
+                "value": 31,
+                "count": 62
+              },
+              {
+                "value": 32,
+                "count": 57
+              },
+              {
+                "value": 33,
+                "count": 40
+              },
+              {
+                "value": 34,
+                "count": 39
+              },
+              {
+                "value": 35,
+                "count": 27
+              },
+              {
+                "value": 36,
+                "count": 26
+              },
+              {
+                "value": 37,
+                "count": 22
+              },
+              {
+                "value": 38,
+                "count": 19
+              },
+              {
+                "value": 41,
+                "count": 15
+              },
+              {
+                "value": 43,
+                "count": 14
+              },
+              {
+                "value": 40,
+                "count": 13
+              },
+              {
+                "value": 39,
+                "count": 10
+              },
+              {
+                "value": 42,
+                "count": 10
+              },
+              {
+                "value": 45,
+                "count": 10
+              },
+              {
+                "value": 47,
+                "count": 8
+              },
+              {
+                "value": 44,
+                "count": 7
+              },
+              {
+                "value": 46,
+                "count": 5
+              },
+              {
+                "value": 52,
+                "count": 5
+              },
+              {
+                "value": 48,
+                "count": 4
+              },
+              {
+                "value": 50,
+                "count": 4
+              },
+              {
+                "value": 53,
+                "count": 4
+              },
+              {
+                "value": 49,
+                "count": 3
+              },
+              {
+                "value": 54,
+                "count": 3
+              },
+              {
+                "value": 55,
+                "count": 2
+              },
+              {
+                "value": 51,
+                "count": 1
+              },
+              {
+                "value": 56,
+                "count": 1
+              },
+              {
+                "value": 57,
+                "count": 1
+              },
+              {
+                "value": 58,
+                "count": 1
+              },
+              {
+                "value": 62,
+                "count": 1
+              },
+              {
+                "value": 65,
+                "count": 1
+              },
+              {
+                "value": 83,
+                "count": 1
+              },
+              {
+                "value": 90,
+                "count": 1
+              }
+            ]
           },
           {
             "name": "mean_weight_for_stature_z_score",
             "type": "number",
-            "description": "Mean visit-level weight_for_stature_z_score."
+            "description": "Mean visit-level weight_for_stature_z_score.",
+            "x-missingCount": 35434,
+            "x-observedRange": {
+              "minimum": -6.4609,
+              "maximum": 5.6179
+            }
           },
           {
             "name": "std_weight_for_stature_z_score",
@@ -1434,17 +3348,32 @@
             "description": "Standard deviation of visit-level weight_for_stature_z_score values.",
             "constraints": {
               "minimum": 0
+            },
+            "x-missingCount": 47394,
+            "x-observedRange": {
+              "minimum": 0.0,
+              "maximum": 7.7948
             }
           },
           {
             "name": "min_weight_for_stature_z_score",
             "type": "number",
-            "description": "Minimum visit-level weight_for_stature_z_score."
+            "description": "Minimum visit-level weight_for_stature_z_score.",
+            "x-missingCount": 35434,
+            "x-observedRange": {
+              "minimum": -14.3445,
+              "maximum": 5.6179
+            }
           },
           {
             "name": "max_weight_for_stature_z_score",
             "type": "number",
-            "description": "Maximum visit-level weight_for_stature_z_score."
+            "description": "Maximum visit-level weight_for_stature_z_score.",
+            "x-missingCount": 35434,
+            "x-observedRange": {
+              "minimum": -5.323,
+              "maximum": 7.4762
+            }
           }
         ],
         "missingValues": [
@@ -1468,12 +3397,12 @@
         "visits_augmented",
         "problem_list"
       ],
-      "x-uniquePatientCount": 250588,
       "x-generatedBy": {
         "script": "scripts/augment.py",
         "function": "augment_patients",
         "command": "python scripts/augment.py input_dir [--output_dir output] [--output_format {csv,parquet}]"
-      }
+      },
+      "x-uniquePatientCount": 250588
     },
     {
       "profile": "tabular-data-resource",
@@ -1516,76 +3445,89 @@
             "type": "integer",
             "description": "Patient age in days at the visit, replacing the absolute date for de-identification.",
             "constraints": {
-              "minimum": 1,
-              "maximum": 6571,
               "required": true
             },
             "x-unit": "day",
-            "x-deidentifiedDate": true
+            "x-deidentifiedDate": true,
+            "x-observedRange": {
+              "minimum": 1,
+              "maximum": 6571
+            }
           },
           {
             "name": "encounter_type",
             "type": "string",
-            "description": "Encounter classification; 45 values occur in the data.",
+            "description": "Encounter classification recorded by Epic.",
             "constraints": {
               "enum": [
-                "Abstract",
-                "Clinical Support",
+                "Office Visit",
+                "Well Visit (Conv.)",
+                "Sick",
+                "Follow-Up",
+                "Walk-In",
                 "Consult",
                 "Conversion Encounter",
-                "Documentation",
-                "ED",
-                "Episode Changes",
-                "Erroneous Encounter",
-                "Erroneous Telephone Encounter",
-                "Evaluation",
-                "External Contact",
-                "Flu",
-                "Follow-Up",
-                "History",
-                "Hospital",
-                "Immunization",
-                "Lab",
-                "Lab Requisition",
-                "Lactation Consult",
-                "Lactation Encounter",
-                "Letter (Out)",
-                "Medication Management",
-                "New Patient",
                 "Newborn",
-                "Nurse Only",
-                "Nutrition",
-                "Office Visit",
-                "Ophth Exam",
-                "Orders Only",
-                "OurPractice Advisory",
-                "Patient Care Review",
-                "Patient Message",
-                "Pre-op/Pre-procedure Orders",
-                "Procedure visit",
-                "Refill",
-                "Routine Prenatal",
-                "Scanned Document",
-                "Sick",
                 "Telemedicine",
                 "Telephone",
-                "Transcribe Orders",
-                "Treatment",
-                "Walk-In",
                 "Weight Check",
-                "Well Visit (Conv.)"
+                "Clinical Support",
+                "Documentation",
+                "Immunization",
+                "New Patient",
+                "Nutrition",
+                "Medication Management",
+                "Nurse Only",
+                "Abstract",
+                "Flu",
+                "Lactation Consult",
+                "Lab",
+                "Lactation Encounter",
+                "Procedure visit",
+                "Pre-op/Pre-procedure Orders",
+                "Erroneous Encounter",
+                "Orders Only",
+                "External Contact",
+                "Patient Message",
+                "Evaluation",
+                "Lab Requisition",
+                "Scanned Document",
+                "Letter (Out)",
+                "Refill",
+                "History",
+                "Ophth Exam",
+                "Hospital",
+                "Routine Prenatal",
+                "Transcribe Orders",
+                "Patient Care Review",
+                "Episode Changes",
+                "Erroneous Telephone Encounter",
+                "ED",
+                "OurPractice Advisory",
+                "Treatment"
               ],
               "required": true
             },
-            "x-uniqueValueCount": 45,
             "x-categories": [
               {
-                "value": "Abstract",
-                "count": 3672
+                "value": "Office Visit",
+                "count": 4725643
               },
               {
-                "value": "Clinical Support",
-                "count": 15347
+                "value": "Well Visit (Conv.)",
+                "count": 778452
+              },
+              {
+                "value": "Sick",
+                "count": 580991
+              },
+              {
+                "value": "Follow-Up",
+                "count": 92370
+              },
+              {
+                "value": "Walk-In",
+                "count": 79679
               },
               {
                 "value": "Consult",
@@ -1596,140 +3538,8 @@
                 "count": 32007
               },
               {
-                "value": "Documentation",
-                "count": 13107
-              },
-              {
-                "value": "ED",
-                "count": 1
-              },
-              {
-                "value": "Episode Changes",
-                "count": 2
-              },
-              {
-                "value": "Erroneous Encounter",
-                "count": 555
-              },
-              {
-                "value": "Erroneous Telephone Encounter",
-                "count": 2
-              },
-              {
-                "value": "Evaluation",
-                "count": 143
-              },
-              {
-                "value": "External Contact",
-                "count": 211
-              },
-              {
-                "value": "Flu",
-                "count": 2104
-              },
-              {
-                "value": "Follow-Up",
-                "count": 92370
-              },
-              {
-                "value": "History",
-                "count": 11
-              },
-              {
-                "value": "Hospital",
-                "count": 5
-              },
-              {
-                "value": "Immunization",
-                "count": 11774
-              },
-              {
-                "value": "Lab",
-                "count": 1351
-              },
-              {
-                "value": "Lab Requisition",
-                "count": 63
-              },
-              {
-                "value": "Lactation Consult",
-                "count": 1384
-              },
-              {
-                "value": "Lactation Encounter",
-                "count": 1337
-              },
-              {
-                "value": "Letter (Out)",
-                "count": 18
-              },
-              {
-                "value": "Medication Management",
-                "count": 4345
-              },
-              {
-                "value": "New Patient",
-                "count": 11410
-              },
-              {
                 "value": "Newborn",
                 "count": 31142
-              },
-              {
-                "value": "Nurse Only",
-                "count": 3786
-              },
-              {
-                "value": "Nutrition",
-                "count": 5406
-              },
-              {
-                "value": "Office Visit",
-                "count": 4725643
-              },
-              {
-                "value": "Ophth Exam",
-                "count": 11
-              },
-              {
-                "value": "Orders Only",
-                "count": 273
-              },
-              {
-                "value": "OurPractice Advisory",
-                "count": 1
-              },
-              {
-                "value": "Patient Care Review",
-                "count": 3
-              },
-              {
-                "value": "Patient Message",
-                "count": 209
-              },
-              {
-                "value": "Pre-op/Pre-procedure Orders",
-                "count": 575
-              },
-              {
-                "value": "Procedure visit",
-                "count": 678
-              },
-              {
-                "value": "Refill",
-                "count": 12
-              },
-              {
-                "value": "Routine Prenatal",
-                "count": 4
-              },
-              {
-                "value": "Scanned Document",
-                "count": 23
-              },
-              {
-                "value": "Sick",
-                "count": 580991
               },
               {
                 "value": "Telemedicine",
@@ -1740,26 +3550,147 @@
                 "count": 22053
               },
               {
-                "value": "Transcribe Orders",
-                "count": 4
-              },
-              {
-                "value": "Treatment",
-                "count": 1
-              },
-              {
-                "value": "Walk-In",
-                "count": 79679
-              },
-              {
                 "value": "Weight Check",
                 "count": 16295
               },
               {
-                "value": "Well Visit (Conv.)",
-                "count": 778452
+                "value": "Clinical Support",
+                "count": 15347
+              },
+              {
+                "value": "Documentation",
+                "count": 13107
+              },
+              {
+                "value": "Immunization",
+                "count": 11774
+              },
+              {
+                "value": "New Patient",
+                "count": 11410
+              },
+              {
+                "value": "Nutrition",
+                "count": 5406
+              },
+              {
+                "value": "Medication Management",
+                "count": 4345
+              },
+              {
+                "value": "Nurse Only",
+                "count": 3786
+              },
+              {
+                "value": "Abstract",
+                "count": 3672
+              },
+              {
+                "value": "Flu",
+                "count": 2104
+              },
+              {
+                "value": "Lactation Consult",
+                "count": 1384
+              },
+              {
+                "value": "Lab",
+                "count": 1351
+              },
+              {
+                "value": "Lactation Encounter",
+                "count": 1337
+              },
+              {
+                "value": "Procedure visit",
+                "count": 678
+              },
+              {
+                "value": "Pre-op/Pre-procedure Orders",
+                "count": 575
+              },
+              {
+                "value": "Erroneous Encounter",
+                "count": 555
+              },
+              {
+                "value": "Orders Only",
+                "count": 273
+              },
+              {
+                "value": "External Contact",
+                "count": 211
+              },
+              {
+                "value": "Patient Message",
+                "count": 209
+              },
+              {
+                "value": "Evaluation",
+                "count": 143
+              },
+              {
+                "value": "Lab Requisition",
+                "count": 63
+              },
+              {
+                "value": "Scanned Document",
+                "count": 23
+              },
+              {
+                "value": "Letter (Out)",
+                "count": 18
+              },
+              {
+                "value": "Refill",
+                "count": 12
+              },
+              {
+                "value": "History",
+                "count": 11
+              },
+              {
+                "value": "Ophth Exam",
+                "count": 11
+              },
+              {
+                "value": "Hospital",
+                "count": 5
+              },
+              {
+                "value": "Routine Prenatal",
+                "count": 4
+              },
+              {
+                "value": "Transcribe Orders",
+                "count": 4
+              },
+              {
+                "value": "Patient Care Review",
+                "count": 3
+              },
+              {
+                "value": "Episode Changes",
+                "count": 2
+              },
+              {
+                "value": "Erroneous Telephone Encounter",
+                "count": 2
+              },
+              {
+                "value": "ED",
+                "count": 1
+              },
+              {
+                "value": "OurPractice Advisory",
+                "count": 1
+              },
+              {
+                "value": "Treatment",
+                "count": 1
               }
-            ]
+            ],
+            "x-uniqueValueCount": 45
           },
           {
             "name": "orig_enc_source_Epic_yn",
@@ -1770,47 +3701,62 @@
                 "Y",
                 "N"
               ]
-            }
+            },
+            "x-categories": [
+              {
+                "value": "Y",
+                "count": 4149865
+              },
+              {
+                "value": "N",
+                "count": 2344608
+              }
+            ],
+            "x-uniqueValueCount": 2
           },
           {
             "name": "weight_oz",
             "type": "number",
             "description": "Recorded weight in ounces; may contain outliers.",
-            "constraints": {
+            "x-unit": "ounce",
+            "x-missingCount": 6445,
+            "x-observedRange": {
               "minimum": 0.2,
-              "maximum": 22648
-            },
-            "x-unit": "ounce"
+              "maximum": 22648.0
+            }
           },
           {
             "name": "height_in",
             "type": "number",
             "description": "Recorded height or length in inches; may contain outliers.",
-            "constraints": {
+            "x-unit": "inch",
+            "x-missingCount": 2984840,
+            "x-observedRange": {
               "minimum": 1.18,
-              "maximum": 115
-            },
-            "x-unit": "inch"
+              "maximum": 115.0
+            }
           },
           {
             "name": "head_circ_cm",
             "type": "number",
             "description": "Recorded head circumference in centimeters; may contain outliers.",
-            "constraints": {
-              "minimum": 0,
+            "x-unit": "centimeter",
+            "x-missingCount": 4858783,
+            "x-observedRange": {
+              "minimum": 0.0,
               "maximum": 505.46
-            },
-            "x-unit": "centimeter"
+            }
           },
           {
             "name": "BMI",
             "type": "number",
             "description": "Body mass index recorded by Epic in the base visits file.",
-            "constraints": {
+            "x-unit": "kg/m2",
+            "x-missingCount": 2836170,
+            "x-observedRange": {
               "minimum": 0.01,
               "maximum": 21164.05
-            },
-            "x-unit": "kg/m2"
+            }
           },
           {
             "name": "bmi_percentile",
@@ -1820,205 +3766,243 @@
               "minimum": 0,
               "maximum": 100
             },
-            "x-unit": "percentile"
+            "x-unit": "percentile",
+            "x-missingCount": 3533288,
+            "x-observedRange": {
+              "minimum": 0.0,
+              "maximum": 100.0
+            }
           },
           {
             "name": "enc_diag_1",
             "type": "string",
             "description": "Primary or first-listed encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 339672
           },
           {
             "name": "enc_diag_2",
             "type": "string",
             "description": "Diagnosis position 2 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 2633784
           },
           {
             "name": "enc_diag_3",
             "type": "string",
             "description": "Diagnosis position 3 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 4406874
           },
           {
             "name": "enc_diag_4",
             "type": "string",
             "description": "Diagnosis position 4 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 5338411
           },
           {
             "name": "enc_diag_5",
             "type": "string",
             "description": "Diagnosis position 5 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 5842807
           },
           {
             "name": "enc_diag_6",
             "type": "string",
             "description": "Diagnosis position 6 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6129492
           },
           {
             "name": "enc_diag_7",
             "type": "string",
             "description": "Diagnosis position 7 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6292453
           },
           {
             "name": "enc_diag_8",
             "type": "string",
             "description": "Diagnosis position 8 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6384404
           },
           {
             "name": "enc_diag_9",
             "type": "string",
             "description": "Diagnosis position 9 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6435791
           },
           {
             "name": "enc_diag_10",
             "type": "string",
             "description": "Diagnosis position 10 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6463492
           },
           {
             "name": "enc_diag_11",
             "type": "string",
             "description": "Diagnosis position 11 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6477956
           },
           {
             "name": "enc_diag_12",
             "type": "string",
             "description": "Diagnosis position 12 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6485564
           },
           {
             "name": "enc_diag_13",
             "type": "string",
             "description": "Diagnosis position 13 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6489628
           },
           {
             "name": "enc_diag_14",
             "type": "string",
             "description": "Diagnosis position 14 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6491828
           },
           {
             "name": "enc_diag_15",
             "type": "string",
             "description": "Diagnosis position 15 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6492956
           },
           {
             "name": "enc_diag_16",
             "type": "string",
             "description": "Diagnosis position 16 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6493585
           },
           {
             "name": "enc_diag_17",
             "type": "string",
             "description": "Diagnosis position 17 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6493907
           },
           {
             "name": "enc_diag_18",
             "type": "string",
             "description": "Diagnosis position 18 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6494116
           },
           {
             "name": "enc_diag_19",
             "type": "string",
             "description": "Diagnosis position 19 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6494245
           },
           {
             "name": "enc_diag_20",
             "type": "string",
             "description": "Diagnosis position 20 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6494326
           },
           {
             "name": "enc_diag_21",
             "type": "string",
             "description": "Diagnosis position 21 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6494376
           },
           {
             "name": "enc_diag_22",
             "type": "string",
             "description": "Diagnosis position 22 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6494408
           },
           {
             "name": "enc_diag_23",
             "type": "string",
             "description": "Diagnosis position 23 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6494426
           },
           {
             "name": "enc_diag_24",
             "type": "string",
             "description": "Diagnosis position 24 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6494438
           },
           {
             "name": "enc_diag_25",
             "type": "string",
             "description": "Diagnosis position 25 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6494448
           },
           {
             "name": "enc_diag_26",
             "type": "string",
             "description": "Diagnosis position 26 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6494453
           },
           {
             "name": "enc_diag_27",
             "type": "string",
             "description": "Diagnosis position 27 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6494458
           },
           {
             "name": "enc_diag_28",
             "type": "string",
             "description": "Diagnosis position 28 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6494461
           },
           {
             "name": "enc_diag_29",
             "type": "string",
             "description": "Diagnosis position 29 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6494464
           },
           {
             "name": "enc_diag_30",
             "type": "string",
             "description": "Diagnosis position 30 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6494470
           },
           {
             "name": "enc_diag_31",
             "type": "string",
             "description": "Diagnosis position 31 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6494471
           },
           {
             "name": "enc_diag_32",
             "type": "string",
             "description": "Diagnosis position 32 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6494471
           },
           {
             "name": "enc_diag_33",
             "type": "string",
             "description": "Diagnosis position 33 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6494471
           }
         ],
         "missingValues": [
@@ -2038,7 +4022,8 @@
       "x-rowCount": 6494473,
       "x-fieldCount": 43,
       "x-uniquePatientCount": 250588,
-      "x-uniqueDiagnosisCodeCount": 8031
+      "x-uniqueVisitIdCount": 6494473,
+      "x-uniqueDiagnosisCodeCount": 8029
     },
     {
       "profile": "tabular-data-resource",
@@ -2087,7 +4072,22 @@
                 "U"
               ],
               "required": true
-            }
+            },
+            "x-categories": [
+              {
+                "value": "M",
+                "count": 3337433
+              },
+              {
+                "value": "F",
+                "count": 3156965
+              },
+              {
+                "value": "U",
+                "count": 75
+              }
+            ],
+            "x-uniqueValueCount": 3
           },
           {
             "name": "ethnicity",
@@ -2098,7 +4098,19 @@
                 "Not Hispanic or Latino",
                 "Hispanic or Latino"
               ]
-            }
+            },
+            "x-missingCount": 1093256,
+            "x-categories": [
+              {
+                "value": "Not Hispanic or Latino",
+                "count": 4631609
+              },
+              {
+                "value": "Hispanic or Latino",
+                "count": 769608
+              }
+            ],
+            "x-uniqueValueCount": 2
           },
           {
             "name": "race_1",
@@ -2114,19 +4126,53 @@
                 "Native Hawaiian or Other Pacific Islander",
                 "White"
               ]
-            }
+            },
+            "x-missingCount": 1071155,
+            "x-categories": [
+              {
+                "value": "White",
+                "count": 4313826
+              },
+              {
+                "value": "Another Race",
+                "count": 421347
+              },
+              {
+                "value": "Asian",
+                "count": 349581
+              },
+              {
+                "value": "Black or African American",
+                "count": 304821
+              },
+              {
+                "value": "American Indian or Alaska Native",
+                "count": 16576
+              },
+              {
+                "value": "Middle Eastern or Northern African",
+                "count": 10388
+              },
+              {
+                "value": "Native Hawaiian or Other Pacific Islander",
+                "count": 6779
+              }
+            ],
+            "x-uniqueValueCount": 7
           },
           {
             "name": "age_in_days",
             "type": "integer",
             "description": "Patient age in days at the visit, replacing the absolute date for de-identification.",
             "constraints": {
-              "minimum": 1,
-              "maximum": 6571,
               "required": true
             },
             "x-unit": "day",
-            "x-deidentifiedDate": true
+            "x-deidentifiedDate": true,
+            "x-observedRange": {
+              "minimum": 1,
+              "maximum": 6571
+            }
           },
           {
             "name": "age_in_months",
@@ -2136,7 +4182,11 @@
             "x-derivedFrom": [
               "age_in_days"
             ],
-            "x-decimalPlaces": 2
+            "x-decimalPlaces": 2,
+            "x-observedRange": {
+              "minimum": 0.03,
+              "maximum": 215.89
+            }
           },
           {
             "name": "age_in_years",
@@ -2146,17 +4196,22 @@
             "x-derivedFrom": [
               "age_in_days"
             ],
-            "x-decimalPlaces": 3
+            "x-decimalPlaces": 3,
+            "x-observedRange": {
+              "minimum": 0.003,
+              "maximum": 17.99
+            }
           },
           {
             "name": "weight_oz",
             "type": "number",
             "description": "Recorded weight in ounces; may contain outliers.",
-            "constraints": {
+            "x-unit": "ounce",
+            "x-missingCount": 6445,
+            "x-observedRange": {
               "minimum": 0.2,
-              "maximum": 22648
-            },
-            "x-unit": "ounce"
+              "maximum": 22648.0
+            }
           },
           {
             "name": "weight_kg",
@@ -2167,7 +4222,12 @@
               "weight_oz"
             ],
             "x-conversionFactor": "1 kg = 35.274 oz",
-            "x-bivRule": "null when abs(weight_z_score) > 5"
+            "x-bivRule": "null when abs(weight_z_score) > 5",
+            "x-missingCount": 11466,
+            "x-observedRange": {
+              "minimum": 0.006,
+              "maximum": 513.92
+            }
           },
           {
             "name": "weight_outlier_flag",
@@ -2178,13 +4238,33 @@
                 0,
                 1
               ]
-            }
+            },
+            "x-missingCount": 6445,
+            "x-observedRange": {
+              "minimum": 0,
+              "maximum": 1
+            },
+            "x-categories": [
+              {
+                "value": 0,
+                "count": 5626394
+              },
+              {
+                "value": 1,
+                "count": 861634
+              }
+            ]
           },
           {
             "name": "delta_weight_kg",
             "type": "number",
             "description": "Weight difference from the reference measurement.",
-            "x-unit": "kilogram"
+            "x-unit": "kilogram",
+            "x-missingCount": 740441,
+            "x-observedRange": {
+              "minimum": -450.42,
+              "maximum": 469.47
+            }
           },
           {
             "name": "delta_age_in_days_weight",
@@ -2193,20 +4273,35 @@
             "constraints": {
               "minimum": 0
             },
-            "x-unit": "day"
+            "x-unit": "day",
+            "x-missingCount": 740441,
+            "x-observedRange": {
+              "minimum": 30,
+              "maximum": 5441
+            }
           },
           {
             "name": "weight_velocity",
             "type": "number",
             "description": "Longitudinal weight growth rate.",
-            "x-unit": "kg/year"
+            "x-unit": "kg/year",
+            "x-missingCount": 740441,
+            "x-observedRange": {
+              "minimum": -620.28,
+              "maximum": 724.19
+            }
           },
           {
             "name": "weight_z_score",
             "type": "number",
             "description": "CDC LMS weight-for-age Z-score.",
             "x-referenceStandard": "CDC LMS growth reference",
-            "x-bivRule": "null when abs(weight_z_score) > 5"
+            "x-bivRule": "null when abs(weight_z_score) > 5",
+            "x-missingCount": 11541,
+            "x-observedRange": {
+              "minimum": -4.9991,
+              "maximum": 4.9995
+            }
           },
           {
             "name": "weight_percentile",
@@ -2216,13 +4311,23 @@
               "minimum": 0,
               "maximum": 100
             },
-            "x-unit": "percentile"
+            "x-unit": "percentile",
+            "x-missingCount": 11541,
+            "x-observedRange": {
+              "minimum": 0.0,
+              "maximum": 100.0
+            }
           },
           {
             "name": "weight_for_length_z_score",
             "type": "number",
             "description": "CDC LMS weight-for-length Z-score for heights 45-103.5 cm.",
-            "x-referenceStandard": "CDC LMS growth reference"
+            "x-referenceStandard": "CDC LMS growth reference",
+            "x-missingCount": 4467156,
+            "x-observedRange": {
+              "minimum": -145.6016,
+              "maximum": 7.6285
+            }
           },
           {
             "name": "weight_for_length_percentile",
@@ -2232,13 +4337,23 @@
               "minimum": 0,
               "maximum": 100
             },
-            "x-unit": "percentile"
+            "x-unit": "percentile",
+            "x-missingCount": 4467156,
+            "x-observedRange": {
+              "minimum": 0.0,
+              "maximum": 100.0
+            }
           },
           {
             "name": "weight_for_stature_z_score",
             "type": "number",
             "description": "CDC LMS weight-for-stature Z-score for heights 77-121.5 cm.",
-            "x-referenceStandard": "CDC LMS growth reference"
+            "x-referenceStandard": "CDC LMS growth reference",
+            "x-missingCount": 5123126,
+            "x-observedRange": {
+              "minimum": -14.3445,
+              "maximum": 7.4762
+            }
           },
           {
             "name": "weight_for_stature_percentile",
@@ -2248,7 +4363,12 @@
               "minimum": 0,
               "maximum": 100
             },
-            "x-unit": "percentile"
+            "x-unit": "percentile",
+            "x-missingCount": 5123126,
+            "x-observedRange": {
+              "minimum": 0.0,
+              "maximum": 100.0
+            }
           },
           {
             "name": "wasting_flag",
@@ -2260,17 +4380,32 @@
                 1
               ],
               "required": true
-            }
+            },
+            "x-observedRange": {
+              "minimum": 0,
+              "maximum": 1
+            },
+            "x-categories": [
+              {
+                "value": 0,
+                "count": 6331019
+              },
+              {
+                "value": 1,
+                "count": 163454
+              }
+            ]
           },
           {
             "name": "height_in",
             "type": "number",
             "description": "Recorded height or length in inches; may contain outliers.",
-            "constraints": {
+            "x-unit": "inch",
+            "x-missingCount": 2984840,
+            "x-observedRange": {
               "minimum": 1.18,
-              "maximum": 115
-            },
-            "x-unit": "inch"
+              "maximum": 115.0
+            }
           },
           {
             "name": "height_cm",
@@ -2282,7 +4417,12 @@
             ],
             "x-conversionFactor": "1 in = 2.54 cm",
             "x-decimalPlaces": 3,
-            "x-bivRule": "null when height_z_score < -5 or height_z_score > 3"
+            "x-bivRule": "null when height_z_score < -5 or height_z_score > 3",
+            "x-missingCount": 3002811,
+            "x-observedRange": {
+              "minimum": 37.465,
+              "maximum": 196.596
+            }
           },
           {
             "name": "height_outlier_flag",
@@ -2293,13 +4433,33 @@
                 0,
                 1
               ]
-            }
+            },
+            "x-missingCount": 2984840,
+            "x-observedRange": {
+              "minimum": 0,
+              "maximum": 1
+            },
+            "x-categories": [
+              {
+                "value": 0,
+                "count": 3303254
+              },
+              {
+                "value": 1,
+                "count": 206379
+              }
+            ]
           },
           {
             "name": "delta_height_cm",
             "type": "number",
             "description": "Height difference from the reference measurement.",
-            "x-unit": "centimeter"
+            "x-unit": "centimeter",
+            "x-missingCount": 3707703,
+            "x-observedRange": {
+              "minimum": -29.16,
+              "maximum": 125.04
+            }
           },
           {
             "name": "delta_age_in_days_height",
@@ -2308,37 +4468,67 @@
             "constraints": {
               "minimum": 0
             },
-            "x-unit": "day"
+            "x-unit": "day",
+            "x-missingCount": 3707703,
+            "x-observedRange": {
+              "minimum": 90,
+              "maximum": 5508
+            }
           },
           {
             "name": "height_velocity",
             "type": "number",
             "description": "Longitudinal height growth rate.",
-            "x-unit": "cm/year"
+            "x-unit": "cm/year",
+            "x-missingCount": 3707703,
+            "x-observedRange": {
+              "minimum": -47.12,
+              "maximum": 81.8
+            }
           },
           {
             "name": "height_velocity_z_score",
             "type": "number",
             "description": "Height-velocity Z-score with no pubertal-onset adjustment.",
-            "x-decimalPlaces": 4
+            "x-decimalPlaces": 4,
+            "x-missingCount": 5367184,
+            "x-observedRange": {
+              "minimum": -10.2306,
+              "maximum": 32.0986
+            }
           },
           {
             "name": "height_velocity_z_score_ep",
             "type": "number",
             "description": "Height-velocity Z-score with earlier pubertal onset.",
-            "x-decimalPlaces": 4
+            "x-decimalPlaces": 4,
+            "x-missingCount": 5517372,
+            "x-observedRange": {
+              "minimum": -28.7985,
+              "maximum": 30.4057
+            }
           },
           {
             "name": "height_velocity_z_score_ap",
             "type": "number",
             "description": "Height-velocity Z-score with average pubertal onset.",
-            "x-decimalPlaces": 4
+            "x-decimalPlaces": 4,
+            "x-missingCount": 5533524,
+            "x-observedRange": {
+              "minimum": -14.6437,
+              "maximum": 113.9615
+            }
           },
           {
             "name": "height_velocity_z_score_lp",
             "type": "number",
             "description": "Height-velocity Z-score with later pubertal onset.",
-            "x-decimalPlaces": 4
+            "x-decimalPlaces": 4,
+            "x-missingCount": 5533399,
+            "x-observedRange": {
+              "minimum": -149.3739,
+              "maximum": 17.823
+            }
           },
           {
             "name": "height_velocity_percentile",
@@ -2349,7 +4539,12 @@
               "maximum": 100
             },
             "x-unit": "percentile",
-            "x-decimalPlaces": 2
+            "x-decimalPlaces": 2,
+            "x-missingCount": 5367184,
+            "x-observedRange": {
+              "minimum": 0.0,
+              "maximum": 100.0
+            }
           },
           {
             "name": "height_velocity_percentile_ep",
@@ -2360,7 +4555,12 @@
               "maximum": 100
             },
             "x-unit": "percentile",
-            "x-decimalPlaces": 2
+            "x-decimalPlaces": 2,
+            "x-missingCount": 5517372,
+            "x-observedRange": {
+              "minimum": 0.0,
+              "maximum": 100.0
+            }
           },
           {
             "name": "height_velocity_percentile_ap",
@@ -2371,7 +4571,12 @@
               "maximum": 100
             },
             "x-unit": "percentile",
-            "x-decimalPlaces": 2
+            "x-decimalPlaces": 2,
+            "x-missingCount": 5533524,
+            "x-observedRange": {
+              "minimum": 0.0,
+              "maximum": 100.0
+            }
           },
           {
             "name": "height_velocity_percentile_lp",
@@ -2382,14 +4587,24 @@
               "maximum": 100
             },
             "x-unit": "percentile",
-            "x-decimalPlaces": 2
+            "x-decimalPlaces": 2,
+            "x-missingCount": 5533399,
+            "x-observedRange": {
+              "minimum": 0.0,
+              "maximum": 100.0
+            }
           },
           {
             "name": "height_z_score",
             "type": "number",
             "description": "CDC LMS height-for-age Z-score.",
             "x-referenceStandard": "CDC LMS growth reference",
-            "x-bivRule": "null when height_z_score < -5 or height_z_score > 3"
+            "x-bivRule": "null when height_z_score < -5 or height_z_score > 3",
+            "x-missingCount": 3002857,
+            "x-observedRange": {
+              "minimum": -4.9992,
+              "maximum": 3.0
+            }
           },
           {
             "name": "height_percentile",
@@ -2399,7 +4614,12 @@
               "minimum": 0,
               "maximum": 100
             },
-            "x-unit": "percentile"
+            "x-unit": "percentile",
+            "x-missingCount": 3002857,
+            "x-observedRange": {
+              "minimum": 0.0,
+              "maximum": 99.87
+            }
           },
           {
             "name": "stunting_flag",
@@ -2411,23 +4631,43 @@
                 1
               ],
               "required": true
-            }
+            },
+            "x-observedRange": {
+              "minimum": 0,
+              "maximum": 1
+            },
+            "x-categories": [
+              {
+                "value": 0,
+                "count": 6442117
+              },
+              {
+                "value": 1,
+                "count": 52356
+              }
+            ]
           },
           {
             "name": "head_circ_cm",
             "type": "number",
             "description": "Recorded head circumference in centimeters; may contain outliers.",
-            "constraints": {
-              "minimum": 0,
+            "x-unit": "centimeter",
+            "x-missingCount": 4858783,
+            "x-observedRange": {
+              "minimum": 0.0,
               "maximum": 505.46
-            },
-            "x-unit": "centimeter"
+            }
           },
           {
             "name": "head_circ_z_score",
             "type": "number",
             "description": "CDC LMS head-circumference Z-score.",
-            "x-referenceStandard": "CDC LMS growth reference"
+            "x-referenceStandard": "CDC LMS growth reference",
+            "x-missingCount": 4858833,
+            "x-observedRange": {
+              "minimum": -17485.9115,
+              "maximum": 306212.5991
+            }
           },
           {
             "name": "head_circ_percentile",
@@ -2437,7 +4677,12 @@
               "minimum": 0,
               "maximum": 100
             },
-            "x-unit": "percentile"
+            "x-unit": "percentile",
+            "x-missingCount": 4858833,
+            "x-observedRange": {
+              "minimum": 0.0,
+              "maximum": 100.0
+            }
           },
           {
             "name": "bmi",
@@ -2449,13 +4694,23 @@
               "height_cm",
               "age_in_months"
             ],
-            "x-minAgeMonths": 24
+            "x-minAgeMonths": 24,
+            "x-missingCount": 4539134,
+            "x-observedRange": {
+              "minimum": 8.1179,
+              "maximum": 219.5056
+            }
           },
           {
             "name": "bmi_z_score",
             "type": "number",
             "description": "CDC LMS BMI-for-age Z-score.",
-            "x-referenceStandard": "CDC LMS growth reference"
+            "x-referenceStandard": "CDC LMS growth reference",
+            "x-missingCount": 4539136,
+            "x-observedRange": {
+              "minimum": -18.7803,
+              "maximum": 6.7026
+            }
           },
           {
             "name": "bmi_percentile",
@@ -2465,7 +4720,12 @@
               "minimum": 0,
               "maximum": 100
             },
-            "x-unit": "percentile"
+            "x-unit": "percentile",
+            "x-missingCount": 4539136,
+            "x-observedRange": {
+              "minimum": 0.0,
+              "maximum": 100.0
+            }
           },
           {
             "name": "bmi_category",
@@ -2482,6 +4742,51 @@
             },
             "x-derivedFrom": [
               "bmi_percentile"
+            ],
+            "x-missingCount": 4539136,
+            "x-categories": [
+              {
+                "value": "normal",
+                "count": 1338418
+              },
+              {
+                "value": "overweight",
+                "count": 280226
+              },
+              {
+                "value": "obese",
+                "count": 253091
+              },
+              {
+                "value": "underweight",
+                "count": 83602
+              }
+            ],
+            "x-unobservedEnumValues": [
+              "severe_obesity"
+            ],
+            "x-uniqueValueCount": 4,
+            "x-observedPercentileRange": [
+              {
+                "value": "underweight",
+                "minimum": 0.0,
+                "maximum": 4.99
+              },
+              {
+                "value": "normal",
+                "minimum": 5.0,
+                "maximum": 84.99
+              },
+              {
+                "value": "overweight",
+                "minimum": 85.0,
+                "maximum": 94.99
+              },
+              {
+                "value": "obese",
+                "minimum": 95.0,
+                "maximum": 100.0
+              }
             ]
           },
           {
@@ -2494,7 +4799,21 @@
                 1
               ],
               "required": true
-            }
+            },
+            "x-observedRange": {
+              "minimum": 0,
+              "maximum": 1
+            },
+            "x-categories": [
+              {
+                "value": 0,
+                "count": 6410871
+              },
+              {
+                "value": 1,
+                "count": 83602
+              }
+            ]
           },
           {
             "name": "obesity_flag",
@@ -2506,71 +4825,96 @@
                 1
               ],
               "required": true
-            }
+            },
+            "x-observedRange": {
+              "minimum": 0,
+              "maximum": 1
+            },
+            "x-categories": [
+              {
+                "value": 0,
+                "count": 6241382
+              },
+              {
+                "value": 1,
+                "count": 253091
+              }
+            ]
           },
           {
             "name": "encounter_type",
             "type": "string",
-            "description": "Encounter classification; 45 values occur in the data.",
+            "description": "Encounter classification recorded by Epic.",
             "constraints": {
               "enum": [
-                "Abstract",
-                "Clinical Support",
+                "Office Visit",
+                "Well Visit (Conv.)",
+                "Sick",
+                "Follow-Up",
+                "Walk-In",
                 "Consult",
                 "Conversion Encounter",
-                "Documentation",
-                "ED",
-                "Episode Changes",
-                "Erroneous Encounter",
-                "Erroneous Telephone Encounter",
-                "Evaluation",
-                "External Contact",
-                "Flu",
-                "Follow-Up",
-                "History",
-                "Hospital",
-                "Immunization",
-                "Lab",
-                "Lab Requisition",
-                "Lactation Consult",
-                "Lactation Encounter",
-                "Letter (Out)",
-                "Medication Management",
-                "New Patient",
                 "Newborn",
-                "Nurse Only",
-                "Nutrition",
-                "Office Visit",
-                "Ophth Exam",
-                "Orders Only",
-                "OurPractice Advisory",
-                "Patient Care Review",
-                "Patient Message",
-                "Pre-op/Pre-procedure Orders",
-                "Procedure visit",
-                "Refill",
-                "Routine Prenatal",
-                "Scanned Document",
-                "Sick",
                 "Telemedicine",
                 "Telephone",
-                "Transcribe Orders",
-                "Treatment",
-                "Walk-In",
                 "Weight Check",
-                "Well Visit (Conv.)"
+                "Clinical Support",
+                "Documentation",
+                "Immunization",
+                "New Patient",
+                "Nutrition",
+                "Medication Management",
+                "Nurse Only",
+                "Abstract",
+                "Flu",
+                "Lactation Consult",
+                "Lab",
+                "Lactation Encounter",
+                "Procedure visit",
+                "Pre-op/Pre-procedure Orders",
+                "Erroneous Encounter",
+                "Orders Only",
+                "External Contact",
+                "Patient Message",
+                "Evaluation",
+                "Lab Requisition",
+                "Scanned Document",
+                "Letter (Out)",
+                "Refill",
+                "History",
+                "Ophth Exam",
+                "Hospital",
+                "Routine Prenatal",
+                "Transcribe Orders",
+                "Patient Care Review",
+                "Episode Changes",
+                "Erroneous Telephone Encounter",
+                "ED",
+                "OurPractice Advisory",
+                "Treatment"
               ],
               "required": true
             },
-            "x-uniqueValueCount": 45,
             "x-categories": [
               {
-                "value": "Abstract",
-                "count": 3672
+                "value": "Office Visit",
+                "count": 4725643
               },
               {
-                "value": "Clinical Support",
-                "count": 15347
+                "value": "Well Visit (Conv.)",
+                "count": 778452
+              },
+              {
+                "value": "Sick",
+                "count": 580991
+              },
+              {
+                "value": "Follow-Up",
+                "count": 92370
+              },
+              {
+                "value": "Walk-In",
+                "count": 79679
               },
               {
                 "value": "Consult",
@@ -2581,140 +4925,8 @@
                 "count": 32007
               },
               {
-                "value": "Documentation",
-                "count": 13107
-              },
-              {
-                "value": "ED",
-                "count": 1
-              },
-              {
-                "value": "Episode Changes",
-                "count": 2
-              },
-              {
-                "value": "Erroneous Encounter",
-                "count": 555
-              },
-              {
-                "value": "Erroneous Telephone Encounter",
-                "count": 2
-              },
-              {
-                "value": "Evaluation",
-                "count": 143
-              },
-              {
-                "value": "External Contact",
-                "count": 211
-              },
-              {
-                "value": "Flu",
-                "count": 2104
-              },
-              {
-                "value": "Follow-Up",
-                "count": 92370
-              },
-              {
-                "value": "History",
-                "count": 11
-              },
-              {
-                "value": "Hospital",
-                "count": 5
-              },
-              {
-                "value": "Immunization",
-                "count": 11774
-              },
-              {
-                "value": "Lab",
-                "count": 1351
-              },
-              {
-                "value": "Lab Requisition",
-                "count": 63
-              },
-              {
-                "value": "Lactation Consult",
-                "count": 1384
-              },
-              {
-                "value": "Lactation Encounter",
-                "count": 1337
-              },
-              {
-                "value": "Letter (Out)",
-                "count": 18
-              },
-              {
-                "value": "Medication Management",
-                "count": 4345
-              },
-              {
-                "value": "New Patient",
-                "count": 11410
-              },
-              {
                 "value": "Newborn",
                 "count": 31142
-              },
-              {
-                "value": "Nurse Only",
-                "count": 3786
-              },
-              {
-                "value": "Nutrition",
-                "count": 5406
-              },
-              {
-                "value": "Office Visit",
-                "count": 4725643
-              },
-              {
-                "value": "Ophth Exam",
-                "count": 11
-              },
-              {
-                "value": "Orders Only",
-                "count": 273
-              },
-              {
-                "value": "OurPractice Advisory",
-                "count": 1
-              },
-              {
-                "value": "Patient Care Review",
-                "count": 3
-              },
-              {
-                "value": "Patient Message",
-                "count": 209
-              },
-              {
-                "value": "Pre-op/Pre-procedure Orders",
-                "count": 575
-              },
-              {
-                "value": "Procedure visit",
-                "count": 678
-              },
-              {
-                "value": "Refill",
-                "count": 12
-              },
-              {
-                "value": "Routine Prenatal",
-                "count": 4
-              },
-              {
-                "value": "Scanned Document",
-                "count": 23
-              },
-              {
-                "value": "Sick",
-                "count": 580991
               },
               {
                 "value": "Telemedicine",
@@ -2725,26 +4937,147 @@
                 "count": 22053
               },
               {
-                "value": "Transcribe Orders",
-                "count": 4
-              },
-              {
-                "value": "Treatment",
-                "count": 1
-              },
-              {
-                "value": "Walk-In",
-                "count": 79679
-              },
-              {
                 "value": "Weight Check",
                 "count": 16295
               },
               {
-                "value": "Well Visit (Conv.)",
-                "count": 778452
+                "value": "Clinical Support",
+                "count": 15347
+              },
+              {
+                "value": "Documentation",
+                "count": 13107
+              },
+              {
+                "value": "Immunization",
+                "count": 11774
+              },
+              {
+                "value": "New Patient",
+                "count": 11410
+              },
+              {
+                "value": "Nutrition",
+                "count": 5406
+              },
+              {
+                "value": "Medication Management",
+                "count": 4345
+              },
+              {
+                "value": "Nurse Only",
+                "count": 3786
+              },
+              {
+                "value": "Abstract",
+                "count": 3672
+              },
+              {
+                "value": "Flu",
+                "count": 2104
+              },
+              {
+                "value": "Lactation Consult",
+                "count": 1384
+              },
+              {
+                "value": "Lab",
+                "count": 1351
+              },
+              {
+                "value": "Lactation Encounter",
+                "count": 1337
+              },
+              {
+                "value": "Procedure visit",
+                "count": 678
+              },
+              {
+                "value": "Pre-op/Pre-procedure Orders",
+                "count": 575
+              },
+              {
+                "value": "Erroneous Encounter",
+                "count": 555
+              },
+              {
+                "value": "Orders Only",
+                "count": 273
+              },
+              {
+                "value": "External Contact",
+                "count": 211
+              },
+              {
+                "value": "Patient Message",
+                "count": 209
+              },
+              {
+                "value": "Evaluation",
+                "count": 143
+              },
+              {
+                "value": "Lab Requisition",
+                "count": 63
+              },
+              {
+                "value": "Scanned Document",
+                "count": 23
+              },
+              {
+                "value": "Letter (Out)",
+                "count": 18
+              },
+              {
+                "value": "Refill",
+                "count": 12
+              },
+              {
+                "value": "History",
+                "count": 11
+              },
+              {
+                "value": "Ophth Exam",
+                "count": 11
+              },
+              {
+                "value": "Hospital",
+                "count": 5
+              },
+              {
+                "value": "Routine Prenatal",
+                "count": 4
+              },
+              {
+                "value": "Transcribe Orders",
+                "count": 4
+              },
+              {
+                "value": "Patient Care Review",
+                "count": 3
+              },
+              {
+                "value": "Episode Changes",
+                "count": 2
+              },
+              {
+                "value": "Erroneous Telephone Encounter",
+                "count": 2
+              },
+              {
+                "value": "ED",
+                "count": 1
+              },
+              {
+                "value": "OurPractice Advisory",
+                "count": 1
+              },
+              {
+                "value": "Treatment",
+                "count": 1
               }
-            ]
+            ],
+            "x-uniqueValueCount": 45
           },
           {
             "name": "orig_enc_source_Epic_yn",
@@ -2755,205 +5088,249 @@
                 "Y",
                 "N"
               ]
-            }
+            },
+            "x-categories": [
+              {
+                "value": "Y",
+                "count": 4149865
+              },
+              {
+                "value": "N",
+                "count": 2344608
+              }
+            ],
+            "x-uniqueValueCount": 2
           },
           {
             "name": "enc_diag_1",
             "type": "string",
             "description": "Primary or first-listed encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 339672
           },
           {
             "name": "enc_diag_2",
             "type": "string",
             "description": "Diagnosis position 2 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 2633784
           },
           {
             "name": "enc_diag_3",
             "type": "string",
             "description": "Diagnosis position 3 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 4406874
           },
           {
             "name": "enc_diag_4",
             "type": "string",
             "description": "Diagnosis position 4 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 5338411
           },
           {
             "name": "enc_diag_5",
             "type": "string",
             "description": "Diagnosis position 5 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 5842807
           },
           {
             "name": "enc_diag_6",
             "type": "string",
             "description": "Diagnosis position 6 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6129492
           },
           {
             "name": "enc_diag_7",
             "type": "string",
             "description": "Diagnosis position 7 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6292453
           },
           {
             "name": "enc_diag_8",
             "type": "string",
             "description": "Diagnosis position 8 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6384404
           },
           {
             "name": "enc_diag_9",
             "type": "string",
             "description": "Diagnosis position 9 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6435791
           },
           {
             "name": "enc_diag_10",
             "type": "string",
             "description": "Diagnosis position 10 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6463492
           },
           {
             "name": "enc_diag_11",
             "type": "string",
             "description": "Diagnosis position 11 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6477956
           },
           {
             "name": "enc_diag_12",
             "type": "string",
             "description": "Diagnosis position 12 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6485564
           },
           {
             "name": "enc_diag_13",
             "type": "string",
             "description": "Diagnosis position 13 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6489628
           },
           {
             "name": "enc_diag_14",
             "type": "string",
             "description": "Diagnosis position 14 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6491828
           },
           {
             "name": "enc_diag_15",
             "type": "string",
             "description": "Diagnosis position 15 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6492956
           },
           {
             "name": "enc_diag_16",
             "type": "string",
             "description": "Diagnosis position 16 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6493585
           },
           {
             "name": "enc_diag_17",
             "type": "string",
             "description": "Diagnosis position 17 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6493907
           },
           {
             "name": "enc_diag_18",
             "type": "string",
             "description": "Diagnosis position 18 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6494116
           },
           {
             "name": "enc_diag_19",
             "type": "string",
             "description": "Diagnosis position 19 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6494245
           },
           {
             "name": "enc_diag_20",
             "type": "string",
             "description": "Diagnosis position 20 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6494326
           },
           {
             "name": "enc_diag_21",
             "type": "string",
             "description": "Diagnosis position 21 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6494376
           },
           {
             "name": "enc_diag_22",
             "type": "string",
             "description": "Diagnosis position 22 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6494408
           },
           {
             "name": "enc_diag_23",
             "type": "string",
             "description": "Diagnosis position 23 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6494426
           },
           {
             "name": "enc_diag_24",
             "type": "string",
             "description": "Diagnosis position 24 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6494438
           },
           {
             "name": "enc_diag_25",
             "type": "string",
             "description": "Diagnosis position 25 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6494448
           },
           {
             "name": "enc_diag_26",
             "type": "string",
             "description": "Diagnosis position 26 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6494453
           },
           {
             "name": "enc_diag_27",
             "type": "string",
             "description": "Diagnosis position 27 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6494458
           },
           {
             "name": "enc_diag_28",
             "type": "string",
             "description": "Diagnosis position 28 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6494461
           },
           {
             "name": "enc_diag_29",
             "type": "string",
             "description": "Diagnosis position 29 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6494464
           },
           {
             "name": "enc_diag_30",
             "type": "string",
             "description": "Diagnosis position 30 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6494470
           },
           {
             "name": "enc_diag_31",
             "type": "string",
             "description": "Diagnosis position 31 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6494471
           },
           {
             "name": "enc_diag_32",
             "type": "string",
             "description": "Diagnosis position 32 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6494471
           },
           {
             "name": "enc_diag_33",
             "type": "string",
             "description": "Diagnosis position 33 encounter diagnosis code.",
-            "x-codeSystem": "ICD-10-CM"
+            "x-codeSystem": "ICD-10-CM",
+            "x-missingCount": 6494471
           }
         ],
         "missingValues": [
@@ -2983,8 +5360,6 @@
         "visits",
         "patients"
       ],
-      "x-uniquePatientCount": 250588,
-      "x-uniqueDiagnosisCodeCount": 8031,
       "x-generatedBy": {
         "script": "scripts/augment.py",
         "function": "augment_visits",
@@ -2992,7 +5367,20 @@
         "referenceStandard": "CDC LMS growth reference",
         "outlierAlgorithm": "Harrall",
         "bivFiltering": "enabled by default via --filter_errors; disable with --no_filter_errors"
-      }
+      },
+      "x-uniquePatientCount": 250588,
+      "x-uniqueVisitIdCount": 6494473,
+      "x-uniqueDiagnosisCodeCount": 8029,
+      "x-logicalForeignKeys": [
+        {
+          "fields": "visit_id",
+          "reference": {
+            "resource": "visits",
+            "fields": "visit_id"
+          },
+          "orphanRows": 0
+        }
+      ]
     },
     {
       "profile": "tabular-data-resource",
@@ -3024,7 +5412,7 @@
           {
             "name": "visit_id",
             "type": "string",
-            "description": "Associated visit identifier; blank for 805 rows and absent from visits.csv for some otherwise non-null values.",
+            "description": "Associated visit identifier; nullable, and absent from visits.csv for some otherwise non-null values.",
             "x-deidentified": true,
             "x-missingCount": 805
           },
@@ -3042,27 +5430,75 @@
             "type": "integer",
             "description": "Sequential result-component line within a lab order.",
             "constraints": {
+              "minimum": 1
+            },
+            "x-missingCount": 2283186,
+            "x-observedRange": {
               "minimum": 1,
               "maximum": 149
-            },
-            "x-missingCount": 2283186
+            }
           },
           {
             "name": "lab_order_date_age_in_days",
             "type": "integer",
             "description": "Patient age in days at lab order, replacing the absolute date for de-identification.",
             "constraints": {
-              "minimum": -687,
-              "maximum": 6570,
               "required": true
             },
             "x-unit": "day",
-            "x-deidentifiedDate": true
+            "x-deidentifiedDate": true,
+            "x-observedRange": {
+              "minimum": -687,
+              "maximum": 6570
+            }
           },
           {
             "name": "lab_procedure_name",
             "type": "string",
             "description": "Epic lab procedure name.",
+            "x-topValues": [
+              {
+                "value": "CBC",
+                "count": 2742117
+              },
+              {
+                "value": "CBC  DIFFERENTIAL",
+                "count": 1660900
+              },
+              {
+                "value": "CE EXTERNAL LAB",
+                "count": 1455867
+              },
+              {
+                "value": "URINALYSIS",
+                "count": 1326746
+              },
+              {
+                "value": "POCT URINALYSIS DIPSTICK",
+                "count": 1079426
+              },
+              {
+                "value": "COMPREHENSIVE METABOLIC PANEL",
+                "count": 475461
+              },
+              {
+                "value": "POCT COVID-19 NUCLEIC ACID (AMPLIFIED PROBE)",
+                "count": 432267
+              },
+              {
+                "value": "LEAD, BLOOD",
+                "count": 394009
+              },
+              {
+                "value": "COVID-19 (CORONAVIRUS 2019) PCR",
+                "count": 392834
+              },
+              {
+                "value": "POCT STREP A NUCLEIC ACID (AMPLIFIED PROBE)",
+                "count": 314977
+              }
+            ],
+            "x-topValuesTruncated": true,
             "x-uniqueValueCount": 3742
           },
           {
@@ -3074,28 +5510,114 @@
             "name": "lab_result_date_age_in_days",
             "type": "integer",
             "description": "Patient age in days at lab result, replacing the absolute date for de-identification.",
-            "constraints": {
-              "minimum": -44378,
-              "maximum": 6570
-            },
             "x-unit": "day",
             "x-deidentifiedDate": true,
-            "x-missingCount": 2283186
+            "x-missingCount": 2283186,
+            "x-observedRange": {
+              "minimum": -44378,
+              "maximum": 6570
+            }
           },
           {
             "name": "result_component_name",
             "type": "string",
             "description": "Name of the result component; null when no result is available.",
-            "x-uniqueValueCount": 12902,
-            "x-missingCount": 2283186
+            "x-missingCount": 2283186,
+            "x-topValues": [
+              {
+                "value": "CONTROL BAND",
+                "count": 605803
+              },
+              {
+                "value": "SARS-COV-2 NUCLEIC ACID MOLECULAR",
+                "count": 329042
+              },
+              {
+                "value": "HGB, POC",
+                "count": 215703
+              },
+              {
+                "value": "STREP A NUCLEIC ACID AMPLIFIED PROBE",
+                "count": 192497
+              },
+              {
+                "value": "STREP A ANTIGEN",
+                "count": 175256
+              },
+              {
+                "value": "INFLUENZA A NUCLEIC ACID AMPLIFIED PROBE",
+                "count": 156874
+              },
+              {
+                "value": "INFLUENZA B NUCLEIC ACID AMPLIFIED PROBE",
+                "count": 154982
+              },
+              {
+                "value": "SARS COV 2 RNA, RT PCR",
+                "count": 153223
+              },
+              {
+                "value": "ERYTHROCYTE MEAN CORPUSCULAR VOLUME (FL) BY AUTOMATED COUNT",
+                "count": 111558
+              },
+              {
+                "value": "WHITE BLOOD CELLS",
+                "count": 108894
+              }
+            ],
+            "x-topValuesTruncated": true,
+            "x-uniqueValueCount": 12902
           },
           {
             "name": "result_loinc_code",
             "type": "string",
             "description": "LOINC code for the result component when available.",
             "x-codeSystem": "LOINC",
-            "x-uniqueValueCount": 2194,
-            "x-missingCount": 15880579
+            "x-missingCount": 15880579,
+            "x-topValues": [
+              {
+                "value": "10368-9",
+                "count": 61585
+              },
+              {
+                "value": "1975-2",
+                "count": 44108
+              },
+              {
+                "value": "718-7",
+                "count": 35204
+              },
+              {
+                "value": "4544-3",
+                "count": 31553
+              },
+              {
+                "value": "789-8",
+                "count": 31549
+              },
+              {
+                "value": "785-6",
+                "count": 31542
+              },
+              {
+                "value": "787-2",
+                "count": 31542
+              },
+              {
+                "value": "6690-2",
+                "count": 31408
+              },
+              {
+                "value": "777-3",
+                "count": 31106
+              },
+              {
+                "value": "786-4",
+                "count": 31097
+              }
+            ],
+            "x-topValuesTruncated": true,
+            "x-uniqueValueCount": 2194
           },
           {
             "name": "result_value",
@@ -3107,46 +5629,7 @@
             "name": "result_flag",
             "type": "string",
             "description": "HL7 result interpretation flag; blank when unassigned. Both (NONE) and Normal occur, so a flag is not abnormal merely because it differs from (NONE).",
-            "constraints": {
-              "enum": [
-                "Abnormal",
-                "High",
-                "Low",
-                "Sensitive",
-                "Resistant",
-                "High Panic",
-                "(NONE)",
-                "Normal",
-                "Panic",
-                "Intermediate",
-                "Low Panic",
-                "Critical",
-                "Negative",
-                "High Off-Scale",
-                "Susceptible-Dose Dependent",
-                "Abnormal High",
-                "Abnormal Low",
-                "Invalid High",
-                "Sig Change Up",
-                "Positive",
-                "Critical High",
-                "Low Off-Scale",
-                "Critical Low",
-                "Class 0: Absent Allergen Specific IgE",
-                "Invalid Low",
-                "Delta Abnormal High",
-                "Class 2: Moderate Level Allergen Specific IgE",
-                "In Process",
-                "Better",
-                "Delta Critical High",
-                "Sig Change Down",
-                "Class 3: High Level Allergen Specific IgE",
-                "Moderately Sensitive",
-                "Delta Abnormal Low",
-                "Worse"
-              ]
-            },
-            "x-uniqueValueCount": 35,
+            "x-missingCount": 15550985,
             "x-categories": [
               {
                 "value": "Abnormal",
@@ -3245,23 +5728,19 @@
                 "count": 7
               },
               {
-                "value": "Invalid Low",
-                "count": 4
-              },
-              {
                 "value": "Delta Abnormal High",
                 "count": 4
               },
               {
-                "value": "Class 2: Moderate Level Allergen Specific IgE",
-                "count": 3
-              },
-              {
-                "value": "In Process",
-                "count": 3
+                "value": "Invalid Low",
+                "count": 4
               },
               {
                 "value": "Better",
+                "count": 3
+              },
+              {
+                "value": "Class 2: Moderate Level Allergen Specific IgE",
                 "count": 3
               },
               {
@@ -3269,19 +5748,23 @@
                 "count": 3
               },
               {
-                "value": "Sig Change Down",
-                "count": 2
+                "value": "In Process",
+                "count": 3
               },
               {
                 "value": "Class 3: High Level Allergen Specific IgE",
                 "count": 2
               },
               {
-                "value": "Moderately Sensitive",
-                "count": 1
+                "value": "Sig Change Down",
+                "count": 2
               },
               {
                 "value": "Delta Abnormal Low",
+                "count": 1
+              },
+              {
+                "value": "Moderately Sensitive",
                 "count": 1
               },
               {
@@ -3289,7 +5772,46 @@
                 "count": 1
               }
             ],
-            "x-missingCount": 15550985
+            "constraints": {
+              "enum": [
+                "Abnormal",
+                "High",
+                "Low",
+                "Sensitive",
+                "Resistant",
+                "High Panic",
+                "(NONE)",
+                "Normal",
+                "Panic",
+                "Intermediate",
+                "Low Panic",
+                "Critical",
+                "Negative",
+                "High Off-Scale",
+                "Susceptible-Dose Dependent",
+                "Abnormal High",
+                "Abnormal Low",
+                "Invalid High",
+                "Sig Change Up",
+                "Positive",
+                "Critical High",
+                "Low Off-Scale",
+                "Critical Low",
+                "Class 0: Absent Allergen Specific IgE",
+                "Delta Abnormal High",
+                "Invalid Low",
+                "Better",
+                "Class 2: Moderate Level Allergen Specific IgE",
+                "Delta Critical High",
+                "In Process",
+                "Class 3: High Level Allergen Specific IgE",
+                "Sig Change Down",
+                "Delta Abnormal Low",
+                "Moderately Sensitive",
+                "Worse"
+              ]
+            },
+            "x-uniqueValueCount": 35
           }
         ],
         "missingValues": [
@@ -3307,6 +5829,8 @@
       },
       "x-rowCount": 17230681,
       "x-fieldCount": 12,
+      "x-keyDescription": "No row-level primary key: lab_order_id repeats across result components and result_line_num is blank in some rows.",
+      "x-encodingNote": "Mixed encoding: predominantly ASCII with a few cp1252 punctuation bytes and a few UTF-8 sequences. iso-8859-1 decodes every byte without error.",
       "x-uniquePatientCount": 247271,
       "x-uniqueVisitIdCount": 2859084,
       "x-uniqueLabOrderCount": 6578838,
@@ -3320,8 +5844,7 @@
           "orphanRows": 5201657,
           "nullRows": 805
         }
-      ],
-      "x-keyDescription": "No row-level primary key: lab_order_id repeats and result_line_num is missing in 2,283,186 rows."
+      ]
     },
     {
       "profile": "tabular-data-resource",
@@ -3373,36 +5896,38 @@
             "type": "integer",
             "description": "Patient age in days at medication order, replacing the absolute date for de-identification.",
             "constraints": {
-              "minimum": -45,
-              "maximum": 6605,
               "required": true
             },
             "x-unit": "day",
-            "x-deidentifiedDate": true
+            "x-deidentifiedDate": true,
+            "x-observedRange": {
+              "minimum": -45,
+              "maximum": 6605
+            }
           },
           {
             "name": "med_start_date_age_in_days",
             "type": "integer",
             "description": "Patient age in days at medication start, replacing the absolute date for de-identification.",
-            "constraints": {
-              "minimum": -40149,
-              "maximum": 36581
-            },
             "x-unit": "day",
             "x-deidentifiedDate": true,
-            "x-missingCount": 283066
+            "x-missingCount": 283066,
+            "x-observedRange": {
+              "minimum": -40149,
+              "maximum": 36581
+            }
           },
           {
             "name": "med_end_date_age_in_days",
             "type": "integer",
             "description": "Patient age in days at medication end, replacing the absolute date for de-identification.",
-            "constraints": {
-              "minimum": 0,
-              "maximum": 31105
-            },
             "x-unit": "day",
             "x-deidentifiedDate": true,
-            "x-missingCount": 450340
+            "x-missingCount": 450340,
+            "x-observedRange": {
+              "minimum": 0,
+              "maximum": 31105
+            }
           },
           {
             "name": "med_record_type",
@@ -3424,7 +5949,8 @@
                 "value": "External",
                 "count": 572675
               }
-            ]
+            ],
+            "x-uniqueValueCount": 2
           },
           {
             "name": "med_simple_generic_name",
@@ -3433,6 +5959,49 @@
             "constraints": {
               "required": true
             },
+            "x-topValues": [
+              {
+                "value": "Amoxicillin",
+                "count": 351609
+              },
+              {
+                "value": "Albuterol Sulfate",
+                "count": 312748
+              },
+              {
+                "value": "Methylphenidate HCl",
+                "count": 219731
+              },
+              {
+                "value": "Dexmethylphenidate HCl",
+                "count": 124415
+              },
+              {
+                "value": "Amphetamine-Dextroamphetamine",
+                "count": 106250
+              },
+              {
+                "value": "Acetaminophen",
+                "count": 83235
+              },
+              {
+                "value": "Cefdinir",
+                "count": 81224
+              },
+              {
+                "value": "Sodium Fluoride",
+                "count": 78612
+              },
+              {
+                "value": "Fluticasone Propionate HFA",
+                "count": 77412
+              },
+              {
+                "value": "Amoxicillin-Pot Clavulanate",
+                "count": 76894
+              }
+            ],
+            "x-topValuesTruncated": true,
             "x-uniqueValueCount": 1073
           }
         ],
@@ -3505,24 +6074,25 @@
             "name": "noted_date_age_in_days",
             "type": "integer",
             "description": "Patient age in days at first problem notation, replacing the absolute date for de-identification.",
-            "constraints": {
-              "minimum": -44891,
-              "maximum": 6601
-            },
             "x-unit": "day",
             "x-deidentifiedDate": true,
-            "x-missingCount": 7284
+            "x-missingCount": 7284,
+            "x-observedRange": {
+              "minimum": -44891,
+              "maximum": 6601
+            }
           },
           {
             "name": "resolved_date_age_in_days",
             "type": "integer",
             "description": "Patient age in days at problem resolution, replacing the absolute date for de-identification.",
-            "constraints": {
+            "x-unit": "day",
+            "x-deidentifiedDate": true,
+            "x-missingCount": 951677,
+            "x-observedRange": {
               "minimum": -84,
               "maximum": 6605
-            },
-            "x-unit": "day",
-            "x-deidentifiedDate": true
+            }
           },
           {
             "name": "pl_diag",
@@ -3532,6 +6102,49 @@
               "required": true
             },
             "x-codeSystem": "ICD-10-CM",
+            "x-topValues": [
+              {
+                "value": "U07.1",
+                "count": 26260
+              },
+              {
+                "value": "Z28.21",
+                "count": 21189
+              },
+              {
+                "value": "F41.9",
+                "count": 20950
+              },
+              {
+                "value": "K59.00",
+                "count": 17491
+              },
+              {
+                "value": "Z00.129",
+                "count": 17348
+              },
+              {
+                "value": "K21.9",
+                "count": 17184
+              },
+              {
+                "value": "Z86.16",
+                "count": 16007
+              },
+              {
+                "value": "J45.20",
+                "count": 15088
+              },
+              {
+                "value": "L30.9",
+                "count": 14868
+              },
+              {
+                "value": "R46.89",
+                "count": 14789
+              }
+            ],
+            "x-topValuesTruncated": true,
             "x-uniqueValueCount": 4739
           }
         ],
@@ -3601,36 +6214,520 @@
             "type": "integer",
             "description": "Patient age in days at referral, replacing the absolute date for de-identification.",
             "constraints": {
-              "minimum": 1,
-              "maximum": 6567,
               "required": true
             },
             "x-unit": "day",
-            "x-deidentifiedDate": true
+            "x-deidentifiedDate": true,
+            "x-observedRange": {
+              "minimum": 1,
+              "maximum": 6567
+            }
           },
           {
             "name": "requested_specialty",
             "type": "string",
             "description": "Requested referral specialty; nullable.",
-            "x-uniqueValueCount": 119,
-            "x-missingCount": 27452
+            "x-missingCount": 27452,
+            "x-categories": [
+              {
+                "value": "Otolaryngology",
+                "count": 35723
+              },
+              {
+                "value": "Ophthalmology",
+                "count": 24298
+              },
+              {
+                "value": "Orthopedic Surgery",
+                "count": 22887
+              },
+              {
+                "value": "Allergy",
+                "count": 21761
+              },
+              {
+                "value": "Behavioral Health",
+                "count": 21748
+              },
+              {
+                "value": "Dermatology",
+                "count": 20652
+              },
+              {
+                "value": "Audiology",
+                "count": 15972
+              },
+              {
+                "value": "Gastroenterology",
+                "count": 14344
+              },
+              {
+                "value": "Cardiology",
+                "count": 13610
+              },
+              {
+                "value": "Neurology",
+                "count": 11275
+              },
+              {
+                "value": "Nutrition",
+                "count": 11035
+              },
+              {
+                "value": "Urology",
+                "count": 10697
+              },
+              {
+                "value": "Speech Pathology",
+                "count": 9879
+              },
+              {
+                "value": "Physical Therapy",
+                "count": 9861
+              },
+              {
+                "value": "Early Intervention",
+                "count": 9302
+              },
+              {
+                "value": "Developmental Medicine",
+                "count": 8532
+              },
+              {
+                "value": "Endocrinology",
+                "count": 6641
+              },
+              {
+                "value": "Occupational Therapy",
+                "count": 6573
+              },
+              {
+                "value": "General Surgery",
+                "count": 4206
+              },
+              {
+                "value": "Psychology",
+                "count": 4134
+              },
+              {
+                "value": "Pulmonary Disease",
+                "count": 3926
+              },
+              {
+                "value": "Plastic Surgery",
+                "count": 3454
+              },
+              {
+                "value": "Psychiatry",
+                "count": 2885
+              },
+              {
+                "value": "Podiatry",
+                "count": 2863
+              },
+              {
+                "value": "Neurosurgery",
+                "count": 2415
+              },
+              {
+                "value": "Genetics",
+                "count": 2397
+              },
+              {
+                "value": "Sports Medicine",
+                "count": 2291
+              },
+              {
+                "value": "Sleep Medicine",
+                "count": 1898
+              },
+              {
+                "value": "Hematology",
+                "count": 1607
+              },
+              {
+                "value": "Obstetrics and Gynecology",
+                "count": 1500
+              },
+              {
+                "value": "Gynecology",
+                "count": 1430
+              },
+              {
+                "value": "Optometry",
+                "count": 1392
+              },
+              {
+                "value": "Rheumatology",
+                "count": 1048
+              },
+              {
+                "value": "Nephrology",
+                "count": 1044
+              },
+              {
+                "value": "Dental General Practice",
+                "count": 852
+              },
+              {
+                "value": "Pediatrics",
+                "count": 742
+              },
+              {
+                "value": "Pediatric Surgery",
+                "count": 645
+              },
+              {
+                "value": "Infectious Diseases",
+                "count": 564
+              },
+              {
+                "value": "Orthopedics",
+                "count": 496
+              },
+              {
+                "value": "Urgent Care",
+                "count": 457
+              },
+              {
+                "value": "Neuropsychology",
+                "count": 427
+              },
+              {
+                "value": "Pediatric Cardiology",
+                "count": 400
+              },
+              {
+                "value": "Oral and Maxillofacial Surgery",
+                "count": 392
+              },
+              {
+                "value": "Pediatric Gastroenterology",
+                "count": 371
+              },
+              {
+                "value": "Pediatric Ophthalmology",
+                "count": 315
+              },
+              {
+                "value": "Vascular Surgery",
+                "count": 304
+              },
+              {
+                "value": "Pediatric Endocrinology",
+                "count": 275
+              },
+              {
+                "value": "Orthotics",
+                "count": 252
+              },
+              {
+                "value": "Pediatric Orthopedic Surgery",
+                "count": 245
+              },
+              {
+                "value": "Radiology",
+                "count": 242
+              },
+              {
+                "value": "Pediatric Neurology",
+                "count": 232
+              },
+              {
+                "value": "Hand Surgery",
+                "count": 194
+              },
+              {
+                "value": "Travel Medicine",
+                "count": 181
+              },
+              {
+                "value": "Physical Medicine and Rehabilitation",
+                "count": 125
+              },
+              {
+                "value": "Pediatric Pulmonology",
+                "count": 102
+              },
+              {
+                "value": "Lactation Services",
+                "count": 93
+              },
+              {
+                "value": "Chiropractic Medicine",
+                "count": 80
+              },
+              {
+                "value": "Oral Surgery",
+                "count": 78
+              },
+              {
+                "value": "Hematology and Oncology",
+                "count": 71
+              },
+              {
+                "value": "Toxicology",
+                "count": 66
+              },
+              {
+                "value": "Feeding and Swallowing",
+                "count": 65
+              },
+              {
+                "value": "Pediatric Rheumatology",
+                "count": 61
+              },
+              {
+                "value": "Oncology",
+                "count": 51
+              },
+              {
+                "value": "Cardiothoracic Surgery",
+                "count": 48
+              },
+              {
+                "value": "Pain Medicine",
+                "count": 48
+              },
+              {
+                "value": "Pediatric Nephrology",
+                "count": 43
+              },
+              {
+                "value": "Neonatology",
+                "count": 39
+              },
+              {
+                "value": "Adolescent Medicine",
+                "count": 32
+              },
+              {
+                "value": "Pediatric Hematology and Oncology",
+                "count": 32
+              },
+              {
+                "value": "Allergy and Immunology",
+                "count": 30
+              },
+              {
+                "value": "Pediatric Neurosurgery",
+                "count": 29
+              },
+              {
+                "value": "Immunology",
+                "count": 27
+              },
+              {
+                "value": "OWL Clinic",
+                "count": 26
+              },
+              {
+                "value": "Pediatric Genetics",
+                "count": 26
+              },
+              {
+                "value": "Breast Surgery",
+                "count": 24
+              },
+              {
+                "value": "Home Health Services",
+                "count": 20
+              },
+              {
+                "value": "Pediatric Infectious Disease",
+                "count": 19
+              },
+              {
+                "value": "Applied Behavior Analysis (ABA)",
+                "count": 18
+              },
+              {
+                "value": "Pediatric Otolaryngology",
+                "count": 18
+              },
+              {
+                "value": "Social Services",
+                "count": 18
+              },
+              {
+                "value": "Pediatric Urology",
+                "count": 17
+              },
+              {
+                "value": "Bariatrics",
+                "count": 16
+              },
+              {
+                "value": "Wound Care",
+                "count": 16
+              },
+              {
+                "value": "Dentistry",
+                "count": 15
+              },
+              {
+                "value": "Internal Medicine",
+                "count": 13
+              },
+              {
+                "value": "Family Medicine",
+                "count": 10
+              },
+              {
+                "value": "Joint Surgery",
+                "count": 10
+              },
+              {
+                "value": "Neuro-Ophthalmology",
+                "count": 10
+              },
+              {
+                "value": "Orthodontics",
+                "count": 10
+              },
+              {
+                "value": "Pediatric Allergy",
+                "count": 10
+              },
+              {
+                "value": "Pediatric Immunology",
+                "count": 9
+              },
+              {
+                "value": "Addiction Medicine",
+                "count": 8
+              },
+              {
+                "value": "Anesthesiology",
+                "count": 8
+              },
+              {
+                "value": "Gender Management Services",
+                "count": 6
+              },
+              {
+                "value": "Pediatric Dermatology",
+                "count": 6
+              },
+              {
+                "value": "Pediatric Hematology",
+                "count": 6
+              },
+              {
+                "value": "Pediatric Plastic Surgery",
+                "count": 6
+              },
+              {
+                "value": "Burn Surgery",
+                "count": 4
+              },
+              {
+                "value": "Endodontics",
+                "count": 4
+              },
+              {
+                "value": "Pediatric Rehabilitation",
+                "count": 4
+              },
+              {
+                "value": "Child and Adolescent Psychiatry",
+                "count": 3
+              },
+              {
+                "value": "Dietitian",
+                "count": 3
+              },
+              {
+                "value": "Medical Genetics",
+                "count": 3
+              },
+              {
+                "value": "Alternative Medicine",
+                "count": 2
+              },
+              {
+                "value": "Cardiovascular Surgery",
+                "count": 2
+              },
+              {
+                "value": "Colon and Rectal Surgery",
+                "count": 2
+              },
+              {
+                "value": "Occupational Medicine",
+                "count": 2
+              },
+              {
+                "value": "Pediatric Physical Medicine and Rehabilitation",
+                "count": 2
+              },
+              {
+                "value": "Pharmacy",
+                "count": 2
+              },
+              {
+                "value": "Surgery",
+                "count": 2
+              },
+              {
+                "value": "Acupuncturist",
+                "count": 1
+              },
+              {
+                "value": "Aerospace Medicine",
+                "count": 1
+              },
+              {
+                "value": "Cardiovascular Disease",
+                "count": 1
+              },
+              {
+                "value": "Certified Clinical Nurse Specialist",
+                "count": 1
+              },
+              {
+                "value": "Emergency Medicine",
+                "count": 1
+              },
+              {
+                "value": "Hospice Services",
+                "count": 1
+              },
+              {
+                "value": "Perinatology",
+                "count": 1
+              },
+              {
+                "value": "Radiation Oncology",
+                "count": 1
+              },
+              {
+                "value": "Social Worker",
+                "count": 1
+              }
+            ],
+            "x-uniqueValueCount": 119
           },
           {
             "name": "referral_number_of_visits",
             "type": "integer",
             "description": "Authorized or associated visit count; nullable.",
             "constraints": {
+              "minimum": 1
+            },
+            "x-missingCount": 26601,
+            "x-observedRange": {
               "minimum": 1,
               "maximum": 10
             },
             "x-categories": [
               {
-                "value": 1,
-                "count": 108736
-              },
-              {
                 "value": 6,
                 "count": 213345
+              },
+              {
+                "value": 1,
+                "count": 108736
               },
               {
                 "value": 3,
@@ -3648,8 +6745,7 @@
                 "value": 4,
                 "count": 1
               }
-            ],
-            "x-missingCount": 26601
+            ]
           }
         ],
         "missingValues": [

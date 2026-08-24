@@ -33,7 +33,7 @@
 
 4. **encounter_type** (Character/String):
 - Type of visit (e.g., office visit, telehealth, etc.).
-- Values (44 types) with visit counts and percentages (based on total visits: 6,494,473):
+- Values (45 types) with visit counts and percentages (based on total visits: 6,494,473):
      - `Abstract`: 3,672 (0.06%)
      - `Clinical Support`: 15,347 (0.24%)
      - `Consult`: 32,355 (0.50%)
@@ -108,7 +108,7 @@
 
 11. **enc_diag_1** (Character/String):
     - Primary ICD-10 code for encounter (or first listed if none indicated as primary).
-    - Part of 8,031 unique ICD-10 codes across diagnosis fields.
+    - Part of 8,029 unique ICD-10 codes across diagnosis fields.
     - Example: `J45.909` (Asthma).
 
 12–43. **enc_diag_2** to **enc_diag_33** (Character/String):
@@ -150,7 +150,7 @@ dtype_dict = {
     'patient_id': 'string',                # Character/String for unique patient identifier
     'visit_id': 'string',                  # Character/String for unique visit identifier
     'age_in_days': 'int32',                # Integer for age in days (1 to 6,571)
-    'encounter_type': 'category',          # Categorical for 44 encounter types to save memory
+    'encounter_type': 'category',          # Categorical for 45 encounter types to save memory
     'orig_enc_source_Epic_yn': 'category', # Categorical for 'Y'/'N' values
     'weight_oz': 'float32',                # Numeric, float to handle decimals and potential NaNs
     'height_in': 'float32',                # Numeric, float to handle decimals and potential NaNs

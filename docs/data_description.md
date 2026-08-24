@@ -57,7 +57,7 @@ Patients (patient_id)
 
 ### [Visits (`visits.csv`)](visits.md)
 - **Rows:** 6,494,473 (one per visit)
-- **Key Columns:** `patient_id`, `visit_id`, `age_in_days`, `encounter_type` (44 types, e.g., "Office Visit"), `weight_oz`, `height_in`, `BMI`, `bmi_percentile`, `enc_diag_1` to `enc_diag_33` (ICD-10 codes)
+- **Key Columns:** `patient_id`, `visit_id`, `age_in_days`, `encounter_type` (45 types, e.g., "Office Visit"), `weight_oz`, `height_in`, `BMI`, `bmi_percentile`, `enc_diag_1` to `enc_diag_33` (ICD-10 codes)
 - **Highlights:** Anthropometrics and diagnoses per visit; 72.8% "Office Visit"; up to 33 diagnoses; missing data in measurements.
 - **LLM Uses:** Growth trend analysis; diagnosis prevalence; join with demographics for stratified insights.
 

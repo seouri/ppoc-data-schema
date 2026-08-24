@@ -1,0 +1,4608 @@
+{
+  "snapshot": "2026-08-24",
+  "profiledWith": "v1.5.5 (Variegata) d8cdaa33fd",
+  "categoryLimit": 130,
+  "topValues": 10,
+  "resources": {
+    "patients": {
+      "rowCount": 250588,
+      "fields": {
+        "patient_id": {
+          "missing": 0,
+          "distinct": 250588
+        },
+        "sex": {
+          "missing": 0,
+          "distinct": 3,
+          "categories": [
+            [
+              "M",
+              127699
+            ],
+            [
+              "F",
+              122883
+            ],
+            [
+              "U",
+              6
+            ]
+          ]
+        },
+        "ethnicity": {
+          "missing": 5464,
+          "distinct": 6,
+          "categories": [
+            [
+              "Not Hispanic or Latino",
+              170594
+            ],
+            [
+              "Hispanic or Latino",
+              28549
+            ],
+            [
+              "Choose not to Answer",
+              24566
+            ],
+            [
+              "Unknown",
+              20834
+            ],
+            [
+              "Unable to collect",
+              450
+            ],
+            [
+              "Patient does not know",
+              131
+            ]
+          ]
+        },
+        "race_1": {
+          "missing": 8818,
+          "distinct": 11,
+          "categories": [
+            [
+              "White",
+              155375
+            ],
+            [
+              "Unknown",
+              23085
+            ],
+            [
+              "Choose not to answer",
+              17534
+            ],
+            [
+              "Another Race",
+              15950
+            ],
+            [
+              "Asian",
+              15661
+            ],
+            [
+              "Black or African American",
+              12162
+            ],
+            [
+              "American Indian or Alaska Native",
+              625
+            ],
+            [
+              "Middle Eastern or Northern African",
+              512
+            ],
+            [
+              "Unable to collect",
+              492
+            ],
+            [
+              "Native Hawaiian or Other Pacific Islander",
+              248
+            ],
+            [
+              "Patient does not know",
+              126
+            ]
+          ]
+        },
+        "race_2": {
+          "missing": 237397,
+          "distinct": 11,
+          "categories": [
+            [
+              "White",
+              8327
+            ],
+            [
+              "Unknown",
+              1554
+            ],
+            [
+              "Another Race",
+              1137
+            ],
+            [
+              "Black or African American",
+              835
+            ],
+            [
+              "Asian",
+              566
+            ],
+            [
+              "Choose not to answer",
+              516
+            ],
+            [
+              "Middle Eastern or Northern African",
+              87
+            ],
+            [
+              "Native Hawaiian or Other Pacific Islander",
+              86
+            ],
+            [
+              "American Indian or Alaska Native",
+              71
+            ],
+            [
+              "Unable to collect",
+              11
+            ],
+            [
+              "Patient does not know",
+              1
+            ]
+          ]
+        },
+        "race_3": {
+          "missing": 249967,
+          "distinct": 9,
+          "categories": [
+            [
+              "White",
+              402
+            ],
+            [
+              "Another Race",
+              63
+            ],
+            [
+              "Unknown",
+              59
+            ],
+            [
+              "Black or African American",
+              31
+            ],
+            [
+              "Choose not to answer",
+              19
+            ],
+            [
+              "American Indian or Alaska Native",
+              15
+            ],
+            [
+              "Asian",
+              15
+            ],
+            [
+              "Native Hawaiian or Other Pacific Islander",
+              10
+            ],
+            [
+              "Middle Eastern or Northern African",
+              7
+            ]
+          ]
+        },
+        "race_4": {
+          "missing": 250550,
+          "distinct": 5,
+          "categories": [
+            [
+              "White",
+              27
+            ],
+            [
+              "Native Hawaiian or Other Pacific Islander",
+              6
+            ],
+            [
+              "Another Race",
+              2
+            ],
+            [
+              "Asian",
+              2
+            ],
+            [
+              "Choose not to answer",
+              1
+            ]
+          ]
+        },
+        "race_5": {
+          "missing": 250582,
+          "distinct": 3,
+          "categories": [
+            [
+              "White",
+              3
+            ],
+            [
+              "Another Race",
+              2
+            ],
+            [
+              "Native Hawaiian or Other Pacific Islander",
+              1
+            ]
+          ]
+        },
+        "race_6": {
+          "missing": 250585,
+          "distinct": 3,
+          "categories": [
+            [
+              "Another Race",
+              1
+            ],
+            [
+              "Unknown",
+              1
+            ],
+            [
+              "White",
+              1
+            ]
+          ]
+        },
+        "race_7": {
+          "missing": 250586,
+          "distinct": 2,
+          "categories": [
+            [
+              "Unknown",
+              1
+            ],
+            [
+              "White",
+              1
+            ]
+          ]
+        },
+        "race_8": {
+          "missing": 250587,
+          "distinct": 1,
+          "categories": [
+            [
+              "White",
+              1
+            ]
+          ]
+        }
+      },
+      "uniqueCounts": {
+        "patient_id": 250588
+      }
+    },
+    "referrals": {
+      "rowCount": 349827,
+      "fields": {
+        "patient_id": {
+          "missing": 0,
+          "distinct": 138071
+        },
+        "visit_id": {
+          "missing": 24830,
+          "distinct": 298615
+        },
+        "referral_id": {
+          "missing": 0,
+          "distinct": 349827
+        },
+        "referral_date_age_in_days": {
+          "missing": 0,
+          "min": 1.0,
+          "max": 6567.0,
+          "bad": 0,
+          "distinct": 6535
+        },
+        "requested_specialty": {
+          "missing": 27452,
+          "distinct": 119,
+          "categories": [
+            [
+              "Otolaryngology",
+              35723
+            ],
+            [
+              "Ophthalmology",
+              24298
+            ],
+            [
+              "Orthopedic Surgery",
+              22887
+            ],
+            [
+              "Allergy",
+              21761
+            ],
+            [
+              "Behavioral Health",
+              21748
+            ],
+            [
+              "Dermatology",
+              20652
+            ],
+            [
+              "Audiology",
+              15972
+            ],
+            [
+              "Gastroenterology",
+              14344
+            ],
+            [
+              "Cardiology",
+              13610
+            ],
+            [
+              "Neurology",
+              11275
+            ],
+            [
+              "Nutrition",
+              11035
+            ],
+            [
+              "Urology",
+              10697
+            ],
+            [
+              "Speech Pathology",
+              9879
+            ],
+            [
+              "Physical Therapy",
+              9861
+            ],
+            [
+              "Early Intervention",
+              9302
+            ],
+            [
+              "Developmental Medicine",
+              8532
+            ],
+            [
+              "Endocrinology",
+              6641
+            ],
+            [
+              "Occupational Therapy",
+              6573
+            ],
+            [
+              "General Surgery",
+              4206
+            ],
+            [
+              "Psychology",
+              4134
+            ],
+            [
+              "Pulmonary Disease",
+              3926
+            ],
+            [
+              "Plastic Surgery",
+              3454
+            ],
+            [
+              "Psychiatry",
+              2885
+            ],
+            [
+              "Podiatry",
+              2863
+            ],
+            [
+              "Neurosurgery",
+              2415
+            ],
+            [
+              "Genetics",
+              2397
+            ],
+            [
+              "Sports Medicine",
+              2291
+            ],
+            [
+              "Sleep Medicine",
+              1898
+            ],
+            [
+              "Hematology",
+              1607
+            ],
+            [
+              "Obstetrics and Gynecology",
+              1500
+            ],
+            [
+              "Gynecology",
+              1430
+            ],
+            [
+              "Optometry",
+              1392
+            ],
+            [
+              "Rheumatology",
+              1048
+            ],
+            [
+              "Nephrology",
+              1044
+            ],
+            [
+              "Dental General Practice",
+              852
+            ],
+            [
+              "Pediatrics",
+              742
+            ],
+            [
+              "Pediatric Surgery",
+              645
+            ],
+            [
+              "Infectious Diseases",
+              564
+            ],
+            [
+              "Orthopedics",
+              496
+            ],
+            [
+              "Urgent Care",
+              457
+            ],
+            [
+              "Neuropsychology",
+              427
+            ],
+            [
+              "Pediatric Cardiology",
+              400
+            ],
+            [
+              "Oral and Maxillofacial Surgery",
+              392
+            ],
+            [
+              "Pediatric Gastroenterology",
+              371
+            ],
+            [
+              "Pediatric Ophthalmology",
+              315
+            ],
+            [
+              "Vascular Surgery",
+              304
+            ],
+            [
+              "Pediatric Endocrinology",
+              275
+            ],
+            [
+              "Orthotics",
+              252
+            ],
+            [
+              "Pediatric Orthopedic Surgery",
+              245
+            ],
+            [
+              "Radiology",
+              242
+            ],
+            [
+              "Pediatric Neurology",
+              232
+            ],
+            [
+              "Hand Surgery",
+              194
+            ],
+            [
+              "Travel Medicine",
+              181
+            ],
+            [
+              "Physical Medicine and Rehabilitation",
+              125
+            ],
+            [
+              "Pediatric Pulmonology",
+              102
+            ],
+            [
+              "Lactation Services",
+              93
+            ],
+            [
+              "Chiropractic Medicine",
+              80
+            ],
+            [
+              "Oral Surgery",
+              78
+            ],
+            [
+              "Hematology and Oncology",
+              71
+            ],
+            [
+              "Toxicology",
+              66
+            ],
+            [
+              "Feeding and Swallowing",
+              65
+            ],
+            [
+              "Pediatric Rheumatology",
+              61
+            ],
+            [
+              "Oncology",
+              51
+            ],
+            [
+              "Cardiothoracic Surgery",
+              48
+            ],
+            [
+              "Pain Medicine",
+              48
+            ],
+            [
+              "Pediatric Nephrology",
+              43
+            ],
+            [
+              "Neonatology",
+              39
+            ],
+            [
+              "Adolescent Medicine",
+              32
+            ],
+            [
+              "Pediatric Hematology and Oncology",
+              32
+            ],
+            [
+              "Allergy and Immunology",
+              30
+            ],
+            [
+              "Pediatric Neurosurgery",
+              29
+            ],
+            [
+              "Immunology",
+              27
+            ],
+            [
+              "OWL Clinic",
+              26
+            ],
+            [
+              "Pediatric Genetics",
+              26
+            ],
+            [
+              "Breast Surgery",
+              24
+            ],
+            [
+              "Home Health Services",
+              20
+            ],
+            [
+              "Pediatric Infectious Disease",
+              19
+            ],
+            [
+              "Applied Behavior Analysis (ABA)",
+              18
+            ],
+            [
+              "Pediatric Otolaryngology",
+              18
+            ],
+            [
+              "Social Services",
+              18
+            ],
+            [
+              "Pediatric Urology",
+              17
+            ],
+            [
+              "Bariatrics",
+              16
+            ],
+            [
+              "Wound Care",
+              16
+            ],
+            [
+              "Dentistry",
+              15
+            ],
+            [
+              "Internal Medicine",
+              13
+            ],
+            [
+              "Family Medicine",
+              10
+            ],
+            [
+              "Joint Surgery",
+              10
+            ],
+            [
+              "Neuro-Ophthalmology",
+              10
+            ],
+            [
+              "Orthodontics",
+              10
+            ],
+            [
+              "Pediatric Allergy",
+              10
+            ],
+            [
+              "Pediatric Immunology",
+              9
+            ],
+            [
+              "Addiction Medicine",
+              8
+            ],
+            [
+              "Anesthesiology",
+              8
+            ],
+            [
+              "Gender Management Services",
+              6
+            ],
+            [
+              "Pediatric Dermatology",
+              6
+            ],
+            [
+              "Pediatric Hematology",
+              6
+            ],
+            [
+              "Pediatric Plastic Surgery",
+              6
+            ],
+            [
+              "Burn Surgery",
+              4
+            ],
+            [
+              "Endodontics",
+              4
+            ],
+            [
+              "Pediatric Rehabilitation",
+              4
+            ],
+            [
+              "Child and Adolescent Psychiatry",
+              3
+            ],
+            [
+              "Dietitian",
+              3
+            ],
+            [
+              "Medical Genetics",
+              3
+            ],
+            [
+              "Alternative Medicine",
+              2
+            ],
+            [
+              "Cardiovascular Surgery",
+              2
+            ],
+            [
+              "Colon and Rectal Surgery",
+              2
+            ],
+            [
+              "Occupational Medicine",
+              2
+            ],
+            [
+              "Pediatric Physical Medicine and Rehabilitation",
+              2
+            ],
+            [
+              "Pharmacy",
+              2
+            ],
+            [
+              "Surgery",
+              2
+            ],
+            [
+              "Acupuncturist",
+              1
+            ],
+            [
+              "Aerospace Medicine",
+              1
+            ],
+            [
+              "Cardiovascular Disease",
+              1
+            ],
+            [
+              "Certified Clinical Nurse Specialist",
+              1
+            ],
+            [
+              "Emergency Medicine",
+              1
+            ],
+            [
+              "Hospice Services",
+              1
+            ],
+            [
+              "Perinatology",
+              1
+            ],
+            [
+              "Radiation Oncology",
+              1
+            ],
+            [
+              "Social Worker",
+              1
+            ]
+          ]
+        },
+        "referral_number_of_visits": {
+          "missing": 26601,
+          "min": 1.0,
+          "max": 10.0,
+          "bad": 0,
+          "distinct": 6,
+          "categories": [
+            [
+              "6",
+              213345
+            ],
+            [
+              "1",
+              108736
+            ],
+            [
+              "3",
+              608
+            ],
+            [
+              "5",
+              476
+            ],
+            [
+              "10",
+              60
+            ],
+            [
+              "4",
+              1
+            ]
+          ]
+        }
+      },
+      "uniqueCounts": {
+        "patient_id": 138071,
+        "visit_id": 298615
+      },
+      "visitLink": {
+        "orphanRows": 98623
+      }
+    },
+    "medications": {
+      "rowCount": 3823049,
+      "fields": {
+        "patient_id": {
+          "missing": 0,
+          "distinct": 236323
+        },
+        "visit_id": {
+          "missing": 0,
+          "distinct": 2757560
+        },
+        "med_record_id": {
+          "missing": 0,
+          "distinct": 3823049
+        },
+        "med_order_date_age_in_days": {
+          "missing": 0,
+          "min": -45.0,
+          "max": 6605.0,
+          "bad": 0,
+          "distinct": 6605
+        },
+        "med_start_date_age_in_days": {
+          "missing": 283066,
+          "min": -40149.0,
+          "max": 36581.0,
+          "bad": 0,
+          "distinct": 6644
+        },
+        "med_end_date_age_in_days": {
+          "missing": 450340,
+          "min": 0.0,
+          "max": 31105.0,
+          "bad": 0,
+          "distinct": 6939
+        },
+        "med_record_type": {
+          "missing": 0,
+          "distinct": 2,
+          "categories": [
+            [
+              "Internal",
+              3250374
+            ],
+            [
+              "External",
+              572675
+            ]
+          ]
+        },
+        "med_simple_generic_name": {
+          "missing": 0,
+          "distinct": 1073,
+          "topValues": [
+            [
+              "Amoxicillin",
+              351609
+            ],
+            [
+              "Albuterol Sulfate",
+              312748
+            ],
+            [
+              "Methylphenidate HCl",
+              219731
+            ],
+            [
+              "Dexmethylphenidate HCl",
+              124415
+            ],
+            [
+              "Amphetamine-Dextroamphetamine",
+              106250
+            ],
+            [
+              "Acetaminophen",
+              83235
+            ],
+            [
+              "Cefdinir",
+              81224
+            ],
+            [
+              "Sodium Fluoride",
+              78612
+            ],
+            [
+              "Fluticasone Propionate HFA",
+              77412
+            ],
+            [
+              "Amoxicillin-Pot Clavulanate",
+              76894
+            ]
+          ]
+        }
+      },
+      "uniqueCounts": {
+        "patient_id": 236323,
+        "visit_id": 2757560
+      },
+      "visitLink": {
+        "orphanRows": 1592437
+      }
+    },
+    "problem_list": {
+      "rowCount": 1709584,
+      "fields": {
+        "patient_id": {
+          "missing": 0,
+          "distinct": 238823
+        },
+        "problem_list_id": {
+          "missing": 0,
+          "distinct": 1709584
+        },
+        "noted_date_age_in_days": {
+          "missing": 7284,
+          "min": -44891.0,
+          "max": 6601.0,
+          "bad": 0,
+          "distinct": 6930
+        },
+        "resolved_date_age_in_days": {
+          "missing": 951677,
+          "min": -84.0,
+          "max": 6605.0,
+          "bad": 0,
+          "distinct": 6565
+        },
+        "pl_diag": {
+          "missing": 0,
+          "distinct": 4739,
+          "topValues": [
+            [
+              "U07.1",
+              26260
+            ],
+            [
+              "Z28.21",
+              21189
+            ],
+            [
+              "F41.9",
+              20950
+            ],
+            [
+              "K59.00",
+              17491
+            ],
+            [
+              "Z00.129",
+              17348
+            ],
+            [
+              "K21.9",
+              17184
+            ],
+            [
+              "Z86.16",
+              16007
+            ],
+            [
+              "J45.20",
+              15088
+            ],
+            [
+              "L30.9",
+              14868
+            ],
+            [
+              "R46.89",
+              14789
+            ]
+          ]
+        }
+      },
+      "uniqueCounts": {
+        "patient_id": 238823
+      }
+    },
+    "patients_augmented": {
+      "rowCount": 250588,
+      "fields": {
+        "patient_id": {
+          "missing": 0,
+          "distinct": 250588
+        },
+        "sex": {
+          "missing": 0,
+          "distinct": 3,
+          "categories": [
+            [
+              "M",
+              127699
+            ],
+            [
+              "F",
+              122883
+            ],
+            [
+              "U",
+              6
+            ]
+          ]
+        },
+        "ethnicity": {
+          "missing": 51445,
+          "distinct": 2,
+          "categories": [
+            [
+              "Not Hispanic or Latino",
+              170594
+            ],
+            [
+              "Hispanic or Latino",
+              28549
+            ]
+          ]
+        },
+        "race_1": {
+          "missing": 50055,
+          "distinct": 7,
+          "categories": [
+            [
+              "White",
+              155375
+            ],
+            [
+              "Another Race",
+              15950
+            ],
+            [
+              "Asian",
+              15661
+            ],
+            [
+              "Black or African American",
+              12162
+            ],
+            [
+              "American Indian or Alaska Native",
+              625
+            ],
+            [
+              "Middle Eastern or Northern African",
+              512
+            ],
+            [
+              "Native Hawaiian or Other Pacific Islander",
+              248
+            ]
+          ]
+        },
+        "race_2": {
+          "missing": 239479,
+          "distinct": 7,
+          "categories": [
+            [
+              "White",
+              8327
+            ],
+            [
+              "Another Race",
+              1137
+            ],
+            [
+              "Black or African American",
+              835
+            ],
+            [
+              "Asian",
+              566
+            ],
+            [
+              "Middle Eastern or Northern African",
+              87
+            ],
+            [
+              "Native Hawaiian or Other Pacific Islander",
+              86
+            ],
+            [
+              "American Indian or Alaska Native",
+              71
+            ]
+          ]
+        },
+        "race_3": {
+          "missing": 250045,
+          "distinct": 7,
+          "categories": [
+            [
+              "White",
+              402
+            ],
+            [
+              "Another Race",
+              63
+            ],
+            [
+              "Black or African American",
+              31
+            ],
+            [
+              "American Indian or Alaska Native",
+              15
+            ],
+            [
+              "Asian",
+              15
+            ],
+            [
+              "Native Hawaiian or Other Pacific Islander",
+              10
+            ],
+            [
+              "Middle Eastern or Northern African",
+              7
+            ]
+          ]
+        },
+        "race_4": {
+          "missing": 250551,
+          "distinct": 4,
+          "categories": [
+            [
+              "White",
+              27
+            ],
+            [
+              "Native Hawaiian or Other Pacific Islander",
+              6
+            ],
+            [
+              "Another Race",
+              2
+            ],
+            [
+              "Asian",
+              2
+            ]
+          ]
+        },
+        "race_5": {
+          "missing": 250582,
+          "distinct": 3,
+          "categories": [
+            [
+              "White",
+              3
+            ],
+            [
+              "Another Race",
+              2
+            ],
+            [
+              "Native Hawaiian or Other Pacific Islander",
+              1
+            ]
+          ]
+        },
+        "race_6": {
+          "missing": 250586,
+          "distinct": 2,
+          "categories": [
+            [
+              "Another Race",
+              1
+            ],
+            [
+              "White",
+              1
+            ]
+          ]
+        },
+        "race_7": {
+          "missing": 250587,
+          "distinct": 1,
+          "categories": [
+            [
+              "White",
+              1
+            ]
+          ]
+        },
+        "race_8": {
+          "missing": 250587,
+          "distinct": 1,
+          "categories": [
+            [
+              "White",
+              1
+            ]
+          ]
+        },
+        "healthy_flag": {
+          "missing": 0,
+          "min": 0.0,
+          "max": 1.0,
+          "bad": 0,
+          "distinct": 2,
+          "categories": [
+            [
+              "0",
+              226117
+            ],
+            [
+              "1",
+              24471
+            ]
+          ]
+        },
+        "chronic_dx_flag": {
+          "missing": 0,
+          "min": 0.0,
+          "max": 1.0,
+          "bad": 0,
+          "distinct": 2,
+          "categories": [
+            [
+              "1",
+              203935
+            ],
+            [
+              "0",
+              46653
+            ]
+          ]
+        },
+        "growth_dx_flag": {
+          "missing": 0,
+          "min": 0.0,
+          "max": 1.0,
+          "bad": 0,
+          "distinct": 2,
+          "categories": [
+            [
+              "0",
+              214681
+            ],
+            [
+              "1",
+              35907
+            ]
+          ]
+        },
+        "ever_stunting_flag": {
+          "missing": 0,
+          "min": 0.0,
+          "max": 1.0,
+          "bad": 0,
+          "distinct": 2,
+          "categories": [
+            [
+              "0",
+              232699
+            ],
+            [
+              "1",
+              17889
+            ]
+          ]
+        },
+        "ever_wasting_flag": {
+          "missing": 0,
+          "min": 0.0,
+          "max": 1.0,
+          "bad": 0,
+          "distinct": 2,
+          "categories": [
+            [
+              "0",
+              183884
+            ],
+            [
+              "1",
+              66704
+            ]
+          ]
+        },
+        "ever_underweight_flag": {
+          "missing": 0,
+          "min": 0.0,
+          "max": 1.0,
+          "bad": 0,
+          "distinct": 2,
+          "categories": [
+            [
+              "0",
+              216980
+            ],
+            [
+              "1",
+              33608
+            ]
+          ]
+        },
+        "ever_obesity_flag": {
+          "missing": 0,
+          "min": 0.0,
+          "max": 1.0,
+          "bad": 0,
+          "distinct": 2,
+          "categories": [
+            [
+              "0",
+              200590
+            ],
+            [
+              "1",
+              49998
+            ]
+          ]
+        },
+        "visits_count": {
+          "missing": 0,
+          "min": 1.0,
+          "max": 244.0,
+          "bad": 0,
+          "distinct": 173
+        },
+        "visits_count_pre_dx": {
+          "missing": 0,
+          "min": 0.0,
+          "max": 244.0,
+          "bad": 0,
+          "distinct": 170
+        },
+        "min_visit_age_days": {
+          "missing": 0,
+          "min": 1.0,
+          "max": 5377.0,
+          "bad": 0,
+          "distinct": 4793
+        },
+        "max_visit_age_days": {
+          "missing": 0,
+          "min": 2.0,
+          "max": 6571.0,
+          "bad": 0,
+          "distinct": 6559
+        },
+        "visits_span_days": {
+          "missing": 0,
+          "min": 0.0,
+          "max": 5653.0,
+          "bad": 0,
+          "distinct": 5635
+        },
+        "dx_age_years": {
+          "missing": 214698,
+          "min": -114.667,
+          "max": 17.462,
+          "bad": 0
+        },
+        "dx_age_years_e03_9": {
+          "missing": 250279,
+          "min": 0.008,
+          "max": 16.92,
+          "bad": 0
+        },
+        "dx_age_years_e10": {
+          "missing": 250097,
+          "min": 0.873,
+          "max": 16.553,
+          "bad": 0
+        },
+        "dx_age_years_e22_0": {
+          "missing": 250585,
+          "min": 1.804,
+          "max": 6.064,
+          "bad": 0
+        },
+        "dx_age_years_e23_0": {
+          "missing": 250438,
+          "min": 0.036,
+          "max": 16.047,
+          "bad": 0
+        },
+        "dx_age_years_e23_6": {
+          "missing": 250557,
+          "min": 0.022,
+          "max": 17.421,
+          "bad": 0
+        },
+        "dx_age_years_e24": {
+          "missing": 250587,
+          "min": 15.644,
+          "max": 15.644,
+          "bad": 0
+        },
+        "dx_age_years_e30_0": {
+          "missing": 250169,
+          "min": 6.075,
+          "max": 17.035,
+          "bad": 0
+        },
+        "dx_age_years_e30_1": {
+          "missing": 247183,
+          "min": 0.016,
+          "max": 17.046,
+          "bad": 0
+        },
+        "dx_age_years_e34_3": {
+          "missing": 250141,
+          "min": 0.019,
+          "max": 16.78,
+          "bad": 0
+        },
+        "dx_age_years_e34_4": {
+          "missing": 250505,
+          "min": 0.088,
+          "max": 14.891,
+          "bad": 0
+        },
+        "dx_age_years_e72_11": {
+          "missing": 250587,
+          "min": 4.635,
+          "max": 4.635,
+          "bad": 0
+        },
+        "dx_age_years_k50": {
+          "missing": 250475,
+          "min": 0.679,
+          "max": 17.268,
+          "bad": 0
+        },
+        "dx_age_years_k51": {
+          "missing": 250526,
+          "min": 0.096,
+          "max": 16.389,
+          "bad": 0
+        },
+        "dx_age_years_k90_0": {
+          "missing": 249690,
+          "min": 0.027,
+          "max": 17.462,
+          "bad": 0
+        },
+        "dx_age_years_n18": {
+          "missing": 250518,
+          "min": 0.025,
+          "max": 16.334,
+          "bad": 0
+        },
+        "dx_age_years_n25_0": {
+          "missing": 250587,
+          "min": 6.842,
+          "max": 6.842,
+          "bad": 0
+        },
+        "dx_age_years_p04_3": {
+          "missing": 250535,
+          "min": 0.0,
+          "max": 11.387,
+          "bad": 0
+        },
+        "dx_age_years_p05": {
+          "missing": 246519,
+          "min": 0.0,
+          "max": 14.757,
+          "bad": 0
+        },
+        "dx_age_years_p07": {
+          "missing": 239574,
+          "min": -114.667,
+          "max": 16.569,
+          "bad": 0
+        },
+        "dx_age_years_p70": {
+          "missing": 247235,
+          "min": -0.003,
+          "max": 7.162,
+          "bad": 0
+        },
+        "dx_age_years_p92_6": {
+          "missing": 236160,
+          "min": -0.12,
+          "max": 11.91,
+          "bad": 0
+        },
+        "dx_age_years_q77": {
+          "missing": 250573,
+          "min": 0.014,
+          "max": 12.553,
+          "bad": 0
+        },
+        "dx_age_years_q78_0": {
+          "missing": 250578,
+          "min": 0.008,
+          "max": 10.119,
+          "bad": 0
+        },
+        "dx_age_years_q78_1": {
+          "missing": 250586,
+          "min": 1.188,
+          "max": 9.517,
+          "bad": 0
+        },
+        "dx_age_years_q87_1": {
+          "missing": 250530,
+          "min": 0.0,
+          "max": 15.329,
+          "bad": 0
+        },
+        "dx_age_years_q87_2": {
+          "missing": 250556,
+          "min": 0.0,
+          "max": 12.947,
+          "bad": 0
+        },
+        "dx_age_years_q87_3": {
+          "missing": 250542,
+          "min": 0.038,
+          "max": 11.967,
+          "bad": 0
+        },
+        "dx_age_years_q87_4": {
+          "missing": 250571,
+          "min": 0.011,
+          "max": 15.981,
+          "bad": 0
+        },
+        "dx_age_years_q90": {
+          "missing": 250383,
+          "min": 0.0,
+          "max": 14.3,
+          "bad": 0
+        },
+        "dx_age_years_q96": {
+          "missing": 250552,
+          "min": 0.0,
+          "max": 15.485,
+          "bad": 0
+        },
+        "dx_age_years_q98_0": {
+          "missing": 250562,
+          "min": 0.0,
+          "max": 13.53,
+          "bad": 0
+        },
+        "dx_age_years_q98_4": {
+          "missing": 250546,
+          "min": 0.0,
+          "max": 15.704,
+          "bad": 0
+        },
+        "dx_age_years_q98_5": {
+          "missing": 250571,
+          "min": 0.0,
+          "max": 5.971,
+          "bad": 0
+        },
+        "count_weight_z_score": {
+          "missing": 0,
+          "min": 0.0,
+          "max": 244.0,
+          "bad": 0,
+          "distinct": 174
+        },
+        "mean_weight_z_score": {
+          "missing": 11,
+          "min": -4.7721,
+          "max": 4.6004,
+          "bad": 0
+        },
+        "std_weight_z_score": {
+          "missing": 993,
+          "min": 0.0001,
+          "max": 3.6504,
+          "bad": 0
+        },
+        "min_weight_z_score": {
+          "missing": 11,
+          "min": -4.9991,
+          "max": 4.5973,
+          "bad": 0
+        },
+        "max_weight_z_score": {
+          "missing": 11,
+          "min": -4.7285,
+          "max": 4.9995,
+          "bad": 0
+        },
+        "count_height_z_score": {
+          "missing": 0,
+          "min": 0.0,
+          "max": 138.0,
+          "bad": 0,
+          "distinct": 97,
+          "categories": [
+            [
+              "12",
+              15805
+            ],
+            [
+              "13",
+              15603
+            ],
+            [
+              "11",
+              15594
+            ],
+            [
+              "14",
+              15412
+            ],
+            [
+              "15",
+              15013
+            ],
+            [
+              "10",
+              14784
+            ],
+            [
+              "16",
+              13511
+            ],
+            [
+              "9",
+              13047
+            ],
+            [
+              "17",
+              12301
+            ],
+            [
+              "8",
+              11687
+            ],
+            [
+              "18",
+              11026
+            ],
+            [
+              "7",
+              10537
+            ],
+            [
+              "6",
+              9997
+            ],
+            [
+              "19",
+              9486
+            ],
+            [
+              "5",
+              8342
+            ],
+            [
+              "20",
+              8165
+            ],
+            [
+              "21",
+              6842
+            ],
+            [
+              "4",
+              6049
+            ],
+            [
+              "22",
+              5451
+            ],
+            [
+              "23",
+              4006
+            ],
+            [
+              "3",
+              3748
+            ],
+            [
+              "24",
+              2997
+            ],
+            [
+              "2",
+              2729
+            ],
+            [
+              "25",
+              2363
+            ],
+            [
+              "1",
+              2089
+            ],
+            [
+              "26",
+              1866
+            ],
+            [
+              "27",
+              1598
+            ],
+            [
+              "28",
+              1301
+            ],
+            [
+              "29",
+              1048
+            ],
+            [
+              "30",
+              976
+            ],
+            [
+              "31",
+              809
+            ],
+            [
+              "32",
+              725
+            ],
+            [
+              "33",
+              629
+            ],
+            [
+              "34",
+              563
+            ],
+            [
+              "35",
+              477
+            ],
+            [
+              "36",
+              424
+            ],
+            [
+              "37",
+              389
+            ],
+            [
+              "0",
+              327
+            ],
+            [
+              "38",
+              318
+            ],
+            [
+              "39",
+              301
+            ],
+            [
+              "40",
+              245
+            ],
+            [
+              "41",
+              230
+            ],
+            [
+              "42",
+              183
+            ],
+            [
+              "44",
+              163
+            ],
+            [
+              "43",
+              161
+            ],
+            [
+              "46",
+              131
+            ],
+            [
+              "45",
+              126
+            ],
+            [
+              "47",
+              122
+            ],
+            [
+              "48",
+              94
+            ],
+            [
+              "49",
+              90
+            ],
+            [
+              "51",
+              69
+            ],
+            [
+              "50",
+              64
+            ],
+            [
+              "52",
+              54
+            ],
+            [
+              "54",
+              51
+            ],
+            [
+              "53",
+              47
+            ],
+            [
+              "55",
+              43
+            ],
+            [
+              "56",
+              43
+            ],
+            [
+              "57",
+              32
+            ],
+            [
+              "59",
+              26
+            ],
+            [
+              "58",
+              25
+            ],
+            [
+              "62",
+              24
+            ],
+            [
+              "61",
+              22
+            ],
+            [
+              "60",
+              21
+            ],
+            [
+              "63",
+              19
+            ],
+            [
+              "64",
+              17
+            ],
+            [
+              "65",
+              15
+            ],
+            [
+              "66",
+              15
+            ],
+            [
+              "68",
+              13
+            ],
+            [
+              "67",
+              12
+            ],
+            [
+              "72",
+              10
+            ],
+            [
+              "70",
+              9
+            ],
+            [
+              "74",
+              9
+            ],
+            [
+              "69",
+              8
+            ],
+            [
+              "71",
+              7
+            ],
+            [
+              "73",
+              7
+            ],
+            [
+              "75",
+              7
+            ],
+            [
+              "76",
+              6
+            ],
+            [
+              "81",
+              5
+            ],
+            [
+              "84",
+              4
+            ],
+            [
+              "80",
+              3
+            ],
+            [
+              "79",
+              2
+            ],
+            [
+              "88",
+              2
+            ],
+            [
+              "96",
+              2
+            ],
+            [
+              "99",
+              2
+            ],
+            [
+              "104",
+              1
+            ],
+            [
+              "109",
+              1
+            ],
+            [
+              "111",
+              1
+            ],
+            [
+              "118",
+              1
+            ],
+            [
+              "138",
+              1
+            ],
+            [
+              "77",
+              1
+            ],
+            [
+              "78",
+              1
+            ],
+            [
+              "83",
+              1
+            ],
+            [
+              "85",
+              1
+            ],
+            [
+              "86",
+              1
+            ],
+            [
+              "87",
+              1
+            ],
+            [
+              "92",
+              1
+            ],
+            [
+              "94",
+              1
+            ]
+          ]
+        },
+        "mean_height_z_score": {
+          "missing": 327,
+          "min": -4.8684,
+          "max": 2.9938,
+          "bad": 0
+        },
+        "std_height_z_score": {
+          "missing": 2416,
+          "min": 0.0,
+          "max": 4.3468,
+          "bad": 0
+        },
+        "min_height_z_score": {
+          "missing": 327,
+          "min": -4.9992,
+          "max": 2.9938,
+          "bad": 0
+        },
+        "max_height_z_score": {
+          "missing": 327,
+          "min": -4.8684,
+          "max": 3.0,
+          "bad": 0
+        },
+        "count_bmi_z_score": {
+          "missing": 0,
+          "min": 0.0,
+          "max": 136.0,
+          "bad": 0,
+          "distinct": 92,
+          "categories": [
+            [
+              "0",
+              37535
+            ],
+            [
+              "6",
+              16005
+            ],
+            [
+              "5",
+              15968
+            ],
+            [
+              "7",
+              15603
+            ],
+            [
+              "4",
+              15292
+            ],
+            [
+              "8",
+              15152
+            ],
+            [
+              "9",
+              13873
+            ],
+            [
+              "3",
+              13372
+            ],
+            [
+              "1",
+              13360
+            ],
+            [
+              "10",
+              12226
+            ],
+            [
+              "2",
+              11453
+            ],
+            [
+              "11",
+              10966
+            ],
+            [
+              "12",
+              10036
+            ],
+            [
+              "13",
+              8675
+            ],
+            [
+              "14",
+              7853
+            ],
+            [
+              "15",
+              6617
+            ],
+            [
+              "16",
+              4598
+            ],
+            [
+              "17",
+              3322
+            ],
+            [
+              "18",
+              2622
+            ],
+            [
+              "19",
+              2136
+            ],
+            [
+              "20",
+              1740
+            ],
+            [
+              "21",
+              1514
+            ],
+            [
+              "22",
+              1331
+            ],
+            [
+              "23",
+              1107
+            ],
+            [
+              "24",
+              955
+            ],
+            [
+              "25",
+              856
+            ],
+            [
+              "26",
+              763
+            ],
+            [
+              "27",
+              679
+            ],
+            [
+              "28",
+              549
+            ],
+            [
+              "29",
+              515
+            ],
+            [
+              "30",
+              450
+            ],
+            [
+              "31",
+              386
+            ],
+            [
+              "32",
+              349
+            ],
+            [
+              "33",
+              326
+            ],
+            [
+              "34",
+              260
+            ],
+            [
+              "35",
+              228
+            ],
+            [
+              "36",
+              226
+            ],
+            [
+              "37",
+              191
+            ],
+            [
+              "39",
+              162
+            ],
+            [
+              "38",
+              158
+            ],
+            [
+              "40",
+              124
+            ],
+            [
+              "42",
+              114
+            ],
+            [
+              "41",
+              107
+            ],
+            [
+              "44",
+              97
+            ],
+            [
+              "43",
+              75
+            ],
+            [
+              "45",
+              56
+            ],
+            [
+              "48",
+              56
+            ],
+            [
+              "46",
+              53
+            ],
+            [
+              "47",
+              47
+            ],
+            [
+              "49",
+              41
+            ],
+            [
+              "50",
+              41
+            ],
+            [
+              "51",
+              40
+            ],
+            [
+              "52",
+              37
+            ],
+            [
+              "54",
+              27
+            ],
+            [
+              "57",
+              25
+            ],
+            [
+              "53",
+              23
+            ],
+            [
+              "56",
+              23
+            ],
+            [
+              "55",
+              21
+            ],
+            [
+              "62",
+              19
+            ],
+            [
+              "58",
+              14
+            ],
+            [
+              "63",
+              14
+            ],
+            [
+              "59",
+              12
+            ],
+            [
+              "60",
+              12
+            ],
+            [
+              "68",
+              11
+            ],
+            [
+              "61",
+              10
+            ],
+            [
+              "64",
+              10
+            ],
+            [
+              "66",
+              9
+            ],
+            [
+              "67",
+              7
+            ],
+            [
+              "65",
+              6
+            ],
+            [
+              "71",
+              6
+            ],
+            [
+              "72",
+              6
+            ],
+            [
+              "70",
+              5
+            ],
+            [
+              "74",
+              4
+            ],
+            [
+              "69",
+              3
+            ],
+            [
+              "77",
+              2
+            ],
+            [
+              "80",
+              2
+            ],
+            [
+              "81",
+              2
+            ],
+            [
+              "83",
+              2
+            ],
+            [
+              "97",
+              2
+            ],
+            [
+              "98",
+              2
+            ],
+            [
+              "104",
+              1
+            ],
+            [
+              "109",
+              1
+            ],
+            [
+              "136",
+              1
+            ],
+            [
+              "73",
+              1
+            ],
+            [
+              "75",
+              1
+            ],
+            [
+              "76",
+              1
+            ],
+            [
+              "78",
+              1
+            ],
+            [
+              "82",
+              1
+            ],
+            [
+              "87",
+              1
+            ],
+            [
+              "88",
+              1
+            ],
+            [
+              "90",
+              1
+            ],
+            [
+              "96",
+              1
+            ]
+          ]
+        },
+        "mean_bmi_z_score": {
+          "missing": 37535,
+          "min": -5.6992,
+          "max": 6.7026,
+          "bad": 0
+        },
+        "std_bmi_z_score": {
+          "missing": 50895,
+          "min": 0.0001,
+          "max": 6.4692,
+          "bad": 0
+        },
+        "min_bmi_z_score": {
+          "missing": 37535,
+          "min": -18.7803,
+          "max": 6.7026,
+          "bad": 0
+        },
+        "max_bmi_z_score": {
+          "missing": 37535,
+          "min": -5.1273,
+          "max": 6.7026,
+          "bad": 0
+        },
+        "count_head_circ_z_score": {
+          "missing": 0,
+          "min": 0.0,
+          "max": 33.0,
+          "bad": 0,
+          "distinct": 30,
+          "categories": [
+            [
+              "0",
+              50004
+            ],
+            [
+              "10",
+              45436
+            ],
+            [
+              "11",
+              28192
+            ],
+            [
+              "9",
+              27042
+            ],
+            [
+              "8",
+              14873
+            ],
+            [
+              "1",
+              12521
+            ],
+            [
+              "12",
+              11618
+            ],
+            [
+              "7",
+              10596
+            ],
+            [
+              "5",
+              8953
+            ],
+            [
+              "6",
+              8858
+            ],
+            [
+              "2",
+              8463
+            ],
+            [
+              "4",
+              8198
+            ],
+            [
+              "3",
+              7764
+            ],
+            [
+              "13",
+              4553
+            ],
+            [
+              "14",
+              1911
+            ],
+            [
+              "15",
+              822
+            ],
+            [
+              "16",
+              374
+            ],
+            [
+              "17",
+              172
+            ],
+            [
+              "18",
+              110
+            ],
+            [
+              "19",
+              61
+            ],
+            [
+              "20",
+              25
+            ],
+            [
+              "21",
+              15
+            ],
+            [
+              "22",
+              14
+            ],
+            [
+              "23",
+              5
+            ],
+            [
+              "25",
+              2
+            ],
+            [
+              "26",
+              2
+            ],
+            [
+              "24",
+              1
+            ],
+            [
+              "27",
+              1
+            ],
+            [
+              "30",
+              1
+            ],
+            [
+              "33",
+              1
+            ]
+          ]
+        },
+        "mean_head_circ_z_score": {
+          "missing": 50004,
+          "min": -1457.3407,
+          "max": 25519.8835,
+          "bad": 0
+        },
+        "std_head_circ_z_score": {
+          "missing": 62525,
+          "min": 0.0,
+          "max": 88395.2809,
+          "bad": 0
+        },
+        "min_head_circ_z_score": {
+          "missing": 50004,
+          "min": -17485.9115,
+          "max": 8999.2033,
+          "bad": 0
+        },
+        "max_head_circ_z_score": {
+          "missing": 50004,
+          "min": -52.9953,
+          "max": 306212.5991,
+          "bad": 0
+        },
+        "count_weight_for_length_z_score": {
+          "missing": 0,
+          "min": 0.0,
+          "max": 68.0,
+          "bad": 0,
+          "distinct": 61,
+          "categories": [
+            [
+              "11",
+              31257
+            ],
+            [
+              "0",
+              30139
+            ],
+            [
+              "12",
+              30086
+            ],
+            [
+              "10",
+              20153
+            ],
+            [
+              "13",
+              19024
+            ],
+            [
+              "9",
+              13091
+            ],
+            [
+              "1",
+              12457
+            ],
+            [
+              "2",
+              12425
+            ],
+            [
+              "3",
+              10238
+            ],
+            [
+              "14",
+              10222
+            ],
+            [
+              "8",
+              10061
+            ],
+            [
+              "5",
+              9185
+            ],
+            [
+              "7",
+              9160
+            ],
+            [
+              "4",
+              9109
+            ],
+            [
+              "6",
+              9100
+            ],
+            [
+              "15",
+              5343
+            ],
+            [
+              "16",
+              2967
+            ],
+            [
+              "17",
+              1755
+            ],
+            [
+              "18",
+              1184
+            ],
+            [
+              "19",
+              830
+            ],
+            [
+              "20",
+              589
+            ],
+            [
+              "21",
+              410
+            ],
+            [
+              "22",
+              372
+            ],
+            [
+              "23",
+              274
+            ],
+            [
+              "24",
+              202
+            ],
+            [
+              "25",
+              177
+            ],
+            [
+              "26",
+              138
+            ],
+            [
+              "27",
+              116
+            ],
+            [
+              "28",
+              73
+            ],
+            [
+              "29",
+              69
+            ],
+            [
+              "31",
+              63
+            ],
+            [
+              "30",
+              53
+            ],
+            [
+              "33",
+              46
+            ],
+            [
+              "34",
+              39
+            ],
+            [
+              "32",
+              27
+            ],
+            [
+              "35",
+              22
+            ],
+            [
+              "36",
+              19
+            ],
+            [
+              "38",
+              18
+            ],
+            [
+              "37",
+              13
+            ],
+            [
+              "41",
+              11
+            ],
+            [
+              "39",
+              9
+            ],
+            [
+              "42",
+              8
+            ],
+            [
+              "43",
+              7
+            ],
+            [
+              "46",
+              7
+            ],
+            [
+              "40",
+              5
+            ],
+            [
+              "44",
+              5
+            ],
+            [
+              "45",
+              5
+            ],
+            [
+              "51",
+              5
+            ],
+            [
+              "54",
+              3
+            ],
+            [
+              "55",
+              3
+            ],
+            [
+              "53",
+              2
+            ],
+            [
+              "56",
+              2
+            ],
+            [
+              "58",
+              2
+            ],
+            [
+              "47",
+              1
+            ],
+            [
+              "48",
+              1
+            ],
+            [
+              "50",
+              1
+            ],
+            [
+              "60",
+              1
+            ],
+            [
+              "61",
+              1
+            ],
+            [
+              "62",
+              1
+            ],
+            [
+              "63",
+              1
+            ],
+            [
+              "68",
+              1
+            ]
+          ]
+        },
+        "mean_weight_for_length_z_score": {
+          "missing": 30139,
+          "min": -9.6117,
+          "max": 6.2246,
+          "bad": 0
+        },
+        "std_weight_for_length_z_score": {
+          "missing": 42596,
+          "min": 0.0,
+          "max": 33.9735,
+          "bad": 0
+        },
+        "min_weight_for_length_z_score": {
+          "missing": 30139,
+          "min": -145.6016,
+          "max": 6.2246,
+          "bad": 0
+        },
+        "max_weight_for_length_z_score": {
+          "missing": 30139,
+          "min": -5.7851,
+          "max": 7.6285,
+          "bad": 0
+        },
+        "count_weight_for_stature_z_score": {
+          "missing": 0,
+          "min": 0.0,
+          "max": 90.0,
+          "bad": 0,
+          "distinct": 63,
+          "categories": [
+            [
+              "0",
+              35434
+            ],
+            [
+              "7",
+              33298
+            ],
+            [
+              "8",
+              28063
+            ],
+            [
+              "6",
+              26131
+            ],
+            [
+              "5",
+              22154
+            ],
+            [
+              "4",
+              21560
+            ],
+            [
+              "3",
+              18348
+            ],
+            [
+              "9",
+              14940
+            ],
+            [
+              "2",
+              14742
+            ],
+            [
+              "1",
+              11960
+            ],
+            [
+              "10",
+              6965
+            ],
+            [
+              "11",
+              3974
+            ],
+            [
+              "12",
+              2698
+            ],
+            [
+              "13",
+              2003
+            ],
+            [
+              "14",
+              1547
+            ],
+            [
+              "15",
+              1203
+            ],
+            [
+              "16",
+              978
+            ],
+            [
+              "17",
+              816
+            ],
+            [
+              "18",
+              644
+            ],
+            [
+              "19",
+              509
+            ],
+            [
+              "20",
+              449
+            ],
+            [
+              "21",
+              353
+            ],
+            [
+              "22",
+              309
+            ],
+            [
+              "23",
+              245
+            ],
+            [
+              "24",
+              184
+            ],
+            [
+              "25",
+              164
+            ],
+            [
+              "26",
+              129
+            ],
+            [
+              "27",
+              110
+            ],
+            [
+              "28",
+              99
+            ],
+            [
+              "30",
+              87
+            ],
+            [
+              "29",
+              75
+            ],
+            [
+              "31",
+              62
+            ],
+            [
+              "32",
+              57
+            ],
+            [
+              "33",
+              40
+            ],
+            [
+              "34",
+              39
+            ],
+            [
+              "35",
+              27
+            ],
+            [
+              "36",
+              26
+            ],
+            [
+              "37",
+              22
+            ],
+            [
+              "38",
+              19
+            ],
+            [
+              "41",
+              15
+            ],
+            [
+              "43",
+              14
+            ],
+            [
+              "40",
+              13
+            ],
+            [
+              "39",
+              10
+            ],
+            [
+              "42",
+              10
+            ],
+            [
+              "45",
+              10
+            ],
+            [
+              "47",
+              8
+            ],
+            [
+              "44",
+              7
+            ],
+            [
+              "46",
+              5
+            ],
+            [
+              "52",
+              5
+            ],
+            [
+              "48",
+              4
+            ],
+            [
+              "50",
+              4
+            ],
+            [
+              "53",
+              4
+            ],
+            [
+              "49",
+              3
+            ],
+            [
+              "54",
+              3
+            ],
+            [
+              "55",
+              2
+            ],
+            [
+              "51",
+              1
+            ],
+            [
+              "56",
+              1
+            ],
+            [
+              "57",
+              1
+            ],
+            [
+              "58",
+              1
+            ],
+            [
+              "62",
+              1
+            ],
+            [
+              "65",
+              1
+            ],
+            [
+              "83",
+              1
+            ],
+            [
+              "90",
+              1
+            ]
+          ]
+        },
+        "mean_weight_for_stature_z_score": {
+          "missing": 35434,
+          "min": -6.4609,
+          "max": 5.6179,
+          "bad": 0
+        },
+        "std_weight_for_stature_z_score": {
+          "missing": 47394,
+          "min": 0.0,
+          "max": 7.7948,
+          "bad": 0
+        },
+        "min_weight_for_stature_z_score": {
+          "missing": 35434,
+          "min": -14.3445,
+          "max": 5.6179,
+          "bad": 0
+        },
+        "max_weight_for_stature_z_score": {
+          "missing": 35434,
+          "min": -5.323,
+          "max": 7.4762,
+          "bad": 0
+        }
+      },
+      "uniqueCounts": {
+        "patient_id": 250588
+      }
+    },
+    "visits": {
+      "rowCount": 6494473,
+      "fields": {
+        "patient_id": {
+          "missing": 0,
+          "distinct": 250588
+        },
+        "visit_id": {
+          "missing": 0,
+          "distinct": 6494473
+        },
+        "age_in_days": {
+          "missing": 0,
+          "min": 1.0,
+          "max": 6571.0,
+          "bad": 0,
+          "distinct": 6563
+        },
+        "encounter_type": {
+          "missing": 0,
+          "distinct": 45,
+          "categories": [
+            [
+              "Office Visit",
+              4725643
+            ],
+            [
+              "Well Visit (Conv.)",
+              778452
+            ],
+            [
+              "Sick",
+              580991
+            ],
+            [
+              "Follow-Up",
+              92370
+            ],
+            [
+              "Walk-In",
+              79679
+            ],
+            [
+              "Consult",
+              32355
+            ],
+            [
+              "Conversion Encounter",
+              32007
+            ],
+            [
+              "Newborn",
+              31142
+            ],
+            [
+              "Telemedicine",
+              25658
+            ],
+            [
+              "Telephone",
+              22053
+            ],
+            [
+              "Weight Check",
+              16295
+            ],
+            [
+              "Clinical Support",
+              15347
+            ],
+            [
+              "Documentation",
+              13107
+            ],
+            [
+              "Immunization",
+              11774
+            ],
+            [
+              "New Patient",
+              11410
+            ],
+            [
+              "Nutrition",
+              5406
+            ],
+            [
+              "Medication Management",
+              4345
+            ],
+            [
+              "Nurse Only",
+              3786
+            ],
+            [
+              "Abstract",
+              3672
+            ],
+            [
+              "Flu",
+              2104
+            ],
+            [
+              "Lactation Consult",
+              1384
+            ],
+            [
+              "Lab",
+              1351
+            ],
+            [
+              "Lactation Encounter",
+              1337
+            ],
+            [
+              "Procedure visit",
+              678
+            ],
+            [
+              "Pre-op/Pre-procedure Orders",
+              575
+            ],
+            [
+              "Erroneous Encounter",
+              555
+            ],
+            [
+              "Orders Only",
+              273
+            ],
+            [
+              "External Contact",
+              211
+            ],
+            [
+              "Patient Message",
+              209
+            ],
+            [
+              "Evaluation",
+              143
+            ],
+            [
+              "Lab Requisition",
+              63
+            ],
+            [
+              "Scanned Document",
+              23
+            ],
+            [
+              "Letter (Out)",
+              18
+            ],
+            [
+              "Refill",
+              12
+            ],
+            [
+              "History",
+              11
+            ],
+            [
+              "Ophth Exam",
+              11
+            ],
+            [
+              "Hospital",
+              5
+            ],
+            [
+              "Routine Prenatal",
+              4
+            ],
+            [
+              "Transcribe Orders",
+              4
+            ],
+            [
+              "Patient Care Review",
+              3
+            ],
+            [
+              "Episode Changes",
+              2
+            ],
+            [
+              "Erroneous Telephone Encounter",
+              2
+            ],
+            [
+              "ED",
+              1
+            ],
+            [
+              "OurPractice Advisory",
+              1
+            ],
+            [
+              "Treatment",
+              1
+            ]
+          ]
+        },
+        "orig_enc_source_Epic_yn": {
+          "missing": 0,
+          "distinct": 2,
+          "categories": [
+            [
+              "Y",
+              4149865
+            ],
+            [
+              "N",
+              2344608
+            ]
+          ]
+        },
+        "weight_oz": {
+          "missing": 6445,
+          "min": 0.2,
+          "max": 22648.0,
+          "bad": 0
+        },
+        "height_in": {
+          "missing": 2984840,
+          "min": 1.18,
+          "max": 115.0,
+          "bad": 0
+        },
+        "head_circ_cm": {
+          "missing": 4858783,
+          "min": 0.0,
+          "max": 505.46,
+          "bad": 0
+        },
+        "BMI": {
+          "missing": 2836170,
+          "min": 0.01,
+          "max": 21164.05,
+          "bad": 0
+        },
+        "bmi_percentile": {
+          "missing": 3533288,
+          "min": 0.0,
+          "max": 100.0,
+          "bad": 0
+        },
+        "enc_diag_1": {
+          "missing": 339672
+        },
+        "enc_diag_2": {
+          "missing": 2633784
+        },
+        "enc_diag_3": {
+          "missing": 4406874
+        },
+        "enc_diag_4": {
+          "missing": 5338411
+        },
+        "enc_diag_5": {
+          "missing": 5842807
+        },
+        "enc_diag_6": {
+          "missing": 6129492
+        },
+        "enc_diag_7": {
+          "missing": 6292453
+        },
+        "enc_diag_8": {
+          "missing": 6384404
+        },
+        "enc_diag_9": {
+          "missing": 6435791
+        },
+        "enc_diag_10": {
+          "missing": 6463492
+        },
+        "enc_diag_11": {
+          "missing": 6477956
+        },
+        "enc_diag_12": {
+          "missing": 6485564
+        },
+        "enc_diag_13": {
+          "missing": 6489628
+        },
+        "enc_diag_14": {
+          "missing": 6491828
+        },
+        "enc_diag_15": {
+          "missing": 6492956
+        },
+        "enc_diag_16": {
+          "missing": 6493585
+        },
+        "enc_diag_17": {
+          "missing": 6493907
+        },
+        "enc_diag_18": {
+          "missing": 6494116
+        },
+        "enc_diag_19": {
+          "missing": 6494245
+        },
+        "enc_diag_20": {
+          "missing": 6494326
+        },
+        "enc_diag_21": {
+          "missing": 6494376
+        },
+        "enc_diag_22": {
+          "missing": 6494408
+        },
+        "enc_diag_23": {
+          "missing": 6494426
+        },
+        "enc_diag_24": {
+          "missing": 6494438
+        },
+        "enc_diag_25": {
+          "missing": 6494448
+        },
+        "enc_diag_26": {
+          "missing": 6494453
+        },
+        "enc_diag_27": {
+          "missing": 6494458
+        },
+        "enc_diag_28": {
+          "missing": 6494461
+        },
+        "enc_diag_29": {
+          "missing": 6494464
+        },
+        "enc_diag_30": {
+          "missing": 6494470
+        },
+        "enc_diag_31": {
+          "missing": 6494471
+        },
+        "enc_diag_32": {
+          "missing": 6494471
+        },
+        "enc_diag_33": {
+          "missing": 6494471
+        }
+      },
+      "uniqueDiagnosisCodeCount": 8029,
+      "uniqueCounts": {
+        "patient_id": 250588,
+        "visit_id": 6494473
+      }
+    },
+    "labs": {
+      "rowCount": 17230681,
+      "fields": {
+        "patient_id": {
+          "missing": 0,
+          "distinct": 247271
+        },
+        "visit_id": {
+          "missing": 805,
+          "distinct": 2859084
+        },
+        "lab_order_id": {
+          "missing": 0,
+          "distinct": 6578838
+        },
+        "result_line_num": {
+          "missing": 2283186,
+          "min": 1.0,
+          "max": 149.0,
+          "bad": 0,
+          "distinct": 149
+        },
+        "lab_order_date_age_in_days": {
+          "missing": 0,
+          "min": -687.0,
+          "max": 6570.0,
+          "bad": 0,
+          "distinct": 6578
+        },
+        "lab_procedure_name": {
+          "missing": 0,
+          "distinct": 3742,
+          "topValues": [
+            [
+              "CBC",
+              2742117
+            ],
+            [
+              "CBC  DIFFERENTIAL",
+              1660900
+            ],
+            [
+              "CE EXTERNAL LAB",
+              1455867
+            ],
+            [
+              "URINALYSIS",
+              1326746
+            ],
+            [
+              "POCT URINALYSIS DIPSTICK",
+              1079426
+            ],
+            [
+              "COMPREHENSIVE METABOLIC PANEL",
+              475461
+            ],
+            [
+              "POCT COVID-19 NUCLEIC ACID (AMPLIFIED PROBE)",
+              432267
+            ],
+            [
+              "LEAD, BLOOD",
+              394009
+            ],
+            [
+              "COVID-19 (CORONAVIRUS 2019) PCR",
+              392834
+            ],
+            [
+              "POCT STREP A NUCLEIC ACID (AMPLIFIED PROBE)",
+              314977
+            ]
+          ]
+        },
+        "lab_procedure_description": {
+          "missing": 0
+        },
+        "lab_result_date_age_in_days": {
+          "missing": 2283186,
+          "min": -44378.0,
+          "max": 6570.0,
+          "bad": 0,
+          "distinct": 6613
+        },
+        "result_component_name": {
+          "missing": 2283186,
+          "distinct": 12902,
+          "topValues": [
+            [
+              "CONTROL BAND",
+              605803
+            ],
+            [
+              "SARS-COV-2 NUCLEIC ACID MOLECULAR",
+              329042
+            ],
+            [
+              "HGB, POC",
+              215703
+            ],
+            [
+              "STREP A NUCLEIC ACID AMPLIFIED PROBE",
+              192497
+            ],
+            [
+              "STREP A ANTIGEN",
+              175256
+            ],
+            [
+              "INFLUENZA A NUCLEIC ACID AMPLIFIED PROBE",
+              156874
+            ],
+            [
+              "INFLUENZA B NUCLEIC ACID AMPLIFIED PROBE",
+              154982
+            ],
+            [
+              "SARS COV 2 RNA, RT PCR",
+              153223
+            ],
+            [
+              "ERYTHROCYTE MEAN CORPUSCULAR VOLUME (FL) BY AUTOMATED COUNT",
+              111558
+            ],
+            [
+              "WHITE BLOOD CELLS",
+              108894
+            ]
+          ]
+        },
+        "result_loinc_code": {
+          "missing": 15880579,
+          "distinct": 2194,
+          "topValues": [
+            [
+              "10368-9",
+              61585
+            ],
+            [
+              "1975-2",
+              44108
+            ],
+            [
+              "718-7",
+              35204
+            ],
+            [
+              "4544-3",
+              31553
+            ],
+            [
+              "789-8",
+              31549
+            ],
+            [
+              "785-6",
+              31542
+            ],
+            [
+              "787-2",
+              31542
+            ],
+            [
+              "6690-2",
+              31408
+            ],
+            [
+              "777-3",
+              31106
+            ],
+            [
+              "786-4",
+              31097
+            ]
+          ]
+        },
+        "result_value": {
+          "missing": 2494261
+        },
+        "result_flag": {
+          "missing": 15550985,
+          "distinct": 35,
+          "categories": [
+            [
+              "Abnormal",
+              704327
+            ],
+            [
+              "High",
+              513650
+            ],
+            [
+              "Low",
+              361300
+            ],
+            [
+              "Sensitive",
+              62794
+            ],
+            [
+              "Resistant",
+              10278
+            ],
+            [
+              "High Panic",
+              9744
+            ],
+            [
+              "(NONE)",
+              5881
+            ],
+            [
+              "Normal",
+              4273
+            ],
+            [
+              "Panic",
+              3056
+            ],
+            [
+              "Intermediate",
+              1704
+            ],
+            [
+              "Low Panic",
+              1406
+            ],
+            [
+              "Critical",
+              373
+            ],
+            [
+              "Negative",
+              188
+            ],
+            [
+              "High Off-Scale",
+              134
+            ],
+            [
+              "Susceptible-Dose Dependent",
+              123
+            ],
+            [
+              "Abnormal High",
+              99
+            ],
+            [
+              "Abnormal Low",
+              92
+            ],
+            [
+              "Invalid High",
+              84
+            ],
+            [
+              "Sig Change Up",
+              68
+            ],
+            [
+              "Positive",
+              35
+            ],
+            [
+              "Critical High",
+              23
+            ],
+            [
+              "Low Off-Scale",
+              17
+            ],
+            [
+              "Critical Low",
+              13
+            ],
+            [
+              "Class 0: Absent Allergen Specific IgE",
+              7
+            ],
+            [
+              "Delta Abnormal High",
+              4
+            ],
+            [
+              "Invalid Low",
+              4
+            ],
+            [
+              "Better",
+              3
+            ],
+            [
+              "Class 2: Moderate Level Allergen Specific IgE",
+              3
+            ],
+            [
+              "Delta Critical High",
+              3
+            ],
+            [
+              "In Process",
+              3
+            ],
+            [
+              "Class 3: High Level Allergen Specific IgE",
+              2
+            ],
+            [
+              "Sig Change Down",
+              2
+            ],
+            [
+              "Delta Abnormal Low",
+              1
+            ],
+            [
+              "Moderately Sensitive",
+              1
+            ],
+            [
+              "Worse",
+              1
+            ]
+          ]
+        }
+      },
+      "uniqueCounts": {
+        "patient_id": 247271,
+        "visit_id": 2859084,
+        "lab_order_id": 6578838
+      },
+      "visitLink": {
+        "orphanRows": 5201657
+      }
+    },
+    "visits_augmented": {
+      "rowCount": 6494473,
+      "fields": {
+        "patient_id": {
+          "missing": 0,
+          "distinct": 250588
+        },
+        "visit_id": {
+          "missing": 0,
+          "distinct": 6494473
+        },
+        "sex": {
+          "missing": 0,
+          "distinct": 3,
+          "categories": [
+            [
+              "M",
+              3337433
+            ],
+            [
+              "F",
+              3156965
+            ],
+            [
+              "U",
+              75
+            ]
+          ]
+        },
+        "ethnicity": {
+          "missing": 1093256,
+          "distinct": 2,
+          "categories": [
+            [
+              "Not Hispanic or Latino",
+              4631609
+            ],
+            [
+              "Hispanic or Latino",
+              769608
+            ]
+          ]
+        },
+        "race_1": {
+          "missing": 1071155,
+          "distinct": 7,
+          "categories": [
+            [
+              "White",
+              4313826
+            ],
+            [
+              "Another Race",
+              421347
+            ],
+            [
+              "Asian",
+              349581
+            ],
+            [
+              "Black or African American",
+              304821
+            ],
+            [
+              "American Indian or Alaska Native",
+              16576
+            ],
+            [
+              "Middle Eastern or Northern African",
+              10388
+            ],
+            [
+              "Native Hawaiian or Other Pacific Islander",
+              6779
+            ]
+          ]
+        },
+        "age_in_days": {
+          "missing": 0,
+          "min": 1.0,
+          "max": 6571.0,
+          "bad": 0,
+          "distinct": 6563
+        },
+        "age_in_months": {
+          "missing": 0,
+          "min": 0.03,
+          "max": 215.89,
+          "bad": 0
+        },
+        "age_in_years": {
+          "missing": 0,
+          "min": 0.003,
+          "max": 17.99,
+          "bad": 0
+        },
+        "weight_oz": {
+          "missing": 6445,
+          "min": 0.2,
+          "max": 22648.0,
+          "bad": 0
+        },
+        "weight_kg": {
+          "missing": 11466,
+          "min": 0.006,
+          "max": 513.92,
+          "bad": 0
+        },
+        "weight_outlier_flag": {
+          "missing": 6445,
+          "min": 0.0,
+          "max": 1.0,
+          "bad": 0,
+          "distinct": 2,
+          "categories": [
+            [
+              "0",
+              5626394
+            ],
+            [
+              "1",
+              861634
+            ]
+          ]
+        },
+        "delta_weight_kg": {
+          "missing": 740441,
+          "min": -450.42,
+          "max": 469.47,
+          "bad": 0
+        },
+        "delta_age_in_days_weight": {
+          "missing": 740441,
+          "min": 30.0,
+          "max": 5441.0,
+          "bad": 0,
+          "distinct": 3424
+        },
+        "weight_velocity": {
+          "missing": 740441,
+          "min": -620.28,
+          "max": 724.19,
+          "bad": 0
+        },
+        "weight_z_score": {
+          "missing": 11541,
+          "min": -4.9991,
+          "max": 4.9995,
+          "bad": 0
+        },
+        "weight_percentile": {
+          "missing": 11541,
+          "min": 0.0,
+          "max": 100.0,
+          "bad": 0
+        },
+        "weight_for_length_z_score": {
+          "missing": 4467156,
+          "min": -145.6016,
+          "max": 7.6285,
+          "bad": 0
+        },
+        "weight_for_length_percentile": {
+          "missing": 4467156,
+          "min": 0.0,
+          "max": 100.0,
+          "bad": 0
+        },
+        "weight_for_stature_z_score": {
+          "missing": 5123126,
+          "min": -14.3445,
+          "max": 7.4762,
+          "bad": 0
+        },
+        "weight_for_stature_percentile": {
+          "missing": 5123126,
+          "min": 0.0,
+          "max": 100.0,
+          "bad": 0
+        },
+        "wasting_flag": {
+          "missing": 0,
+          "min": 0.0,
+          "max": 1.0,
+          "bad": 0,
+          "distinct": 2,
+          "categories": [
+            [
+              "0",
+              6331019
+            ],
+            [
+              "1",
+              163454
+            ]
+          ]
+        },
+        "height_in": {
+          "missing": 2984840,
+          "min": 1.18,
+          "max": 115.0,
+          "bad": 0
+        },
+        "height_cm": {
+          "missing": 3002811,
+          "min": 37.465,
+          "max": 196.596,
+          "bad": 0
+        },
+        "height_outlier_flag": {
+          "missing": 2984840,
+          "min": 0.0,
+          "max": 1.0,
+          "bad": 0,
+          "distinct": 2,
+          "categories": [
+            [
+              "0",
+              3303254
+            ],
+            [
+              "1",
+              206379
+            ]
+          ]
+        },
+        "delta_height_cm": {
+          "missing": 3707703,
+          "min": -29.16,
+          "max": 125.04,
+          "bad": 0
+        },
+        "delta_age_in_days_height": {
+          "missing": 3707703,
+          "min": 90.0,
+          "max": 5508.0,
+          "bad": 0,
+          "distinct": 3135
+        },
+        "height_velocity": {
+          "missing": 3707703,
+          "min": -47.12,
+          "max": 81.8,
+          "bad": 0
+        },
+        "height_velocity_z_score": {
+          "missing": 5367184,
+          "min": -10.2306,
+          "max": 32.0986,
+          "bad": 0
+        },
+        "height_velocity_z_score_ep": {
+          "missing": 5517372,
+          "min": -28.7985,
+          "max": 30.4057,
+          "bad": 0
+        },
+        "height_velocity_z_score_ap": {
+          "missing": 5533524,
+          "min": -14.6437,
+          "max": 113.9615,
+          "bad": 0
+        },
+        "height_velocity_z_score_lp": {
+          "missing": 5533399,
+          "min": -149.3739,
+          "max": 17.823,
+          "bad": 0
+        },
+        "height_velocity_percentile": {
+          "missing": 5367184,
+          "min": 0.0,
+          "max": 100.0,
+          "bad": 0
+        },
+        "height_velocity_percentile_ep": {
+          "missing": 5517372,
+          "min": 0.0,
+          "max": 100.0,
+          "bad": 0
+        },
+        "height_velocity_percentile_ap": {
+          "missing": 5533524,
+          "min": 0.0,
+          "max": 100.0,
+          "bad": 0
+        },
+        "height_velocity_percentile_lp": {
+          "missing": 5533399,
+          "min": 0.0,
+          "max": 100.0,
+          "bad": 0
+        },
+        "height_z_score": {
+          "missing": 3002857,
+          "min": -4.9992,
+          "max": 3.0,
+          "bad": 0
+        },
+        "height_percentile": {
+          "missing": 3002857,
+          "min": 0.0,
+          "max": 99.87,
+          "bad": 0
+        },
+        "stunting_flag": {
+          "missing": 0,
+          "min": 0.0,
+          "max": 1.0,
+          "bad": 0,
+          "distinct": 2,
+          "categories": [
+            [
+              "0",
+              6442117
+            ],
+            [
+              "1",
+              52356
+            ]
+          ]
+        },
+        "head_circ_cm": {
+          "missing": 4858783,
+          "min": 0.0,
+          "max": 505.46,
+          "bad": 0
+        },
+        "head_circ_z_score": {
+          "missing": 4858833,
+          "min": -17485.9115,
+          "max": 306212.5991,
+          "bad": 0
+        },
+        "head_circ_percentile": {
+          "missing": 4858833,
+          "min": 0.0,
+          "max": 100.0,
+          "bad": 0
+        },
+        "bmi": {
+          "missing": 4539134,
+          "min": 8.117899894714355,
+          "max": 219.50559997558594,
+          "bad": 0
+        },
+        "bmi_z_score": {
+          "missing": 4539136,
+          "min": -18.7803,
+          "max": 6.7026,
+          "bad": 0
+        },
+        "bmi_percentile": {
+          "missing": 4539136,
+          "min": 0.0,
+          "max": 100.0,
+          "bad": 0
+        },
+        "bmi_category": {
+          "missing": 4539136,
+          "distinct": 4,
+          "categories": [
+            [
+              "normal",
+              1338418
+            ],
+            [
+              "overweight",
+              280226
+            ],
+            [
+              "obese",
+              253091
+            ],
+            [
+              "underweight",
+              83602
+            ]
+          ]
+        },
+        "underweight_flag": {
+          "missing": 0,
+          "min": 0.0,
+          "max": 1.0,
+          "bad": 0,
+          "distinct": 2,
+          "categories": [
+            [
+              "0",
+              6410871
+            ],
+            [
+              "1",
+              83602
+            ]
+          ]
+        },
+        "obesity_flag": {
+          "missing": 0,
+          "min": 0.0,
+          "max": 1.0,
+          "bad": 0,
+          "distinct": 2,
+          "categories": [
+            [
+              "0",
+              6241382
+            ],
+            [
+              "1",
+              253091
+            ]
+          ]
+        },
+        "encounter_type": {
+          "missing": 0,
+          "distinct": 45,
+          "categories": [
+            [
+              "Office Visit",
+              4725643
+            ],
+            [
+              "Well Visit (Conv.)",
+              778452
+            ],
+            [
+              "Sick",
+              580991
+            ],
+            [
+              "Follow-Up",
+              92370
+            ],
+            [
+              "Walk-In",
+              79679
+            ],
+            [
+              "Consult",
+              32355
+            ],
+            [
+              "Conversion Encounter",
+              32007
+            ],
+            [
+              "Newborn",
+              31142
+            ],
+            [
+              "Telemedicine",
+              25658
+            ],
+            [
+              "Telephone",
+              22053
+            ],
+            [
+              "Weight Check",
+              16295
+            ],
+            [
+              "Clinical Support",
+              15347
+            ],
+            [
+              "Documentation",
+              13107
+            ],
+            [
+              "Immunization",
+              11774
+            ],
+            [
+              "New Patient",
+              11410
+            ],
+            [
+              "Nutrition",
+              5406
+            ],
+            [
+              "Medication Management",
+              4345
+            ],
+            [
+              "Nurse Only",
+              3786
+            ],
+            [
+              "Abstract",
+              3672
+            ],
+            [
+              "Flu",
+              2104
+            ],
+            [
+              "Lactation Consult",
+              1384
+            ],
+            [
+              "Lab",
+              1351
+            ],
+            [
+              "Lactation Encounter",
+              1337
+            ],
+            [
+              "Procedure visit",
+              678
+            ],
+            [
+              "Pre-op/Pre-procedure Orders",
+              575
+            ],
+            [
+              "Erroneous Encounter",
+              555
+            ],
+            [
+              "Orders Only",
+              273
+            ],
+            [
+              "External Contact",
+              211
+            ],
+            [
+              "Patient Message",
+              209
+            ],
+            [
+              "Evaluation",
+              143
+            ],
+            [
+              "Lab Requisition",
+              63
+            ],
+            [
+              "Scanned Document",
+              23
+            ],
+            [
+              "Letter (Out)",
+              18
+            ],
+            [
+              "Refill",
+              12
+            ],
+            [
+              "History",
+              11
+            ],
+            [
+              "Ophth Exam",
+              11
+            ],
+            [
+              "Hospital",
+              5
+            ],
+            [
+              "Routine Prenatal",
+              4
+            ],
+            [
+              "Transcribe Orders",
+              4
+            ],
+            [
+              "Patient Care Review",
+              3
+            ],
+            [
+              "Episode Changes",
+              2
+            ],
+            [
+              "Erroneous Telephone Encounter",
+              2
+            ],
+            [
+              "ED",
+              1
+            ],
+            [
+              "OurPractice Advisory",
+              1
+            ],
+            [
+              "Treatment",
+              1
+            ]
+          ]
+        },
+        "orig_enc_source_Epic_yn": {
+          "missing": 0,
+          "distinct": 2,
+          "categories": [
+            [
+              "Y",
+              4149865
+            ],
+            [
+              "N",
+              2344608
+            ]
+          ]
+        },
+        "enc_diag_1": {
+          "missing": 339672
+        },
+        "enc_diag_2": {
+          "missing": 2633784
+        },
+        "enc_diag_3": {
+          "missing": 4406874
+        },
+        "enc_diag_4": {
+          "missing": 5338411
+        },
+        "enc_diag_5": {
+          "missing": 5842807
+        },
+        "enc_diag_6": {
+          "missing": 6129492
+        },
+        "enc_diag_7": {
+          "missing": 6292453
+        },
+        "enc_diag_8": {
+          "missing": 6384404
+        },
+        "enc_diag_9": {
+          "missing": 6435791
+        },
+        "enc_diag_10": {
+          "missing": 6463492
+        },
+        "enc_diag_11": {
+          "missing": 6477956
+        },
+        "enc_diag_12": {
+          "missing": 6485564
+        },
+        "enc_diag_13": {
+          "missing": 6489628
+        },
+        "enc_diag_14": {
+          "missing": 6491828
+        },
+        "enc_diag_15": {
+          "missing": 6492956
+        },
+        "enc_diag_16": {
+          "missing": 6493585
+        },
+        "enc_diag_17": {
+          "missing": 6493907
+        },
+        "enc_diag_18": {
+          "missing": 6494116
+        },
+        "enc_diag_19": {
+          "missing": 6494245
+        },
+        "enc_diag_20": {
+          "missing": 6494326
+        },
+        "enc_diag_21": {
+          "missing": 6494376
+        },
+        "enc_diag_22": {
+          "missing": 6494408
+        },
+        "enc_diag_23": {
+          "missing": 6494426
+        },
+        "enc_diag_24": {
+          "missing": 6494438
+        },
+        "enc_diag_25": {
+          "missing": 6494448
+        },
+        "enc_diag_26": {
+          "missing": 6494453
+        },
+        "enc_diag_27": {
+          "missing": 6494458
+        },
+        "enc_diag_28": {
+          "missing": 6494461
+        },
+        "enc_diag_29": {
+          "missing": 6494464
+        },
+        "enc_diag_30": {
+          "missing": 6494470
+        },
+        "enc_diag_31": {
+          "missing": 6494471
+        },
+        "enc_diag_32": {
+          "missing": 6494471
+        },
+        "enc_diag_33": {
+          "missing": 6494471
+        }
+      },
+      "uniqueDiagnosisCodeCount": 8029,
+      "bmiCategories": [
+        {
+          "value": "underweight",
+          "count": 83602,
+          "minPercentile": 0.0,
+          "maxPercentile": 4.99
+        },
+        {
+          "value": "normal",
+          "count": 1338418,
+          "minPercentile": 5.0,
+          "maxPercentile": 84.99
+        },
+        {
+          "value": "overweight",
+          "count": 280226,
+          "minPercentile": 85.0,
+          "maxPercentile": 94.99
+        },
+        {
+          "value": "obese",
+          "count": 253091,
+          "minPercentile": 95.0,
+          "maxPercentile": 100.0
+        }
+      ],
+      "uniqueCounts": {
+        "patient_id": 250588,
+        "visit_id": 6494473
+      },
+      "visitLink": {
+        "orphanRows": 0
+      }
+    }
+  }
+}

@@ -12,6 +12,20 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "datapackage.json"
+STATS_PATH = ROOT / "schema" / "stats.json"
+
+# Every statistic in the descriptor comes from schema/profile.py, which reads the
+# CSV snapshot with DuckDB. This file owns the shape of the package; stats.json
+# owns the numbers, so the descriptor can be rebuilt without the data at hand.
+STATS = json.loads(STATS_PATH.read_text())
+
+# Enums narrow enough to double as a validation contract, taken from the values
+# the snapshot actually contains rather than an external code list.
+OBSERVED_ENUMS = {
+    ("visits", "encounter_type"),
+    ("visits_augmented", "encounter_type"),
+    ("labs", "result_flag"),
+}
 
 
 def field(
@@ -83,42 +97,6 @@ INFORMATIVE_RACE_VALUES = [
 ]
 
 
-def categories(counts: dict[Any, int] | list[tuple[Any, int]]) -> list[dict[str, Any]]:
-    """Observed value frequencies, dropping values absent from the column."""
-    items = counts.items() if isinstance(counts, dict) else counts
-    return [{"value": value, "count": count} for value, count in items if count]
-
-
-# Value frequencies below are transcribed from the docs/ snapshot summaries; see
-# the package-level x-statisticsSource note. validate_package cross-checks every
-# distribution against its row and missing-value counts.
-SEX_COUNTS = {"F": 122883, "M": 127699, "U": 6}
-ETHNICITY_COUNTS = {
-    "Not Hispanic or Latino": 170594,
-    "Hispanic or Latino": 28549,
-    "Choose not to Answer": 24566,
-    "Unknown": 20834,
-    "Unable to collect": 450,
-    "Patient does not know": 131,
-}
-ETHNICITY_MISSING = 5464
-# Counts per race_1 ... race_8 column.
-RACE_COUNTS = {
-    "American Indian or Alaska Native": (625, 71, 15, 0, 0, 0, 0, 0),
-    "Another Race": (15950, 1137, 63, 2, 2, 1, 0, 0),
-    "Asian": (15661, 566, 15, 2, 0, 0, 0, 0),
-    "Black or African American": (12162, 835, 31, 0, 0, 0, 0, 0),
-    "Choose not to answer": (17534, 516, 19, 1, 0, 0, 0, 0),
-    "Middle Eastern or Northern African": (512, 87, 7, 0, 0, 0, 0, 0),
-    "Native Hawaiian or Other Pacific Islander": (248, 86, 10, 6, 1, 0, 0, 0),
-    "Patient does not know": (126, 1, 0, 0, 0, 0, 0, 0),
-    "Unable to collect": (492, 11, 0, 0, 0, 0, 0, 0),
-    "Unknown": (23085, 1554, 59, 0, 0, 1, 1, 0),
-    "White": (155375, 8327, 402, 27, 3, 1, 1, 1),
-}
-RACE_MISSING = (8818, 237397, 249967, 250550, 250582, 250585, 250586, 250587)
-
-
 PATIENT_FIELDS = [
     identifier("patient_id", "patient"),
     field(
@@ -127,14 +105,12 @@ PATIENT_FIELDS = [
         "Recorded patient sex; U means unknown.",
         required=True,
         constraints={"enum": SEX_VALUES},
-        **{"x-categories": categories(SEX_COUNTS)},
     ),
     field(
         "ethnicity",
         "string",
         "Recorded patient ethnicity; non-response is retained as a category in the base file.",
         constraints={"enum": ETHNICITY_VALUES},
-        **{"x-categories": categories(ETHNICITY_COUNTS), "x-missingCount": ETHNICITY_MISSING},
     ),
 ]
 PATIENT_FIELDS.extend(
@@ -143,12 +119,6 @@ PATIENT_FIELDS.extend(
         "string",
         f"Recorded race category at position {index}; blank when no category is present.",
         constraints={"enum": RACE_VALUES},
-        **{
-            "x-categories": categories(
-                [(value, counts[index - 1]) for value, counts in RACE_COUNTS.items()]
-            ),
-            "x-missingCount": RACE_MISSING[index - 1],
-        },
     )
     for index in range(1, 9)
 )
@@ -172,69 +142,15 @@ def age_field(
     )
 
 
-ENCOUNTER_TYPE_COUNTS = {
-    "Abstract": 3672,
-    "Clinical Support": 15347,
-    "Consult": 32355,
-    "Conversion Encounter": 32007,
-    "Documentation": 13107,
-    "ED": 1,
-    "Episode Changes": 2,
-    "Erroneous Encounter": 555,
-    "Erroneous Telephone Encounter": 2,
-    "Evaluation": 143,
-    "External Contact": 211,
-    "Flu": 2104,
-    "Follow-Up": 92370,
-    "History": 11,
-    "Hospital": 5,
-    "Immunization": 11774,
-    "Lab": 1351,
-    "Lab Requisition": 63,
-    "Lactation Consult": 1384,
-    "Lactation Encounter": 1337,
-    "Letter (Out)": 18,
-    "Medication Management": 4345,
-    "New Patient": 11410,
-    "Newborn": 31142,
-    "Nurse Only": 3786,
-    "Nutrition": 5406,
-    "Office Visit": 4725643,
-    "Ophth Exam": 11,
-    "Orders Only": 273,
-    "OurPractice Advisory": 1,
-    "Patient Care Review": 3,
-    "Patient Message": 209,
-    "Pre-op/Pre-procedure Orders": 575,
-    "Procedure visit": 678,
-    "Refill": 12,
-    "Routine Prenatal": 4,
-    "Scanned Document": 23,
-    "Sick": 580991,
-    "Telemedicine": 25658,
-    "Telephone": 22053,
-    "Transcribe Orders": 4,
-    "Treatment": 1,
-    "Walk-In": 79679,
-    "Weight Check": 16295,
-    "Well Visit (Conv.)": 778452,
-}
-
-
 VISIT_FIELDS = [
     identifier("patient_id", "patient"),
     identifier("visit_id", "visit"),
-    age_field("age_in_days", "the visit", required=True, constraints={"minimum": 1, "maximum": 6571}),
+    age_field("age_in_days", "the visit", required=True),
     field(
         "encounter_type",
         "string",
-        f"Encounter classification; {len(ENCOUNTER_TYPE_COUNTS)} values occur in the data.",
+        "Encounter classification recorded by Epic.",
         required=True,
-        constraints={"enum": list(ENCOUNTER_TYPE_COUNTS)},
-        **{
-            "x-uniqueValueCount": len(ENCOUNTER_TYPE_COUNTS),
-            "x-categories": categories(ENCOUNTER_TYPE_COUNTS),
-        },
     ),
     field(
         "orig_enc_source_Epic_yn",
@@ -242,14 +158,13 @@ VISIT_FIELDS = [
         "Y when the encounter originated in Epic; N when converted from a legacy EMR.",
         constraints={"enum": ["Y", "N"]},
     ),
-    field("weight_oz", "number", "Recorded weight in ounces; may contain outliers.", constraints={"minimum": 0.2, "maximum": 22648}, **{"x-unit": "ounce"}),
-    field("height_in", "number", "Recorded height or length in inches; may contain outliers.", constraints={"minimum": 1.18, "maximum": 115}, **{"x-unit": "inch"}),
-    field("head_circ_cm", "number", "Recorded head circumference in centimeters; may contain outliers.", constraints={"minimum": 0, "maximum": 505.46}, **{"x-unit": "centimeter"}),
+    field("weight_oz", "number", "Recorded weight in ounces; may contain outliers.", **{"x-unit": "ounce"}),
+    field("height_in", "number", "Recorded height or length in inches; may contain outliers.", **{"x-unit": "inch"}),
+    field("head_circ_cm", "number", "Recorded head circumference in centimeters; may contain outliers.", **{"x-unit": "centimeter"}),
     field(
         "BMI",
         "number",
         "Body mass index recorded by Epic in the base visits file.",
-        constraints={"minimum": 0.01, "maximum": 21164.05},
         **{"x-unit": "kg/m2"},
     ),
     field(
@@ -319,24 +234,10 @@ def binary_flag(name: str, description: str, *, required: bool = True) -> dict[s
     )
 
 
-PATIENT_ROW_COUNT = 250588
-
 PATIENT_AUGMENTED_FIELDS = copy.deepcopy(PATIENT_FIELDS)
 PATIENT_AUGMENTED_FIELDS[2]["constraints"]["enum"] = INFORMATIVE_ETHNICITY_VALUES
 for race_field in PATIENT_AUGMENTED_FIELDS[3:]:
     race_field["constraints"]["enum"] = INFORMATIVE_RACE_VALUES
-
-
-def informative_only(entry: dict[str, Any], row_count: int) -> None:
-    """Non-informative responses are cleaned to null in the augmented file, so
-    the retained categories are the enum members and everything else is missing."""
-    kept = [row for row in entry["x-categories"] if row["value"] in entry["constraints"]["enum"]]
-    entry["x-categories"] = kept
-    entry["x-missingCount"] = row_count - sum(row["count"] for row in kept)
-
-
-for demographic in PATIENT_AUGMENTED_FIELDS[2:]:
-    informative_only(demographic, PATIENT_ROW_COUNT)
 PATIENT_AUGMENTED_FIELDS.extend(
     [
         binary_flag("healthy_flag", "1 only when all diagnosis and adverse-growth history flags are 0."),
@@ -346,12 +247,12 @@ PATIENT_AUGMENTED_FIELDS.extend(
         binary_flag("ever_wasting_flag", "1 when any visit meets the wasting threshold."),
         binary_flag("ever_underweight_flag", "1 when any visit has bmi_percentile below 5."),
         binary_flag("ever_obesity_flag", "1 when any visit has bmi_percentile at least 95."),
-        field("visits_count", "integer", "Total recorded visits; 0 for a patient with no visits.", required=True, constraints={"minimum": 0}),
+        field("visits_count", "integer", "Total recorded visits.", required=True, constraints={"minimum": 0}),
         field("visits_count_pre_dx", "integer", "Visits before the first growth-related diagnosis, or all visits when none exists.", required=True, constraints={"minimum": 0}),
         age_field("min_visit_age_days", "the first recorded visit"),
         age_field("max_visit_age_days", "the last recorded visit"),
-        field("visits_span_days", "integer", "Days between first and last visit; null with no visits.", constraints={"minimum": 0}, **{"x-unit": "day"}),
-        field("dx_age_years", "number", "Minimum age in years at any growth-related diagnosis.", **{"x-unit": "year"}),
+        field("visits_span_days", "integer", "Days between first and last visit; 0 for a patient with a single visit.", required=True, constraints={"minimum": 0}, **{"x-unit": "day"}),
+        field("dx_age_years", "number", "Minimum age in years at any growth-related diagnosis; negative when the source diagnosis date precedes birth.", **{"x-unit": "year"}),
     ]
 )
 for code, diagnosis_description in GROWTH_DIAGNOSES:
@@ -506,67 +407,22 @@ if set(VISIT_AUGMENTED_BY_NAME) != set(VISIT_AUGMENTED_ORDER):
 VISIT_AUGMENTED_FIELDS = [VISIT_AUGMENTED_BY_NAME[name] for name in VISIT_AUGMENTED_ORDER]
 
 
-RESULT_FLAG_COUNTS = {
-    "Abnormal": 704327,
-    "High": 513650,
-    "Low": 361300,
-    "Sensitive": 62794,
-    "Resistant": 10278,
-    "High Panic": 9744,
-    "(NONE)": 5881,
-    "Normal": 4273,
-    "Panic": 3056,
-    "Intermediate": 1704,
-    "Low Panic": 1406,
-    "Critical": 373,
-    "Negative": 188,
-    "High Off-Scale": 134,
-    "Susceptible-Dose Dependent": 123,
-    "Abnormal High": 99,
-    "Abnormal Low": 92,
-    "Invalid High": 84,
-    "Sig Change Up": 68,
-    "Positive": 35,
-    "Critical High": 23,
-    "Low Off-Scale": 17,
-    "Critical Low": 13,
-    "Class 0: Absent Allergen Specific IgE": 7,
-    "Invalid Low": 4,
-    "Delta Abnormal High": 4,
-    "Class 2: Moderate Level Allergen Specific IgE": 3,
-    "In Process": 3,
-    "Better": 3,
-    "Delta Critical High": 3,
-    "Sig Change Down": 2,
-    "Class 3: High Level Allergen Specific IgE": 2,
-    "Moderately Sensitive": 1,
-    "Delta Abnormal Low": 1,
-    "Worse": 1,
-}
-
-
 LAB_FIELDS = [
     identifier("patient_id", "patient"),
-    field("visit_id", "string", "Associated visit identifier; blank for 805 rows and absent from visits.csv for some otherwise non-null values.", **{"x-deidentified": True, "x-missingCount": 805}),
+    field("visit_id", "string", "Associated visit identifier; nullable, and absent from visits.csv for some otherwise non-null values.", **{"x-deidentified": True}),
     identifier("lab_order_id", "lab order"),
-    field("result_line_num", "integer", "Sequential result-component line within a lab order.", constraints={"minimum": 1, "maximum": 149}, **{"x-missingCount": 2283186}),
-    age_field("lab_order_date_age_in_days", "lab order", required=True, constraints={"minimum": -687, "maximum": 6570}),
-    field("lab_procedure_name", "string", "Epic lab procedure name.", **{"x-uniqueValueCount": 3742}),
+    field("result_line_num", "integer", "Sequential result-component line within a lab order.", constraints={"minimum": 1}),
+    age_field("lab_order_date_age_in_days", "lab order", required=True),
+    field("lab_procedure_name", "string", "Epic lab procedure name."),
     field("lab_procedure_description", "string", "Additional procedure description, especially for external labs."),
-    age_field("lab_result_date_age_in_days", "lab result", constraints={"minimum": -44378, "maximum": 6570}, **{"x-missingCount": 2283186}),
-    field("result_component_name", "string", "Name of the result component; null when no result is available.", **{"x-uniqueValueCount": 12902, "x-missingCount": 2283186}),
-    field("result_loinc_code", "string", "LOINC code for the result component when available.", **{"x-codeSystem": "LOINC", "x-uniqueValueCount": 2194, "x-missingCount": 15880579}),
-    field("result_value", "string", "Result represented as text; it may be numeric, categorical, or narrative.", **{"x-missingCount": 2494261}),
+    age_field("lab_result_date_age_in_days", "lab result"),
+    field("result_component_name", "string", "Name of the result component; null when no result is available."),
+    field("result_loinc_code", "string", "LOINC code for the result component when available.", **{"x-codeSystem": "LOINC"}),
+    field("result_value", "string", "Result represented as text; it may be numeric, categorical, or narrative."),
     field(
         "result_flag",
         "string",
         "HL7 result interpretation flag; blank when unassigned. Both (NONE) and Normal occur, so a flag is not abnormal merely because it differs from (NONE).",
-        constraints={"enum": list(RESULT_FLAG_COUNTS)},
-        **{
-            "x-uniqueValueCount": len(RESULT_FLAG_COUNTS),
-            "x-categories": categories(RESULT_FLAG_COUNTS),
-            "x-missingCount": 15550985,
-        },
     ),
 ]
 
@@ -575,45 +431,40 @@ MEDICATION_FIELDS = [
     identifier("patient_id", "patient"),
     identifier("visit_id", "visit"),
     identifier("med_record_id", "medication record"),
-    age_field("med_order_date_age_in_days", "medication order", required=True, constraints={"minimum": -45, "maximum": 6605}),
-    age_field("med_start_date_age_in_days", "medication start", constraints={"minimum": -40149, "maximum": 36581}, **{"x-missingCount": 283066}),
-    age_field("med_end_date_age_in_days", "medication end", constraints={"minimum": 0, "maximum": 31105}, **{"x-missingCount": 450340}),
+    age_field("med_order_date_age_in_days", "medication order", required=True),
+    age_field("med_start_date_age_in_days", "medication start"),
+    age_field("med_end_date_age_in_days", "medication end"),
     field(
         "med_record_type",
         "string",
         "Internal for a PPOC-provider order; External for a historical or outside record.",
         required=True,
         constraints={"enum": ["Internal", "External"]},
-        **{"x-categories": categories({"Internal": 3250374, "External": 572675})},
     ),
-        field("med_simple_generic_name", "string", "Simplified generic medication name.", required=True, **{"x-uniqueValueCount": 1073}),
+        field("med_simple_generic_name", "string", "Simplified generic medication name.", required=True),
 ]
 
 
 PROBLEM_FIELDS = [
     identifier("patient_id", "patient"),
     identifier("problem_list_id", "problem-list entry"),
-    age_field("noted_date_age_in_days", "first problem notation", constraints={"minimum": -44891, "maximum": 6601}, **{"x-missingCount": 7284}),
-    age_field("resolved_date_age_in_days", "problem resolution", constraints={"minimum": -84, "maximum": 6605}),
-    field("pl_diag", "string", "Problem-list diagnosis code.", required=True, **{"x-codeSystem": "ICD-10-CM", "x-uniqueValueCount": 4739}),
+    age_field("noted_date_age_in_days", "first problem notation"),
+    age_field("resolved_date_age_in_days", "problem resolution"),
+    field("pl_diag", "string", "Problem-list diagnosis code.", required=True, **{"x-codeSystem": "ICD-10-CM"}),
 ]
 
 
 REFERRAL_FIELDS = [
     identifier("patient_id", "patient"),
-    field("visit_id", "string", "Associated visit identifier; nullable when the referral is not linked to a visit.", **{"x-deidentified": True, "x-missingCount": 24830}),
+    field("visit_id", "string", "Associated visit identifier; nullable when the referral is not linked to a visit.", **{"x-deidentified": True}),
     identifier("referral_id", "referral"),
-    age_field("referral_date_age_in_days", "referral", required=True, constraints={"minimum": 1, "maximum": 6567}),
-    field("requested_specialty", "string", "Requested referral specialty; nullable.", **{"x-uniqueValueCount": 119, "x-missingCount": 27452}),
+    age_field("referral_date_age_in_days", "referral", required=True),
+    field("requested_specialty", "string", "Requested referral specialty; nullable."),
     field(
         "referral_number_of_visits",
         "integer",
         "Authorized or associated visit count; nullable.",
-        constraints={"minimum": 1, "maximum": 10},
-        **{
-            "x-categories": categories({1: 108736, 6: 213345, 3: 608, 5: 476, 10: 60, 4: 1}),
-            "x-missingCount": 26601,
-        },
+        constraints={"minimum": 1},
     ),
 ]
 
@@ -629,7 +480,6 @@ def resource(
     name: str,
     description: str,
     fields: list[dict[str, Any]],
-    row_count: int,
     *,
     path: str | None = None,
     primary_key: str | None = None,
@@ -655,13 +505,96 @@ def resource(
         "encoding": encoding,
         "dialect": {"header": True, "delimiter": ",", "quoteChar": '"', "doubleQuote": True},
         "schema": schema,
-        "x-rowCount": row_count,
+        "x-rowCount": STATS["resources"][name]["rowCount"],
         "x-fieldCount": len(fields),
     }
     if derived_from:
         result["x-derivedFrom"] = derived_from
     result.update(metadata)
+    apply_statistics(result)
     return result
+
+
+def numeric(value: float, field_type: str) -> Any:
+    if field_type == "integer" and float(value).is_integer():
+        return int(value)
+    # Several augmented columns are stored at float32 precision, so trim the
+    # binary-representation tail rather than publishing it as significance.
+    return round(value, 6)
+
+
+def apply_statistics(item: dict[str, Any]) -> None:
+    """Attach the profiled numbers to a resource and its fields."""
+    profile = STATS["resources"][item["name"]]
+    row_count = profile["rowCount"]
+
+    for entry in item["schema"]["fields"]:
+        observed = profile["fields"].get(entry["name"])
+        if observed is None:
+            raise ValueError(f"{item['name']}.{entry['name']} is absent from {STATS_PATH.name}")
+        if observed["missing"]:
+            entry["x-missingCount"] = observed["missing"]
+        if observed.get("bad"):
+            entry["x-unparseableCount"] = observed["bad"]
+        if "min" in observed and observed["min"] is not None:
+            entry["x-observedRange"] = {
+                "minimum": numeric(observed["min"], entry["type"]),
+                "maximum": numeric(observed["max"], entry["type"]),
+            }
+        values = observed.get("categories")
+        if values:
+            typed = [[numeric(value, entry["type"]) if entry["type"] != "string" else value, count] for value, count in values]
+            entry["x-categories"] = [{"value": value, "count": count} for value, count in typed]
+            declared = entry.get("constraints", {}).get("enum")
+            if declared is not None:
+                unobserved = [value for value in declared if value not in {row["value"] for row in entry["x-categories"]}]
+                if unobserved:
+                    entry["x-unobservedEnumValues"] = unobserved
+            if (item["name"], entry["name"]) in OBSERVED_ENUMS:
+                enum_values = [value for value, _ in typed]
+                entry.setdefault("constraints", {})["enum"] = enum_values
+                entry["constraints"] = dict(sorted(entry["constraints"].items(), key=constraint_order))
+        elif observed.get("topValues"):
+            entry["x-topValues"] = [
+                {"value": value, "count": count} for value, count in observed["topValues"]
+            ]
+            entry["x-topValuesTruncated"] = True
+        if entry["type"] == "string" and not entry.get("x-deidentified") and observed.get("distinct"):
+            entry["x-uniqueValueCount"] = observed["distinct"]
+
+    for key, target in (
+        ("patient_id", "x-uniquePatientCount"),
+        ("visit_id", "x-uniqueVisitIdCount"),
+        ("lab_order_id", "x-uniqueLabOrderCount"),
+    ):
+        value = profile.get("uniqueCounts", {}).get(key)
+        if value is not None:
+            item[target] = value
+    if "uniqueDiagnosisCodeCount" in profile:
+        item["x-uniqueDiagnosisCodeCount"] = profile["uniqueDiagnosisCodeCount"]
+    if "visitLink" in profile:
+        link = {"fields": "visit_id", "reference": {"resource": "visits", "fields": "visit_id"}}
+        link["orphanRows"] = profile["visitLink"]["orphanRows"]
+        nulls = profile["fields"]["visit_id"]["missing"]
+        if nulls:
+            link["nullRows"] = nulls
+        item["x-logicalForeignKeys"] = [link]
+    if "bmiCategories" in profile:
+        bmi_category = next(e for e in item["schema"]["fields"] if e["name"] == "bmi_category")
+        bmi_category["x-observedPercentileRange"] = [
+            {
+                "value": row["value"],
+                "minimum": row["minPercentile"],
+                "maximum": row["maxPercentile"],
+            }
+            for row in profile["bmiCategories"]
+        ]
+
+
+def constraint_order(pair: tuple[str, Any]) -> tuple[int, str]:
+    order = ["enum", "minimum", "maximum", "required"]
+    key = pair[0]
+    return (order.index(key) if key in order else len(order), key)
 
 
 VISITS_AUGMENTED_PATH = "visits_augmented-20251209150512.csv"
@@ -687,40 +620,28 @@ RESOURCES = [
         "patients",
         "One demographic record per de-identified pediatric patient.",
         PATIENT_FIELDS,
-        250588,
         primary_key="patient_id",
-        **{"x-uniquePatientCount": 250588},
     ),
     resource(
         "patients_augmented",
         "Patient demographics plus longitudinal diagnosis and growth summaries.",
         PATIENT_AUGMENTED_FIELDS,
-        250588,
         primary_key="patient_id",
         foreign_keys=[foreign_key("patient_id", "patients", "patient_id")],
         derived_from=["patients", "visits_augmented", "problem_list"],
-        **{
-            "x-uniquePatientCount": 250588,
-            "x-generatedBy": PATIENTS_AUGMENTED_GENERATOR,
-        },
+        **{"x-generatedBy": PATIENTS_AUGMENTED_GENERATOR},
     ),
     resource(
         "visits",
         "One de-identified pediatric encounter with anthropometrics and up to 33 diagnoses per row.",
         VISIT_FIELDS,
-        6494473,
         primary_key="visit_id",
         foreign_keys=[foreign_key("patient_id", "patients", "patient_id")],
-        **{
-            "x-uniquePatientCount": 250588,
-            "x-uniqueDiagnosisCodeCount": 8031,
-        },
     ),
     resource(
         "visits_augmented",
         "Visit records augmented with demographics, standardized growth metrics, velocities, and clinical flags.",
         VISIT_AUGMENTED_FIELDS,
-        6494473,
         path=VISITS_AUGMENTED_PATH,
         primary_key="visit_id",
         foreign_keys=[
@@ -728,67 +649,43 @@ RESOURCES = [
             foreign_key("visit_id", "visits", "visit_id"),
         ],
         derived_from=["visits", "patients"],
-        **{
-            "x-uniquePatientCount": 250588,
-            "x-uniqueDiagnosisCodeCount": 8031,
-            "x-generatedBy": VISITS_AUGMENTED_GENERATOR,
-        },
+        **{"x-generatedBy": VISITS_AUGMENTED_GENERATOR},
     ),
     resource(
         "labs",
         "One lab result component per row; orders without results remain represented.",
         LAB_FIELDS,
-        17230681,
         foreign_keys=[foreign_key("patient_id", "patients", "patient_id")],
         encoding="iso-8859-1",
         **{
-            "x-uniquePatientCount": 247271,
-            "x-uniqueVisitIdCount": 2859084,
-            "x-uniqueLabOrderCount": 6578838,
-            "x-logicalForeignKeys": [{"fields": "visit_id", "reference": {"resource": "visits", "fields": "visit_id"}, "orphanRows": 5201657, "nullRows": 805}],
-            "x-keyDescription": "No row-level primary key: lab_order_id repeats and result_line_num is missing in 2,283,186 rows.",
+            "x-keyDescription": "No row-level primary key: lab_order_id repeats across result components and result_line_num is blank in some rows.",
+            "x-encodingNote": "Mixed encoding: predominantly ASCII with a few cp1252 punctuation bytes and a few UTF-8 sequences. iso-8859-1 decodes every byte without error.",
         },
     ),
     resource(
         "medications",
         "One pediatric prescription, administration, or historical medication record per row.",
         MEDICATION_FIELDS,
-        3823049,
         primary_key="med_record_id",
         foreign_keys=[
             foreign_key("patient_id", "patients", "patient_id"),
         ],
-        **{
-            "x-uniquePatientCount": 236323,
-            "x-uniqueVisitIdCount": 2757560,
-            "x-logicalForeignKeys": [{"fields": "visit_id", "reference": {"resource": "visits", "fields": "visit_id"}, "orphanRows": 1592437}],
-        },
     ),
     resource(
         "problem_list",
         "One patient problem-list diagnosis entry per row.",
         PROBLEM_FIELDS,
-        1709584,
         primary_key="problem_list_id",
         foreign_keys=[foreign_key("patient_id", "patients", "patient_id")],
-        **{
-            "x-uniquePatientCount": 238823,
-        },
     ),
     resource(
         "referrals",
         "One specialty referral associated with a pediatric visit per row.",
         REFERRAL_FIELDS,
-        349827,
         primary_key="referral_id",
         foreign_keys=[
             foreign_key("patient_id", "patients", "patient_id"),
         ],
-        **{
-            "x-uniquePatientCount": 138071,
-            "x-uniqueVisitIdCount": 298615,
-            "x-logicalForeignKeys": [{"fields": "visit_id", "reference": {"resource": "visits", "fields": "visit_id"}, "orphanRows": 98623, "nullRows": 24830}],
-        },
     ),
 ]
 
@@ -802,7 +699,12 @@ PACKAGE = {
     "version": "1.0.0",
     "created": "2026-08-18T00:00:00Z",
     "keywords": ["pediatrics", "electronic-health-records", "growth", "de-identified"],
-    "x-statisticsSource": "Row, missing-value, unique-value, and category counts are transcribed from the docs/ snapshot summaries; they are not recomputed from the CSVs by schema/build.py.",
+    "x-statisticsSource": {
+        "description": "Row, missing-value, unique-value, range, and category statistics are computed from the CSV snapshot by schema/profile.py and stored in schema/stats.json.",
+        "snapshot": STATS["snapshot"],
+        "profiledWith": STATS["profiledWith"],
+        "categoryLimit": STATS["categoryLimit"],
+    },
     "licenses": [
         {
             "name": "other-closed",
@@ -855,11 +757,14 @@ def validate_statistics(item: dict[str, Any]) -> None:
             if unknown:
                 raise ValueError(f"categories outside the enum on {label}: {unknown}")
         else:
+            bounds = entry.get("x-observedRange", {})
+            low = bounds.get("minimum", minimum)
+            high = bounds.get("maximum", maximum)
             for row in observed:
-                if minimum is not None and row["value"] < minimum:
-                    raise ValueError(f"category below the declared minimum on {label}")
-                if maximum is not None and row["value"] > maximum:
-                    raise ValueError(f"category above the declared maximum on {label}")
+                if low is not None and row["value"] < low:
+                    raise ValueError(f"category below the observed minimum on {label}")
+                if high is not None and row["value"] > high:
+                    raise ValueError(f"category above the observed maximum on {label}")
         unique_count = entry.get("x-uniqueValueCount")
         if unique_count is not None and unique_count != len(observed):
             raise ValueError(f"unique value count disagrees with categories on {label}")

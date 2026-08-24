@@ -11,6 +11,8 @@ This repository describes eight de-identified pediatric EHR CSV resources with a
 - [`docs/`](docs/): resource-specific field descriptions.
 - [`schema/README.md`](schema/README.md): Python loading examples.
 - [`schema/build.py`](schema/build.py): regenerate and validate `datapackage.json`.
+- [`schema/profile.py`](schema/profile.py): recompute the snapshot statistics from the CSVs.
+- [`schema/stats.json`](schema/stats.json): the statistics `build.py` reads, so the descriptor rebuilds without the data.
 
 ## Resources
 
@@ -43,6 +45,15 @@ From the repository root:
 ```sh
 python3 schema/build.py
 python3 schema/build.py --check
+```
+
+Every count, range, and value distribution in the descriptor is measured from the
+CSV snapshot rather than maintained by hand. After the data changes, re-measure
+with the DuckDB CLI on `PATH` and rebuild:
+
+```sh
+python3 schema/profile.py --data-root /path/to/csvs --snapshot 2026-08-24
+python3 schema/build.py
 ```
 
 The Python usage example includes schema-driven pandas loading, declared CSV encodings, nullable types, column selection, and key inspection.
