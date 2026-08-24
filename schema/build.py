@@ -546,8 +546,13 @@ def apply_statistics(item: dict[str, Any]) -> None:
             typed = [[numeric(value, entry["type"]) if entry["type"] != "string" else value, count] for value, count in values]
             entry["x-categories"] = [{"value": value, "count": count} for value, count in typed]
             declared = entry.get("constraints", {}).get("enum")
-            if declared is not None:
-                unobserved = [value for value in declared if value not in {row["value"] for row in entry["x-categories"]}]
+            populated = row_count - observed["missing"]
+            # An absent enum member is only worth reporting when the column holds
+            # enough rows for the absence to mean something; in a column with a
+            # few dozen values most of the enum is trivially unused.
+            if declared is not None and populated >= 100 * len(declared):
+                seen = {row["value"] for row in entry["x-categories"]}
+                unobserved = [value for value in declared if value not in seen]
                 if unobserved:
                     entry["x-unobservedEnumValues"] = unobserved
             if (item["name"], entry["name"]) in OBSERVED_ENUMS:

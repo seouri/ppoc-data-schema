@@ -336,10 +336,6 @@
                 "count": 7
               }
             ],
-            "x-unobservedEnumValues": [
-              "Patient does not know",
-              "Unable to collect"
-            ],
             "x-uniqueValueCount": 9
           },
           {
@@ -384,14 +380,6 @@
                 "count": 1
               }
             ],
-            "x-unobservedEnumValues": [
-              "American Indian or Alaska Native",
-              "Black or African American",
-              "Middle Eastern or Northern African",
-              "Patient does not know",
-              "Unable to collect",
-              "Unknown"
-            ],
             "x-uniqueValueCount": 5
           },
           {
@@ -427,16 +415,6 @@
                 "value": "Native Hawaiian or Other Pacific Islander",
                 "count": 1
               }
-            ],
-            "x-unobservedEnumValues": [
-              "American Indian or Alaska Native",
-              "Asian",
-              "Black or African American",
-              "Choose not to answer",
-              "Middle Eastern or Northern African",
-              "Patient does not know",
-              "Unable to collect",
-              "Unknown"
             ],
             "x-uniqueValueCount": 3
           },
@@ -474,16 +452,6 @@
                 "count": 1
               }
             ],
-            "x-unobservedEnumValues": [
-              "American Indian or Alaska Native",
-              "Asian",
-              "Black or African American",
-              "Choose not to answer",
-              "Middle Eastern or Northern African",
-              "Native Hawaiian or Other Pacific Islander",
-              "Patient does not know",
-              "Unable to collect"
-            ],
             "x-uniqueValueCount": 3
           },
           {
@@ -516,17 +484,6 @@
                 "count": 1
               }
             ],
-            "x-unobservedEnumValues": [
-              "American Indian or Alaska Native",
-              "Another Race",
-              "Asian",
-              "Black or African American",
-              "Choose not to answer",
-              "Middle Eastern or Northern African",
-              "Native Hawaiian or Other Pacific Islander",
-              "Patient does not know",
-              "Unable to collect"
-            ],
             "x-uniqueValueCount": 2
           },
           {
@@ -554,18 +511,6 @@
                 "value": "White",
                 "count": 1
               }
-            ],
-            "x-unobservedEnumValues": [
-              "American Indian or Alaska Native",
-              "Another Race",
-              "Asian",
-              "Black or African American",
-              "Choose not to answer",
-              "Middle Eastern or Northern African",
-              "Native Hawaiian or Other Pacific Islander",
-              "Patient does not know",
-              "Unable to collect",
-              "Unknown"
             ],
             "x-uniqueValueCount": 1
           }
@@ -835,11 +780,6 @@
                 "count": 2
               }
             ],
-            "x-unobservedEnumValues": [
-              "American Indian or Alaska Native",
-              "Black or African American",
-              "Middle Eastern or Northern African"
-            ],
             "x-uniqueValueCount": 4
           },
           {
@@ -872,12 +812,6 @@
                 "count": 1
               }
             ],
-            "x-unobservedEnumValues": [
-              "American Indian or Alaska Native",
-              "Asian",
-              "Black or African American",
-              "Middle Eastern or Northern African"
-            ],
             "x-uniqueValueCount": 3
           },
           {
@@ -906,13 +840,6 @@
                 "count": 1
               }
             ],
-            "x-unobservedEnumValues": [
-              "American Indian or Alaska Native",
-              "Asian",
-              "Black or African American",
-              "Middle Eastern or Northern African",
-              "Native Hawaiian or Other Pacific Islander"
-            ],
             "x-uniqueValueCount": 2
           },
           {
@@ -937,14 +864,6 @@
                 "count": 1
               }
             ],
-            "x-unobservedEnumValues": [
-              "American Indian or Alaska Native",
-              "Another Race",
-              "Asian",
-              "Black or African American",
-              "Middle Eastern or Northern African",
-              "Native Hawaiian or Other Pacific Islander"
-            ],
             "x-uniqueValueCount": 1
           },
           {
@@ -968,14 +887,6 @@
                 "value": "White",
                 "count": 1
               }
-            ],
-            "x-unobservedEnumValues": [
-              "American Indian or Alaska Native",
-              "Another Race",
-              "Asian",
-              "Black or African American",
-              "Middle Eastern or Northern African",
-              "Native Hawaiian or Other Pacific Islander"
             ],
             "x-uniqueValueCount": 1
           },
