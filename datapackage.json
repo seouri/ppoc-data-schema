@@ -12,6 +12,7 @@
     "growth",
     "de-identified"
   ],
+  "x-statisticsSource": "Row, missing-value, unique-value, and category counts are transcribed from the docs/ snapshot summaries; they are not recomputed from the CSVs by schema/build.py.",
   "licenses": [
     {
       "name": "other-closed",
@@ -44,6 +45,7 @@
       "path": "patients.csv",
       "title": "Patients",
       "description": "One demographic record per de-identified pediatric patient.",
+      "x-documentation": "docs/patients.md",
       "format": "csv",
       "mediatype": "text/csv",
       "encoding": "utf-8",
@@ -75,7 +77,21 @@
                 "U"
               ],
               "required": true
-            }
+            },
+            "x-categories": [
+              {
+                "value": "F",
+                "count": 122883
+              },
+              {
+                "value": "M",
+                "count": 127699
+              },
+              {
+                "value": "U",
+                "count": 6
+              }
+            ]
           },
           {
             "name": "ethnicity",
@@ -90,7 +106,34 @@
                 "Unable to collect",
                 "Patient does not know"
               ]
-            }
+            },
+            "x-categories": [
+              {
+                "value": "Not Hispanic or Latino",
+                "count": 170594
+              },
+              {
+                "value": "Hispanic or Latino",
+                "count": 28549
+              },
+              {
+                "value": "Choose not to Answer",
+                "count": 24566
+              },
+              {
+                "value": "Unknown",
+                "count": 20834
+              },
+              {
+                "value": "Unable to collect",
+                "count": 450
+              },
+              {
+                "value": "Patient does not know",
+                "count": 131
+              }
+            ],
+            "x-missingCount": 5464
           },
           {
             "name": "race_1",
@@ -110,7 +153,54 @@
                 "Unknown",
                 "White"
               ]
-            }
+            },
+            "x-categories": [
+              {
+                "value": "American Indian or Alaska Native",
+                "count": 625
+              },
+              {
+                "value": "Another Race",
+                "count": 15950
+              },
+              {
+                "value": "Asian",
+                "count": 15661
+              },
+              {
+                "value": "Black or African American",
+                "count": 12162
+              },
+              {
+                "value": "Choose not to answer",
+                "count": 17534
+              },
+              {
+                "value": "Middle Eastern or Northern African",
+                "count": 512
+              },
+              {
+                "value": "Native Hawaiian or Other Pacific Islander",
+                "count": 248
+              },
+              {
+                "value": "Patient does not know",
+                "count": 126
+              },
+              {
+                "value": "Unable to collect",
+                "count": 492
+              },
+              {
+                "value": "Unknown",
+                "count": 23085
+              },
+              {
+                "value": "White",
+                "count": 155375
+              }
+            ],
+            "x-missingCount": 8818
           },
           {
             "name": "race_2",
@@ -130,7 +220,54 @@
                 "Unknown",
                 "White"
               ]
-            }
+            },
+            "x-categories": [
+              {
+                "value": "American Indian or Alaska Native",
+                "count": 71
+              },
+              {
+                "value": "Another Race",
+                "count": 1137
+              },
+              {
+                "value": "Asian",
+                "count": 566
+              },
+              {
+                "value": "Black or African American",
+                "count": 835
+              },
+              {
+                "value": "Choose not to answer",
+                "count": 516
+              },
+              {
+                "value": "Middle Eastern or Northern African",
+                "count": 87
+              },
+              {
+                "value": "Native Hawaiian or Other Pacific Islander",
+                "count": 86
+              },
+              {
+                "value": "Patient does not know",
+                "count": 1
+              },
+              {
+                "value": "Unable to collect",
+                "count": 11
+              },
+              {
+                "value": "Unknown",
+                "count": 1554
+              },
+              {
+                "value": "White",
+                "count": 8327
+              }
+            ],
+            "x-missingCount": 237397
           },
           {
             "name": "race_3",
@@ -150,7 +287,46 @@
                 "Unknown",
                 "White"
               ]
-            }
+            },
+            "x-categories": [
+              {
+                "value": "American Indian or Alaska Native",
+                "count": 15
+              },
+              {
+                "value": "Another Race",
+                "count": 63
+              },
+              {
+                "value": "Asian",
+                "count": 15
+              },
+              {
+                "value": "Black or African American",
+                "count": 31
+              },
+              {
+                "value": "Choose not to answer",
+                "count": 19
+              },
+              {
+                "value": "Middle Eastern or Northern African",
+                "count": 7
+              },
+              {
+                "value": "Native Hawaiian or Other Pacific Islander",
+                "count": 10
+              },
+              {
+                "value": "Unknown",
+                "count": 59
+              },
+              {
+                "value": "White",
+                "count": 402
+              }
+            ],
+            "x-missingCount": 249967
           },
           {
             "name": "race_4",
@@ -170,7 +346,30 @@
                 "Unknown",
                 "White"
               ]
-            }
+            },
+            "x-categories": [
+              {
+                "value": "Another Race",
+                "count": 2
+              },
+              {
+                "value": "Asian",
+                "count": 2
+              },
+              {
+                "value": "Choose not to answer",
+                "count": 1
+              },
+              {
+                "value": "Native Hawaiian or Other Pacific Islander",
+                "count": 6
+              },
+              {
+                "value": "White",
+                "count": 27
+              }
+            ],
+            "x-missingCount": 250550
           },
           {
             "name": "race_5",
@@ -190,7 +389,22 @@
                 "Unknown",
                 "White"
               ]
-            }
+            },
+            "x-categories": [
+              {
+                "value": "Another Race",
+                "count": 2
+              },
+              {
+                "value": "Native Hawaiian or Other Pacific Islander",
+                "count": 1
+              },
+              {
+                "value": "White",
+                "count": 3
+              }
+            ],
+            "x-missingCount": 250582
           },
           {
             "name": "race_6",
@@ -210,7 +424,22 @@
                 "Unknown",
                 "White"
               ]
-            }
+            },
+            "x-categories": [
+              {
+                "value": "Another Race",
+                "count": 1
+              },
+              {
+                "value": "Unknown",
+                "count": 1
+              },
+              {
+                "value": "White",
+                "count": 1
+              }
+            ],
+            "x-missingCount": 250585
           },
           {
             "name": "race_7",
@@ -230,7 +459,18 @@
                 "Unknown",
                 "White"
               ]
-            }
+            },
+            "x-categories": [
+              {
+                "value": "Unknown",
+                "count": 1
+              },
+              {
+                "value": "White",
+                "count": 1
+              }
+            ],
+            "x-missingCount": 250586
           },
           {
             "name": "race_8",
@@ -250,7 +490,14 @@
                 "Unknown",
                 "White"
               ]
-            }
+            },
+            "x-categories": [
+              {
+                "value": "White",
+                "count": 1
+              }
+            ],
+            "x-missingCount": 250587
           }
         ],
         "missingValues": [
@@ -268,6 +515,7 @@
       "path": "patients_augmented.csv",
       "title": "Patients Augmented",
       "description": "Patient demographics plus longitudinal diagnosis and growth summaries.",
+      "x-documentation": "docs/patients_augmented.md",
       "format": "csv",
       "mediatype": "text/csv",
       "encoding": "utf-8",
@@ -299,7 +547,21 @@
                 "U"
               ],
               "required": true
-            }
+            },
+            "x-categories": [
+              {
+                "value": "F",
+                "count": 122883
+              },
+              {
+                "value": "M",
+                "count": 127699
+              },
+              {
+                "value": "U",
+                "count": 6
+              }
+            ]
           },
           {
             "name": "ethnicity",
@@ -310,7 +572,18 @@
                 "Not Hispanic or Latino",
                 "Hispanic or Latino"
               ]
-            }
+            },
+            "x-categories": [
+              {
+                "value": "Not Hispanic or Latino",
+                "count": 170594
+              },
+              {
+                "value": "Hispanic or Latino",
+                "count": 28549
+              }
+            ],
+            "x-missingCount": 51445
           },
           {
             "name": "race_1",
@@ -326,7 +599,38 @@
                 "Native Hawaiian or Other Pacific Islander",
                 "White"
               ]
-            }
+            },
+            "x-categories": [
+              {
+                "value": "American Indian or Alaska Native",
+                "count": 625
+              },
+              {
+                "value": "Another Race",
+                "count": 15950
+              },
+              {
+                "value": "Asian",
+                "count": 15661
+              },
+              {
+                "value": "Black or African American",
+                "count": 12162
+              },
+              {
+                "value": "Middle Eastern or Northern African",
+                "count": 512
+              },
+              {
+                "value": "Native Hawaiian or Other Pacific Islander",
+                "count": 248
+              },
+              {
+                "value": "White",
+                "count": 155375
+              }
+            ],
+            "x-missingCount": 50055
           },
           {
             "name": "race_2",
@@ -342,7 +646,38 @@
                 "Native Hawaiian or Other Pacific Islander",
                 "White"
               ]
-            }
+            },
+            "x-categories": [
+              {
+                "value": "American Indian or Alaska Native",
+                "count": 71
+              },
+              {
+                "value": "Another Race",
+                "count": 1137
+              },
+              {
+                "value": "Asian",
+                "count": 566
+              },
+              {
+                "value": "Black or African American",
+                "count": 835
+              },
+              {
+                "value": "Middle Eastern or Northern African",
+                "count": 87
+              },
+              {
+                "value": "Native Hawaiian or Other Pacific Islander",
+                "count": 86
+              },
+              {
+                "value": "White",
+                "count": 8327
+              }
+            ],
+            "x-missingCount": 239479
           },
           {
             "name": "race_3",
@@ -358,7 +693,38 @@
                 "Native Hawaiian or Other Pacific Islander",
                 "White"
               ]
-            }
+            },
+            "x-categories": [
+              {
+                "value": "American Indian or Alaska Native",
+                "count": 15
+              },
+              {
+                "value": "Another Race",
+                "count": 63
+              },
+              {
+                "value": "Asian",
+                "count": 15
+              },
+              {
+                "value": "Black or African American",
+                "count": 31
+              },
+              {
+                "value": "Middle Eastern or Northern African",
+                "count": 7
+              },
+              {
+                "value": "Native Hawaiian or Other Pacific Islander",
+                "count": 10
+              },
+              {
+                "value": "White",
+                "count": 402
+              }
+            ],
+            "x-missingCount": 250045
           },
           {
             "name": "race_4",
@@ -374,7 +740,26 @@
                 "Native Hawaiian or Other Pacific Islander",
                 "White"
               ]
-            }
+            },
+            "x-categories": [
+              {
+                "value": "Another Race",
+                "count": 2
+              },
+              {
+                "value": "Asian",
+                "count": 2
+              },
+              {
+                "value": "Native Hawaiian or Other Pacific Islander",
+                "count": 6
+              },
+              {
+                "value": "White",
+                "count": 27
+              }
+            ],
+            "x-missingCount": 250551
           },
           {
             "name": "race_5",
@@ -390,7 +775,22 @@
                 "Native Hawaiian or Other Pacific Islander",
                 "White"
               ]
-            }
+            },
+            "x-categories": [
+              {
+                "value": "Another Race",
+                "count": 2
+              },
+              {
+                "value": "Native Hawaiian or Other Pacific Islander",
+                "count": 1
+              },
+              {
+                "value": "White",
+                "count": 3
+              }
+            ],
+            "x-missingCount": 250582
           },
           {
             "name": "race_6",
@@ -406,7 +806,18 @@
                 "Native Hawaiian or Other Pacific Islander",
                 "White"
               ]
-            }
+            },
+            "x-categories": [
+              {
+                "value": "Another Race",
+                "count": 1
+              },
+              {
+                "value": "White",
+                "count": 1
+              }
+            ],
+            "x-missingCount": 250586
           },
           {
             "name": "race_7",
@@ -422,7 +833,14 @@
                 "Native Hawaiian or Other Pacific Islander",
                 "White"
               ]
-            }
+            },
+            "x-categories": [
+              {
+                "value": "White",
+                "count": 1
+              }
+            ],
+            "x-missingCount": 250587
           },
           {
             "name": "race_8",
@@ -438,7 +856,14 @@
                 "Native Hawaiian or Other Pacific Islander",
                 "White"
               ]
-            }
+            },
+            "x-categories": [
+              {
+                "value": "White",
+                "count": 1
+              }
+            ],
+            "x-missingCount": 250587
           },
           {
             "name": "healthy_flag",
@@ -1042,7 +1467,13 @@
         "patients",
         "visits_augmented",
         "problem_list"
-      ]
+      ],
+      "x-uniquePatientCount": 250588,
+      "x-generatedBy": {
+        "script": "scripts/augment.py",
+        "function": "augment_patients",
+        "command": "python scripts/augment.py input_dir [--output_dir output] [--output_format {csv,parquet}]"
+      }
     },
     {
       "profile": "tabular-data-resource",
@@ -1050,6 +1481,7 @@
       "path": "visits.csv",
       "title": "Visits",
       "description": "One de-identified pediatric encounter with anthropometrics and up to 33 diagnoses per row.",
+      "x-documentation": "docs/visits.md",
       "format": "csv",
       "mediatype": "text/csv",
       "encoding": "utf-8",
@@ -1084,6 +1516,8 @@
             "type": "integer",
             "description": "Patient age in days at the visit, replacing the absolute date for de-identification.",
             "constraints": {
+              "minimum": 1,
+              "maximum": 6571,
               "required": true
             },
             "x-unit": "day",
@@ -1092,8 +1526,240 @@
           {
             "name": "encounter_type",
             "type": "string",
-            "description": "Encounter classification; 44 values occur in the data.",
-            "x-uniqueValueCount": 44
+            "description": "Encounter classification; 45 values occur in the data.",
+            "constraints": {
+              "enum": [
+                "Abstract",
+                "Clinical Support",
+                "Consult",
+                "Conversion Encounter",
+                "Documentation",
+                "ED",
+                "Episode Changes",
+                "Erroneous Encounter",
+                "Erroneous Telephone Encounter",
+                "Evaluation",
+                "External Contact",
+                "Flu",
+                "Follow-Up",
+                "History",
+                "Hospital",
+                "Immunization",
+                "Lab",
+                "Lab Requisition",
+                "Lactation Consult",
+                "Lactation Encounter",
+                "Letter (Out)",
+                "Medication Management",
+                "New Patient",
+                "Newborn",
+                "Nurse Only",
+                "Nutrition",
+                "Office Visit",
+                "Ophth Exam",
+                "Orders Only",
+                "OurPractice Advisory",
+                "Patient Care Review",
+                "Patient Message",
+                "Pre-op/Pre-procedure Orders",
+                "Procedure visit",
+                "Refill",
+                "Routine Prenatal",
+                "Scanned Document",
+                "Sick",
+                "Telemedicine",
+                "Telephone",
+                "Transcribe Orders",
+                "Treatment",
+                "Walk-In",
+                "Weight Check",
+                "Well Visit (Conv.)"
+              ],
+              "required": true
+            },
+            "x-uniqueValueCount": 45,
+            "x-categories": [
+              {
+                "value": "Abstract",
+                "count": 3672
+              },
+              {
+                "value": "Clinical Support",
+                "count": 15347
+              },
+              {
+                "value": "Consult",
+                "count": 32355
+              },
+              {
+                "value": "Conversion Encounter",
+                "count": 32007
+              },
+              {
+                "value": "Documentation",
+                "count": 13107
+              },
+              {
+                "value": "ED",
+                "count": 1
+              },
+              {
+                "value": "Episode Changes",
+                "count": 2
+              },
+              {
+                "value": "Erroneous Encounter",
+                "count": 555
+              },
+              {
+                "value": "Erroneous Telephone Encounter",
+                "count": 2
+              },
+              {
+                "value": "Evaluation",
+                "count": 143
+              },
+              {
+                "value": "External Contact",
+                "count": 211
+              },
+              {
+                "value": "Flu",
+                "count": 2104
+              },
+              {
+                "value": "Follow-Up",
+                "count": 92370
+              },
+              {
+                "value": "History",
+                "count": 11
+              },
+              {
+                "value": "Hospital",
+                "count": 5
+              },
+              {
+                "value": "Immunization",
+                "count": 11774
+              },
+              {
+                "value": "Lab",
+                "count": 1351
+              },
+              {
+                "value": "Lab Requisition",
+                "count": 63
+              },
+              {
+                "value": "Lactation Consult",
+                "count": 1384
+              },
+              {
+                "value": "Lactation Encounter",
+                "count": 1337
+              },
+              {
+                "value": "Letter (Out)",
+                "count": 18
+              },
+              {
+                "value": "Medication Management",
+                "count": 4345
+              },
+              {
+                "value": "New Patient",
+                "count": 11410
+              },
+              {
+                "value": "Newborn",
+                "count": 31142
+              },
+              {
+                "value": "Nurse Only",
+                "count": 3786
+              },
+              {
+                "value": "Nutrition",
+                "count": 5406
+              },
+              {
+                "value": "Office Visit",
+                "count": 4725643
+              },
+              {
+                "value": "Ophth Exam",
+                "count": 11
+              },
+              {
+                "value": "Orders Only",
+                "count": 273
+              },
+              {
+                "value": "OurPractice Advisory",
+                "count": 1
+              },
+              {
+                "value": "Patient Care Review",
+                "count": 3
+              },
+              {
+                "value": "Patient Message",
+                "count": 209
+              },
+              {
+                "value": "Pre-op/Pre-procedure Orders",
+                "count": 575
+              },
+              {
+                "value": "Procedure visit",
+                "count": 678
+              },
+              {
+                "value": "Refill",
+                "count": 12
+              },
+              {
+                "value": "Routine Prenatal",
+                "count": 4
+              },
+              {
+                "value": "Scanned Document",
+                "count": 23
+              },
+              {
+                "value": "Sick",
+                "count": 580991
+              },
+              {
+                "value": "Telemedicine",
+                "count": 25658
+              },
+              {
+                "value": "Telephone",
+                "count": 22053
+              },
+              {
+                "value": "Transcribe Orders",
+                "count": 4
+              },
+              {
+                "value": "Treatment",
+                "count": 1
+              },
+              {
+                "value": "Walk-In",
+                "count": 79679
+              },
+              {
+                "value": "Weight Check",
+                "count": 16295
+              },
+              {
+                "value": "Well Visit (Conv.)",
+                "count": 778452
+              }
+            ]
           },
           {
             "name": "orig_enc_source_Epic_yn",
@@ -1110,24 +1776,40 @@
             "name": "weight_oz",
             "type": "number",
             "description": "Recorded weight in ounces; may contain outliers.",
+            "constraints": {
+              "minimum": 0.2,
+              "maximum": 22648
+            },
             "x-unit": "ounce"
           },
           {
             "name": "height_in",
             "type": "number",
             "description": "Recorded height or length in inches; may contain outliers.",
+            "constraints": {
+              "minimum": 1.18,
+              "maximum": 115
+            },
             "x-unit": "inch"
           },
           {
             "name": "head_circ_cm",
             "type": "number",
             "description": "Recorded head circumference in centimeters; may contain outliers.",
+            "constraints": {
+              "minimum": 0,
+              "maximum": 505.46
+            },
             "x-unit": "centimeter"
           },
           {
             "name": "BMI",
             "type": "number",
             "description": "Body mass index recorded by Epic in the base visits file.",
+            "constraints": {
+              "minimum": 0.01,
+              "maximum": 21164.05
+            },
             "x-unit": "kg/m2"
           },
           {
@@ -1355,7 +2037,8 @@
       },
       "x-rowCount": 6494473,
       "x-fieldCount": 43,
-      "x-uniquePatientCount": 250588
+      "x-uniquePatientCount": 250588,
+      "x-uniqueDiagnosisCodeCount": 8031
     },
     {
       "profile": "tabular-data-resource",
@@ -1363,6 +2046,7 @@
       "path": "visits_augmented-20251209150512.csv",
       "title": "Visits Augmented",
       "description": "Visit records augmented with demographics, standardized growth metrics, velocities, and clinical flags.",
+      "x-documentation": "docs/visits_augmented.md",
       "format": "csv",
       "mediatype": "text/csv",
       "encoding": "utf-8",
@@ -1437,6 +2121,8 @@
             "type": "integer",
             "description": "Patient age in days at the visit, replacing the absolute date for de-identification.",
             "constraints": {
+              "minimum": 1,
+              "maximum": 6571,
               "required": true
             },
             "x-unit": "day",
@@ -1449,7 +2135,8 @@
             "x-unit": "month",
             "x-derivedFrom": [
               "age_in_days"
-            ]
+            ],
+            "x-decimalPlaces": 2
           },
           {
             "name": "age_in_years",
@@ -1458,12 +2145,17 @@
             "x-unit": "year",
             "x-derivedFrom": [
               "age_in_days"
-            ]
+            ],
+            "x-decimalPlaces": 3
           },
           {
             "name": "weight_oz",
             "type": "number",
             "description": "Recorded weight in ounces; may contain outliers.",
+            "constraints": {
+              "minimum": 0.2,
+              "maximum": 22648
+            },
             "x-unit": "ounce"
           },
           {
@@ -1473,7 +2165,9 @@
             "x-unit": "kilogram",
             "x-derivedFrom": [
               "weight_oz"
-            ]
+            ],
+            "x-conversionFactor": "1 kg = 35.274 oz",
+            "x-bivRule": "null when abs(weight_z_score) > 5"
           },
           {
             "name": "weight_outlier_flag",
@@ -1510,7 +2204,9 @@
           {
             "name": "weight_z_score",
             "type": "number",
-            "description": "CDC LMS weight-for-age Z-score."
+            "description": "CDC LMS weight-for-age Z-score.",
+            "x-referenceStandard": "CDC LMS growth reference",
+            "x-bivRule": "null when abs(weight_z_score) > 5"
           },
           {
             "name": "weight_percentile",
@@ -1525,7 +2221,8 @@
           {
             "name": "weight_for_length_z_score",
             "type": "number",
-            "description": "CDC LMS weight-for-length Z-score for heights 45-103.5 cm."
+            "description": "CDC LMS weight-for-length Z-score for heights 45-103.5 cm.",
+            "x-referenceStandard": "CDC LMS growth reference"
           },
           {
             "name": "weight_for_length_percentile",
@@ -1540,7 +2237,8 @@
           {
             "name": "weight_for_stature_z_score",
             "type": "number",
-            "description": "CDC LMS weight-for-stature Z-score for heights 77-121.5 cm."
+            "description": "CDC LMS weight-for-stature Z-score for heights 77-121.5 cm.",
+            "x-referenceStandard": "CDC LMS growth reference"
           },
           {
             "name": "weight_for_stature_percentile",
@@ -1568,6 +2266,10 @@
             "name": "height_in",
             "type": "number",
             "description": "Recorded height or length in inches; may contain outliers.",
+            "constraints": {
+              "minimum": 1.18,
+              "maximum": 115
+            },
             "x-unit": "inch"
           },
           {
@@ -1577,7 +2279,10 @@
             "x-unit": "centimeter",
             "x-derivedFrom": [
               "height_in"
-            ]
+            ],
+            "x-conversionFactor": "1 in = 2.54 cm",
+            "x-decimalPlaces": 3,
+            "x-bivRule": "null when height_z_score < -5 or height_z_score > 3"
           },
           {
             "name": "height_outlier_flag",
@@ -1614,22 +2319,26 @@
           {
             "name": "height_velocity_z_score",
             "type": "number",
-            "description": "Height-velocity Z-score with no pubertal-onset adjustment."
+            "description": "Height-velocity Z-score with no pubertal-onset adjustment.",
+            "x-decimalPlaces": 4
           },
           {
             "name": "height_velocity_z_score_ep",
             "type": "number",
-            "description": "Height-velocity Z-score with earlier pubertal onset."
+            "description": "Height-velocity Z-score with earlier pubertal onset.",
+            "x-decimalPlaces": 4
           },
           {
             "name": "height_velocity_z_score_ap",
             "type": "number",
-            "description": "Height-velocity Z-score with average pubertal onset."
+            "description": "Height-velocity Z-score with average pubertal onset.",
+            "x-decimalPlaces": 4
           },
           {
             "name": "height_velocity_z_score_lp",
             "type": "number",
-            "description": "Height-velocity Z-score with later pubertal onset."
+            "description": "Height-velocity Z-score with later pubertal onset.",
+            "x-decimalPlaces": 4
           },
           {
             "name": "height_velocity_percentile",
@@ -1639,7 +2348,8 @@
               "minimum": 0,
               "maximum": 100
             },
-            "x-unit": "percentile"
+            "x-unit": "percentile",
+            "x-decimalPlaces": 2
           },
           {
             "name": "height_velocity_percentile_ep",
@@ -1649,7 +2359,8 @@
               "minimum": 0,
               "maximum": 100
             },
-            "x-unit": "percentile"
+            "x-unit": "percentile",
+            "x-decimalPlaces": 2
           },
           {
             "name": "height_velocity_percentile_ap",
@@ -1659,7 +2370,8 @@
               "minimum": 0,
               "maximum": 100
             },
-            "x-unit": "percentile"
+            "x-unit": "percentile",
+            "x-decimalPlaces": 2
           },
           {
             "name": "height_velocity_percentile_lp",
@@ -1669,12 +2381,15 @@
               "minimum": 0,
               "maximum": 100
             },
-            "x-unit": "percentile"
+            "x-unit": "percentile",
+            "x-decimalPlaces": 2
           },
           {
             "name": "height_z_score",
             "type": "number",
-            "description": "CDC LMS height-for-age Z-score."
+            "description": "CDC LMS height-for-age Z-score.",
+            "x-referenceStandard": "CDC LMS growth reference",
+            "x-bivRule": "null when height_z_score < -5 or height_z_score > 3"
           },
           {
             "name": "height_percentile",
@@ -1702,12 +2417,17 @@
             "name": "head_circ_cm",
             "type": "number",
             "description": "Recorded head circumference in centimeters; may contain outliers.",
+            "constraints": {
+              "minimum": 0,
+              "maximum": 505.46
+            },
             "x-unit": "centimeter"
           },
           {
             "name": "head_circ_z_score",
             "type": "number",
-            "description": "CDC LMS head-circumference Z-score."
+            "description": "CDC LMS head-circumference Z-score.",
+            "x-referenceStandard": "CDC LMS growth reference"
           },
           {
             "name": "head_circ_percentile",
@@ -1728,12 +2448,14 @@
               "weight_kg",
               "height_cm",
               "age_in_months"
-            ]
+            ],
+            "x-minAgeMonths": 24
           },
           {
             "name": "bmi_z_score",
             "type": "number",
-            "description": "CDC LMS BMI-for-age Z-score."
+            "description": "CDC LMS BMI-for-age Z-score.",
+            "x-referenceStandard": "CDC LMS growth reference"
           },
           {
             "name": "bmi_percentile",
@@ -1789,8 +2511,240 @@
           {
             "name": "encounter_type",
             "type": "string",
-            "description": "Encounter classification; 44 values occur in the data.",
-            "x-uniqueValueCount": 44
+            "description": "Encounter classification; 45 values occur in the data.",
+            "constraints": {
+              "enum": [
+                "Abstract",
+                "Clinical Support",
+                "Consult",
+                "Conversion Encounter",
+                "Documentation",
+                "ED",
+                "Episode Changes",
+                "Erroneous Encounter",
+                "Erroneous Telephone Encounter",
+                "Evaluation",
+                "External Contact",
+                "Flu",
+                "Follow-Up",
+                "History",
+                "Hospital",
+                "Immunization",
+                "Lab",
+                "Lab Requisition",
+                "Lactation Consult",
+                "Lactation Encounter",
+                "Letter (Out)",
+                "Medication Management",
+                "New Patient",
+                "Newborn",
+                "Nurse Only",
+                "Nutrition",
+                "Office Visit",
+                "Ophth Exam",
+                "Orders Only",
+                "OurPractice Advisory",
+                "Patient Care Review",
+                "Patient Message",
+                "Pre-op/Pre-procedure Orders",
+                "Procedure visit",
+                "Refill",
+                "Routine Prenatal",
+                "Scanned Document",
+                "Sick",
+                "Telemedicine",
+                "Telephone",
+                "Transcribe Orders",
+                "Treatment",
+                "Walk-In",
+                "Weight Check",
+                "Well Visit (Conv.)"
+              ],
+              "required": true
+            },
+            "x-uniqueValueCount": 45,
+            "x-categories": [
+              {
+                "value": "Abstract",
+                "count": 3672
+              },
+              {
+                "value": "Clinical Support",
+                "count": 15347
+              },
+              {
+                "value": "Consult",
+                "count": 32355
+              },
+              {
+                "value": "Conversion Encounter",
+                "count": 32007
+              },
+              {
+                "value": "Documentation",
+                "count": 13107
+              },
+              {
+                "value": "ED",
+                "count": 1
+              },
+              {
+                "value": "Episode Changes",
+                "count": 2
+              },
+              {
+                "value": "Erroneous Encounter",
+                "count": 555
+              },
+              {
+                "value": "Erroneous Telephone Encounter",
+                "count": 2
+              },
+              {
+                "value": "Evaluation",
+                "count": 143
+              },
+              {
+                "value": "External Contact",
+                "count": 211
+              },
+              {
+                "value": "Flu",
+                "count": 2104
+              },
+              {
+                "value": "Follow-Up",
+                "count": 92370
+              },
+              {
+                "value": "History",
+                "count": 11
+              },
+              {
+                "value": "Hospital",
+                "count": 5
+              },
+              {
+                "value": "Immunization",
+                "count": 11774
+              },
+              {
+                "value": "Lab",
+                "count": 1351
+              },
+              {
+                "value": "Lab Requisition",
+                "count": 63
+              },
+              {
+                "value": "Lactation Consult",
+                "count": 1384
+              },
+              {
+                "value": "Lactation Encounter",
+                "count": 1337
+              },
+              {
+                "value": "Letter (Out)",
+                "count": 18
+              },
+              {
+                "value": "Medication Management",
+                "count": 4345
+              },
+              {
+                "value": "New Patient",
+                "count": 11410
+              },
+              {
+                "value": "Newborn",
+                "count": 31142
+              },
+              {
+                "value": "Nurse Only",
+                "count": 3786
+              },
+              {
+                "value": "Nutrition",
+                "count": 5406
+              },
+              {
+                "value": "Office Visit",
+                "count": 4725643
+              },
+              {
+                "value": "Ophth Exam",
+                "count": 11
+              },
+              {
+                "value": "Orders Only",
+                "count": 273
+              },
+              {
+                "value": "OurPractice Advisory",
+                "count": 1
+              },
+              {
+                "value": "Patient Care Review",
+                "count": 3
+              },
+              {
+                "value": "Patient Message",
+                "count": 209
+              },
+              {
+                "value": "Pre-op/Pre-procedure Orders",
+                "count": 575
+              },
+              {
+                "value": "Procedure visit",
+                "count": 678
+              },
+              {
+                "value": "Refill",
+                "count": 12
+              },
+              {
+                "value": "Routine Prenatal",
+                "count": 4
+              },
+              {
+                "value": "Scanned Document",
+                "count": 23
+              },
+              {
+                "value": "Sick",
+                "count": 580991
+              },
+              {
+                "value": "Telemedicine",
+                "count": 25658
+              },
+              {
+                "value": "Telephone",
+                "count": 22053
+              },
+              {
+                "value": "Transcribe Orders",
+                "count": 4
+              },
+              {
+                "value": "Treatment",
+                "count": 1
+              },
+              {
+                "value": "Walk-In",
+                "count": 79679
+              },
+              {
+                "value": "Weight Check",
+                "count": 16295
+              },
+              {
+                "value": "Well Visit (Conv.)",
+                "count": 778452
+              }
+            ]
           },
           {
             "name": "orig_enc_source_Epic_yn",
@@ -2028,7 +2982,17 @@
       "x-derivedFrom": [
         "visits",
         "patients"
-      ]
+      ],
+      "x-uniquePatientCount": 250588,
+      "x-uniqueDiagnosisCodeCount": 8031,
+      "x-generatedBy": {
+        "script": "scripts/augment.py",
+        "function": "augment_visits",
+        "command": "python scripts/augment.py input_dir [--output_dir output] [--output_format {csv,parquet}] [--filter_errors|--no_filter_errors]",
+        "referenceStandard": "CDC LMS growth reference",
+        "outlierAlgorithm": "Harrall",
+        "bivFiltering": "enabled by default via --filter_errors; disable with --no_filter_errors"
+      }
     },
     {
       "profile": "tabular-data-resource",
@@ -2036,6 +3000,7 @@
       "path": "labs.csv",
       "title": "Labs",
       "description": "One lab result component per row; orders without results remain represented.",
+      "x-documentation": "docs/labs.md",
       "format": "csv",
       "mediatype": "text/csv",
       "encoding": "iso-8859-1",
@@ -2087,6 +3052,8 @@
             "type": "integer",
             "description": "Patient age in days at lab order, replacing the absolute date for de-identification.",
             "constraints": {
+              "minimum": -687,
+              "maximum": 6570,
               "required": true
             },
             "x-unit": "day",
@@ -2107,6 +3074,10 @@
             "name": "lab_result_date_age_in_days",
             "type": "integer",
             "description": "Patient age in days at lab result, replacing the absolute date for de-identification.",
+            "constraints": {
+              "minimum": -44378,
+              "maximum": 6570
+            },
             "x-unit": "day",
             "x-deidentifiedDate": true,
             "x-missingCount": 2283186
@@ -2135,8 +3106,189 @@
           {
             "name": "result_flag",
             "type": "string",
-            "description": "HL7 result interpretation flag; blank when unassigned.",
+            "description": "HL7 result interpretation flag; blank when unassigned. Both (NONE) and Normal occur, so a flag is not abnormal merely because it differs from (NONE).",
+            "constraints": {
+              "enum": [
+                "Abnormal",
+                "High",
+                "Low",
+                "Sensitive",
+                "Resistant",
+                "High Panic",
+                "(NONE)",
+                "Normal",
+                "Panic",
+                "Intermediate",
+                "Low Panic",
+                "Critical",
+                "Negative",
+                "High Off-Scale",
+                "Susceptible-Dose Dependent",
+                "Abnormal High",
+                "Abnormal Low",
+                "Invalid High",
+                "Sig Change Up",
+                "Positive",
+                "Critical High",
+                "Low Off-Scale",
+                "Critical Low",
+                "Class 0: Absent Allergen Specific IgE",
+                "Invalid Low",
+                "Delta Abnormal High",
+                "Class 2: Moderate Level Allergen Specific IgE",
+                "In Process",
+                "Better",
+                "Delta Critical High",
+                "Sig Change Down",
+                "Class 3: High Level Allergen Specific IgE",
+                "Moderately Sensitive",
+                "Delta Abnormal Low",
+                "Worse"
+              ]
+            },
             "x-uniqueValueCount": 35,
+            "x-categories": [
+              {
+                "value": "Abnormal",
+                "count": 704327
+              },
+              {
+                "value": "High",
+                "count": 513650
+              },
+              {
+                "value": "Low",
+                "count": 361300
+              },
+              {
+                "value": "Sensitive",
+                "count": 62794
+              },
+              {
+                "value": "Resistant",
+                "count": 10278
+              },
+              {
+                "value": "High Panic",
+                "count": 9744
+              },
+              {
+                "value": "(NONE)",
+                "count": 5881
+              },
+              {
+                "value": "Normal",
+                "count": 4273
+              },
+              {
+                "value": "Panic",
+                "count": 3056
+              },
+              {
+                "value": "Intermediate",
+                "count": 1704
+              },
+              {
+                "value": "Low Panic",
+                "count": 1406
+              },
+              {
+                "value": "Critical",
+                "count": 373
+              },
+              {
+                "value": "Negative",
+                "count": 188
+              },
+              {
+                "value": "High Off-Scale",
+                "count": 134
+              },
+              {
+                "value": "Susceptible-Dose Dependent",
+                "count": 123
+              },
+              {
+                "value": "Abnormal High",
+                "count": 99
+              },
+              {
+                "value": "Abnormal Low",
+                "count": 92
+              },
+              {
+                "value": "Invalid High",
+                "count": 84
+              },
+              {
+                "value": "Sig Change Up",
+                "count": 68
+              },
+              {
+                "value": "Positive",
+                "count": 35
+              },
+              {
+                "value": "Critical High",
+                "count": 23
+              },
+              {
+                "value": "Low Off-Scale",
+                "count": 17
+              },
+              {
+                "value": "Critical Low",
+                "count": 13
+              },
+              {
+                "value": "Class 0: Absent Allergen Specific IgE",
+                "count": 7
+              },
+              {
+                "value": "Invalid Low",
+                "count": 4
+              },
+              {
+                "value": "Delta Abnormal High",
+                "count": 4
+              },
+              {
+                "value": "Class 2: Moderate Level Allergen Specific IgE",
+                "count": 3
+              },
+              {
+                "value": "In Process",
+                "count": 3
+              },
+              {
+                "value": "Better",
+                "count": 3
+              },
+              {
+                "value": "Delta Critical High",
+                "count": 3
+              },
+              {
+                "value": "Sig Change Down",
+                "count": 2
+              },
+              {
+                "value": "Class 3: High Level Allergen Specific IgE",
+                "count": 2
+              },
+              {
+                "value": "Moderately Sensitive",
+                "count": 1
+              },
+              {
+                "value": "Delta Abnormal Low",
+                "count": 1
+              },
+              {
+                "value": "Worse",
+                "count": 1
+              }
+            ],
             "x-missingCount": 15550985
           }
         ],
@@ -2177,6 +3329,7 @@
       "path": "medications.csv",
       "title": "Medications",
       "description": "One pediatric prescription, administration, or historical medication record per row.",
+      "x-documentation": "docs/medications.md",
       "format": "csv",
       "mediatype": "text/csv",
       "encoding": "utf-8",
@@ -2220,6 +3373,8 @@
             "type": "integer",
             "description": "Patient age in days at medication order, replacing the absolute date for de-identification.",
             "constraints": {
+              "minimum": -45,
+              "maximum": 6605,
               "required": true
             },
             "x-unit": "day",
@@ -2229,15 +3384,25 @@
             "name": "med_start_date_age_in_days",
             "type": "integer",
             "description": "Patient age in days at medication start, replacing the absolute date for de-identification.",
+            "constraints": {
+              "minimum": -40149,
+              "maximum": 36581
+            },
             "x-unit": "day",
-            "x-deidentifiedDate": true
+            "x-deidentifiedDate": true,
+            "x-missingCount": 283066
           },
           {
             "name": "med_end_date_age_in_days",
             "type": "integer",
             "description": "Patient age in days at medication end, replacing the absolute date for de-identification.",
+            "constraints": {
+              "minimum": 0,
+              "maximum": 31105
+            },
             "x-unit": "day",
-            "x-deidentifiedDate": true
+            "x-deidentifiedDate": true,
+            "x-missingCount": 450340
           },
           {
             "name": "med_record_type",
@@ -2249,7 +3414,17 @@
                 "External"
               ],
               "required": true
-            }
+            },
+            "x-categories": [
+              {
+                "value": "Internal",
+                "count": 3250374
+              },
+              {
+                "value": "External",
+                "count": 572675
+              }
+            ]
           },
           {
             "name": "med_simple_generic_name",
@@ -2296,6 +3471,7 @@
       "path": "problem_list.csv",
       "title": "Problem List",
       "description": "One patient problem-list diagnosis entry per row.",
+      "x-documentation": "docs/problem_list.md",
       "format": "csv",
       "mediatype": "text/csv",
       "encoding": "utf-8",
@@ -2329,13 +3505,22 @@
             "name": "noted_date_age_in_days",
             "type": "integer",
             "description": "Patient age in days at first problem notation, replacing the absolute date for de-identification.",
+            "constraints": {
+              "minimum": -44891,
+              "maximum": 6601
+            },
             "x-unit": "day",
-            "x-deidentifiedDate": true
+            "x-deidentifiedDate": true,
+            "x-missingCount": 7284
           },
           {
             "name": "resolved_date_age_in_days",
             "type": "integer",
             "description": "Patient age in days at problem resolution, replacing the absolute date for de-identification.",
+            "constraints": {
+              "minimum": -84,
+              "maximum": 6605
+            },
             "x-unit": "day",
             "x-deidentifiedDate": true
           },
@@ -2374,6 +3559,7 @@
       "path": "referrals.csv",
       "title": "Referrals",
       "description": "One specialty referral associated with a pediatric visit per row.",
+      "x-documentation": "docs/referrals.md",
       "format": "csv",
       "mediatype": "text/csv",
       "encoding": "utf-8",
@@ -2398,7 +3584,8 @@
             "name": "visit_id",
             "type": "string",
             "description": "Associated visit identifier; nullable when the referral is not linked to a visit.",
-            "x-deidentified": true
+            "x-deidentified": true,
+            "x-missingCount": 24830
           },
           {
             "name": "referral_id",
@@ -2414,6 +3601,8 @@
             "type": "integer",
             "description": "Patient age in days at referral, replacing the absolute date for de-identification.",
             "constraints": {
+              "minimum": 1,
+              "maximum": 6567,
               "required": true
             },
             "x-unit": "day",
@@ -2423,7 +3612,8 @@
             "name": "requested_specialty",
             "type": "string",
             "description": "Requested referral specialty; nullable.",
-            "x-uniqueValueCount": 119
+            "x-uniqueValueCount": 119,
+            "x-missingCount": 27452
           },
           {
             "name": "referral_number_of_visits",
@@ -2432,7 +3622,34 @@
             "constraints": {
               "minimum": 1,
               "maximum": 10
-            }
+            },
+            "x-categories": [
+              {
+                "value": 1,
+                "count": 108736
+              },
+              {
+                "value": 6,
+                "count": 213345
+              },
+              {
+                "value": 3,
+                "count": 608
+              },
+              {
+                "value": 5,
+                "count": 476
+              },
+              {
+                "value": 10,
+                "count": 60
+              },
+              {
+                "value": 4,
+                "count": 1
+              }
+            ],
+            "x-missingCount": 26601
           }
         ],
         "missingValues": [
