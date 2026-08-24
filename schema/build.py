@@ -586,8 +586,35 @@ PACKAGE = {
     "name": "ppoc-pediatric-ehr",
     "title": "PPOC Pediatric EHR Data Package",
     "description": "Machine-readable schema for de-identified pediatric EHR data. Absolute dates are replaced by patient age in days.",
-    "x-schemaVersion": "1.0.0",
+    "homepage": "https://www.ppochildrens.org/",
+    "version": "1.0.0",
+    "created": "2026-08-18T00:00:00Z",
     "keywords": ["pediatrics", "electronic-health-records", "growth", "de-identified"],
+    "licenses": [
+        {
+            "name": "other-closed",
+            "title": "Restricted use under Harvard Medical School and PPOC IRB protocol and Data Use Agreement",
+            "path": "https://www.ppochildrens.org/",
+        }
+    ],
+    "sources": [
+        {
+            "title": "Pediatric Physicians' Organization at Children's (PPOC)",
+            "path": "https://www.ppochildrens.org/",
+        }
+    ],
+    "contributors": [
+        {
+            "title": "Pediatric Physicians' Organization at Children's (PPOC)",
+            "path": "https://www.ppochildrens.org/",
+            "role": "publisher",
+        },
+        {
+            "title": "Isaac Kohane Lab, Department of Biomedical Informatics, Harvard Medical School",
+            "path": "https://dbmi.hms.harvard.edu/",
+            "role": "maintainer",
+        },
+    ],
     "resources": RESOURCES,
 }
 
