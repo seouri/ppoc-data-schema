@@ -24,7 +24,7 @@ class IdentityPreservingTestDerivationOracle:
     """Test-only augmentation oracle that copies visible identity fields."""
 
     oracle_id = "identity-preserving-test-oracle-v1"
-    implementation_fingerprint = "test-oracle-fingerprint-v1"
+    implementation_fingerprint = "0123456789abcdef" * 4
 
     def derive(self, package_root: Path, descriptor: dict) -> DerivationResult:
         with (package_root / "patients.csv").open(encoding="utf-8", newline="") as handle:
