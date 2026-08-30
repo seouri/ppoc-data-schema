@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -16,6 +18,14 @@ class DerivationResult:
     oracle_id: str
     implementation_fingerprint: str = ""
     test_only: bool = False
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.implementation_fingerprint, str) or re.fullmatch(
+            r"[0-9a-f]{64}", self.implementation_fingerprint
+        ) is None:
+            raise ValueError("implementation_fingerprint must be lowercase SHA-256 hex")
+        if not isinstance(self.test_only, bool):
+            raise TypeError("test_only must be a boolean")
 
 
 class DerivationOracle(Protocol):
@@ -50,4 +60,7 @@ def require_augmented_outputs(
         if not output_path.is_file():
             raise DerivationUnavailable(f"missing {name} output from {oracle_id}")
 
-    return DerivationResult(oracle_id=oracle_id)
+    return DerivationResult(
+        oracle_id=oracle_id,
+        implementation_fingerprint=hashlib.sha256(oracle_id.encode()).hexdigest(),
+    )

@@ -14,6 +14,11 @@ SNAPSHOT_STAT_KEYS = {
     "x-uniqueLabOrderCount", "x-uniqueVisitIdCount", "x-uniqueValueCount",
     "x-uniquePatientCount", "x-unobservedEnumValues",
 }
+FIELD_SEMANTIC_KEYS = {
+    "x-unit", "x-deidentified", "x-deidentifiedDate", "x-diagnosisPrefix",
+    "x-codeSystem", "x-bivRule", "x-conversionFactor", "x-decimalPlaces",
+    "x-minAgeMonths", "x-referenceStandard",
+}
 
 
 def write_resource(
@@ -112,7 +117,8 @@ def write_synthetic_descriptor(
     generated["title"] = f"{source_descriptor['title']} -- Completely Generated"
     generated["description"] = (
         "Synthetic smoke-profile package; contains no real patient records and makes no "
-        "claims of demographic representativeness or prevalence calibration."
+        "claims of demographic representativeness, prevalence calibration, clinical validity, "
+        "privacy approval, release approval, or development/golden/validated fixture status."
     )
     generated["x-synthetic"] = True
     generated["homepage"] = None
@@ -135,7 +141,7 @@ def write_synthetic_descriptor(
         stats = _generated_field_statistics(package_root, resource)
         for field in resource["schema"]["fields"]:
             for key in list(field):
-                if key.startswith("x-"):
+                if key.startswith("x-") and key not in FIELD_SEMANTIC_KEYS:
                     field.pop(key)
             for key in SNAPSHOT_STAT_KEYS:
                 field.pop(key, None)
@@ -144,5 +150,8 @@ def write_synthetic_descriptor(
             resource["x-uniquePatientCount"] = stats["patient_id"]["x-uniqueValueCount"]
     _replace_logical_link_statistics(package_root, generated)
     output = package_root / "datapackage.json"
-    output.write_text(json.dumps(generated, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    if output.exists() or output.is_symlink():
+        raise ValueError(f"unsafe descriptor output path: {output}")
+    with output.open("x", encoding="utf-8") as handle:
+        handle.write(json.dumps(generated, indent=2, ensure_ascii=False) + "\n")
     return output

@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import stat
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +21,7 @@ def validate_resource_paths(descriptor: dict[str, Any], package_root: Path) -> N
     """Reject unsafe, duplicate, or pre-existing symlink resource targets."""
     root = package_root.resolve()
     seen: set[str] = set()
+    reserved = {"datapackage.json", "manifest.json", "validation-report.json"}
     for resource in descriptor["resources"]:
         raw = resource.get("path")
         if not isinstance(raw, str) or not raw or os.path.isabs(raw):
@@ -28,14 +30,22 @@ def validate_resource_paths(descriptor: dict[str, Any], package_root: Path) -> N
         if any(part == ".." for part in relative.parts):
             raise ValueError(f"unsafe resource path: {raw!r}")
         target = root / relative
-        if target.resolve(strict=False).parent != target.parent.resolve():
+        resolved = target.resolve(strict=False)
+        if not resolved.is_relative_to(root):
             raise ValueError(f"resource path escapes package root: {raw!r}")
         key = relative.as_posix()
+        if key in reserved:
+            raise ValueError(f"resource path is reserved: {raw!r}")
         if key in seen:
             raise ValueError(f"duplicate resource path: {raw!r}")
         seen.add(key)
-        if target.is_symlink():
-            raise ValueError(f"resource path is a symlink: {raw!r}")
+        current = root
+        for component in relative.parts:
+            current /= component
+            if current.is_symlink():
+                raise ValueError(f"resource path contains symlink: {raw!r}")
+        if target.exists() and not stat.S_ISREG(target.stat().st_mode):
+            raise ValueError(f"resource path is not a regular file: {raw!r}")
 
 
 def resource_spec(descriptor: dict[str, Any], name: str) -> dict[str, Any]:

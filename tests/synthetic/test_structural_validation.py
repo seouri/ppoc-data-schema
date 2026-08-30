@@ -92,6 +92,7 @@ def test_synthetic_descriptor_strips_all_source_snapshot_metadata(tmp_path: Path
     descriptor = load_descriptor(ROOT / "datapackage.json")
     descriptor["x-created"] = "real-snapshot"
     descriptor["resources"][0]["x-keyDescription"] = "real"
+    descriptor["resources"][0]["schema"]["fields"][0]["x-unit"] = "cm"
     descriptor["resources"][0]["schema"]["fields"][0]["x-encodingNote"] = "real"
     _empty_package(tmp_path, descriptor)
     generated = json.loads(write_synthetic_descriptor(tmp_path, descriptor, {
@@ -101,6 +102,7 @@ def test_synthetic_descriptor_strips_all_source_snapshot_metadata(tmp_path: Path
     assert "real-snapshot" not in serialized
     assert "x-keyDescription" not in serialized
     assert "x-encodingNote" not in serialized
+    assert generated["resources"][0]["schema"]["fields"][0]["x-unit"] == "cm"
 
 
 def test_validation_uses_declared_semicolon_dialect(tmp_path: Path) -> None:

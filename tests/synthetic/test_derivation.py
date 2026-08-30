@@ -1,3 +1,4 @@
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -41,4 +42,4 @@ def test_returns_pinned_identity_when_both_outputs_exist(tmp_path: Path) -> None
         )
     assert require_augmented_outputs(
         tmp_path, descriptor, oracle_id="fake-v1"
-    ) == DerivationResult("fake-v1")
+    ) == DerivationResult("fake-v1", hashlib.sha256(b"fake-v1").hexdigest())
