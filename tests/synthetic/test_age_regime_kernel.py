@@ -191,7 +191,36 @@ def test_kernel_rejects_declared_reference_domain() -> None:
         )
 
 
-def test_kernel_rejects_transition_discontinuity() -> None:
+def test_kernel_converts_transition_bmi_overflow_to_value_error() -> None:
+    class ExtremeTransitionReference(RegimeReference):
+        def value(self, metric: str, age_days: int, reference_sex: str, z: float) -> float:
+            if metric == "length_cm":
+                return 1e308
+            return super().value(metric, age_days, reference_sex, z)
+
+    with pytest.raises(ValueError, match="derived BMI.*finite and positive"):
+        AgeRegimeTrajectoryKernel(ExtremeTransitionReference()).generate(
+            PATIENT, (730,), NamedRandomStreams(5, 0)
+        )
+
+
+def test_kernel_converts_post_transition_weight_overflow_to_value_error() -> None:
+    class ExtremePostTransitionReference(RegimeReference):
+        def value(self, metric: str, age_days: int, reference_sex: str, z: float) -> float:
+            if metric == "height_cm":
+                return 1e308
+            return super().value(metric, age_days, reference_sex, z)
+
+    with pytest.raises(ValueError, match="derived weight.*finite and positive"):
+        AgeRegimeTrajectoryKernel(ExtremePostTransitionReference()).generate(
+            PATIENT, (1000,), NamedRandomStreams(5, 0)
+        )
+
+
+@pytest.mark.parametrize("ages_days", [(730, 761), (699, 761), (699, 3000)])
+def test_kernel_rejects_transition_discontinuity_across_sparse_samples(
+    ages_days: tuple[int, int],
+) -> None:
     class JumpReference(RegimeReference):
         def value(self, metric: str, age_days: int, reference_sex: str, z: float) -> float:
             value = super().value(metric, age_days, reference_sex, z)
@@ -201,5 +230,5 @@ def test_kernel_rejects_transition_discontinuity() -> None:
 
     with pytest.raises(ValueError, match="transition"):
         AgeRegimeTrajectoryKernel(JumpReference()).generate(
-            PATIENT, (730, 761), NamedRandomStreams(5, 0)
+            PATIENT, ages_days, NamedRandomStreams(5, 0)
         )

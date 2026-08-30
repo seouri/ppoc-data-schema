@@ -60,3 +60,44 @@ The scoped staging set includes `tests/synthetic/fakes.py` in addition to the fi
 The continuity guard applies to adjacent points leaving the transition regime when the first post-transition point remains within one additional transition-window duration. This catches the specified 730-to-761 discontinuity without misclassifying the brief's deliberately sparse 730-to-4380 stream-isolation trajectory as a measurement jump. The development defaults remain uncalibrated, all returned state remains evaluator-only, and no visible package path changed.
 
 An attempted verification wrapper using `env PYTHONDONTWRITEBYTECODE=1 uv run ...` could not initialize the user-level uv cache under the managed sandbox. The required commands were rerun directly and produced the successful results above. Only generated `__pycache__` directories were removed afterward.
+
+## Fix round 1
+
+Review found two fail-closed gaps in commit `9d211a9`: the continuity check silently skipped sparse adjacent samples that spanned the full transition window or ended later than an undocumented local cutoff, and extreme finite heights could raise `OverflowError` during derived BMI/weight exponentiation before validation.
+
+Regression tests were added before production changes. The sparse continuity cases reproduced as two missing `ValueError`s:
+
+```text
+uv run pytest -q tests/synthetic/test_age_regime_kernel.py -k transition_discontinuity
+.FF                                                                      [100%]
+2 failed, 1 passed, 17 deselected in 0.08s
+```
+
+The transition and post-transition arithmetic cases reproduced as uncontrolled overflow errors:
+
+```text
+uv run pytest -q tests/synthetic/test_age_regime_kernel.py -k 'overflow'
+FF                                                                       [100%]
+2 failed, 20 deselected in 0.07s
+```
+
+The continuity guard now detects every adjacent pair satisfying `previous.age_days <= transition_end < current.age_days`, independent of the observation gap. It compares the converted-length and standing-height representations at the common first-post-transition age using the stable childhood height channel, so sparse samples such as `(699, 761)` and `(699, 3000)` cannot bypass validation. Derived BMI and weight now use guarded multiplication/division without exponentiation and pass all results through finite/positive validation, converting arithmetic failures to documented `ValueError`s.
+
+Fresh fix-round verification:
+
+```text
+uv run pytest -q tests/synthetic/test_age_regime_kernel.py
+......................                                                   [100%]
+22 passed in 0.05s
+
+uv run pytest -q tests/synthetic
+........................................................................ [ 41%]
+........................................................................ [ 82%]
+...............................                                          [100%]
+175 passed in 0.33s
+
+uv run ruff check src/synthetic/native/age_regimes.py tests/synthetic/test_age_regime_kernel.py tests/synthetic/fakes.py
+All checks passed!
+```
+
+No API, stream naming, exporter/resource path, plan, or ledger changed in this fix round. The earlier local-gap continuity concern is superseded by the common-age representation check above.

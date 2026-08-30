@@ -144,6 +144,24 @@ def _positive_value(name: str, value: object) -> float:
     return number
 
 
+def _derived_bmi(weight_kg: float, height_cm: float) -> float:
+    try:
+        height_m = height_cm / 100.0
+        value = weight_kg / (height_m * height_m)
+    except ArithmeticError as exc:
+        raise ValueError("derived BMI must be finite and positive") from exc
+    return _positive_value("derived BMI", value)
+
+
+def _derived_weight(bmi: float, height_cm: float) -> float:
+    try:
+        height_m = height_cm / 100.0
+        value = bmi * height_m * height_m
+    except ArithmeticError as exc:
+        raise ValueError("derived weight must be finite and positive") from exc
+    return _positive_value("derived weight", value)
+
+
 def _smooth_step(age_days: int, onset_age_days: int, tempo_days: int) -> float:
     if age_days < onset_age_days:
         return 0.0
@@ -243,7 +261,7 @@ class AgeRegimeTrajectoryKernel:
             previous_size = comparable_size
             previous_weight = weight_kg
 
-        self._validate_transition_continuity(points)
+        self._validate_transition_continuity(points, patient, state)
         return AgeRegimeTrajectory(tuple(points), state)
 
     def _validate_ages(self, ages_days: object) -> None:
@@ -361,10 +379,7 @@ class AgeRegimeTrajectoryKernel:
                 "converted standing height",
                 length_cm - self.config.length_to_height_offset_cm,
             )
-            bmi = _positive_value(
-                "derived BMI",
-                weight_kg / (height_cm / 100.0) ** 2,
-            )
+            bmi = _derived_bmi(weight_kg, height_cm)
             height_z = length_z
 
         return {
@@ -404,10 +419,7 @@ class AgeRegimeTrajectoryKernel:
         )
         height_cm = self._reference_value("height_cm", age_days, patient, height_z)
         bmi = self._reference_value("bmi", age_days, patient, bmi_z)
-        weight_kg = _positive_value(
-            "derived weight",
-            bmi * (height_cm / 100.0) ** 2,
-        )
+        weight_kg = _derived_weight(bmi, height_cm)
         return {
             "length_cm": None,
             "height_cm": height_cm,
@@ -430,21 +442,34 @@ class AgeRegimeTrajectoryKernel:
         value = self.reference.value(metric, age_days, patient.reference_sex, z)
         return _positive_value(f"reference {metric}", value)
 
-    def _validate_transition_continuity(self, points: list[AgeRegimePoint]) -> None:
+    def _validate_transition_continuity(
+        self,
+        points: list[AgeRegimePoint],
+        patient: PatientState,
+        state: AgeRegimeState,
+    ) -> None:
         transition_end = self.config.transition_age_days + self.config.transition_window_days
-        continuity_end = transition_end + self.config.transition_window_days
         for previous, current in pairwise(points):
-            if (
-                previous.regime is GrowthRegime.TRANSITION
-                and current.age_days > transition_end
-                and current.age_days <= continuity_end
-            ):
-                previous_height = previous.height_cm
-                current_height = current.height_cm
+            if previous.age_days <= transition_end < current.age_days:
+                comparison_age = transition_end + 1
+                length_cm = self._reference_value(
+                    "length_cm",
+                    comparison_age,
+                    patient,
+                    state.childhood_height_z,
+                )
+                converted_height = _positive_value(
+                    "converted standing height",
+                    length_cm - self.config.length_to_height_offset_cm,
+                )
+                standing_height = self._reference_value(
+                    "height_cm",
+                    comparison_age,
+                    patient,
+                    state.childhood_height_z,
+                )
                 if (
-                    previous_height is None
-                    or current_height is None
-                    or abs(current_height - previous_height)
+                    abs(standing_height - converted_height)
                     > self.config.max_transition_discontinuity_cm
                 ):
                     raise ValueError("transition discontinuity exceeds configured tolerance")
