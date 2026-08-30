@@ -20,6 +20,30 @@ class LinearTestReference:
         raise KeyError(metric)
 
 
+class RegimeLinearTestReference:
+    """Test-only reference with all metrics required by the age-regime kernel."""
+
+    reference_id = "regime-linear-test-reference-v1"
+    min_age_days = 0
+    max_age_days = 7305
+
+    def value(self, metric: str, age_days: int, reference_sex: str, z: float) -> float:
+        del reference_sex
+        age_years = age_days / 365.25
+        standing_height = 74.0 + 5.5 * age_years + 3.0 * z
+        if metric == "length_cm":
+            return standing_height + 0.7
+        if metric == "weight_kg":
+            return 8.5 + 2.0 * age_years + 0.5 * z
+        if metric == "head_circumference_cm":
+            return 46.0 + 1.5 * age_years + 1.0 * z
+        if metric == "height_cm":
+            return standing_height
+        if metric == "bmi":
+            return 15.5 + 0.2 * age_years + 0.5 * z
+        raise KeyError(metric)
+
+
 class IdentityPreservingTestDerivationOracle:
     """Test-only augmentation oracle that copies visible identity fields."""
 
