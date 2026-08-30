@@ -8,6 +8,37 @@ The current vertical slice generates healthy patients aged two years and older. 
 
 The generator reads `datapackage.json` as schema metadata only. It does not read the repository's real CSV snapshots or any patient records. The current command-line entry point intentionally fails closed because no production growth reference or authoritative augmentation oracle is shipped.
 
+## Development-only latent growth-disorder modules
+
+The latent trajectory layer is a development and evaluator harness, not a clinical model. It applies a directionally coherent, uncalibrated scenario module to the existing healthy kernel while keeping hidden truth and event traces separate from observable descendants. For example, using the injected test reference already used by the tests:
+
+```python
+from synthetic.models import PatientState
+from synthetic.native.clinical_modules import FamilialShortStatureModule
+from synthetic.native.healthy import HealthyKernel
+from synthetic.native.trajectories import DisorderTrajectoryKernel
+from synthetic.randomness import NamedRandomStreams
+from tests.synthetic.fakes import LinearTestReference
+
+kernel = DisorderTrajectoryKernel(
+    HealthyKernel(LinearTestReference()), FamilialShortStatureModule()
+)
+trajectory = kernel.generate(
+    PatientState("synthetic-patient", "F", "F"),
+    (730, 1095, 1460),
+    NamedRandomStreams(20260830, 0),
+)
+```
+
+The available modules and their directional signatures are:
+
+- `HealthyGrowthModule`: Δheight-z = 0; ΔBMI-z = 0.
+- `FamilialShortStatureModule`: constant negative Δheight-z; ΔBMI-z = 0.
+- `ConstitutionalDelayModule`: bounded temporary negative Δheight-z with recovery; ΔBMI-z = 0.
+- `GrowthHormoneDeficiencyModule`: progressive negative Δheight-z, nonnegative BMI-z during impairment, and an optional treatment response.
+
+These defaults are uncalibrated development scenarios. `LatentTrajectory.disorder` and `LatentTrajectory.events` are evaluator-only hidden truth and event traces; they are not exported, and visible CSV generation remains unchanged. Prevalence, demographic calibration, disorder-critical labs/medications/referrals, held-out validation, and privacy auditing remain later gates. No real patient data, clinical claim, or privacy claim is introduced by this layer.
+
 ## Prerequisites
 
 Run these commands from the repository root:
