@@ -160,6 +160,8 @@ class FamilialShortStatureConfig:
 
     def __post_init__(self) -> None:
         _require_ordered_bounds("severity_min", self.severity_min, "severity_max", self.severity_max)
+        if _require_age("onset_age_days", self.onset_age_days) != 0:
+            raise ValueError("onset_age_days must be zero for familial short stature")
         schedule = (
             self.onset_age_days,
             self.phenotype_age_days,
