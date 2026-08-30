@@ -218,6 +218,8 @@ def test_classifier_covers_all_regimes_at_explicit_boundaries() -> None:
         {"maximum_age_days": 729},
         {"puberty_min_age_days": 5000, "puberty_max_age_days": 4000},
         {"puberty_tempo_min_days": 0},
+        {"maximum_age_days": 5000, "puberty_max_age_days": 4500, "puberty_tempo_max_days": 600},
+        {"maximum_age_days": 760, "transition_window_days": 30},
         {"length_to_height_offset_cm": -0.1},
         {"max_transition_discontinuity_cm": 0.0},
     ],
@@ -246,7 +248,7 @@ Expected: collection fails because `AgeRegimeConfig` and `classify_age` are not 
 In `src/synthetic/native/age_regimes.py`:
 
 1. Add frozen `AgeRegimeConfig` with `module_version: ClassVar[str] = "age-regimes-v1"` and these development-only defaults: `transition_age_days=730`, `transition_window_days=30`, `maximum_age_days=7305`, `puberty_min_age_days=3287`, `puberty_max_age_days=5114`, `puberty_tempo_min_days=730`, `puberty_tempo_max_days=1460`, `catch_up_days=730`, `head_circumference_decay_days=730`, `residual_sd=0.1`, `length_to_height_offset_cm=0.7`, `max_transition_discontinuity_cm=3.0`, `puberty_height_spurt_min=0.2`, `puberty_height_spurt_max=0.8`, `puberty_bmi_shift_min=-0.2`, and `puberty_bmi_shift_max=0.3`.
-2. Validate all age values as nonnegative integers, all durations as positive integers where a duration is required, all scales as finite numeric values, ordered min/max pairs, `puberty_max_age_days <= maximum_age_days`, and a strictly positive continuity tolerance. Reject booleans explicitly.
+2. Validate all age values as nonnegative integers, all durations as positive integers where a duration is required, all scales as finite numeric values, ordered min/max pairs, `puberty_max_age_days + puberty_tempo_max_days <= maximum_age_days`, `transition_age_days + transition_window_days < maximum_age_days`, and a strictly positive continuity tolerance. Reject booleans explicitly.
 3. Implement `classify_age` with the exact boundary policy used in the tests: ages below `transition_age_days - transition_window_days` are `INFANCY`; ages through `transition_age_days + transition_window_days` are `TRANSITION`; ages before puberty onset are `CHILDHOOD`; ages through onset plus tempo are `PUBERTY`; later ages are `ADOLESCENCE`. Reject negative ages and nonpositive puberty tempo.
 4. Keep configuration/version metadata separate from calibrated prevalence or clinical evidence; no default is allowed to be described as representative.
 
@@ -271,6 +273,7 @@ git commit -m "feat: add age-regime configuration"
 
 **Files:**
 - Modify: `src/synthetic/native/age_regimes.py`
+- Modify: `tests/synthetic/fakes.py`
 - Create: `tests/synthetic/test_age_regime_kernel.py`
 
 **Interfaces:**
@@ -281,7 +284,32 @@ git commit -m "feat: add age-regime configuration"
 
 - [ ] **Step 1: Write failing kernel tests**
 
-Create `tests/synthetic/test_age_regime_kernel.py`:
+Add a test-only `RegimeLinearTestReference` to `tests/synthetic/fakes.py` and create `tests/synthetic/test_age_regime_kernel.py`:
+
+```python
+class RegimeLinearTestReference:
+    """Test-only reference with all metrics required by the age-regime kernel."""
+
+    reference_id = "regime-linear-test-reference-v1"
+    min_age_days = 0
+    max_age_days = 7305
+
+    def value(self, metric: str, age_days: int, reference_sex: str, z: float) -> float:
+        del reference_sex
+        age_years = age_days / 365.25
+        standing_height = 74.0 + 5.5 * age_years + 3.0 * z
+        if metric == "length_cm":
+            return standing_height + 0.7
+        if metric == "weight_kg":
+            return 8.5 + 2.0 * age_years + 0.5 * z
+        if metric == "head_circumference_cm":
+            return 46.0 + 1.5 * age_years + 1.0 * z
+        if metric == "height_cm":
+            return standing_height
+        if metric == "bmi":
+            return 15.5 + 0.2 * age_years + 0.5 * z
+        raise KeyError(metric)
+```
 
 ```python
 import math
@@ -472,7 +500,7 @@ In `src/synthetic/native/age_regimes.py`:
 4. Use a deterministic smooth-step function `3*t*t - 2*t*t*t` for `t` clamped to `[0, 1]`; apply pubertal offsets only at and after the sampled onset, with the effect plateauing after `puberty_tempo_days`. The reference remains responsible for age-specific adult-height deceleration; the kernel must not claim a clinical velocity distribution.
 5. Treat head circumference as optional after `config.head_circumference_decay_days`; omit it when the point is past the transition regime. Reject every nonfinite or nonpositive reference result before constructing a point.
 6. Compute height velocity from comparable body size (`height_cm` after conversion, or `length_cm - offset` before conversion) and weight velocity over elapsed days using `365.25 / delta_days`. Set the first point’s velocities to `None`; reject nonfinite derived velocities.
-7. Before returning `AgeRegimeTrajectory`, enforce the transition continuity tolerance between adjacent points crossing the transition window. Preserve patient IDs and ages, keep all latent state inside the returned evaluator-only object, and never call a CSV/resource mapper.
+7. Before returning `AgeRegimeTrajectory`, enforce the transition continuity tolerance between adjacent points crossing the transition window. Preserve patient IDs and ages, keep all latent state inside the returned evaluator-only object, and never call a CSV/resource mapper. Keep `RegimeLinearTestReference` under `tests/synthetic/fakes.py`; it is test-only and must not be imported by production code.
 
 - [ ] **Step 4: Run focused kernel tests and the existing suite**
 
