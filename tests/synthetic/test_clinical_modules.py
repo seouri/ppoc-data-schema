@@ -3,7 +3,7 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from synthetic.models import DisorderKind, PatientState
+from synthetic.models import DisorderKind, LatentDisorderState, PatientState
 from synthetic.native.clinical_modules import (
     ConstitutionalDelayConfig,
     ConstitutionalDelayModule,
@@ -181,9 +181,16 @@ def test_growth_hormone_deficiency_treatment_branches_and_bmi_boundaries() -> No
     assert untreated_state.treatment_start_age_days is None
     assert untreated_state.onset_age_days is not None
     untreated_onset = untreated_state.onset_age_days
+    untreated_at_onset = untreated_module.height_z_delta(untreated_state, untreated_onset)
+    untreated_midpoint = untreated_module.height_z_delta(
+        untreated_state, untreated_onset + untreated_config.progression_days // 2
+    )
     untreated_height = untreated_module.height_z_delta(
         untreated_state, untreated_onset + untreated_config.progression_days
     )
+    assert untreated_at_onset == 0.0
+    assert untreated_midpoint < 0
+    assert untreated_height < untreated_midpoint
     assert untreated_height < 0
     untreated_event_types = [
         event.event_type for event in untreated_module.events(PATIENT, untreated_state)
@@ -200,6 +207,15 @@ def test_growth_hormone_deficiency_treatment_branches_and_bmi_boundaries() -> No
     assert treated_state.treatment_start_age_days is not None
     treated_onset = treated_state.onset_age_days
     assert treated_onset is not None
+    matching_untreated = LatentDisorderState(
+        DisorderKind.GROWTH_HORMONE_DEFICIENCY,
+        treated_onset,
+        treated_state.severity,
+    )
+    before_treatment = treated_state.treatment_start_age_days - 1
+    assert treated_module.height_z_delta(
+        treated_state, before_treatment
+    ) == treated_module.height_z_delta(matching_untreated, before_treatment)
     response_age = treated_state.treatment_start_age_days + treated_config.response_days
     assert treated_module.height_z_delta(treated_state, response_age) > untreated_height
     assert 0 <= treated_module.bmi_z_delta(
