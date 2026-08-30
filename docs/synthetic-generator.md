@@ -14,18 +14,30 @@ The visible smoke example remains the healthy age-730+ profile: three visits at 
 
 When exercising the latent trajectory layer with an injected reference, cover the five explicit regimes: birth (age 0), infancy (less than 730 days), prepubertal childhood (730 days through puberty onset), puberty, and late adolescence (including age 7305). At every age, generate only two independent anthropometric dimensions; derive the third explicitly using the applicable conversion (for example, derive weight from standing height and BMI, or derive weight-for-length from recumbent length and weight). Do not generate height/length, weight, and BMI as three independent states.
 
-The following compact example is development-only. Its injected reference is a test double, and its expected metrics are evaluator requirements rather than clinical targets:
+The following compact example is development-only. Its injected reference is a test double, and its expected metrics are evaluator requirements rather than clinical targets. The named `puberty_age_days` value is an injected schedule/configuration value for this smoke example, not a clinical timing claim. The reference contract supplies finite values for `length_cm`, `weight_kg`, `head_circumference_cm`, `height_cm`, and `bmi` at each requested age, sex, and z-score.
 
 ```python
-ages = (0, 730, 4_745, 7_305)  # birth, childhood, puberty, late adolescence
+from synthetic.models import PatientState
+from synthetic.native.age_regimes import AgeRegimeConfig, AgeRegimeTrajectoryKernel
+from synthetic.randomness import NamedRandomStreams
+from tests.synthetic.fakes import LinearTestReference
+
+puberty_age_days = 4_745  # injected schedule/config value for this example
+config = AgeRegimeConfig(
+    puberty_min_age_days=puberty_age_days,
+    puberty_max_age_days=puberty_age_days,
+)
+reference = LinearTestReference()  # test double; never a production reference
+kernel = AgeRegimeTrajectoryKernel(reference, config)
+ages = (0, 730, puberty_age_days, 7_305)  # birth, childhood, puberty, late adolescence
 trajectory = kernel.generate(
     PatientState("synthetic-age-regime", "F", "F"),
     ages,
     NamedRandomStreams(20260830, 1),
 )
 # Evaluator-only checks: continuity at regime boundaries; two-dimension identity;
-# explicit conversion; valid reference domains; age-windowed height/BMI velocity;
-# and head-circumference availability/behavior in the infant regime.
+# explicit conversion; valid reference domains; length_cm, weight_kg, height_cm,
+# and bmi values; age-windowed velocity; and head_circumference_cm behavior.
 ```
 
 Velocity and head-circumference fields used by those checks are evaluator-only derived views. They must not be exported as latent truth or as a new visible smoke resource; the existing observable CSV contract and its non-matchability limitation remain unchanged. These defaults are uncalibrated development scenarios. Clinical validity, prevalence, demographic calibration, held-out validation, privacy evaluation, and any Synthea or release gate remain deferred until separately approved evidence and governance are available.
@@ -71,7 +83,7 @@ Run these commands from the repository root:
 uv sync
 ```
 
-The package requires Python 3.12 or newer. The test-only reference and derivation oracle used in the example below live under `tests/synthetic/fakes.py`; they are safe for smoke tests but must not be presented as clinical or privacy evidence.
+The package requires Python 3.12 or newer. The test-only reference and derivation oracle used in the smoke example below live under `tests/synthetic/fakes.py`; they are safe for smoke tests but must not be presented as clinical or privacy evidence.
 
 ## Run the smoke profile from Python
 
