@@ -1,7 +1,9 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from synthetic import run_directory
 from synthetic.run_directory import RunDirectory
 
 
@@ -77,3 +79,20 @@ def test_repeated_lifecycle_calls_fail_without_overwriting(tmp_path: Path) -> No
 def test_rejects_invalid_run_id_tokens(tmp_path: Path, run_id: str) -> None:
     with pytest.raises(ValueError):
         RunDirectory.start(tmp_path / "run", run_id)
+
+
+def test_linux_dispatch_uses_no_replace_rename(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple] = []
+
+    class FakeRename:
+        def __call__(self, *args: object) -> int:
+            calls.append(args)
+            return 0
+
+    fake_libc = SimpleNamespace(renameat2=FakeRename())
+    monkeypatch.setattr(run_directory.sys, "platform", "linux")
+    monkeypatch.setattr(run_directory.ctypes, "CDLL", lambda *args, **kwargs: fake_libc)
+
+    run_directory._rename_without_replacing(Path("source"), Path("target"))
+
+    assert calls and calls[0][-1] == 1
