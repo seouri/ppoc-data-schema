@@ -36,7 +36,7 @@ def _validate_events(
 ) -> None:
     previous_age = -1
     treatment_start_seen = False
-    treatment_response_seen = False
+    treatment_outcome_seen: str | None = None
     for event in events:
         if not isinstance(event, ClinicalEvent):
             raise TypeError("module events must be ClinicalEvent instances")
@@ -46,8 +46,8 @@ def _validate_events(
             raise ValueError("module event age must be nonnegative")
         if event.age_days < previous_age:
             raise ValueError("module event ages must be nondecreasing")
-        if treatment_response_seen:
-            raise ValueError("no event may follow a treatment response")
+        if treatment_outcome_seen is not None:
+            raise ValueError("treatment outcome events are terminal")
 
         if event.event_type == "treatment_start":
             if (
@@ -57,15 +57,23 @@ def _validate_events(
             ):
                 raise ValueError("treatment start event does not match the treatment schedule")
             treatment_start_seen = True
-        elif event.event_type == "treatment_response":
+        elif event.event_type in {"treatment_response", "treatment_nonresponse"}:
             if (
                 state.treatment_start_age_days is None
                 or not treatment_start_seen
-                or event.age_days <= state.treatment_start_age_days
-                or treatment_response_seen
             ):
-                raise ValueError("treatment response event does not match the treatment schedule")
-            treatment_response_seen = True
+                raise ValueError(f"{event.event_type} requires a prior treatment_start event")
+            if event.age_days <= state.treatment_start_age_days:
+                raise ValueError(f"{event.event_type} must occur after treatment start")
+            if event.event_type == "treatment_response" and state.treatment_response <= 0:
+                raise ValueError(
+                    "treatment_response event requires state.treatment_response > 0"
+                )
+            if event.event_type == "treatment_nonresponse" and state.treatment_response != 0:
+                raise ValueError(
+                    "treatment_nonresponse event requires state.treatment_response == 0"
+                )
+            treatment_outcome_seen = event.event_type
 
         previous_age = event.age_days
 
@@ -78,6 +86,9 @@ class DisorderTrajectoryKernel:
             raise ValueError("module must be provided")
         if not isinstance(getattr(module, "kind", None), DisorderKind):
             raise TypeError("module must declare a DisorderKind")
+        module_version = getattr(module, "module_version", None)
+        if not isinstance(module_version, str) or not module_version.strip():
+            raise TypeError("module must declare a nonempty string module_version")
         for method_name in (
             "sample_state",
             "height_z_delta",

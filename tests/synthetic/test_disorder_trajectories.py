@@ -24,8 +24,15 @@ class EventModule:
     kind = DisorderKind.HEALTHY
 
     def __init__(
-        self, state: LatentDisorderState, events: tuple[ClinicalEvent, ...]
+        self,
+        state: LatentDisorderState,
+        events: tuple[ClinicalEvent, ...],
+        *,
+        kind: DisorderKind = DisorderKind.HEALTHY,
+        module_version: object = "event-test-v1",
     ) -> None:
+        self.kind = kind
+        self.module_version = module_version
         self.state = state
         self._events = events
 
@@ -48,6 +55,22 @@ class EventModule:
     ) -> tuple[ClinicalEvent, ...]:
         del patient, state
         return self._events
+
+
+def _treatment_module(
+    events: tuple[ClinicalEvent, ...], *, treatment_response: float = 0.6
+) -> EventModule:
+    return EventModule(
+        LatentDisorderState(
+            DisorderKind.GROWTH_HORMONE_DEFICIENCY,
+            100,
+            0.8,
+            treatment_start_age_days=300,
+            treatment_response=treatment_response,
+        ),
+        events,
+        kind=DisorderKind.GROWTH_HORMONE_DEFICIENCY,
+    )
 
 
 def test_healthy_module_matches_existing_healthy_kernel() -> None:
@@ -94,6 +117,33 @@ def test_constitutional_delay_has_no_effect_before_puberty_and_returns_after_rec
     assert puberty_age >= 3650
 
 
+def test_kernel_accepts_nonempty_string_module_version() -> None:
+    module = EventModule(
+        LatentDisorderState(DisorderKind.HEALTHY, None, 0.0), ()
+    )
+
+    result = DisorderTrajectoryKernel(
+        HealthyKernel(LinearTestReference()), module
+    ).generate(PATIENT, (730,), NamedRandomStreams(20260830, 0))
+
+    assert result.events == ()
+
+
+@pytest.mark.parametrize("module_version", ["", "   ", None, 1])
+def test_kernel_rejects_missing_empty_or_non_string_module_version(
+    module_version: object,
+) -> None:
+    module = EventModule(
+        LatentDisorderState(DisorderKind.HEALTHY, None, 0.0), (),
+        module_version=module_version,
+    )
+    if module_version is None:
+        del module.module_version
+
+    with pytest.raises((TypeError, ValueError), match="module_version"):
+        DisorderTrajectoryKernel(HealthyKernel(LinearTestReference()), module)
+
+
 def test_kernel_rejects_module_events_for_a_different_patient() -> None:
     module = EventModule(
         LatentDisorderState(DisorderKind.HEALTHY, None, 0.0),
@@ -128,6 +178,137 @@ def test_kernel_rejects_response_event_without_treatment_schedule() -> None:
     )
 
     with pytest.raises(ValueError, match="treatment"):
+        DisorderTrajectoryKernel(HealthyKernel(LinearTestReference()), module).generate(
+            PATIENT, (730,), NamedRandomStreams(20260830, 0)
+        )
+
+
+def test_kernel_accepts_matching_treatment_response_terminal_event() -> None:
+    module = _treatment_module(
+        (
+            ClinicalEvent(PATIENT.patient_id, 300, "treatment_start", None, False),
+            ClinicalEvent(PATIENT.patient_id, 400, "treatment_response", None, False),
+        )
+    )
+
+    result = DisorderTrajectoryKernel(
+        HealthyKernel(LinearTestReference()), module
+    ).generate(PATIENT, (730,), NamedRandomStreams(20260830, 0))
+
+    assert [event.event_type for event in result.events] == [
+        "treatment_start",
+        "treatment_response",
+    ]
+
+
+def test_kernel_accepts_matching_treatment_nonresponse_terminal_event() -> None:
+    module = _treatment_module(
+        (
+            ClinicalEvent(PATIENT.patient_id, 300, "treatment_start", None, False),
+            ClinicalEvent(PATIENT.patient_id, 400, "treatment_nonresponse", None, False),
+        ),
+        treatment_response=0.0,
+    )
+
+    result = DisorderTrajectoryKernel(
+        HealthyKernel(LinearTestReference()), module
+    ).generate(PATIENT, (730,), NamedRandomStreams(20260830, 0))
+
+    assert [event.event_type for event in result.events] == [
+        "treatment_start",
+        "treatment_nonresponse",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("events", "response", "message"),
+    [
+        (
+            (ClinicalEvent(PATIENT.patient_id, 400, "treatment_response", None, False),),
+            0.6,
+            "prior treatment_start",
+        ),
+        (
+            (ClinicalEvent(PATIENT.patient_id, 400, "treatment_nonresponse", None, False),),
+            0.0,
+            "prior treatment_start",
+        ),
+        (
+            (
+                ClinicalEvent(PATIENT.patient_id, 300, "treatment_start", None, False),
+                ClinicalEvent(PATIENT.patient_id, 300, "treatment_response", None, False),
+            ),
+            0.6,
+            "after treatment",
+        ),
+        (
+            (
+                ClinicalEvent(PATIENT.patient_id, 300, "treatment_start", None, False),
+                ClinicalEvent(PATIENT.patient_id, 400, "treatment_response", None, False),
+                ClinicalEvent(PATIENT.patient_id, 500, "treatment_nonresponse", None, False),
+            ),
+            0.6,
+            "terminal",
+        ),
+        (
+            (
+                ClinicalEvent(PATIENT.patient_id, 300, "treatment_start", None, False),
+                ClinicalEvent(PATIENT.patient_id, 400, "treatment_response", None, False),
+                ClinicalEvent(PATIENT.patient_id, 500, "treatment_response", None, False),
+            ),
+            0.6,
+            "terminal",
+        ),
+        (
+            (
+                ClinicalEvent(PATIENT.patient_id, 300, "treatment_start", None, False),
+                ClinicalEvent(PATIENT.patient_id, 400, "treatment_nonresponse", None, False),
+                ClinicalEvent(PATIENT.patient_id, 500, "treatment_response", None, False),
+            ),
+            0.0,
+            "terminal",
+        ),
+        (
+            (
+                ClinicalEvent(PATIENT.patient_id, 300, "treatment_start", None, False),
+                ClinicalEvent(PATIENT.patient_id, 400, "treatment_nonresponse", None, False),
+                ClinicalEvent(PATIENT.patient_id, 500, "treatment_nonresponse", None, False),
+            ),
+            0.0,
+            "terminal",
+        ),
+        (
+            (
+                ClinicalEvent(PATIENT.patient_id, 300, "treatment_start", None, False),
+                ClinicalEvent(PATIENT.patient_id, 400, "treatment_response", None, False),
+            ),
+            0.0,
+            "state.treatment_response",
+        ),
+        (
+            (
+                ClinicalEvent(PATIENT.patient_id, 300, "treatment_start", None, False),
+                ClinicalEvent(PATIENT.patient_id, 400, "treatment_nonresponse", None, False),
+            ),
+            0.6,
+            "state.treatment_response",
+        ),
+        (
+            (
+                ClinicalEvent(PATIENT.patient_id, 200, "treatment_response", None, False),
+                ClinicalEvent(PATIENT.patient_id, 300, "treatment_start", None, False),
+            ),
+            0.6,
+            "prior treatment_start",
+        ),
+    ],
+)
+def test_kernel_rejects_malformed_terminal_treatment_events(
+    events: tuple[ClinicalEvent, ...], response: float, message: str
+) -> None:
+    module = _treatment_module(events, treatment_response=response)
+
+    with pytest.raises(ValueError, match=message):
         DisorderTrajectoryKernel(HealthyKernel(LinearTestReference()), module).generate(
             PATIENT, (730,), NamedRandomStreams(20260830, 0)
         )
