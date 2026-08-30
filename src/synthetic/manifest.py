@@ -21,9 +21,9 @@ class RunManifest:
     prng_family: str
     seed_derivation_version: str
     status: str
+    metadata_only: bool = False
     row_counts: dict[str, int] = field(default_factory=dict)
     file_sha256: dict[str, str] = field(default_factory=dict)
-    derivation_oracle: str | None = None
 
     @classmethod
     def smoke(
@@ -50,9 +50,12 @@ class RunManifest:
             prng_family=PRNG_FAMILY,
             seed_derivation_version=SEED_DERIVATION_VERSION,
             status="GENERATED_UNVALIDATED",
+            metadata_only=True,
         )
 
     def to_json_bytes(self) -> bytes:
+        if not self.metadata_only and (not self.row_counts or not self.file_sha256):
+            raise ValueError("generated manifests require row_counts and file_sha256")
         return (
             json.dumps(asdict(self), sort_keys=True, indent=2, ensure_ascii=False) + "\n"
         ).encode("utf-8")

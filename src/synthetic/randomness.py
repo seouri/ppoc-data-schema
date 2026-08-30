@@ -28,7 +28,18 @@ class NamedRandomStreams:
 
 
 def synthetic_id(run_seed: int, kind: str, index: int) -> str:
+    if not isinstance(run_seed, int) or isinstance(run_seed, bool):
+        raise TypeError("run_seed must be an integer")
+    if not isinstance(kind, str):
+        raise TypeError("kind must be a nonempty string")
+    if not kind:
+        raise ValueError("kind must be a nonempty string")
+    if not isinstance(index, int) or isinstance(index, bool):
+        raise TypeError("index must be a nonnegative integer")
+    if index < 0:
+        raise ValueError("index must be a nonnegative integer")
     digest = hashlib.sha256(
-        f"synthetic-id-v1\x1f{run_seed}\x1f{kind}\x1f{index}".encode()
+        f"synthetic-id-v1\x1f{run_seed}\x1f{kind}\x1f{index}".encode("utf-8")  # noqa: UP012
     ).hexdigest()
-    return f"syn-{kind}-{digest[:24]}"
+    opaque = digest.translate(str.maketrans("0123456789abcdef", "abcdefghijklmnop"))
+    return f"syn-{opaque[:32]}"
