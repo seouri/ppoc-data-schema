@@ -108,12 +108,14 @@ def test_descriptor_statistics_use_declared_dialect(tmp_path: Path) -> None:
     descriptor = load_descriptor(ROOT / "datapackage.json")
     patients = next(item for item in descriptor["resources"] if item["name"] == "patients")
     patients["dialect"].update({"delimiter": ";", "quoteChar": "|"})
+    sex = next(field for field in patients["schema"]["fields"] if field["name"] == "sex")
+    sex["constraints"]["enum"].append("syn;|sex")
     links = next(item for item in descriptor["resources"] if item["name"] == "visits_augmented")
     links["dialect"].update({"delimiter": ";", "quoteChar": "|"})
     _empty_package(tmp_path, descriptor)
     patient_fields = [field["name"] for field in patients["schema"]["fields"]]
     patient_row = {field: "" for field in patient_fields}
-    patient_row.update({"patient_id": "syn;|a", "sex": "U"})
+    patient_row.update({"patient_id": "syn;|a", "sex": "syn;|sex"})
     with (tmp_path / patients["path"]).open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=patient_fields, delimiter=";", quotechar="|")
         writer.writeheader()
@@ -133,6 +135,9 @@ def test_descriptor_statistics_use_declared_dialect(tmp_path: Path) -> None:
     patient_field = generated["resources"][0]["schema"]["fields"][0]
     assert patient_field["x-uniqueValueCount"] == 1
     assert patient_field["x-missingCount"] == 0
+    generated_patients = generated["resources"][0]
+    generated_sex = next(field for field in generated_patients["schema"]["fields"] if field["name"] == "sex")
+    assert generated_sex["x-categories"] == [{"value": "syn;|sex", "count": 1}]
     generated_links = next(item for item in generated["resources"] if item["name"] == "visits_augmented")
     assert generated_links["x-logicalForeignKeys"][0]["orphanRows"] == 1
     visit_field = next(field for field in generated_links["schema"]["fields"] if field["name"] == "visit_id")
