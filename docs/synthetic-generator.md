@@ -12,7 +12,7 @@ The visible smoke example remains the healthy age-730+ profile: three visits at 
 
 ### Development-only age-regime smoke example
 
-When exercising the latent trajectory layer with an injected reference, cover the five explicit regimes: birth (age 0), infancy (less than 730 days), prepubertal childhood (730 days through puberty onset), puberty, and late adolescence (including age 7305). At every age, generate only two independent anthropometric dimensions; derive the third explicitly using the applicable conversion (for example, derive weight from standing height and BMI, or derive weight-for-length from recumbent length and weight). Do not generate height/length, weight, and BMI as three independent states.
+When exercising the latent trajectory layer with an injected reference, cover the five `GrowthRegime` classifier regimes: infancy, transition, childhood, puberty, and adolescence. Infancy runs before the configured transition window; transition spans the configured 24-month window (700–760 days by default, so day 730 is transition); childhood follows that window until the injected puberty schedule; puberty follows onset for its configured tempo; and adolescence continues through the maximum age (including 7305). At every age, generate only two independent anthropometric dimensions: length plus weight before transition, and height plus BMI after transition, with the applicable third value derived explicitly. Do not generate height/length, weight, and BMI as three independent states.
 
 The following compact example is development-only. Its injected reference is a test double, and its expected metrics are evaluator requirements rather than clinical targets. The named `puberty_age_days` value is an injected schedule/configuration value for this smoke example, not a clinical timing claim. The reference contract supplies finite values for `length_cm`, `weight_kg`, `head_circumference_cm`, `height_cm`, and `bmi` at each requested age, sex, and z-score.
 
@@ -20,16 +20,16 @@ The following compact example is development-only. Its injected reference is a t
 from synthetic.models import PatientState
 from synthetic.native.age_regimes import AgeRegimeConfig, AgeRegimeTrajectoryKernel
 from synthetic.randomness import NamedRandomStreams
-from tests.synthetic.fakes import LinearTestReference
+from tests.synthetic.test_age_regime_kernel import RegimeReference
 
 puberty_age_days = 4_745  # injected schedule/config value for this example
 config = AgeRegimeConfig(
     puberty_min_age_days=puberty_age_days,
     puberty_max_age_days=puberty_age_days,
 )
-reference = LinearTestReference()  # test double; never a production reference
+reference = RegimeReference()  # test double supporting all five metric names; never production
 kernel = AgeRegimeTrajectoryKernel(reference, config)
-ages = (0, 730, puberty_age_days, 7_305)  # birth, childhood, puberty, late adolescence
+ages = (0, 730, puberty_age_days, 7_305)  # infancy, transition, puberty, adolescence
 trajectory = kernel.generate(
     PatientState("synthetic-age-regime", "F", "F"),
     ages,
@@ -40,7 +40,7 @@ trajectory = kernel.generate(
 # and bmi values; age-windowed velocity; and head_circumference_cm behavior.
 ```
 
-Velocity and head-circumference fields used by those checks are evaluator-only derived views. They must not be exported as latent truth or as a new visible smoke resource; the existing observable CSV contract and its non-matchability limitation remain unchanged. These defaults are uncalibrated development scenarios. Clinical validity, prevalence, demographic calibration, held-out validation, privacy evaluation, and any Synthea or release gate remain deferred until separately approved evidence and governance are available.
+Velocity and head-circumference fields used by those checks are evaluator-only derived views. The trajectory `.state` and `.points` are likewise evaluator-only and are not exported as latent truth or as a new visible smoke resource; the existing observable CSV contract and its non-matchability limitation remain unchanged. This example uses no WHO/CDC clinical table and creates no disorder-critical descendants. These defaults are uncalibrated development scenarios. Clinical validity, prevalence, demographic calibration, held-out validation, privacy evaluation, Synthea conformance, and any release gate remain deferred until separately approved evidence and governance are available; a Synthea adapter would require its own conformance evaluation.
 
 ## Development-only latent growth-disorder modules
 
