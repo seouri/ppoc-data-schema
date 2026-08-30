@@ -65,6 +65,24 @@ The foundation requests `height_cm` and `bmi` values. A derivation oracle implem
 
 For a future authoritative oracle, pin the implementation fingerprint through reviewed configuration and set `test_only=False` only after the appropriate parity, clinical, and release gates have passed. Adding a Synthea module is an optional future adapter; this repository currently exposes the engine-neutral protocol, not a Synthea implementation.
 
+### Supplying an approved LMS reference
+
+The reference layer is an input contract. Supply an approved, public LMS artifact from outside this repository; do not add patient rows or other real clinical data. The CSV header must contain exactly these six columns, in any order: `metric`, `age_days`, `reference_sex`, `l`, `m`, `s`. Each row supplies one metric/sex/age point, with nonnegative integer `age_days` and numeric `l`, `m`, and `s`; `m` and `s` must be finite and positive. The loader records the SHA-256 of the exact file bytes. Pin it at load time with `expected_sha256`, which must be a lowercase 64-character hexadecimal SHA-256 digest; the loader enforces that exact format and rejects a changed artifact.
+
+```python
+from pathlib import Path
+
+from synthetic.references import LmsGrowthReference
+
+reference = LmsGrowthReference.from_csv(
+    Path("approved-growth-lms.csv"),
+    reference_id="approved-public-growth-v1",
+    expected_sha256="0123456789abcdef" * 4,
+)
+```
+
+The domain is determined by the rows supplied for each `(metric, reference_sex)` pair. Requests must use a supported metric and reference sex and an integer age within that pair's minimum and maximum ages; ages between rows are linearly interpolated in the LMS parameters, while ages outside the domain are rejected. The resulting LMS value must be finite and positive. A table-backed reference is not, by itself, clinical validation, prevalence validation, or privacy validation; those require separate approved evidence and governance.
+
 ## Output layout
 
 A successful run promotes the partial directory to the requested output path and contains exactly these eight descriptor-named CSV resources plus metadata:
