@@ -1,11 +1,12 @@
 import hashlib
 import json
+import os
 from pathlib import Path
 
 import pytest
 
 from synthetic.derivation import DerivationUnavailable
-from synthetic.generate import generate_smoke
+from synthetic.generate import _scan_tree, generate_smoke
 from tests.synthetic.fakes import (
     IdentityPreservingTestDerivationOracle,
     LinearTestReference,
@@ -117,6 +118,28 @@ def test_oracle_cannot_mutate_actual_partial(tmp_path: Path) -> None:
             trusted_derivation_test_only=True,
         )
     assert not output.exists()
+
+
+def test_oracle_test_only_classification_must_match_trusted_config(tmp_path: Path) -> None:
+    class Mismatch(IdentityPreservingTestDerivationOracle):
+        def derive(self, package_root: Path, descriptor: dict):
+            result = super().derive(package_root, descriptor)
+            return result.__class__(result.oracle_id, result.implementation_fingerprint, False)
+
+    with pytest.raises(DerivationUnavailable):
+        generate_smoke(
+            descriptor_path=ROOT / "datapackage.json", output=tmp_path / "run",
+            patient_count=1, seed=1, reference_time="2026-08-30T00:00:00Z",
+            software_revision="test", reference=LinearTestReference(),
+            derivation_oracle=Mismatch(), trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
+            trusted_derivation_test_only=True,
+        )
+
+
+def test_tree_scan_rejects_fifo(tmp_path: Path) -> None:
+    os.mkfifo(tmp_path / "pipe")
+    with pytest.raises(DerivationUnavailable):
+        _scan_tree(tmp_path, {"data.csv"}, set())
 
 
 @pytest.mark.parametrize("mode", ["extra", "mutate"])

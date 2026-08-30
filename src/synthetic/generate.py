@@ -6,6 +6,7 @@ import hashlib
 import json
 import re
 import shutil
+import stat
 import tempfile
 from pathlib import Path
 
@@ -41,9 +42,10 @@ def _allowed_tree(descriptor: dict, names: tuple[str, ...]) -> tuple[set[str], s
 def _scan_tree(root: Path, files: set[str], dirs: set[str]) -> None:
     for path in root.rglob("*"):
         relative = path.relative_to(root).as_posix()
-        if path.is_symlink() or (path.is_file() and relative not in files) or (
-            path.is_dir() and relative not in dirs
-        ):
+        mode = path.lstat().st_mode
+        allowed_file = relative in files and stat.S_ISREG(mode)
+        allowed_dir = relative in dirs and stat.S_ISDIR(mode)
+        if not (allowed_file or allowed_dir):
             raise DerivationUnavailable(f"unexpected run artifact: {relative}")
 
 
@@ -173,6 +175,8 @@ def generate_smoke(
         _scan_tree(run.partial_path, partial_files, partial_dirs)
         if derivation.implementation_fingerprint != trusted_derivation_fingerprint:
             raise DerivationUnavailable("derivation fingerprint does not match trusted configuration")
+        if derivation.test_only != trusted_derivation_test_only:
+            raise DerivationUnavailable("derivation test-only classification does not match trusted configuration")
         if derivation.implementation_fingerprint == "0" * 64:
             raise DerivationUnavailable("derivation implementation fingerprint is a placeholder")
         report = validate_structure(run.partial_path, descriptor)
