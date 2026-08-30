@@ -4,6 +4,7 @@ import argparse
 import dataclasses
 import hashlib
 import json
+import re
 import shutil
 import tempfile
 from pathlib import Path
@@ -36,12 +37,18 @@ def generate_smoke(
     software_revision: str,
     reference: GrowthReference,
     derivation_oracle: DerivationOracle | None,
+    trusted_derivation_fingerprint: str,
+    trusted_derivation_test_only: bool,
 ) -> Path:
     """Generate and atomically promote the exact-schema synthetic smoke package."""
     if patient_count < 1:
         raise ValueError("patient_count must be positive")
     if derivation_oracle is None:
         raise DerivationUnavailable("authoritative derivation oracle is not configured")
+    if re.fullmatch(r"[0-9a-f]{64}", trusted_derivation_fingerprint) is None:
+        raise ValueError("trusted_derivation_fingerprint must be lowercase SHA-256 hex")
+    if not isinstance(trusted_derivation_test_only, bool):
+        raise TypeError("trusted_derivation_test_only must be a boolean")
 
     descriptor = load_descriptor(descriptor_path)
     smoke_configuration = {
@@ -135,6 +142,16 @@ def generate_smoke(
                 target.parent.mkdir(parents=True, exist_ok=True)
                 with target.open("xb") as handle:
                     handle.write(source.read_bytes())
+        descriptor_names = [item["name"] for item in descriptor["resources"]]
+        allowed = {Path(resource_spec(descriptor, name)["path"]).as_posix() for name in descriptor_names}
+        for path in run.partial_path.rglob("*"):
+            relative = path.relative_to(run.partial_path).as_posix()
+            if path.is_symlink() or (path.is_file() and relative not in allowed) or (
+                path.is_dir() and relative not in {parent for item in allowed for parent in Path(item).parents if str(parent) != "."}
+            ):
+                raise DerivationUnavailable(f"unexpected run artifact: {relative}")
+        if derivation.implementation_fingerprint != trusted_derivation_fingerprint:
+            raise DerivationUnavailable("derivation fingerprint does not match trusted configuration")
         if derivation.implementation_fingerprint == "":
             raise DerivationUnavailable("derivation implementation fingerprint is required")
         report = validate_structure(run.partial_path, descriptor)
@@ -155,14 +172,14 @@ def generate_smoke(
             software_revision=software_revision,
         )
         file_sha256 = {
-            path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+            path.relative_to(run.partial_path).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
             for path in sorted(run.partial_path.rglob("*"))
             if path.is_file() and not path.is_symlink() and path.name != "manifest.json"
         }
         manifest = dataclasses.replace(
             manifest,
-            status="STRUCTURE_VALIDATED_TEST_ORACLE" if derivation.test_only else "STRUCTURE_VALIDATED",
-            derivation_fingerprint=derivation.implementation_fingerprint,
+            status="STRUCTURE_VALIDATED_TEST_ORACLE" if trusted_derivation_test_only else "STRUCTURE_VALIDATED",
+            derivation_fingerprint=trusted_derivation_fingerprint,
             metadata_only=False,
             row_counts=row_counts,
             file_sha256=file_sha256,

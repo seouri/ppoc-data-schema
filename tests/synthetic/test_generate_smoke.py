@@ -12,6 +12,7 @@ from tests.synthetic.fakes import (
 )
 
 ROOT = Path(__file__).resolve().parents[2]
+TRUSTED_FINGERPRINT = "0123456789abcdef" * 4
 
 
 def _hashes(root: Path) -> dict[str, str]:
@@ -33,6 +34,8 @@ def test_smoke_generation_is_exact_schema_and_reproducible(tmp_path: Path) -> No
         "software_revision": "test-revision",
         "reference": LinearTestReference(),
         "derivation_oracle": IdentityPreservingTestDerivationOracle(),
+        "trusted_derivation_fingerprint": TRUSTED_FINGERPRINT,
+        "trusted_derivation_test_only": True,
     }
     generate_smoke(output=first, **arguments)
     generate_smoke(output=second, **arguments)
@@ -64,8 +67,22 @@ def test_no_derivation_oracle_cannot_promote_output(tmp_path: Path) -> None:
             software_revision="test-revision",
             reference=LinearTestReference(),
             derivation_oracle=None,
+            trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
+            trusted_derivation_test_only=True,
         )
     assert not (tmp_path / "run").exists()
+
+
+def test_untrusted_derivation_identity_cannot_promote(tmp_path: Path) -> None:
+    with pytest.raises(DerivationUnavailable):
+        generate_smoke(
+            descriptor_path=ROOT / "datapackage.json", output=tmp_path / "run",
+            patient_count=1, seed=1, reference_time="2026-08-30T00:00:00Z",
+            software_revision="test", reference=LinearTestReference(),
+            derivation_oracle=IdentityPreservingTestDerivationOracle(),
+            trusted_derivation_fingerprint="f" * 64,
+            trusted_derivation_test_only=True,
+        )
 
 
 @pytest.mark.parametrize("mode", ["extra", "mutate"])
@@ -86,5 +103,7 @@ def test_derivation_cannot_write_extra_artifacts_or_mutate_base(tmp_path: Path, 
             patient_count=1, seed=1, reference_time="2026-08-30T00:00:00Z",
             software_revision="test", reference=LinearTestReference(),
             derivation_oracle=Hostile(),
+            trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
+            trusted_derivation_test_only=True,
         )
     assert not (tmp_path / "run").exists()

@@ -125,6 +125,9 @@ def write_synthetic_descriptor(
     generated["sources"] = []
     generated["licenses"] = []
     generated["contributors"] = []
+    generated.pop("created", None)
+    generated["version"] = "synthetic-smoke-v1"
+    generated["keywords"] = ["synthetic", "smoke-profile"]
     for key in list(generated):
         if key.startswith("x-"):
             generated.pop(key)
