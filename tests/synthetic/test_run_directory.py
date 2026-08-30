@@ -96,3 +96,11 @@ def test_linux_dispatch_uses_no_replace_rename(monkeypatch: pytest.MonkeyPatch) 
     run_directory._rename_without_replacing(Path("source"), Path("target"))
 
     assert calls and calls[0][-1] == 1
+
+
+def test_linux_missing_renameat2_is_controlled(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(run_directory.sys, "platform", "linux")
+    monkeypatch.setattr(run_directory.ctypes, "CDLL", lambda *args, **kwargs: SimpleNamespace())
+
+    with pytest.raises(NotImplementedError, match="renameat2 is unavailable"):
+        run_directory._rename_without_replacing(Path("source"), Path("target"))
