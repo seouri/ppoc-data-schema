@@ -273,7 +273,11 @@ Use these fixed configurations for deterministic timing assertions:
 ```python
 def test_constitutional_delay_shifts_puberty_once() -> None:
     physiology = AgeRegimeTrajectoryKernel(
-        RegimeLinearTestReference(), AgeRegimeConfig(residual_sd=0.0)
+        RegimeLinearTestReference(), AgeRegimeConfig(
+            residual_sd=0.0,
+            puberty_min_age_days=4380,
+            puberty_max_age_days=4380,
+        )
     )
     module = ConstitutionalDelayModule(
         ConstitutionalDelayConfig(
