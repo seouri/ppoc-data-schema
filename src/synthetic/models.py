@@ -186,7 +186,12 @@ class AgeRegimePoint:
         if self.regime is not GrowthRegime.INFANCY and self.length_cm is not None and self.regime is not GrowthRegime.TRANSITION:
             raise ValueError("length is not accepted after transition")
         if self.height_cm is not None and self.bmi is not None:
-            expected = self.bmi * (self.height_cm / 100) ** 2
+            try:
+                expected = self.bmi * (self.height_cm / 100) ** 2
+            except OverflowError as exc:
+                raise ValueError("weight does not match height and BMI") from exc
+            if not math.isfinite(expected):
+                raise ValueError("weight does not match height and BMI")
             if not math.isclose(self.weight_kg, expected, rel_tol=1e-9, abs_tol=1e-9):
                 raise ValueError("weight does not match height and BMI")
 

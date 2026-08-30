@@ -69,6 +69,11 @@ def test_age_regime_models_reject_boolean_numeric_values() -> None:
         AgeRegimeState("v1", True, 0.0, 0.0, 0.0, 0.0, 4380, 900, 0.0, 0.0)
 
 
+def test_age_regime_point_rejects_overflowing_bmi_identity() -> None:
+    with pytest.raises(ValueError, match="weight"):
+        AgeRegimePoint("syn-patient-a", 4000, GrowthRegime.PUBERTY, None, 1e308, 1.0, 1.0)
+
+
 def test_existing_latent_point_positional_contract_is_unchanged() -> None:
     from synthetic.models import LatentPoint
     point = LatentPoint("syn-patient-a", 730, 90.0, 16.0, 12.96, 0.0, 0.0)
