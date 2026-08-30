@@ -63,3 +63,5 @@ The Python usage example includes schema-driven pandas loading, declared CSV enc
 The approved design is in [the synthetic growth fixture specification](docs/superpowers/specs/2026-08-30-synthetic-growth-fixtures-design.md). The first implementation work package establishes an exact-schema synthetic smoke-profile package with injected growth-reference and augmentation interfaces. It does not ship a clinically validated reference model, claim demographic representativeness, calibrate or validate prevalence, read PPOC records, or establish privacy or release approval.
 
 Until the authoritative augmentation implementation or an approved parity harness is supplied, the command-line entry point fails closed. The smoke-profile package must not be labeled a development fixture, golden fixture, or validated output.
+
+See [`docs/synthetic-generator.md`](docs/synthetic-generator.md) for the Python usage example, output contract, safety checks, and verification commands.
