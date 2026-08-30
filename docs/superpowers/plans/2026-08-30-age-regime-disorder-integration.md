@@ -268,11 +268,60 @@ def test_familial_effect_preserves_identities_across_regimes() -> None:
             )
 ```
 
-Use fixed module configurations for deterministic constitutional-delay and
-growth-hormone-deficiency tests. Add negative tests for wrong module
-kind/state, malformed event patient IDs, shifted schedules outside the
-configured domain, extreme reference values, sparse transition continuity, and
-missing required module methods.
+Use these fixed configurations for deterministic timing assertions:
+
+```python
+def test_constitutional_delay_shifts_puberty_once() -> None:
+    physiology = AgeRegimeTrajectoryKernel(
+        RegimeLinearTestReference(), AgeRegimeConfig(residual_sd=0.0)
+    )
+    module = ConstitutionalDelayModule(
+        ConstitutionalDelayConfig(
+            expected_puberty_age_days=4380,
+            puberty_delay_min_days=360,
+            puberty_delay_max_days=360,
+        )
+    )
+    result = AgeRegimeDisorderKernel(physiology, module).generate(
+        PATIENT, (4380, 4740, 4741, 5100), NamedRandomStreams(9, 0)
+    )
+
+    assert result.disorder.puberty_delay_days == 360
+    assert result.physiology.state.puberty_onset_age_days == 4740
+    assert result.physiology.points[0].height_z == pytest.approx(
+        result.physiology.points[1].height_z
+    )
+    assert result.events[0].event_type == "latent_onset"
+
+
+def test_growth_hormone_deficiency_keeps_treatment_events_and_changes_growth() -> None:
+    physiology = AgeRegimeTrajectoryKernel(
+        RegimeLinearTestReference(), AgeRegimeConfig(residual_sd=0.0)
+    )
+    module = GrowthHormoneDeficiencyModule(
+        GrowthHormoneDeficiencyConfig(
+            onset_min_age_days=3000,
+            onset_max_age_days=3000,
+            treatment_probability=1.0,
+            treatment_delay_days=0,
+            response_days=365,
+            treatment_response_min=0.6,
+            treatment_response_max=0.6,
+        )
+    )
+    result = AgeRegimeDisorderKernel(physiology, module).generate(
+        PATIENT, (2999, 3000, 3365, 4000, 5000), NamedRandomStreams(10, 0)
+    )
+
+    assert result.physiology.points[2].height_z < result.physiology.points[1].height_z
+    assert [event.event_type for event in result.events][-2:] == [
+        "treatment_start", "treatment_response"
+    ]
+```
+
+Add negative tests for wrong module kind/state, malformed event patient IDs,
+shifted schedules outside the configured domain, extreme reference values,
+sparse transition continuity, and missing required module methods.
 
 - [ ] **Step 2: Run integration tests to verify they fail**
 
