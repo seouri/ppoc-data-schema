@@ -47,10 +47,17 @@ def write_resource(
 
 
 def _read_rows(package_root: Path, resource: dict[str, Any]) -> list[dict[str, str]]:
+    dialect = resource.get("dialect", {})
     with (package_root / resource["path"]).open(
         encoding=resource.get("encoding", "utf-8"), newline=""
     ) as handle:
-        return list(csv.DictReader(handle))
+        return list(csv.DictReader(
+            handle,
+            delimiter=dialect.get("delimiter", ","),
+            quotechar=dialect.get("quoteChar", '"'),
+            doublequote=dialect.get("doubleQuote", True),
+            strict=True,
+        ))
 
 
 def _generated_field_statistics(package_root: Path, resource: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -102,6 +109,10 @@ def write_synthetic_descriptor(
     generated["title"] = f"{source_descriptor['title']} -- Completely Generated"
     generated["description"] = "Completely generated development fixtures; contains no real patient records."
     generated["x-synthetic"] = True
+    generated["homepage"] = None
+    generated["sources"] = []
+    generated["licenses"] = []
+    generated["contributors"] = []
     generated.pop("x-statisticsSource", None)
     for resource in generated["resources"]:
         resource["x-rowCount"] = row_counts[resource["name"]]

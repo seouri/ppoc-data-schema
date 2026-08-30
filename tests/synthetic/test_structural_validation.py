@@ -71,3 +71,32 @@ def test_synthetic_descriptor_removes_real_statistics(tmp_path: Path) -> None:
     ]
     assert logical_links
     assert all(link["nullRows"] == 0 and link["orphanRows"] == 0 for link in logical_links)
+
+
+def test_synthetic_descriptor_has_no_real_provenance(tmp_path: Path) -> None:
+    descriptor = load_descriptor(ROOT / "datapackage.json")
+    _empty_package(tmp_path, descriptor)
+    output = write_synthetic_descriptor(tmp_path, copy.deepcopy(descriptor), {
+        item["name"]: 0 for item in descriptor["resources"]
+    })
+    generated = json.loads(output.read_text())
+    assert generated["sources"] == []
+    assert generated["licenses"] == []
+    assert generated["contributors"] == []
+    assert generated["homepage"] is None
+
+
+def test_validation_uses_declared_semicolon_dialect(tmp_path: Path) -> None:
+    descriptor = load_descriptor(ROOT / "datapackage.json")
+    patients = next(item for item in descriptor["resources"] if item["name"] == "patients")
+    patients["dialect"]["delimiter"] = ";"
+    _empty_package(tmp_path, descriptor)
+    fields = [field["name"] for field in patients["schema"]["fields"]]
+    row = {field: "" for field in fields}
+    row["patient_id"] = "syn-a"
+    row["sex"] = "U"
+    with (tmp_path / "patients.csv").open("w", encoding="utf-8", newline="") as handle:
+        csv.DictWriter(handle, fieldnames=fields, delimiter=";").writeheader()
+        csv.DictWriter(handle, fieldnames=fields, delimiter=";").writerow(row)
+    report = validate_structure(tmp_path, descriptor)
+    assert not any(error.startswith("patients:") for error in report.errors)

@@ -53,9 +53,16 @@ def validate_structure(package_root: Path, descriptor: dict[str, Any]) -> Valida
             row_counts[name] = 0
             continue
         expected = [field["name"] for field in resource["schema"]["fields"]]
+        dialect = resource.get("dialect", {})
         try:
             with path.open(encoding=resource.get("encoding", "utf-8"), newline="") as handle:
-                reader = csv.DictReader(handle, strict=True)
+                reader = csv.DictReader(
+                    handle,
+                    delimiter=dialect.get("delimiter", ","),
+                    quotechar=dialect.get("quoteChar", '"'),
+                    doublequote=dialect.get("doubleQuote", True),
+                    strict=True,
+                )
                 if reader.fieldnames != expected:
                     errors.append(f"{name}: header mismatch")
                     row_counts[name] = 0
