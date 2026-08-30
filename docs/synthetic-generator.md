@@ -8,6 +8,28 @@ The current vertical slice generates healthy patients aged two years and older. 
 
 The generator reads `datapackage.json` as schema metadata only. It does not read the repository's real CSV snapshots or any patient records. The current command-line entry point intentionally fails closed because no production growth reference or authoritative augmentation oracle is shipped.
 
+The visible smoke example remains the healthy age-730+ profile: three visits at ages 730, 1095, and 1460 days. It does not export latent age-regime state, puberty state, or any other evaluator-only trajectory state. The broader age-regime behavior below is a development-only injected-reference example, not a change to that visible smoke contract.
+
+### Development-only age-regime smoke example
+
+When exercising the latent trajectory layer with an injected reference, cover the five explicit regimes: birth (age 0), infancy (less than 730 days), prepubertal childhood (730 days through puberty onset), puberty, and late adolescence (including age 7305). At every age, generate only two independent anthropometric dimensions; derive the third explicitly using the applicable conversion (for example, derive weight from standing height and BMI, or derive weight-for-length from recumbent length and weight). Do not generate height/length, weight, and BMI as three independent states.
+
+The following compact example is development-only. Its injected reference is a test double, and its expected metrics are evaluator requirements rather than clinical targets:
+
+```python
+ages = (0, 730, 4_745, 7_305)  # birth, childhood, puberty, late adolescence
+trajectory = kernel.generate(
+    PatientState("synthetic-age-regime", "F", "F"),
+    ages,
+    NamedRandomStreams(20260830, 1),
+)
+# Evaluator-only checks: continuity at regime boundaries; two-dimension identity;
+# explicit conversion; valid reference domains; age-windowed height/BMI velocity;
+# and head-circumference availability/behavior in the infant regime.
+```
+
+Velocity and head-circumference fields used by those checks are evaluator-only derived views. They must not be exported as latent truth or as a new visible smoke resource; the existing observable CSV contract and its non-matchability limitation remain unchanged. These defaults are uncalibrated development scenarios. Clinical validity, prevalence, demographic calibration, held-out validation, privacy evaluation, and any Synthea or release gate remain deferred until separately approved evidence and governance are available.
+
 ## Development-only latent growth-disorder modules
 
 The latent trajectory layer is a development and evaluator harness, not a clinical model. It applies a directionally coherent, uncalibrated scenario module to the existing healthy kernel while keeping hidden truth and event traces separate from observable descendants. For example, using the injected test reference already used by the tests:
