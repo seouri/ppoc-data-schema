@@ -191,9 +191,16 @@ class AgeRegimeTrajectoryKernel:
         patient: PatientState,
         ages_days: tuple[int, ...],
         streams: NamedRandomStreams,
+        *,
+        state: AgeRegimeState | None = None,
     ) -> AgeRegimeTrajectory:
         self._validate_ages(ages_days)
-        state, residual, head = self._sample_state(streams)
+        if state is None:
+            state = self.sample_state(streams)
+        else:
+            self._validate_state(state)
+        residual = streams.generator("regime.residual")
+        head = streams.generator("regime.head")
 
         points: list[AgeRegimePoint] = []
         previous_age: int | None = None
@@ -293,11 +300,10 @@ class AgeRegimeTrajectoryKernel:
         ):
             raise ValueError("requested ages are outside the reference domain")
 
-    def _sample_state(self, streams: NamedRandomStreams):
+    def sample_state(self, streams: NamedRandomStreams) -> AgeRegimeState:
         birth = streams.generator("regime.birth")
         childhood = streams.generator("regime.childhood")
         puberty = streams.generator("regime.puberty")
-        residual = streams.generator("regime.residual")
         head = streams.generator("regime.head")
 
         puberty_height_spurt_z = float(
@@ -338,7 +344,19 @@ class AgeRegimeTrajectoryKernel:
             puberty_height_spurt_z=puberty_height_spurt_z,
             puberty_bmi_shift_z=puberty_bmi_shift_z,
         )
-        return state, residual, head
+        return state
+
+    def _validate_state(self, state: AgeRegimeState) -> None:
+        if not isinstance(state, AgeRegimeState):
+            raise ValueError("state must be an AgeRegimeState")  # noqa: TRY004
+        if state.module_version != self.config.module_version:
+            raise ValueError("state module_version does not match current module")
+        if not self.config.puberty_min_age_days <= state.puberty_onset_age_days <= self.config.puberty_max_age_days:
+            raise ValueError("state puberty onset is outside configured puberty bounds")
+        if not self.config.puberty_tempo_min_days <= state.puberty_tempo_days <= self.config.puberty_tempo_max_days:
+            raise ValueError("state puberty tempo is outside configured puberty bounds")
+        if state.puberty_onset_age_days + state.puberty_tempo_days > self.config.maximum_age_days:
+            raise ValueError("state puberty schedule exceeds maximum_age_days")
 
     def _pre_transition_values(
         self,
