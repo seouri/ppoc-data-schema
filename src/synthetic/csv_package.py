@@ -116,6 +116,8 @@ def write_synthetic_descriptor(
     generated.pop("x-statisticsSource", None)
     for resource in generated["resources"]:
         resource["x-rowCount"] = row_counts[resource["name"]]
+        resource.pop("x-generatedBy", None)
+        resource.pop("x-derivedFrom", None)
         for key in SNAPSHOT_STAT_KEYS:
             resource.pop(key, None)
         stats = _generated_field_statistics(package_root, resource)

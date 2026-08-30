@@ -84,6 +84,8 @@ def test_synthetic_descriptor_has_no_real_provenance(tmp_path: Path) -> None:
     assert generated["licenses"] == []
     assert generated["contributors"] == []
     assert generated["homepage"] is None
+    assert all("x-generatedBy" not in resource and "x-derivedFrom" not in resource
+               for resource in generated["resources"])
 
 
 def test_validation_uses_declared_semicolon_dialect(tmp_path: Path) -> None:
@@ -100,3 +102,35 @@ def test_validation_uses_declared_semicolon_dialect(tmp_path: Path) -> None:
         csv.DictWriter(handle, fieldnames=fields, delimiter=";").writerow(row)
     report = validate_structure(tmp_path, descriptor)
     assert not any(error.startswith("patients:") for error in report.errors)
+
+
+def test_descriptor_statistics_use_declared_dialect(tmp_path: Path) -> None:
+    descriptor = load_descriptor(ROOT / "datapackage.json")
+    patients = next(item for item in descriptor["resources"] if item["name"] == "patients")
+    patients["dialect"].update({"delimiter": ";", "quoteChar": "|"})
+    links = next(item for item in descriptor["resources"] if item["name"] == "visits_augmented")
+    links["dialect"].update({"delimiter": ";", "quoteChar": "|"})
+    _empty_package(tmp_path, descriptor)
+    patient_fields = [field["name"] for field in patients["schema"]["fields"]]
+    patient_row = {field: "" for field in patient_fields}
+    patient_row.update({"patient_id": "syn-a", "sex": "U"})
+    with (tmp_path / patients["path"]).open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=patient_fields, delimiter=";", quotechar="|")
+        writer.writeheader()
+        writer.writerow(patient_row)
+    link_fields = [field["name"] for field in links["schema"]["fields"]]
+    link_row = {field: "" for field in link_fields}
+    link_row["visit_id"] = "orphan-visit"
+    with (tmp_path / links["path"]).open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=link_fields, delimiter=";", quotechar="|")
+        writer.writeheader()
+        writer.writerow(link_row)
+    output = write_synthetic_descriptor(tmp_path, descriptor, {
+        item["name"]: 1 if item["name"] in {"patients", "visits_augmented"} else 0
+        for item in descriptor["resources"]
+    })
+    generated = json.loads(output.read_text())
+    patient_field = generated["resources"][0]["schema"]["fields"][0]
+    assert patient_field["x-uniqueValueCount"] == 1
+    generated_links = next(item for item in generated["resources"] if item["name"] == "visits_augmented")
+    assert generated_links["x-logicalForeignKeys"][0]["orphanRows"] == 1
