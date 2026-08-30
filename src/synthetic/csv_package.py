@@ -77,8 +77,9 @@ def _generated_field_statistics(package_root: Path, resource: dict[str, Any]) ->
             item["x-observedRange"] = {"minimum": min(numeric), "maximum": max(numeric)}
         if "enum" in field.get("constraints", {}) and present:
             counts = Counter(present)
+            enum_types = {str(item): item for item in field["constraints"]["enum"]}
             item["x-categories"] = [
-                {"value": value, "count": count}
+                {"value": enum_types.get(value, value), "count": count}
                 for value, count in sorted(counts.items(), key=lambda pair: (-pair[1], pair[0]))
             ]
         statistics[name] = item

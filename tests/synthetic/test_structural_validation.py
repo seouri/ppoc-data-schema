@@ -88,6 +88,21 @@ def test_synthetic_descriptor_has_no_real_provenance(tmp_path: Path) -> None:
                for resource in generated["resources"])
 
 
+def test_synthetic_descriptor_strips_all_source_snapshot_metadata(tmp_path: Path) -> None:
+    descriptor = load_descriptor(ROOT / "datapackage.json")
+    descriptor["x-created"] = "real-snapshot"
+    descriptor["resources"][0]["x-keyDescription"] = "real"
+    descriptor["resources"][0]["schema"]["fields"][0]["x-encodingNote"] = "real"
+    _empty_package(tmp_path, descriptor)
+    generated = json.loads(write_synthetic_descriptor(tmp_path, descriptor, {
+        item["name"]: 0 for item in descriptor["resources"]
+    }).read_text())
+    serialized = json.dumps(generated)
+    assert "real-snapshot" not in serialized
+    assert "x-keyDescription" not in serialized
+    assert "x-encodingNote" not in serialized
+
+
 def test_validation_uses_declared_semicolon_dialect(tmp_path: Path) -> None:
     descriptor = load_descriptor(ROOT / "datapackage.json")
     patients = next(item for item in descriptor["resources"] if item["name"] == "patients")
