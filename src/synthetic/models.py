@@ -90,6 +90,10 @@ class LatentDisorderState:
             or not 0 <= self.treatment_response <= 1
         ):
             raise ValueError("treatment_response must be finite and in [0, 1]")
+        if self.treatment_start_age_days is None and self.treatment_response != 0:
+            raise ValueError(
+                "nonzero treatment_response requires treatment_start_age_days"
+            )
 
 
 @dataclass(frozen=True)

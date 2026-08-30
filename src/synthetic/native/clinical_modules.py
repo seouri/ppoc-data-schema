@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Protocol
+from typing import ClassVar, Protocol
 
 from synthetic.models import ClinicalEvent, DisorderKind, LatentDisorderState, PatientState
 from synthetic.randomness import NamedRandomStreams
@@ -21,11 +21,13 @@ _PHASE_ORDER = {
     "recorded_diagnosis": 4,
     "treatment_start": 5,
     "treatment_response": 6,
+    "treatment_nonresponse": 6,
 }
 
 
 class GrowthDisorderModule(Protocol):
     kind: DisorderKind
+    module_version: str
 
     def sample_state(
         self, patient: PatientState, streams: NamedRandomStreams
@@ -115,11 +117,14 @@ def _ordered_events(
 
 @dataclass(frozen=True)
 class HealthyGrowthConfig:
-    """Empty configuration retained for a uniform versioned module interface."""
+    """Empty configuration retained for the versioned module interface."""
+
+    module_version: ClassVar[str] = "healthy-growth-v1"
 
 
 class HealthyGrowthModule:
     kind = DisorderKind.HEALTHY
+    module_version: ClassVar[str] = HealthyGrowthConfig.module_version
 
     def __init__(self, config: HealthyGrowthConfig | None = None) -> None:
         self.config = config or HealthyGrowthConfig()
@@ -150,6 +155,8 @@ class HealthyGrowthModule:
 class FamilialShortStatureConfig:
     """Uncalibrated development scenario parameters for familial short stature."""
 
+    module_version: ClassVar[str] = "familial-short-stature-v1"
+
     severity_min: float = 0.7
     severity_max: float = 1.3
     onset_age_days: int = 0
@@ -175,6 +182,7 @@ class FamilialShortStatureConfig:
 
 class FamilialShortStatureModule:
     kind = DisorderKind.FAMILIAL_SHORT_STATURE
+    module_version: ClassVar[str] = FamilialShortStatureConfig.module_version
 
     def __init__(self, config: FamilialShortStatureConfig | None = None) -> None:
         self.config = config or FamilialShortStatureConfig()
@@ -200,6 +208,10 @@ class FamilialShortStatureModule:
         self, patient: PatientState, state: LatentDisorderState
     ) -> tuple[ClinicalEvent, ...]:
         _require_module_state(state, self.kind)
+        if state.severity == 0:
+            return _ordered_events(
+                patient, (("latent_onset", self.config.onset_age_days),)
+            )
         return _ordered_events(
             patient,
             (
@@ -215,6 +227,8 @@ class FamilialShortStatureModule:
 @dataclass(frozen=True)
 class ConstitutionalDelayConfig:
     """Uncalibrated development scenario parameters for constitutional delay."""
+
+    module_version: ClassVar[str] = "constitutional-delay-v1"
 
     expected_puberty_age_days: int = 4380
     puberty_delay_min_days: int = 180
@@ -246,6 +260,7 @@ class ConstitutionalDelayConfig:
 
 class ConstitutionalDelayModule:
     kind = DisorderKind.CONSTITUTIONAL_DELAY
+    module_version: ClassVar[str] = ConstitutionalDelayConfig.module_version
 
     def __init__(self, config: ConstitutionalDelayConfig | None = None) -> None:
         self.config = config or ConstitutionalDelayConfig()
@@ -290,6 +305,8 @@ class ConstitutionalDelayModule:
     ) -> tuple[ClinicalEvent, ...]:
         _require_module_state(state, self.kind)
         puberty_age = self.config.expected_puberty_age_days
+        if state.severity == 0 or state.puberty_delay_days == 0:
+            return _ordered_events(patient, (("latent_onset", puberty_age),))
         delayed_end = puberty_age + state.puberty_delay_days
         phenotype_age = puberty_age + state.puberty_delay_days // 2
         recognition_age = delayed_end + self.config.recognition_delay_days
@@ -310,6 +327,8 @@ class ConstitutionalDelayModule:
 @dataclass(frozen=True)
 class GrowthHormoneDeficiencyConfig:
     """Uncalibrated development scenario parameters for growth-hormone deficiency."""
+
+    module_version: ClassVar[str] = "growth-hormone-deficiency-v1"
 
     onset_min_age_days: int = 730
     onset_max_age_days: int = 3652
@@ -360,6 +379,7 @@ class GrowthHormoneDeficiencyConfig:
 
 class GrowthHormoneDeficiencyModule:
     kind = DisorderKind.GROWTH_HORMONE_DEFICIENCY
+    module_version: ClassVar[str] = GrowthHormoneDeficiencyConfig.module_version
 
     def __init__(self, config: GrowthHormoneDeficiencyConfig | None = None) -> None:
         self.config = config or GrowthHormoneDeficiencyConfig()
@@ -372,7 +392,7 @@ class GrowthHormoneDeficiencyModule:
             disorder.integers(self.config.onset_min_age_days, self.config.onset_max_age_days + 1)
         )
         severity = float(disorder.uniform(self.config.severity_min, self.config.severity_max))
-        if float(disorder.random()) >= self.config.treatment_probability:
+        if severity == 0 or float(disorder.random()) >= self.config.treatment_probability:
             return LatentDisorderState(self.kind, onset, severity)
         response = float(
             disorder.uniform(
@@ -435,6 +455,8 @@ class GrowthHormoneDeficiencyModule:
         if state.onset_age_days is None:
             raise ValueError("growth hormone deficiency requires an onset age")
         onset = state.onset_age_days
+        if state.severity == 0:
+            return _ordered_events(patient, (("latent_onset", onset),))
         phenotype_age = onset + self.config.phenotype_delay_days
         recognition_age = phenotype_age + self.config.recognition_delay_days
         workup_age = recognition_age + self.config.workup_delay_days
@@ -456,6 +478,11 @@ class GrowthHormoneDeficiencyModule:
             schedule
             + (
                 ("treatment_start", state.treatment_start_age_days),
-                ("treatment_response", state.treatment_start_age_days + self.config.response_days),
+                (
+                    "treatment_response"
+                    if state.treatment_response > 0
+                    else "treatment_nonresponse",
+                    state.treatment_start_age_days + self.config.response_days,
+                ),
             ),
         )

@@ -40,6 +40,98 @@ def test_healthy_module_has_no_effects_or_events() -> None:
     assert module.events(PATIENT, state) == ()
 
 
+def test_module_versions_are_stable_and_unique() -> None:
+    modules = (
+        HealthyGrowthModule(),
+        FamilialShortStatureModule(),
+        ConstitutionalDelayModule(),
+        GrowthHormoneDeficiencyModule(),
+    )
+
+    versions = [module.module_version for module in modules]
+    assert all(isinstance(version, str) and version for version in versions)
+    assert len(versions) == len(set(versions))
+    assert versions == [
+        "healthy-growth-v1",
+        "familial-short-stature-v1",
+        "constitutional-delay-v1",
+        "growth-hormone-deficiency-v1",
+    ]
+    assert [module.config.module_version for module in modules] == versions
+
+
+def test_zero_familial_severity_has_no_observable_descendants() -> None:
+    module = FamilialShortStatureModule(
+        FamilialShortStatureConfig(severity_min=0.0, severity_max=0.0)
+    )
+    state = module.sample_state(PATIENT, NamedRandomStreams(5, 0))
+
+    assert state.severity == 0.0
+    assert module.height_z_delta(state, 1000) == 0.0
+    assert [event.event_type for event in module.events(PATIENT, state)] == [
+        "latent_onset"
+    ]
+
+
+def test_zero_constitutional_delay_has_no_observable_descendants() -> None:
+    module = ConstitutionalDelayModule(
+        ConstitutionalDelayConfig(puberty_delay_min_days=0, puberty_delay_max_days=0)
+    )
+    state = module.sample_state(PATIENT, NamedRandomStreams(5, 0))
+
+    assert state.puberty_delay_days == 0
+    assert module.height_z_delta(
+        state, module.config.expected_puberty_age_days + 30
+    ) == 0.0
+    assert [event.event_type for event in module.events(PATIENT, state)] == [
+        "latent_onset"
+    ]
+
+
+def test_zero_growth_hormone_severity_has_no_treatment_descendants() -> None:
+    module = GrowthHormoneDeficiencyModule(
+        GrowthHormoneDeficiencyConfig(
+            severity_min=0.0,
+            severity_max=0.0,
+            treatment_probability=1.0,
+        )
+    )
+    state = module.sample_state(PATIENT, NamedRandomStreams(5, 0))
+
+    assert state.severity == 0.0
+    assert state.treatment_start_age_days is None
+    assert [event.event_type for event in module.events(PATIENT, state)] == [
+        "latent_onset"
+    ]
+
+
+def test_zero_treatment_response_is_nonresponse_not_response_event() -> None:
+    module = GrowthHormoneDeficiencyModule(
+        GrowthHormoneDeficiencyConfig(
+            treatment_probability=1.0,
+            treatment_response_min=0.0,
+            treatment_response_max=0.0,
+        )
+    )
+    state = module.sample_state(PATIENT, NamedRandomStreams(5, 0))
+    event_types = [event.event_type for event in module.events(PATIENT, state)]
+
+    assert state.treatment_start_age_days is not None
+    assert "treatment_start" in event_types
+    assert "treatment_response" not in event_types
+    assert "treatment_nonresponse" in event_types
+
+
+def test_nonzero_treatment_response_requires_treatment_start() -> None:
+    with pytest.raises(ValueError, match="treatment_response"):
+        LatentDisorderState(
+            kind=DisorderKind.GROWTH_HORMONE_DEFICIENCY,
+            onset_age_days=900,
+            severity=0.8,
+            treatment_response=0.6,
+        )
+
+
 def test_familial_short_stature_preserves_velocity_with_constant_height_offset() -> None:
     module = FamilialShortStatureModule()
     state = module.sample_state(PATIENT, NamedRandomStreams(5, 0))
