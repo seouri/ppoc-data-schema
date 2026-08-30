@@ -1,7 +1,7 @@
 # Synthetic Pediatric Growth Fixture System Design
 
 **Date:** 2026-08-30
-**Status:** Revised after Synthea and synthetic-patient-generation review; awaiting user review
+**Status:** Approved by the user after Synthea and synthetic-patient-generation review
 
 ## Purpose
 
