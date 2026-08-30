@@ -142,6 +142,41 @@ def test_tree_scan_rejects_fifo(tmp_path: Path) -> None:
         _scan_tree(tmp_path, {"data.csv"}, set())
 
 
+def test_non_boolean_oracle_classification_fails_closed(tmp_path: Path) -> None:
+    class Duck(IdentityPreservingTestDerivationOracle):
+        def derive(self, package_root: Path, descriptor: dict):
+            result = super().derive(package_root, descriptor)
+            return type("Result", (), {"oracle_id": result.oracle_id,
+                "implementation_fingerprint": result.implementation_fingerprint,
+                "test_only": 1})()
+
+    with pytest.raises(DerivationUnavailable):
+        generate_smoke(
+            descriptor_path=ROOT / "datapackage.json", output=tmp_path / "run",
+            patient_count=1, seed=1, reference_time="2026-08-30T00:00:00Z",
+            software_revision="test", reference=LinearTestReference(), derivation_oracle=Duck(),
+            trusted_derivation_fingerprint=TRUSTED_FINGERPRINT, trusted_derivation_test_only=True,
+        )
+
+
+def test_oracle_fifo_replacement_fails_before_hashing(tmp_path: Path) -> None:
+    class Hostile(IdentityPreservingTestDerivationOracle):
+        def derive(self, package_root: Path, descriptor: dict):
+            result = super().derive(package_root, descriptor)
+            path = package_root / "patients.csv"
+            path.unlink()
+            os.mkfifo(path)
+            return result
+
+    with pytest.raises(DerivationUnavailable):
+        generate_smoke(
+            descriptor_path=ROOT / "datapackage.json", output=tmp_path / "run",
+            patient_count=1, seed=1, reference_time="2026-08-30T00:00:00Z",
+            software_revision="test", reference=LinearTestReference(), derivation_oracle=Hostile(),
+            trusted_derivation_fingerprint=TRUSTED_FINGERPRINT, trusted_derivation_test_only=True,
+        )
+
+
 @pytest.mark.parametrize("mode", ["extra", "mutate"])
 def test_derivation_cannot_write_extra_artifacts_or_mutate_base(tmp_path: Path, mode: str) -> None:
     class Hostile(IdentityPreservingTestDerivationOracle):

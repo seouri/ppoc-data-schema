@@ -143,8 +143,18 @@ def generate_smoke(
             unexpected_parent_entries = set(staging.parent.iterdir()) - staging_parent_entries
             if unexpected_parent_entries:
                 raise DerivationUnavailable("derivation escaped staging directory")
+            if not isinstance(derivation.test_only, bool):
+                raise DerivationUnavailable("derivation test-only classification must be a boolean")
             if not derivation.oracle_id:
                 raise DerivationUnavailable("derivation oracle returned no identity")
+            stage_files, stage_dirs = _allowed_tree(
+                descriptor, BASE_RESOURCES + ("patients_augmented", "visits_augmented")
+            )
+            _scan_tree(staging, stage_files, stage_dirs)
+            for name in BASE_RESOURCES:
+                base_path = staging / resource_spec(descriptor, name)["path"]
+                if not base_path.is_file() or not stat.S_ISREG(base_path.lstat().st_mode):
+                    raise DerivationUnavailable("derivation removed or replaced a base resource")
             if any(
                 hashlib.sha256((staging / path).read_bytes()).hexdigest() != digest
                 for path, digest in base_hashes.items()
