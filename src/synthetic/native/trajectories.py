@@ -29,7 +29,25 @@ def _positive_reference_value(value: object, message: str) -> float:
     return result
 
 
-def _validate_events(
+def validate_growth_disorder_module(module: object) -> None:
+    if module is None:
+        raise ValueError("module must be provided")
+    if not isinstance(getattr(module, "kind", None), DisorderKind):
+        raise TypeError("module must declare a DisorderKind")
+    module_version = getattr(module, "module_version", None)
+    if not isinstance(module_version, str) or not module_version.strip():
+        raise TypeError("module must declare a nonempty string module_version")
+    for method_name in (
+        "sample_state",
+        "height_z_delta",
+        "bmi_z_delta",
+        "events",
+    ):
+        if not callable(getattr(module, method_name, None)):
+            raise TypeError(f"module must provide {method_name}")
+
+
+def validate_disorder_events(
     patient: PatientState,
     state: LatentDisorderState,
     events: tuple[ClinicalEvent, ...],
@@ -82,21 +100,7 @@ class DisorderTrajectoryKernel:
     def __init__(self, healthy: HealthyKernel, module: GrowthDisorderModule) -> None:
         if not isinstance(healthy, HealthyKernel):
             raise TypeError("healthy must be a HealthyKernel")
-        if module is None:
-            raise ValueError("module must be provided")
-        if not isinstance(getattr(module, "kind", None), DisorderKind):
-            raise TypeError("module must declare a DisorderKind")
-        module_version = getattr(module, "module_version", None)
-        if not isinstance(module_version, str) or not module_version.strip():
-            raise TypeError("module must declare a nonempty string module_version")
-        for method_name in (
-            "sample_state",
-            "height_z_delta",
-            "bmi_z_delta",
-            "events",
-        ):
-            if not callable(getattr(module, method_name, None)):
-                raise TypeError(f"module must provide {method_name}")
+        validate_growth_disorder_module(module)
         self.healthy = healthy
         self.module = module
 
@@ -106,6 +110,7 @@ class DisorderTrajectoryKernel:
         ages_days: tuple[int, ...],
         streams: NamedRandomStreams,
     ) -> LatentTrajectory:
+        validate_growth_disorder_module(self.module)
         baseline = self.healthy.generate(patient, ages_days, streams)
         state = self.module.sample_state(patient, streams)
         if not isinstance(state, LatentDisorderState):
@@ -154,5 +159,5 @@ class DisorderTrajectoryKernel:
             )
 
         events = tuple(self.module.events(patient, state))
-        _validate_events(patient, state, events)
+        validate_disorder_events(patient, state, events)
         return LatentTrajectory(tuple(points), state, events)

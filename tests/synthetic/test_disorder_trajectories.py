@@ -12,7 +12,10 @@ from synthetic.native.clinical_modules import (
     HealthyGrowthModule,
 )
 from synthetic.native.healthy import HealthyKernel
-from synthetic.native.trajectories import DisorderTrajectoryKernel
+from synthetic.native.trajectories import (
+    DisorderTrajectoryKernel,
+    validate_disorder_events,
+)
 from synthetic.randomness import NamedRandomStreams
 from tests.synthetic.fakes import LinearTestReference
 
@@ -153,6 +156,17 @@ def test_kernel_rejects_module_events_for_a_different_patient() -> None:
     with pytest.raises(ValueError, match="patient"):
         DisorderTrajectoryKernel(HealthyKernel(LinearTestReference()), module).generate(
             PATIENT, (730,), NamedRandomStreams(20260830, 0)
+        )
+
+
+def test_shared_event_validator_preserves_patient_error_message() -> None:
+    with pytest.raises(
+        ValueError, match="module event patient ID must match the requested patient"
+    ):
+        validate_disorder_events(
+            PATIENT,
+            LatentDisorderState(DisorderKind.HEALTHY, None, 0.0),
+            (ClinicalEvent("other-patient", 730, "latent_onset", None, True),),
         )
 
 

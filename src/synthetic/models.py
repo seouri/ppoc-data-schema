@@ -211,3 +211,23 @@ class AgeRegimeTrajectory:
             raise ValueError("points must have one patient")
         if any(a.age_days >= b.age_days for a, b in zip(self.points, self.points[1:])):
             raise ValueError("points must be strictly increasing by age")
+
+
+@dataclass(frozen=True)
+class AgeRegimeDisorderTrajectory:
+    physiology: AgeRegimeTrajectory
+    disorder: LatentDisorderState
+    events: tuple[ClinicalEvent, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.physiology, AgeRegimeTrajectory):
+            raise TypeError("physiology must be an AgeRegimeTrajectory")
+        if not isinstance(self.disorder, LatentDisorderState):
+            raise TypeError("disorder must be a LatentDisorderState")
+        if not isinstance(self.events, tuple):
+            raise ValueError("events must be a tuple of ClinicalEvent")  # noqa: TRY004
+        if not all(isinstance(event, ClinicalEvent) for event in self.events):
+            raise ValueError("events must be a tuple of ClinicalEvent")
+        patient = self.physiology.points[0].patient_id
+        if any(event.patient_id != patient for event in self.events):
+            raise ValueError("events must have one patient")
