@@ -127,11 +127,12 @@ class AgeRegimeState:
     def __post_init__(self) -> None:
         if not isinstance(self.module_version, str) or not self.module_version:
             raise ValueError("module_version must be a nonempty string")
-        for value in (self.birth_length_z, self.birth_weight_z, self.head_circumference_z,
-                      self.childhood_height_z, self.childhood_bmi_z,
-                      self.puberty_height_spurt_z, self.puberty_bmi_shift_z):
-            if not isinstance(value, (int, float)) or not math.isfinite(value):
-                raise ValueError("z-scores and effects must be finite")
+        for name in ("birth_length_z", "birth_weight_z", "head_circumference_z",
+                     "childhood_height_z", "childhood_bmi_z", "puberty_height_spurt_z",
+                     "puberty_bmi_shift_z"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+                raise ValueError(f"{name} must be finite")
         if (isinstance(self.puberty_onset_age_days, bool)
                 or not isinstance(self.puberty_onset_age_days, int)
                 or self.puberty_onset_age_days < 0):
@@ -168,11 +169,13 @@ class AgeRegimePoint:
             raise ValueError("regime must be a GrowthRegime")  # noqa: TRY004
         for name in ("weight_kg", "length_cm", "height_cm", "bmi", "head_circumference_cm"):
             value = getattr(self, name)
-            if value is not None and (not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0):
+            if name == "weight_kg" and value is None:
+                raise ValueError("weight_kg must be finite and positive")
+            if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0):
                 raise ValueError(f"{name} must be finite and positive")
         for name in ("length_z", "height_z", "weight_z", "bmi_z", "height_velocity_cm_per_year", "weight_velocity_kg_per_year"):
             value = getattr(self, name)
-            if value is not None and (not isinstance(value, (int, float)) or not math.isfinite(value)):
+            if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value)):
                 raise ValueError(f"{name} must be finite")
         if self.regime is GrowthRegime.INFANCY and self.length_cm is None:
             raise ValueError("infancy requires length")
