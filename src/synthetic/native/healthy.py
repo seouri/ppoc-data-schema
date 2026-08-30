@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from numbers import Real
 
 from synthetic.models import LatentPoint, PatientState
 from synthetic.randomness import NamedRandomStreams
@@ -44,11 +45,11 @@ class HealthyKernel:
 
         reference_min_age = getattr(self.reference, "min_age_days", None)
         reference_max_age = getattr(self.reference, "max_age_days", None)
-        if self.minimum_age_days != 0 and isinstance(reference_min_age, int) and any(
+        if isinstance(reference_min_age, int) and not isinstance(reference_min_age, bool) and any(
             age < reference_min_age for age in ages_days
         ):
             raise ValueError("requested ages are outside the reference domain")
-        if isinstance(reference_max_age, int) and any(
+        if isinstance(reference_max_age, int) and not isinstance(reference_max_age, bool) and any(
             age > reference_max_age for age in ages_days
         ):
             raise ValueError("requested ages are outside the reference domain")
@@ -64,9 +65,19 @@ class HealthyKernel:
                 "height_cm", age_days, patient.reference_sex, height_z
             )
             bmi = self.reference.value("bmi", age_days, patient.reference_sex, bmi_z)
-            if not math.isfinite(height_cm) or height_cm <= 0:
+            if (
+                isinstance(height_cm, bool)
+                or not isinstance(height_cm, Real)
+                or not math.isfinite(height_cm)
+                or height_cm <= 0
+            ):
                 raise ValueError("reference height must be finite and positive")
-            if not math.isfinite(bmi) or bmi <= 0:
+            if (
+                isinstance(bmi, bool)
+                or not isinstance(bmi, Real)
+                or not math.isfinite(bmi)
+                or bmi <= 0
+            ):
                 raise ValueError("reference BMI must be finite and positive")
             weight_kg = bmi * (height_cm / 100.0) ** 2
             points.append(
