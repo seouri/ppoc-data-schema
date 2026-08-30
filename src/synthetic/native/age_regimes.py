@@ -196,11 +196,14 @@ class AgeRegimeTrajectoryKernel:
     ) -> AgeRegimeTrajectory:
         self._validate_ages(ages_days)
         if state is None:
-            state = self.sample_state(streams)
+            state, residual, head = self._sample_state_with_generators(streams)
         else:
             self._validate_state(state)
-        residual = streams.generator("regime.residual")
-        head = streams.generator("regime.head")
+            residual = streams.generator("regime.residual")
+            head = streams.generator("regime.head")
+            # State sampling consumes the head stream once for the latent
+            # head-circumference z; preserve that continuation on replay.
+            head.normal(0.0, self.config.residual_sd)
 
         points: list[AgeRegimePoint] = []
         previous_age: int | None = None
@@ -301,9 +304,14 @@ class AgeRegimeTrajectoryKernel:
             raise ValueError("requested ages are outside the reference domain")
 
     def sample_state(self, streams: NamedRandomStreams) -> AgeRegimeState:
+        state, _, _ = self._sample_state_with_generators(streams)
+        return state
+
+    def _sample_state_with_generators(self, streams: NamedRandomStreams):
         birth = streams.generator("regime.birth")
         childhood = streams.generator("regime.childhood")
         puberty = streams.generator("regime.puberty")
+        residual = streams.generator("regime.residual")
         head = streams.generator("regime.head")
 
         puberty_height_spurt_z = float(
@@ -344,7 +352,7 @@ class AgeRegimeTrajectoryKernel:
             puberty_height_spurt_z=puberty_height_spurt_z,
             puberty_bmi_shift_z=puberty_bmi_shift_z,
         )
-        return state
+        return state, residual, head
 
     def _validate_state(self, state: AgeRegimeState) -> None:
         if not isinstance(state, AgeRegimeState):

@@ -65,6 +65,16 @@ def test_state_replay_rejects_wrong_version_or_puberty_domain() -> None:
         )
 
 
+def test_ordinary_generation_preserves_head_circumference_stream() -> None:
+    trajectory = AgeRegimeTrajectoryKernel(RegimeReference()).generate(
+        PATIENT, (0, 365, 730), NamedRandomStreams(5, 0)
+    )
+
+    assert [point.head_circumference_cm for point in trajectory.points] == pytest.approx(
+        [45.694691365078036, 47.41377622324069, 49.099453092386426]
+    )
+
+
 def test_kernel_generates_all_regimes_with_two_dimension_identities() -> None:
     ages = (0, 365, 699, 700, 730, 760, 761, 3000, 4380, 5281, 7305)
     trajectory = AgeRegimeTrajectoryKernel(RegimeReference()).generate(
