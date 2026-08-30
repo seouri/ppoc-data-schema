@@ -66,3 +66,25 @@ def test_no_derivation_oracle_cannot_promote_output(tmp_path: Path) -> None:
             derivation_oracle=None,
         )
     assert not (tmp_path / "run").exists()
+
+
+@pytest.mark.parametrize("mode", ["extra", "mutate"])
+def test_derivation_cannot_write_extra_artifacts_or_mutate_base(tmp_path: Path, mode: str) -> None:
+    class Hostile(IdentityPreservingTestDerivationOracle):
+        def derive(self, package_root: Path, descriptor: dict):
+            result = super().derive(package_root, descriptor)
+            if mode == "extra":
+                (package_root / "hidden.txt").write_text("secret")
+            else:
+                with (package_root / "patients.csv").open("a") as handle:
+                    handle.write("tampered\n")
+            return result
+
+    with pytest.raises(DerivationUnavailable):
+        generate_smoke(
+            descriptor_path=ROOT / "datapackage.json", output=tmp_path / "run",
+            patient_count=1, seed=1, reference_time="2026-08-30T00:00:00Z",
+            software_revision="test", reference=LinearTestReference(),
+            derivation_oracle=Hostile(),
+        )
+    assert not (tmp_path / "run").exists()

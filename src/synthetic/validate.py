@@ -75,10 +75,12 @@ def validate_structure(package_root: Path, descriptor: dict[str, Any]) -> Valida
         rows_by_resource[name] = rows
         row_counts[name] = len(rows)
         for row_number, row in enumerate(rows, start=2):
-            if None in row:
+            if None in row or any(value is None for value in row.values()):
                 errors.append(f"{name} row {row_number}: column count mismatch")
             for field in resource["schema"]["fields"]:
-                errors.extend(_validate_value(name, row_number, field, row.get(field["name"], "")))
+                value = row.get(field["name"], "")
+                if value is not None:
+                    errors.extend(_validate_value(name, row_number, field, value))
         primary_key = resource["schema"].get("primaryKey")
         if primary_key:
             values = [row.get(primary_key, "") for row in rows]

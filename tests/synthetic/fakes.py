@@ -24,6 +24,7 @@ class IdentityPreservingTestDerivationOracle:
     """Test-only augmentation oracle that copies visible identity fields."""
 
     oracle_id = "identity-preserving-test-oracle-v1"
+    implementation_fingerprint = "test-oracle-fingerprint-v1"
 
     def derive(self, package_root: Path, descriptor: dict) -> DerivationResult:
         with (package_root / "patients.csv").open(encoding="utf-8", newline="") as handle:
@@ -97,4 +98,4 @@ class IdentityPreservingTestDerivationOracle:
                 writer = csv.DictWriter(handle, fieldnames=fields, lineterminator="\n")
                 writer.writeheader()
                 writer.writerows(rows)
-        return DerivationResult(self.oracle_id)
+        return DerivationResult(self.oracle_id, self.implementation_fingerprint, True)

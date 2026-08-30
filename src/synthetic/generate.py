@@ -15,7 +15,12 @@ from synthetic.native.healthy import HealthyKernel
 from synthetic.randomness import NamedRandomStreams, synthetic_id
 from synthetic.references import GrowthReference
 from synthetic.run_directory import RunDirectory
-from synthetic.schema_contract import load_descriptor, resource_spec, schema_fingerprint
+from synthetic.schema_contract import (
+    load_descriptor,
+    resource_spec,
+    schema_fingerprint,
+    validate_resource_paths,
+)
 from synthetic.validate import validate_structure
 
 
@@ -50,6 +55,7 @@ def generate_smoke(
     ).hexdigest()[:12]
     run = RunDirectory.start(output, run_id)
     try:
+        validate_resource_paths(descriptor, run.partial_path)
         accumulated = {name: [] for name in BASE_RESOURCES}
         kernel = HealthyKernel(reference)
         for patient_index in range(patient_count):
@@ -77,12 +83,32 @@ def generate_smoke(
                 run.partial_path / resource["path"], resource, accumulated[name]
             )
 
+        expected_augmented = {
+            Path(resource_spec(descriptor, name)["path"]).as_posix()
+            for name in ("patients_augmented", "visits_augmented")
+        }
+        before = {
+            path.relative_to(run.partial_path).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in run.partial_path.rglob("*")
+            if path.is_file() and not path.is_symlink()
+        }
         derivation = derivation_oracle.derive(run.partial_path, descriptor)
         if not derivation.oracle_id:
             raise DerivationUnavailable("derivation oracle returned no identity")
         require_augmented_outputs(
             run.partial_path, descriptor, oracle_id=derivation.oracle_id
         )
+        after_paths = list(run.partial_path.rglob("*"))
+        for path in after_paths:
+            relative = path.relative_to(run.partial_path).as_posix()
+            if path.is_symlink() or not path.is_file() or (relative not in before and relative not in expected_augmented):
+                raise DerivationUnavailable(f"derivation wrote unexpected artifact: {relative}")
+        after = {
+            path.relative_to(run.partial_path).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in run.partial_path.rglob("*") if path.is_file()
+        }
+        if any(after.get(path) != digest for path, digest in before.items()):
+            raise DerivationUnavailable("derivation mutated a base resource")
         report = validate_structure(run.partial_path, descriptor)
         if report.errors:
             raise ValueError("; ".join(report.errors))
@@ -107,11 +133,9 @@ def generate_smoke(
         }
         manifest = dataclasses.replace(
             manifest,
-            status=(
-                "STRUCTURE_VALIDATED_TEST_ORACLE"
-                if derivation.oracle_id.startswith("identity-preserving-test-")
-                else "STRUCTURE_VALIDATED"
-            ),
+            status="STRUCTURE_VALIDATED_TEST_ORACLE" if derivation.test_only else "STRUCTURE_VALIDATED",
+            derivation_fingerprint=derivation.implementation_fingerprint
+            or hashlib.sha256(f"{type(derivation_oracle).__module__}.{type(derivation_oracle).__qualname__}:{derivation.oracle_id}".encode()).hexdigest(),
             metadata_only=False,
             row_counts=row_counts,
             file_sha256=file_sha256,

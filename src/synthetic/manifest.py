@@ -21,6 +21,7 @@ class RunManifest:
     prng_family: str
     seed_derivation_version: str
     status: str
+    derivation_fingerprint: str = ""
     metadata_only: bool = False
     row_counts: dict[str, int] = field(default_factory=dict)
     file_sha256: dict[str, str] = field(default_factory=dict)
@@ -35,6 +36,7 @@ class RunManifest:
         reference_id: str,
         configuration_sha256: str,
         software_revision: str,
+        derivation_fingerprint: str = "",
     ) -> RunManifest:
         return cls(
             manifest_version="1",
@@ -47,6 +49,7 @@ class RunManifest:
             reference_id=reference_id,
             configuration_sha256=configuration_sha256,
             software_revision=software_revision,
+            derivation_fingerprint=derivation_fingerprint,
             prng_family=PRNG_FAMILY,
             seed_derivation_version=SEED_DERIVATION_VERSION,
             status="GENERATED_UNVALIDATED",

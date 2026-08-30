@@ -27,7 +27,9 @@ def write_resource(
     encoding = resource.get("encoding", "utf-8")
     path.parent.mkdir(parents=True, exist_ok=True)
     count = 0
-    with path.open("w", encoding=encoding, newline="") as handle:
+    if path.is_symlink() or (path.exists() and not path.is_file()):
+        raise ValueError(f"unsafe output path: {path}")
+    with path.open("x", encoding=encoding, newline="") as handle:
         writer = csv.DictWriter(
             handle,
             fieldnames=fields,
@@ -107,14 +109,23 @@ def write_synthetic_descriptor(
     generated = copy.deepcopy(source_descriptor)
     generated["name"] = f"{source_descriptor['name']}-synthetic"
     generated["title"] = f"{source_descriptor['title']} -- Completely Generated"
-    generated["description"] = "Completely generated development fixtures; contains no real patient records."
+    generated["description"] = (
+        "Synthetic smoke-profile package; contains no real patient records and makes no "
+        "claims of demographic representativeness or prevalence calibration."
+    )
     generated["x-synthetic"] = True
     generated["homepage"] = None
     generated["sources"] = []
     generated["licenses"] = []
     generated["contributors"] = []
-    generated.pop("x-statisticsSource", None)
+    for key in list(generated):
+        if key.startswith("x-"):
+            generated.pop(key)
+    generated["x-synthetic"] = True
     for resource in generated["resources"]:
+        for key in list(resource):
+            if key.startswith("x-") and key != "x-logicalForeignKeys":
+                resource.pop(key)
         resource["x-rowCount"] = row_counts[resource["name"]]
         resource.pop("x-generatedBy", None)
         resource.pop("x-derivedFrom", None)
@@ -122,6 +133,9 @@ def write_synthetic_descriptor(
             resource.pop(key, None)
         stats = _generated_field_statistics(package_root, resource)
         for field in resource["schema"]["fields"]:
+            for key in list(field):
+                if key.startswith("x-"):
+                    field.pop(key)
             for key in SNAPSHOT_STAT_KEYS:
                 field.pop(key, None)
             field.update(stats[field["name"]])

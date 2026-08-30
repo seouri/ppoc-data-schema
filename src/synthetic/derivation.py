@@ -14,6 +14,8 @@ class DerivationUnavailable(RuntimeError):
 @dataclass(frozen=True)
 class DerivationResult:
     oracle_id: str
+    implementation_fingerprint: str = ""
+    test_only: bool = False
 
 
 class DerivationOracle(Protocol):

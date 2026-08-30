@@ -142,3 +142,17 @@ def test_descriptor_statistics_use_declared_dialect(tmp_path: Path) -> None:
     assert generated_links["x-logicalForeignKeys"][0]["orphanRows"] == 1
     visit_field = next(field for field in generated_links["schema"]["fields"] if field["name"] == "visit_id")
     assert visit_field["x-uniqueValueCount"] == 1
+
+
+def test_truncated_and_overwide_rows_fail_validation(tmp_path: Path) -> None:
+    descriptor = load_descriptor(ROOT / "datapackage.json")
+    _empty_package(tmp_path, descriptor)
+    patients = next(item for item in descriptor["resources"] if item["name"] == "patients")
+    fields = [field["name"] for field in patients["schema"]["fields"]]
+    (tmp_path / "patients.csv").write_text(
+        ",".join(fields) + "\n" + "syn-a,U\n" + ",".join(["syn-b", "U"] + [""] * len(fields)) + "\n",
+        encoding="utf-8",
+    )
+    report = validate_structure(tmp_path, descriptor)
+    assert any("patients row 2: column count mismatch" in error for error in report.errors)
+    assert any("patients row 3: column count mismatch" in error for error in report.errors)

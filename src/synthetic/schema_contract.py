@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -11,8 +12,30 @@ def load_descriptor(path: Path) -> dict[str, Any]:
     if descriptor.get("profile") != "tabular-data-package":
         raise ValueError("descriptor is not a tabular-data-package")
     if not isinstance(descriptor.get("resources"), list):
-        raise ValueError("descriptor resources must be a list")
+        raise TypeError("descriptor resources must be a list")
     return descriptor
+
+
+def validate_resource_paths(descriptor: dict[str, Any], package_root: Path) -> None:
+    """Reject unsafe, duplicate, or pre-existing symlink resource targets."""
+    root = package_root.resolve()
+    seen: set[str] = set()
+    for resource in descriptor["resources"]:
+        raw = resource.get("path")
+        if not isinstance(raw, str) or not raw or os.path.isabs(raw):
+            raise ValueError(f"unsafe resource path: {raw!r}")
+        relative = Path(raw)
+        if any(part == ".." for part in relative.parts):
+            raise ValueError(f"unsafe resource path: {raw!r}")
+        target = root / relative
+        if target.resolve(strict=False).parent != target.parent.resolve():
+            raise ValueError(f"resource path escapes package root: {raw!r}")
+        key = relative.as_posix()
+        if key in seen:
+            raise ValueError(f"duplicate resource path: {raw!r}")
+        seen.add(key)
+        if target.is_symlink():
+            raise ValueError(f"resource path is a symlink: {raw!r}")
 
 
 def resource_spec(descriptor: dict[str, Any], name: str) -> dict[str, Any]:
