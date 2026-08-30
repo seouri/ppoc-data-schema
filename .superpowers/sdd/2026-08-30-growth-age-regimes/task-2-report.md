@@ -45,3 +45,29 @@ Recorded below after the final scoped Git checks.
 ## Concerns
 
 None. Defaults are explicitly documented as development-only and uncalibrated; no prevalence or clinical-evidence claims were added. Existing Task 1 models and other synthetic modules were left unchanged. Generated `__pycache__` directories remain untracked and were not included.
+
+## Reviewer follow-up
+
+Added cross-field validation requiring the transition window to start at or after day 0 and requiring configured puberty onset bounds to begin strictly after the transition window. Added focused regression cases for both degenerate schedules.
+
+Red-phase command:
+
+```text
+uv run pytest -q tests/synthetic/test_age_regime_config.py
+2 failed, 11 passed in 0.06s
+```
+
+Final verification:
+
+```text
+uv run pytest -q tests/synthetic/test_age_regime_config.py
+13 passed in 0.04s
+
+uv run pytest -q tests/synthetic
+178 passed in 0.26s
+
+uv run ruff check src/synthetic/native/age_regimes.py tests/synthetic/test_age_regime_config.py
+All checks passed!
+```
+
+Removed only generated `__pycache__` directories. No additional concerns.

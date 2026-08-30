@@ -90,6 +90,10 @@ class AgeRegimeConfig:
             raise ValueError("puberty height-spurt bounds must be ordered")
         if self.puberty_bmi_shift_min > self.puberty_bmi_shift_max:
             raise ValueError("puberty BMI-shift bounds must be ordered")
+        if self.transition_window_days > self.transition_age_days:
+            raise ValueError("transition window must start at or after day 0")
+        if self.puberty_min_age_days <= self.transition_age_days + self.transition_window_days:
+            raise ValueError("puberty must begin after the transition window")
         if self.residual_sd < 0:
             raise ValueError("residual_sd must be nonnegative")
         if self.length_to_height_offset_cm < 0:

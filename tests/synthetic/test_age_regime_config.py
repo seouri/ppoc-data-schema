@@ -34,6 +34,8 @@ def test_classifier_covers_all_regimes_at_explicit_boundaries() -> None:
         {"puberty_tempo_min_days": 0},
         {"maximum_age_days": 5000, "puberty_max_age_days": 4500, "puberty_tempo_max_days": 600},
         {"maximum_age_days": 760, "transition_window_days": 30},
+        {"transition_age_days": 10, "transition_window_days": 30},
+        {"puberty_min_age_days": 750},
         {"length_to_height_offset_cm": -0.1},
         {"max_transition_discontinuity_cm": 0.0},
     ],
