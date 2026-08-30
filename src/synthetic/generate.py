@@ -27,6 +27,26 @@ from synthetic.schema_contract import (
 from synthetic.validate import validate_structure
 
 
+def _allowed_tree(descriptor: dict, names: tuple[str, ...]) -> tuple[set[str], set[str]]:
+    files = {Path(resource_spec(descriptor, name)["path"]).as_posix() for name in names}
+    dirs = {
+        parent.as_posix()
+        for item in files
+        for parent in Path(item).parents
+        if parent.as_posix() != "."
+    }
+    return files, dirs
+
+
+def _scan_tree(root: Path, files: set[str], dirs: set[str]) -> None:
+    for path in root.rglob("*"):
+        relative = path.relative_to(root).as_posix()
+        if path.is_symlink() or (path.is_file() and relative not in files) or (
+            path.is_dir() and relative not in dirs
+        ):
+            raise DerivationUnavailable(f"unexpected run artifact: {relative}")
+
+
 def generate_smoke(
     *,
     descriptor_path: Path,
@@ -47,6 +67,8 @@ def generate_smoke(
         raise DerivationUnavailable("authoritative derivation oracle is not configured")
     if re.fullmatch(r"[0-9a-f]{64}", trusted_derivation_fingerprint) is None:
         raise ValueError("trusted_derivation_fingerprint must be lowercase SHA-256 hex")
+    if trusted_derivation_fingerprint == "0" * 64:
+        raise ValueError("trusted_derivation_fingerprint cannot be a placeholder")
     if not isinstance(trusted_derivation_test_only, bool):
         raise TypeError("trusted_derivation_test_only must be a boolean")
 
@@ -109,6 +131,12 @@ def generate_smoke(
                 ).hexdigest()
                 for name in BASE_RESOURCES
             }
+            partial_base_hashes = {
+                resource_spec(descriptor, name)["path"]: hashlib.sha256(
+                    (run.partial_path / resource_spec(descriptor, name)["path"]).read_bytes()
+                ).hexdigest()
+                for name in BASE_RESOURCES
+            }
             derivation = derivation_oracle.derive(staging, stage_descriptor)
             unexpected_parent_entries = set(staging.parent.iterdir()) - staging_parent_entries
             if unexpected_parent_entries:
@@ -120,21 +148,18 @@ def generate_smoke(
                 for path, digest in base_hashes.items()
             ):
                 raise DerivationUnavailable("derivation mutated a base resource")
+            for path, digest in partial_base_hashes.items():
+                target = run.partial_path / path
+                if not target.is_file() or hashlib.sha256(target.read_bytes()).hexdigest() != digest:
+                    raise DerivationUnavailable("derivation mutated the partial base resource")
             stage_descriptor = json.loads(json.dumps(descriptor))
             require_augmented_outputs(
                 staging, stage_descriptor, oracle_id=derivation.oracle_id
             )
-            expected_augmented = {
-                Path(resource_spec(descriptor, name)["path"]).as_posix()
-                for name in ("patients_augmented", "visits_augmented")
-            }
-            for path in staging.rglob("*"):
-                relative = path.relative_to(staging).as_posix()
-                if path.is_symlink() or not path.is_file() or relative not in {
-                    *(Path(resource_spec(descriptor, name)["path"]).as_posix() for name in BASE_RESOURCES),
-                    *expected_augmented,
-                }:
-                    raise DerivationUnavailable(f"derivation wrote unexpected artifact: {relative}")
+            stage_files, stage_dirs = _allowed_tree(
+                descriptor, BASE_RESOURCES + ("patients_augmented", "visits_augmented")
+            )
+            _scan_tree(staging, stage_files, stage_dirs)
             for name in ("patients_augmented", "visits_augmented"):
                 resource = resource_spec(descriptor, name)
                 source = staging / resource["path"]
@@ -142,18 +167,14 @@ def generate_smoke(
                 target.parent.mkdir(parents=True, exist_ok=True)
                 with target.open("xb") as handle:
                     handle.write(source.read_bytes())
-        descriptor_names = [item["name"] for item in descriptor["resources"]]
-        allowed = {Path(resource_spec(descriptor, name)["path"]).as_posix() for name in descriptor_names}
-        for path in run.partial_path.rglob("*"):
-            relative = path.relative_to(run.partial_path).as_posix()
-            if path.is_symlink() or (path.is_file() and relative not in allowed) or (
-                path.is_dir() and relative not in {parent for item in allowed for parent in Path(item).parents if str(parent) != "."}
-            ):
-                raise DerivationUnavailable(f"unexpected run artifact: {relative}")
+        partial_files, partial_dirs = _allowed_tree(
+            descriptor, tuple(item["name"] for item in descriptor["resources"])
+        )
+        _scan_tree(run.partial_path, partial_files, partial_dirs)
         if derivation.implementation_fingerprint != trusted_derivation_fingerprint:
             raise DerivationUnavailable("derivation fingerprint does not match trusted configuration")
-        if derivation.implementation_fingerprint == "":
-            raise DerivationUnavailable("derivation implementation fingerprint is required")
+        if derivation.implementation_fingerprint == "0" * 64:
+            raise DerivationUnavailable("derivation implementation fingerprint is a placeholder")
         report = validate_structure(run.partial_path, descriptor)
         if report.errors:
             raise ValueError("; ".join(report.errors))
@@ -174,7 +195,7 @@ def generate_smoke(
         file_sha256 = {
             path.relative_to(run.partial_path).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
             for path in sorted(run.partial_path.rglob("*"))
-            if path.is_file() and not path.is_symlink() and path.name != "manifest.json"
+            if path.is_file() and not path.is_symlink() and path.relative_to(run.partial_path).as_posix() != "manifest.json"
         }
         manifest = dataclasses.replace(
             manifest,

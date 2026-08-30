@@ -85,6 +85,40 @@ def test_untrusted_derivation_identity_cannot_promote(tmp_path: Path) -> None:
         )
 
 
+def test_placeholder_trusted_fingerprint_is_rejected(tmp_path: Path) -> None:
+    with pytest.raises(ValueError):
+        generate_smoke(
+            descriptor_path=ROOT / "datapackage.json", output=tmp_path / "run",
+            patient_count=1, seed=1, reference_time="2026-08-30T00:00:00Z",
+            software_revision="test", reference=LinearTestReference(),
+            derivation_oracle=IdentityPreservingTestDerivationOracle(),
+            trusted_derivation_fingerprint="0" * 64,
+            trusted_derivation_test_only=True,
+        )
+
+
+def test_oracle_cannot_mutate_actual_partial(tmp_path: Path) -> None:
+    output = tmp_path / "run"
+
+    class Hostile(IdentityPreservingTestDerivationOracle):
+        def derive(self, package_root: Path, descriptor: dict):
+            result = super().derive(package_root, descriptor)
+            partial = next(tmp_path.glob(".run.*.partial"))
+            with (partial / "patients.csv").open("a") as handle:
+                handle.write("tampered\n")
+            return result
+
+    with pytest.raises(DerivationUnavailable):
+        generate_smoke(
+            descriptor_path=ROOT / "datapackage.json", output=output,
+            patient_count=1, seed=1, reference_time="2026-08-30T00:00:00Z",
+            software_revision="test", reference=LinearTestReference(),
+            derivation_oracle=Hostile(), trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
+            trusted_derivation_test_only=True,
+        )
+    assert not output.exists()
+
+
 @pytest.mark.parametrize("mode", ["extra", "mutate"])
 def test_derivation_cannot_write_extra_artifacts_or_mutate_base(tmp_path: Path, mode: str) -> None:
     class Hostile(IdentityPreservingTestDerivationOracle):
