@@ -415,4 +415,3 @@ Before merging this plan, verify that:
 - Anthropometric identities, reference guards, age ordering, and named random-stream isolation pass independent tests.
 - No latent truth, event trace, clinical data, prevalence claim, or privacy claim enters the visible eight-resource fixture package.
 - Full pytest, Ruff, schema, and whitespace checks pass, and the documentation labels defaults as uncalibrated development scenarios.
-
