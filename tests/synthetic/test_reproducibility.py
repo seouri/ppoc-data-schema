@@ -73,6 +73,19 @@ def test_manifest_serialization_is_canonical() -> None:
     assert manifest.to_json_bytes().endswith(b"\n")
 
 
+def test_manifest_rejects_malformed_reference_sha256() -> None:
+    with pytest.raises(ValueError, match="reference_sha256"):
+        RunManifest.smoke(
+            seed=20260830,
+            schema_fingerprint="abc",
+            reference_time="2026-08-30T00:00:00Z",
+            reference_id="linear-test-reference-v1",
+            reference_sha256="A" * 64,
+            configuration_sha256="config-hash",
+            software_revision="test-revision",
+        )
+
+
 def test_generated_manifest_requires_output_evidence() -> None:
     manifest = RunManifest.smoke(
         seed=20260830,

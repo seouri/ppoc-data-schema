@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict, dataclass, field
 
 from synthetic.randomness import PRNG_FAMILY, SEED_DERIVATION_VERSION
@@ -21,6 +22,7 @@ class RunManifest:
     prng_family: str
     seed_derivation_version: str
     status: str
+    reference_sha256: str | None = None
     derivation_fingerprint: str = ""
     metadata_only: bool = False
     row_counts: dict[str, int] = field(default_factory=dict)
@@ -36,8 +38,15 @@ class RunManifest:
         reference_id: str,
         configuration_sha256: str,
         software_revision: str,
+        reference_sha256: str | None = None,
         derivation_fingerprint: str = "",
     ) -> RunManifest:
+        if reference_sha256 is not None and re.fullmatch(
+            r"[0-9a-f]{64}", reference_sha256
+        ) is None:
+            raise ValueError(
+                "reference_sha256 must be a lowercase 64-character SHA-256 hex digest"
+            )
         return cls(
             manifest_version="1",
             generator_version="0.1.0",
@@ -47,6 +56,7 @@ class RunManifest:
             schema_fingerprint=schema_fingerprint,
             reference_time=reference_time,
             reference_id=reference_id,
+            reference_sha256=reference_sha256,
             configuration_sha256=configuration_sha256,
             software_revision=software_revision,
             derivation_fingerprint=derivation_fingerprint,

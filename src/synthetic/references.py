@@ -1,5 +1,6 @@
 import csv
 import hashlib
+import io
 import math
 from bisect import bisect_left
 from collections.abc import Iterable
@@ -141,14 +142,15 @@ class LmsGrowthReference:
     def from_csv(
         cls, path: Path, reference_id: str, expected_sha256: str | None = None
     ) -> "LmsGrowthReference":
-        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        source = path.read_bytes()
+        digest = hashlib.sha256(source).hexdigest()
         if expected_sha256 is not None:
             _validate_sha256(expected_sha256, "expected_sha256")
             if digest != expected_sha256:
                 raise ValueError("SHA-256 hash does not match expected value")
         columns = ("metric", "age_days", "reference_sex", "l", "m", "s")
         rows: list[LmsRow] = []
-        with path.open(encoding="utf-8", newline="") as handle:
+        with io.StringIO(source.decode("utf-8"), newline="") as handle:
             reader = csv.DictReader(handle)
             if reader.fieldnames is None or set(reader.fieldnames) != set(columns) or len(reader.fieldnames) != len(columns):
                 raise ValueError("CSV columns must be exactly metric, age_days, reference_sex, l, m, s")

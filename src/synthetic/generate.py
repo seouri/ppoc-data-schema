@@ -203,6 +203,7 @@ def generate_smoke(
             schema_fingerprint=schema_fingerprint(descriptor),
             reference_time=reference_time,
             reference_id=reference.reference_id,
+            reference_sha256=getattr(reference, "source_sha256", None),
             configuration_sha256=configuration_sha256,
             software_revision=software_revision,
         )

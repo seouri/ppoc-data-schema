@@ -330,4 +330,3 @@ Before calling this plan complete, verify that:
 - No clinical reference data, real patient rows, hidden truth, or privacy evidence entered the repository.
 - The full pytest, Ruff, schema, and whitespace checks pass from the feature branch.
 - The usage guide explicitly labels the reference layer as an input contract, not clinical or prevalence validation.
-

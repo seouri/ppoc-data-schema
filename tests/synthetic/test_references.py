@@ -1,5 +1,7 @@
 import hashlib
+import io
 import math
+from pathlib import Path
 
 import pytest
 
@@ -90,6 +92,43 @@ def test_lms_reference_loads_csv_and_checks_exact_source_hash(tmp_path) -> None:
         LmsGrowthReference.from_csv(
             path, reference_id="public-growth-v1", expected_sha256=digest.upper()
         )
+
+
+def test_lms_reference_hashes_and_parses_the_same_single_read(
+    monkeypatch, tmp_path: Path
+) -> None:
+    path = tmp_path / "growth.csv"
+    approved = (
+        b"metric,age_days,reference_sex,l,m,s\n"
+        b"height_cm,730,F,1,100,0.1\n"
+    )
+    replacement = (
+        "metric,age_days,reference_sex,l,m,s\n"
+        "height_cm,730,F,1,999,0.1\n"
+    )
+    reads: list[str] = []
+
+    def read_bytes_once(self: Path) -> bytes:
+        assert self == path
+        reads.append("bytes")
+        return approved
+
+    def reopen_replacement(self: Path, *args, **kwargs):
+        assert self == path
+        reads.append("text")
+        return io.StringIO(replacement)
+
+    monkeypatch.setattr(Path, "read_bytes", read_bytes_once)
+    monkeypatch.setattr(Path, "open", reopen_replacement)
+
+    digest = hashlib.sha256(approved).hexdigest()
+    reference = LmsGrowthReference.from_csv(
+        path, reference_id="public-growth-v1", expected_sha256=digest
+    )
+
+    assert reads == ["bytes"]
+    assert reference.source_sha256 == digest
+    assert reference.value("height_cm", 730, "F", 0.0) == pytest.approx(100.0)
 
 
 def test_lms_reference_rejects_bad_csv_columns(tmp_path) -> None:

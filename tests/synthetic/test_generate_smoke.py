@@ -57,6 +57,28 @@ def test_smoke_generation_is_exact_schema_and_reproducible(tmp_path: Path) -> No
     assert len(list(first.glob("*.csv"))) == 8
 
 
+def test_smoke_manifest_records_injected_reference_digest(tmp_path: Path) -> None:
+    class HashedLinearTestReference(LinearTestReference):
+        source_sha256 = "a" * 64
+
+    output = tmp_path / "run"
+    generate_smoke(
+        descriptor_path=ROOT / "datapackage.json",
+        output=output,
+        patient_count=1,
+        seed=20260830,
+        reference_time="2026-08-30T00:00:00Z",
+        software_revision="test-revision",
+        reference=HashedLinearTestReference(),
+        derivation_oracle=IdentityPreservingTestDerivationOracle(),
+        trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
+        trusted_derivation_test_only=True,
+    )
+
+    manifest = json.loads((output / "manifest.json").read_text())
+    assert manifest["reference_sha256"] == "a" * 64
+
+
 def test_no_derivation_oracle_cannot_promote_output(tmp_path: Path) -> None:
     with pytest.raises(DerivationUnavailable):
         generate_smoke(
