@@ -28,8 +28,8 @@ def test_lms_reference_linearly_interpolates_parameters_by_age() -> None:
         ),
     )
 
-    # Midpoint parameters are L=1, M=105, S=0.15; z=0 therefore returns M.
-    assert reference.value("height_cm", 912, "F", 0.0) == pytest.approx(105.0)
+    expected = 100.0 + (182.0 / 365.0) * 10.0
+    assert reference.value("height_cm", 912, "F", 0.0) == pytest.approx(expected)
 
 
 def test_lms_reference_rejects_missing_duplicate_and_invalid_rows() -> None:
@@ -86,6 +86,10 @@ def test_lms_reference_loads_csv_and_checks_exact_source_hash(tmp_path) -> None:
         LmsGrowthReference.from_csv(
             path, reference_id="public-growth-v1", expected_sha256="0" * 64
         )
+    with pytest.raises(ValueError, match="SHA-256"):
+        LmsGrowthReference.from_csv(
+            path, reference_id="public-growth-v1", expected_sha256=digest.upper()
+        )
 
 
 def test_lms_reference_rejects_bad_csv_columns(tmp_path) -> None:
@@ -94,3 +98,12 @@ def test_lms_reference_rejects_bad_csv_columns(tmp_path) -> None:
 
     with pytest.raises(ValueError, match="columns"):
         LmsGrowthReference.from_csv(path, reference_id="public-growth-v1")
+
+
+def test_lms_reference_rejects_malformed_or_uppercase_source_hash() -> None:
+    row = LmsRow("height_cm", 730, "F", 1.0, 100.0, 0.1)
+
+    with pytest.raises(ValueError, match="SHA-256"):
+        LmsGrowthReference("public-growth-v1", rows=(row,), source_sha256="abc")
+    with pytest.raises(ValueError, match="SHA-256"):
+        LmsGrowthReference("public-growth-v1", rows=(row,), source_sha256="A" * 64)

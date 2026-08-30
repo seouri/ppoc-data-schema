@@ -8,6 +8,11 @@ from pathlib import Path
 from typing import Protocol
 
 
+def _validate_sha256(value: str, label: str) -> None:
+    if not isinstance(value, str) or len(value) != 64 or any(char not in "0123456789abcdef" for char in value):
+        raise ValueError(f"{label} must be a lowercase 64-character SHA-256 hex digest")
+
+
 class GrowthReference(Protocol):
     reference_id: str
 
@@ -50,6 +55,8 @@ class LmsGrowthReference:
     ) -> None:
         if not isinstance(reference_id, str) or not reference_id:
             raise ValueError("reference_id must be a nonempty string")
+        if source_sha256 is not None:
+            _validate_sha256(source_sha256, "source_sha256")
         normalized = tuple(rows)
         if not normalized:
             raise ValueError("rows must not be empty")
@@ -106,12 +113,7 @@ class LmsGrowthReference:
             lms = series[right]
         else:
             lower, upper = series[right - 1], series[right]
-            midpoint = (lower.age_days + upper.age_days) // 2
-            fraction = (
-                0.5
-                if age_days == midpoint
-                else (age_days - lower.age_days) / (upper.age_days - lower.age_days)
-            )
+            fraction = (age_days - lower.age_days) / (upper.age_days - lower.age_days)
             lms = LmsRow(
                 metric, age_days, reference_sex,
                 lower.l + fraction * (upper.l - lower.l),
@@ -140,8 +142,10 @@ class LmsGrowthReference:
         cls, path: Path, reference_id: str, expected_sha256: str | None = None
     ) -> "LmsGrowthReference":
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
-        if expected_sha256 is not None and digest != expected_sha256:
-            raise ValueError("SHA-256 hash does not match expected value")
+        if expected_sha256 is not None:
+            _validate_sha256(expected_sha256, "expected_sha256")
+            if digest != expected_sha256:
+                raise ValueError("SHA-256 hash does not match expected value")
         columns = ("metric", "age_days", "reference_sex", "l", "m", "s")
         rows: list[LmsRow] = []
         with path.open(encoding="utf-8", newline="") as handle:
