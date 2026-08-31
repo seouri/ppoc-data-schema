@@ -1,0 +1,256 @@
+from __future__ import annotations
+
+import ast
+import inspect
+from pathlib import Path
+
+from synthetic.cohort import generate_native_cohort
+
+ROOT = Path(__file__).resolve().parents[2]
+COHORT = ROOT / "src" / "synthetic" / "cohort.py"
+GUIDE = ROOT / "docs" / "synthetic-generator.md"
+README = ROOT / "README.md"
+VISIBLE_NATIVE_GENERATION = (
+    COHORT,
+    ROOT / "src" / "synthetic" / "native" / "age_regime_disorder.py",
+    ROOT / "src" / "synthetic" / "native" / "age_regimes.py",
+    ROOT / "src" / "synthetic" / "native" / "clinical_modules.py",
+    ROOT / "src" / "synthetic" / "native" / "healthy.py",
+    ROOT / "src" / "synthetic" / "native" / "observations.py",
+    ROOT / "src" / "synthetic" / "native" / "resources.py",
+    ROOT / "src" / "synthetic" / "native" / "trajectories.py",
+)
+
+FORBIDDEN_MODULES = {
+    "pathlib",
+    "shutil",
+    "tempfile",
+    "synthetic.calibrate",
+    "synthetic.calibration_disclosure",
+    "synthetic.calibration_input",
+    "synthetic.csv_package",
+    "synthetic.generate",
+    "synthetic.heldout_validate",
+    "synthetic.manifest",
+    "synthetic.package_export",
+    "synthetic.privacy_audit",
+    "synthetic.real_data",
+    "synthetic.realdata",
+    "synthetic.run_directory",
+    "synthetic.synthea",
+}
+FORBIDDEN_CALL_LEAVES = {
+    "RunDirectory",
+    "audit_privacy",
+    "calibrate",
+    "export_exact_schema_package",
+    "export_observed_resource_package",
+    "load_calibration_artifact",
+    "load_descriptor",
+    "makedirs",
+    "mkdir",
+    "open",
+    "read_bytes",
+    "read_csv",
+    "read_excel",
+    "read_json",
+    "read_parquet",
+    "read_text",
+    "read_table",
+    "rename",
+    "replace",
+    "rmdir",
+    "unlink",
+    "validate_heldout",
+    "write_bytes",
+    "write_csv",
+    "write_json",
+    "write_text",
+}
+SAFE_NON_FILESYSTEM_CALLS = {"dataclasses.replace"}
+FORBIDDEN_ARGUMENTS = {
+    "calibration_path",
+    "data_root",
+    "descriptor_path",
+    "heldout_report",
+    "key_file",
+    "output",
+    "output_path",
+    "partition_key",
+    "privacy_policy",
+    "privacy_report",
+    "real_data_root",
+    "real_root",
+    "snapshot_root",
+    "synthea_input",
+    "truth",
+}
+
+
+def _import_base(node: ast.ImportFrom, module_name: str) -> str | None:
+    if node.level == 0:
+        return node.module
+    package = module_name.split(".")[:-1]
+    climb = node.level - 1
+    if climb > len(package):
+        return None
+    parts = package[: len(package) - climb]
+    if node.module is not None:
+        parts.extend(node.module.split("."))
+    return ".".join(parts)
+
+
+def _call_name(node: ast.expr) -> str | None:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Call):
+        return _call_name(node.func)
+    if isinstance(node, ast.Attribute):
+        parent = _call_name(node.value)
+        return f"{parent}.{node.attr}" if parent else None
+    return None
+
+
+def _scan(source: str, module_name: str) -> tuple[set[str], set[str], set[str]]:
+    tree = ast.parse(source, filename=f"<{module_name}>")
+    imports: set[str] = set()
+    bindings: dict[str, str] = {}
+    arguments: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                imports.add(alias.name)
+                bindings[alias.asname or alias.name.split(".", maxsplit=1)[0]] = alias.name
+        elif isinstance(node, ast.ImportFrom):
+            base = _import_base(node, module_name)
+            if base:
+                imports.add(base)
+                for alias in node.names:
+                    bindings[alias.asname or alias.name] = f"{base}.{alias.name}"
+        elif isinstance(node, ast.arg):
+            arguments.add(node.arg)
+
+    calls: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        name = _call_name(node.func)
+        if name is None:
+            continue
+        root, dot, suffix = name.partition(".")
+        calls.add(f"{bindings.get(root, root)}{dot}{suffix}")
+    return imports, calls, arguments
+
+
+def _forbidden_modules(imports: set[str]) -> set[str]:
+    return {
+        name
+        for name in imports
+        if any(
+            name == forbidden or name.startswith(f"{forbidden}.")
+            for forbidden in FORBIDDEN_MODULES
+        )
+    }
+
+
+def _forbidden_calls(calls: set[str]) -> set[str]:
+    return {
+        name
+        for name in calls
+        if name not in SAFE_NON_FILESYSTEM_CALLS
+        and name.rsplit(".", maxsplit=1)[-1] in FORBIDDEN_CALL_LEAVES
+    }
+
+
+def test_cohort_module_has_no_governed_input_or_output_lifecycle_boundary() -> None:
+    """Catches cohort orchestration gaining a reader, writer, or governed dependency."""
+    imports, calls, arguments = _scan(
+        COHORT.read_text(encoding="utf-8"), "synthetic.cohort"
+    )
+
+    assert _forbidden_modules(imports) == set()
+    assert _forbidden_calls(calls) == set()
+    assert arguments.isdisjoint(FORBIDDEN_ARGUMENTS)
+    assert set(inspect.signature(generate_native_cohort).parameters).isdisjoint(
+        FORBIDDEN_ARGUMENTS
+    )
+
+
+def test_visible_native_generation_has_no_governed_or_package_lifecycle_dependency() -> None:
+    """Catches visible native generation gaining file/package side effects."""
+    for path in VISIBLE_NATIVE_GENERATION:
+        module_name = ".".join(
+            path.relative_to(ROOT / "src").with_suffix("").parts
+        )
+        imports, calls, _arguments = _scan(
+            path.read_text(encoding="utf-8"), module_name
+        )
+
+        assert _forbidden_modules(imports) == set(), path
+        assert _forbidden_calls(calls) == set(), path
+
+
+def test_cohort_boundary_scanner_detects_aliases_and_lifecycle_calls() -> None:
+    source = """from pathlib import Path as FilePath
+from synthetic.package_export import export_observed_resource_package as export_package
+
+def unsafe(*, real_root, output_path):
+    FilePath(real_root).read_text()
+    export_package([], {}, output_path)
+"""
+
+    imports, calls, arguments = _scan(source, "synthetic.cohort")
+
+    assert _forbidden_modules(imports) == {
+        "pathlib",
+        "synthetic.package_export",
+    }
+    assert _forbidden_calls(calls) == {
+        "pathlib.Path.read_text",
+        "synthetic.package_export.export_observed_resource_package",
+    }
+    assert arguments & FORBIDDEN_ARGUMENTS == {"output_path", "real_root"}
+
+
+def test_native_cohort_documentation_states_usage_and_deferred_gates() -> None:
+    """Catches the user guide presenting the cohort without its safety boundaries."""
+    guide = GUIDE.read_text(encoding="utf-8")
+    readme = README.read_text(encoding="utf-8")
+
+    for document in (guide, readme):
+        for required in (
+            "generate_native_cohort",
+            "CalibrationSamplingProfile",
+            "released aggregate",
+            "explicit module prior",
+            "healthy-plus-disorder",
+            "already-loaded descriptor mapping",
+            "evaluator-only",
+            "no real-data path",
+            "fail-closed command-line",
+        ):
+            assert required in document
+
+    for required in (
+        "CalibrationArtifact",
+        "ObservationPolicy",
+        "RegimeLinearTestReference",
+        "blank/nonresponse",
+        "race slot two",
+        "recorded flags do not allocate latent disease",
+        "export_observed_resource_package",
+    ):
+        assert required in guide
+
+    for deferred in (
+        "prevalence validation",
+        "held-out validation",
+        "privacy/non-matchability",
+        "clinical validity",
+        "task utility",
+        "ancillary resources",
+        "authoritative derivation",
+        "release approval",
+        "Synthea",
+    ):
+        assert deferred in guide

@@ -1,10 +1,10 @@
 # Synthetic generator
 
-This guide describes the exact-schema synthetic smoke generator and development-only observed-resource package export in this repository. They are development and integration harnesses for completely generated records; they are not a clinically validated simulator, a prevalence-calibrated cohort, a privacy audit, or a release-approved fixture.
+This guide describes the exact-schema synthetic smoke generator, the development-only in-memory native cohort, and development-only observed-resource package export in this repository. They are development and integration harnesses for completely generated records; they are not a clinically validated simulator, a prevalence-validated representative cohort, a privacy audit, or a release-approved fixture.
 
 ## Current scope
 
-The current vertical slice generates healthy patients aged two years and older. It produces three deterministic measurement visits per patient at ages 730, 1095, and 1460 days. Height and BMI are the two generated anthropometric dimensions; weight is derived from them. The smoke profile alternates recorded/reference sex across patients only to exercise the schema. It does not yet model growth-disorder states, disorder prevalence, calibrated demographics, infancy, puberty, or clinical events.
+The exact-schema smoke slice generates healthy patients aged two years and older. It produces three deterministic measurement visits per patient at ages 730, 1095, and 1460 days. Height and BMI are the two generated anthropometric dimensions; weight is derived from them. The smoke profile alternates recorded/reference sex across patients only to exercise the schema. It does not model growth-disorder states, disorder prevalence, calibrated demographics, infancy, puberty, or clinical events. The separate native cohort API below composes completely fictional healthy-plus-disorder trajectories in memory; it does not change this visible smoke contract.
 
 The generator reads `datapackage.json` as schema metadata only. It does not read the repository's real CSV snapshots or any patient records. The current command-line entry point intentionally fails closed because no production growth reference or authoritative augmentation oracle is shipped.
 
@@ -22,7 +22,72 @@ artifact = load_calibration_artifact(Path("approved-calibration.json"))
 print(artifact.artifact_id, len(artifact.strata))
 ```
 
-Strict keys, types, tokens, support, suppression, and file checks apply; suppressed cells remain null. The loader does not read PPOC CSVs, calibrate prevalence, tune trajectories, validate clinical fidelity, prove non-matchability, or authorize release. Generator consumption, held-out validation, privacy auditing, and an optional Synthea adapter are separate deferred gates.
+Strict keys, types, tokens, support, suppression, and file checks apply; suppressed cells remain null. The loader does not read PPOC CSVs, calibrate prevalence, tune trajectories, validate clinical fidelity, prove non-matchability, or authorize release. The native cohort API may consume the already-loaded artifact through the strict aggregate profile below; file/CLI consumption, held-out validation, privacy auditing, and an optional Synthea adapter are separate deferred gates.
+
+### Development-only native calibrated cohort
+
+`CalibrationSamplingProfile.from_artifact` converts an already-loaded `CalibrationArtifact` into aggregate sampling weights only when every required demographic and recorded-outcome target cell is a released aggregate. Missing or suppressed cells fail closed. `generate_native_cohort` then samples fictional demographics, composes healthy-plus-disorder trajectories from an explicit module prior, applies an explicit `ObservationPolicy`, and optionally projects each passing observation frame with an already-loaded descriptor mapping. It accepts no real-data path, calibration path, key, held-out or privacy report, output path, or patient row, and the fail-closed command-line entry point remains unchanged.
+
+The example uses the fictional `RegimeLinearTestReference`; inject a separately reviewed reference for any use beyond tests. Both the calibration artifact and `descriptor_mapping` have already been loaded by the caller:
+
+```python
+from collections.abc import Mapping
+
+from synthetic.calibration import CalibrationArtifact
+from synthetic.cohort import (
+    CalibrationSamplingProfile,
+    CohortConfig,
+    CohortModuleWeight,
+    NativeCohort,
+    generate_native_cohort,
+)
+from synthetic.models import DisorderKind
+from synthetic.native.clinical_modules import (
+    GrowthHormoneDeficiencyModule,
+    HealthyGrowthModule,
+)
+from synthetic.native.observations import ObservationPolicy
+from tests.synthetic.fakes import RegimeLinearTestReference
+
+
+def build_development_cohort(
+    artifact: CalibrationArtifact,
+    descriptor_mapping: Mapping[str, object] | None,
+) -> NativeCohort:
+    calibration = CalibrationSamplingProfile.from_artifact(artifact)
+    config = CohortConfig(
+        profile="native-development-v1",
+        patient_count=100,
+        seed=20260831,
+        ages_days=(761, 1_460, 3_650, 5_110, 6_200),
+        observation_policy=ObservationPolicy(
+            "native-cohort-observation-v1",
+            0,
+            6_201,
+        ),
+        module_weights=(
+            CohortModuleWeight(DisorderKind.HEALTHY, 0.85),
+            CohortModuleWeight(DisorderKind.GROWTH_HORMONE_DEFICIENCY, 0.15),
+        ),
+        reference_sex_mapping=(("F", "F"), ("M", "M"), ("U", "U")),
+    )
+    return generate_native_cohort(
+        config,
+        RegimeLinearTestReference(),
+        calibration,
+        modules={
+            DisorderKind.HEALTHY: HealthyGrowthModule(),
+            DisorderKind.GROWTH_HORMONE_DEFICIENCY: GrowthHormoneDeficiencyModule(),
+        },
+        descriptor=descriptor_mapping,
+    )
+```
+
+The blank/nonresponse ethnicity or race category remains a distinct aggregate cell and maps explicitly to visible `Unknown`. Race slot one follows the released primary-race weights; when the released multiselect probability draws true, race slot two is drawn from the same weights and slots three through eight remain `Unknown`. This is a documented approximation, not reconstruction of higher-order race combinations; recorded flags do not allocate latent disease. `healthy_flag` and `growth_dx_flag` remain evidence for later prevalence validation, while only the explicit module prior controls latent module sampling.
+
+`NativeCohort.to_mapping()` and `CohortMember.to_mapping()` expose only visible summaries, demographics, frames, and optional bundles. Each returned `member.trajectory` and `member.frame.truth` is evaluator-only and must stay outside ordinary mappings, logs, manifests, and visible packages. When a descriptor was supplied, a caller may separately collect the passing non-null bundles and pass them to `export_observed_resource_package` with the same already-loaded descriptor mapping, explicit export metadata, and an injected derivation oracle. `generate_native_cohort` never calls that package bridge or writes a file.
+
+This API is development orchestration, not evidence of prevalence validation, demographic representativeness, held-out validation, privacy/non-matchability, clinical validity, task utility, ancillary resources or clinical pathways, authoritative derivation, release approval, or Synthea conformance. Those remain separate deferred gates; the production smoke CLI remains fail closed.
 
 ### Governed aggregate calibration command
 
@@ -51,7 +116,7 @@ calibration-output/
 
 The artifact contains fixed-registry, calibration-partition aggregates for recorded demographics and outcomes, utilization, observation availability and logical-link completeness, and clean age-windowed physiology summaries. Recorded diagnosis flags are observable outcomes, not latent prevalence. Cells below the disclosure policy's minimum support are `suppressed` with null value, support, and denominator; suppression never becomes numeric zero. The separate report has status `AGGREGATES_ONLY` and exposes only aggregate partition/resource totals, target-family and suppression counts, policy identity, checks, and the shared aggregate hash.
 
-Repository CI invokes this path only with the wholly synthetic eight-resource mock package and test key material. No visible generator, CSV exporter, or native trajectory module imports the calibrator, reads its governed input, or consumes the resulting artifact in this slice. The existing generator examples and output contract therefore remain unchanged.
+Repository CI invokes this path only with the wholly synthetic eight-resource mock package and test key material. No visible generator, CSV exporter, or native trajectory module imports the calibrator or reads its governed input. The native cohort receives only an already-loaded aggregate artifact through `CalibrationSamplingProfile`; the existing file generator examples and output contract remain unchanged.
 
 Calibration output is not prevalence validation, representative-cohort evidence, clinical validation, privacy or non-matchability evidence, or release authorization. Held-out fidelity validation, clinical review, privacy auditing, and any future generator-consumption contract remain separate governed gates.
 

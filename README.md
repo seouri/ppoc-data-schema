@@ -67,11 +67,17 @@ Until the authoritative augmentation implementation or an approved parity harnes
 
 See [`docs/synthetic-generator.md`](docs/synthetic-generator.md) for the Python usage example, output contract, safety checks, and verification commands.
 
+## Development-only native cohort
+
+The in-memory `generate_native_cohort` API composes deterministic healthy-plus-disorder trajectories from a `CalibrationSamplingProfile`, an injected fictional growth reference, an explicit `ObservationPolicy`, and an explicit module prior. The profile accepts only complete released aggregate cells from an already-loaded `CalibrationArtifact`; suppressed or missing targets fail closed, and recorded diagnosis flags remain validation evidence rather than latent-disease allocators. An optional already-loaded descriptor mapping projects passing visible resource bundles. The API accepts no real-data path, key, report, or output destination, and the fail-closed command-line smoke entry point remains unchanged.
+
+Trajectory and observation truth remain evaluator-only and are excluded from ordinary mappings and visible packages. A caller may separately pass returned bundles to the reviewed package bridge; the cohort API itself never reads or writes package files. This healthy-plus-disorder development harness is not prevalence validation, demographic representativeness, held-out validation, privacy/non-matchability evidence, clinical validity, task utility, ancillary resources, authoritative derivation, release approval, or Synthea conformance. See [the native cohort section](docs/synthetic-generator.md#development-only-native-calibrated-cohort) for the complete example and boundary.
+
 ## Governed aggregate calibration
 
 The repository also provides `python -m synthetic.calibrate` for authorized offline use inside the governed environment. It requires explicit snapshot, descriptor, policy, creation-time, key-file, and new-output arguments and emits only `calibration-artifact.json` plus an aggregate report whose status is `AGGREGATES_ONLY`. The exact command, key-file controls, target families, and suppression semantics are documented in [the synthetic generator guide](docs/synthetic-generator.md#governed-aggregate-calibration-command).
 
-CI exercises calibration only with wholly synthetic records and test key material. No visible synthetic generator path consumes the calibration artifact. Its aggregates are not prevalence validation, clinical validation, privacy evidence, or release authorization.
+CI exercises calibration only with wholly synthetic records and test key material. No file generator or CLI consumes the calibration artifact; the development-only native cohort accepts only its already-loaded aggregate model through `CalibrationSamplingProfile`. Its aggregates are not prevalence validation, clinical validation, privacy evidence, or release authorization.
 
 ## Patient-disjoint held-out validation
 

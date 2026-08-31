@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 GUIDE = ROOT / "docs" / "synthetic-generator.md"
 README = ROOT / "README.md"
 PACKAGE_EXPORT = ROOT / "src" / "synthetic" / "package_export.py"
+COHORT = ROOT / "src" / "synthetic" / "cohort.py"
 FORBIDDEN_MODULES = {
     "synthetic.calibrate",
     "synthetic.calibration",
@@ -94,6 +95,7 @@ LEGACY_READER_CALLS = {
     PACKAGE_EXPORT: ("read_bytes",),
 }
 RANDOMNESS_IMPORTERS = {
+    COHORT,
     ROOT / "src" / "synthetic" / "generate.py",
     ROOT / "src" / "synthetic" / "manifest.py",
     ROOT / "src" / "synthetic" / "native" / "age_regime_disorder.py",
@@ -104,6 +106,18 @@ RANDOMNESS_IMPORTERS = {
     ROOT / "src" / "synthetic" / "native" / "observations.py",
     ROOT / "src" / "synthetic" / "native" / "trajectories.py",
 }
+COHORT_ALLOWED_CALLS = frozenset(
+    {
+        "synthetic.calibration.require_aggregate_safe_token",
+        "synthetic.calibration_targets.ETHNICITY_CATEGORY_SLUGS.items",
+        "synthetic.calibration_targets.ETHNICITY_CATEGORY_SLUGS.values",
+        "synthetic.calibration_targets.RACE_CATEGORY_SLUGS.items",
+        "synthetic.calibration_targets.RACE_CATEGORY_SLUGS.values",
+        "synthetic.calibration_targets.SEX_CATEGORY_SLUGS.items",
+        "synthetic.calibration_targets.SEX_CATEGORY_SLUGS.values",
+        "synthetic.calibration_targets.is_registered_target_key",
+    }
+)
 OUTPUT_FILES = (
     "patients.csv",
     "patients_augmented.csv",
@@ -235,6 +249,7 @@ def _imports_and_calls(path: Path) -> tuple[set[str], set[str]]:
 
 def _visible_paths() -> tuple[Path, ...]:
     return (
+        COHORT,
         PACKAGE_EXPORT,
         ROOT / "src" / "synthetic" / "generate.py",
         ROOT / "src" / "synthetic" / "manifest.py",
@@ -243,23 +258,39 @@ def _visible_paths() -> tuple[Path, ...]:
     )
 
 
-def _matches_forbidden(names: set[str]) -> set[str]:
+def _matches_forbidden(
+    names: set[str],
+    *,
+    allowed_names: frozenset[str] = frozenset(),
+) -> set[str]:
     return {
         name
         for name in names
-        if any(name == module or name.startswith(f"{module}.") for module in FORBIDDEN_MODULES)
-        or name.rsplit(".", maxsplit=1)[-1] in FORBIDDEN_CALL_SYMBOLS
+        if name not in allowed_names
+        and (
+            any(
+                name == module or name.startswith(f"{module}.")
+                for module in FORBIDDEN_MODULES
+            )
+            or name.rsplit(".", maxsplit=1)[-1] in FORBIDDEN_CALL_SYMBOLS
+        )
     }
 
 
 def test_visible_package_paths_reject_governed_synthea_and_package_reader_boundaries() -> None:
     """Catches an export path gaining governed inputs or descriptor/package readers."""
     for path in _visible_paths():
+        allowed_imports = (
+            frozenset({"synthetic.calibration", "synthetic.calibration_targets"})
+            if path == COHORT
+            else frozenset()
+        )
         imports, calls, readers, identifiers = _imports_calls_readers_and_identifiers(
             path.read_text(encoding="utf-8"), _module_name(path)
         )
-        assert _matches_forbidden(imports) == set(), path
-        assert _matches_forbidden(calls) == set(), path
+        assert _matches_forbidden(imports, allowed_names=allowed_imports) == set(), path
+        allowed_calls = COHORT_ALLOWED_CALLS if path == COHORT else frozenset()
+        assert _matches_forbidden(calls, allowed_names=allowed_calls) == set(), path
         assert not identifiers & FORBIDDEN_REAL_DATA_IDENTIFIERS, path
         assert readers == LEGACY_READER_CALLS.get(path, ()), path
 
