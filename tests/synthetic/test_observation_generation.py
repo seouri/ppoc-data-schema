@@ -20,8 +20,10 @@ from synthetic.native.observations import (
     MeasurementAvailability,
     MeasurementChannel,
     ObservationPolicy,
+    ObservationValidationStatus,
     RecordedEventKind,
     generate_observation_frame,
+    validate_observation_frame,
 )
 from synthetic.randomness import NamedRandomStreams
 
@@ -226,6 +228,59 @@ def test_generation_keeps_regime_channel_applicability_and_derives_bmi() -> None
     assert bmi == pytest.approx(weight / (height / 100.0) ** 2)
     assert frame.truth.measurement_truth
     assert all(item.channel is not MeasurementChannel.BMI for item in frame.truth.measurement_truth)
+
+
+def test_generation_derives_transition_bmi_without_latent_bmi_and_handles_missing_inputs() -> None:
+    points = list(_trajectory().physiology.points)
+    points[1] = dataclasses.replace(points[1], bmi=None)
+    trajectory = dataclasses.replace(
+        _trajectory(),
+        physiology=dataclasses.replace(_trajectory().physiology, points=tuple(points)),
+    )
+
+    frame = generate_observation_frame(
+        trajectory, _policy(rounding_digits=2), NamedRandomStreams(12, 0)
+    )
+    transition = next(visit for visit in frame.visits if visit.age_days == 730)
+    by_channel = {item.channel: item for item in transition.measurements}
+    height = by_channel[MeasurementChannel.HEIGHT]
+    weight = by_channel[MeasurementChannel.WEIGHT]
+    bmi = by_channel[MeasurementChannel.BMI]
+    assert height.availability is MeasurementAvailability.OBSERVED
+    assert weight.availability is MeasurementAvailability.OBSERVED
+    assert bmi.availability is MeasurementAvailability.OBSERVED
+    assert height.recorded_value is not None
+    assert weight.recorded_value is not None
+    assert bmi.recorded_value == pytest.approx(
+        weight.recorded_value / (height.recorded_value / 100.0) ** 2
+    )
+    assert validate_observation_frame(frame).status is ObservationValidationStatus.PASS
+
+    for availability_changes, missing_channel in (
+        ({"height_availability_probability": 0.0}, MeasurementChannel.HEIGHT),
+        ({"weight_availability_probability": 0.0}, MeasurementChannel.WEIGHT),
+    ):
+        missing_frame = generate_observation_frame(
+            trajectory,
+            _policy(**availability_changes),
+            NamedRandomStreams(12, 0),
+        )
+        missing_transition = next(
+            visit for visit in missing_frame.visits if visit.age_days == 730
+        )
+        missing_by_channel = {
+            item.channel: item for item in missing_transition.measurements
+        }
+        assert (
+            missing_by_channel[missing_channel].availability
+            is MeasurementAvailability.MISSING
+        )
+        assert missing_by_channel[MeasurementChannel.BMI].availability is MeasurementAvailability.MISSING
+        assert missing_by_channel[MeasurementChannel.BMI].recorded_value is None
+        assert (
+            validate_observation_frame(missing_frame).status
+            is ObservationValidationStatus.PASS
+        )
 
 
 def test_generation_applies_additive_error_before_rounding_and_never_clips() -> None:
