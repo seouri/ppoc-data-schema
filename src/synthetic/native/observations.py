@@ -862,7 +862,8 @@ def _point_channel_value(point: Any, channel: MeasurementChannel) -> float | Non
     elif channel is MeasurementChannel.WEIGHT:
         value = point.weight_kg
     elif channel is MeasurementChannel.HEAD_CIRCUMFERENCE:
-        value = point.head_circumference_cm
+        applicable = point.regime in (GrowthRegime.INFANCY, GrowthRegime.TRANSITION)
+        value = point.head_circumference_cm if applicable else None
     else:
         raise ValueError("BMI is derived and has no latent channel draw")
     if value is None:
@@ -1014,9 +1015,19 @@ def _stable_visit_id(patient_id: str, policy_version: str, point_index: int) -> 
 def _selected_opportunity(
     opportunities: tuple[VisitOpportunity, ...],
     minimum_age_days: int,
+    observed_measurements_by_point: Mapping[int, tuple[MeasurementObservation, ...]],
 ) -> VisitOpportunity | None:
     for opportunity in opportunities:
-        if opportunity.realized and opportunity.age_days >= minimum_age_days:
+        measurements = observed_measurements_by_point.get(opportunity.source_point_index, ())
+        has_observed_measurement = any(
+            item.availability is MeasurementAvailability.OBSERVED
+            for item in measurements
+        )
+        if (
+            opportunity.realized
+            and opportunity.age_days >= minimum_age_days
+            and has_observed_measurement
+        ):
             return opportunity
     return None
 
@@ -1025,10 +1036,10 @@ def _event_projection(
     trajectory: AgeRegimeDisorderTrajectory,
     policy: ObservationPolicy,
     opportunities: tuple[VisitOpportunity, ...],
+    observed_measurements_by_point: Mapping[int, tuple[MeasurementObservation, ...]],
     recognition_generator: Any,
     recorded_event_generator: Any,
 ) -> tuple[tuple[RecordedEvent, ...], tuple[EventRecordingDecision, ...]]:
-    selected_opportunities = tuple(item for item in opportunities if item.realized)
     source_events = trajectory.events
     decisions: list[EventRecordingDecision] = []
     records: list[RecordedEvent] = []
@@ -1052,7 +1063,11 @@ def _event_projection(
             minimum_age = event.age_days + policy.recognition_delay_days
             if last_recorded_age is not None:
                 minimum_age = max(minimum_age, last_recorded_age)
-            opportunity = _selected_opportunity(selected_opportunities, minimum_age)
+            opportunity = _selected_opportunity(
+                opportunities,
+                minimum_age,
+                observed_measurements_by_point,
+            )
             if (
                 not event.hidden
                 and has_observable_phenotype
@@ -1080,7 +1095,11 @@ def _event_projection(
             minimum_age = event.age_days
             if last_recorded_age is not None:
                 minimum_age = max(minimum_age, last_recorded_age)
-            opportunity = _selected_opportunity(selected_opportunities, minimum_age)
+            opportunity = _selected_opportunity(
+                opportunities,
+                minimum_age,
+                observed_measurements_by_point,
+            )
             if (
                 not event.hidden
                 and recognition_recorded
@@ -1108,7 +1127,11 @@ def _event_projection(
             minimum_age = event.age_days
             if last_recorded_age is not None:
                 minimum_age = max(minimum_age, last_recorded_age)
-            opportunity = _selected_opportunity(selected_opportunities, minimum_age)
+            opportunity = _selected_opportunity(
+                opportunities,
+                minimum_age,
+                observed_measurements_by_point,
+            )
             if (
                 not event.hidden
                 and workup_recorded
@@ -1181,6 +1204,7 @@ def generate_observation_frame(
 
     visits: list[ObservedVisit] = []
     measurement_truth: list[MeasurementTruth] = []
+    observed_measurements_by_point: dict[int, tuple[MeasurementObservation, ...]] = {}
     for opportunity in opportunities:
         if not opportunity.realized:
             continue
@@ -1193,6 +1217,7 @@ def generate_observation_frame(
             error_generator,
         )
         measurement_truth.extend(truth_items)
+        observed_measurements_by_point[opportunity.source_point_index] = measurements
         visits.append(
             ObservedVisit(
                 patient_id,
@@ -1207,6 +1232,7 @@ def generate_observation_frame(
         trajectory,
         policy,
         tuple(opportunities),
+        observed_measurements_by_point,
         recognition_generator,
         recorded_event_generator,
     )

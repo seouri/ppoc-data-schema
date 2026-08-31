@@ -284,6 +284,59 @@ def test_generation_projects_recognition_workup_and_diagnosis_with_delay() -> No
     assert all(event.age_days >= frame.visits[event.opportunity_index].age_days for event in frame.events)
 
 
+def test_generation_requires_observed_measurement_evidence_for_recorded_descendants() -> None:
+    policy = _policy(
+        length_availability_probability=0.0,
+        height_availability_probability=0.0,
+        weight_availability_probability=0.0,
+        head_circumference_availability_probability=0.0,
+        recognition_probability=1.0,
+        diagnosis_probability=1.0,
+    )
+    frame = generate_observation_frame(
+        _event_trajectory(), policy, NamedRandomStreams(10, 0)
+    )
+
+    assert frame.visits
+    assert all(
+        measurement.availability is not MeasurementAvailability.OBSERVED
+        for visit in frame.visits
+        for measurement in visit.measurements
+    )
+    assert frame.events == ()
+    assert all(not decision.recorded for decision in frame.truth.event_decisions)
+
+
+def test_generation_uses_not_applicable_head_circumference_after_transition() -> None:
+    trajectory = _trajectory()
+    points = list(trajectory.physiology.points)
+    points[2] = dataclasses.replace(points[2], head_circumference_cm=46.0)
+    trajectory = dataclasses.replace(
+        trajectory,
+        physiology=dataclasses.replace(trajectory.physiology, points=tuple(points)),
+    )
+
+    frame = generate_observation_frame(
+        trajectory, _policy(), NamedRandomStreams(11, 0)
+    )
+    later_visit = next(visit for visit in frame.visits if visit.age_days == 1000)
+    head = next(
+        measurement
+        for measurement in later_visit.measurements
+        if measurement.channel is MeasurementChannel.HEAD_CIRCUMFERENCE
+    )
+    assert head.availability is MeasurementAvailability.NOT_APPLICABLE
+    assert head.recorded_value is None
+    truth = next(
+        item
+        for item in frame.truth.measurement_truth
+        if item.source_point_index == 2
+        and item.channel is MeasurementChannel.HEAD_CIRCUMFERENCE
+    )
+    assert truth.availability is MeasurementAvailability.NOT_APPLICABLE
+    assert truth.latent_value is None
+
+
 def test_generation_suppresses_hidden_and_deferred_events() -> None:
     policy = _policy(recognition_probability=1.0, diagnosis_probability=1.0)
     frame = generate_observation_frame(
