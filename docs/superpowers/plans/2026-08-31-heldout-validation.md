@@ -13,7 +13,7 @@ Spec: docs/superpowers/specs/2026-08-31-heldout-validation-design.md
 ## Global Constraints
 
 - datapackage.json remains the sole schema authority; real and generated descriptors must have the repository fingerprint and exact eight resources.
-- Real root, real descriptor, snapshot, synthetic root, calibration artifact, calibration report, partition policy, disclosure policy, partition key, frozen fidelity policy, age windows, and output are explicit inputs; there is no default data path or patient partition file.
+- Real root, real descriptor, snapshot, synthetic root, calibration artifact, calibration report, partition policy, disclosure policy, partition key, frozen fidelity policy, and output are explicit inputs; library callers provide age windows explicitly and the CLI uses the checked-in DEFAULT_AGE_WINDOWS registry; there is no default data path or patient partition file.
 - The HMAC partition key and every patient/visit row remain process-local; no key, identifier, support, denominator, raw category, candidate link, sequence, or hidden truth appears in report, summary, error, filename, or manifest.
 - The real target set uses only partition_label="held_out"; the synthetic target set stages every generated patient under an internal calibration label and never mixes the two connections.
 - The existing fixed target registry, calibration-artifact-v1 loader, disclosure suppression, and clean physiology rules remain authoritative; no arbitrary SQL or columns are accepted.

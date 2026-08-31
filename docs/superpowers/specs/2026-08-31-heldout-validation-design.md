@@ -75,7 +75,7 @@ def validate_heldout(config: HeldoutRunConfig) -> HeldoutValidationResult:
 
 `FidelityPolicy` requires exact JSON keys. `continuous_tolerances` must contain exactly the five approved target families (`demographics`, `observation`, `physiology`, `utilization`, `recorded_outcome`) with finite nonnegative values. `required_families` must be a nonempty canonical subset of those families, with no duplicates. The minimum evaluable support is positive; the proportion floor is in `[0,1]`; the proportion z-score is positive; count tolerance and the unevaluable allowance are nonnegative integers. Policy identifiers and target registry version use aggregate-safe ASCII tokens. Unknown JSON keys, duplicate keys, nonfinite numbers, unsupported families, or invalid ranges fail closed.
 
-The command is explicit about every governed input:
+The command is explicit about every governed input; the CLI uses the checked-in DEFAULT_AGE_WINDOWS registry, while library callers provide the age_windows tuple explicitly:
 
 ```sh
 uv run python -m synthetic.heldout_validate \
