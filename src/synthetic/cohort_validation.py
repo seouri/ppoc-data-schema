@@ -9,6 +9,7 @@ a separate recorded layer.
 from __future__ import annotations
 
 import math
+import re
 from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -31,6 +32,11 @@ from synthetic.models import (
     GrowthRegime,
 )
 from synthetic.native.observations import (
+    RECORDED_EVENT_CODES,
+    EncounterType,
+    MeasurementAvailability,
+    MeasurementChannel,
+    MeasurementObservation,
     ObservationFrame,
     ObservedVisit,
     RecordedEvent,
@@ -38,6 +44,22 @@ from synthetic.native.observations import (
 )
 
 COHORT_VALIDATION_REPORT_VERSION = "cohort-validation-report-v1"
+
+_SYNTHETIC_PATIENT_TOKEN = re.compile(r"^syn-[A-Za-z0-9][A-Za-z0-9._-]*$")
+_SYNTHETIC_VISIT_TOKEN = re.compile(r"^syn-[A-Za-z0-9][A-Za-z0-9._:-]*$")
+_SOURCE_EVENT_PHASES = MappingProxyType(
+    {
+        "latent_onset": 0,
+        "observable_phenotype": 1,
+        "recognition_opportunity": 2,
+        "workup": 3,
+        "recorded_diagnosis": 4,
+        "treatment_start": 5,
+        "treatment_response": 6,
+        "treatment_nonresponse": 6,
+    }
+)
+_SOURCE_EVENT_TYPES = frozenset(_SOURCE_EVENT_PHASES)
 
 GROWTH_TOLERANCE_KEYS = (
     "height_z_score",
@@ -306,10 +328,29 @@ def _expected_layer(name: str) -> str | None:
         return "demographics"
     if len(parts) == 2 and parts[0] == "latent_module" and parts[1] in _DISORDER_ORDER:
         return "latent"
-    if len(parts) == 3 and parts[0] == "growth" and parts[2].endswith("_mean"):
-        metric = parts[2][:-5]
-        if metric in GROWTH_TOLERANCE_KEYS:
-            return "growth"
+    if _growth_name_parts(name) is not None:
+        return "growth"
+    return None
+
+
+def _growth_name_parts(name: str) -> tuple[str, str] | None:
+    """Parse a growth comparison from its fixed metric suffix.
+
+    Window tokens are aggregate-safe and may contain dots, so splitting the
+    full name on every dot cannot identify the window.  The metric registry is
+    closed; matching its suffix from the right keeps the serialized window
+    token unchanged and makes the grammar unambiguous.
+    """
+
+    if not name.startswith("growth."):
+        return None
+    body = name.removeprefix("growth.")
+    for metric in GROWTH_TOLERANCE_KEYS:
+        suffix = f".{metric}_mean"
+        if body.endswith(suffix):
+            window = body[: -len(suffix)]
+            if window:
+                return window, metric
     return None
 
 
@@ -356,8 +397,10 @@ def _comparison_sort_key(comparison: CohortComparison) -> tuple[object, ...]:
     if name.startswith("recorded_"):
         return (4, ("recorded_recognition", "recorded_workup", "recorded_diagnosis").index(name), name)
     if name.startswith("growth."):
-        _prefix, window, metric_name = name.split(".", 2)
-        metric = metric_name.removesuffix("_mean")
+        parsed = _growth_name_parts(name)
+        if parsed is None:
+            raise ValueError("growth comparison name is not registered")
+        window, metric = parsed
         return (5, window, _GROWTH_METRIC_ORDER[metric])
     if name.startswith("coverage."):
         coverage_order = {
@@ -790,6 +833,171 @@ def _failed_status_comparison(
     )
 
 
+def _is_synthetic_patient_id(value: object) -> bool:
+    return isinstance(value, str) and _SYNTHETIC_PATIENT_TOKEN.fullmatch(value) is not None
+
+
+def _is_synthetic_visit_id(value: object) -> bool:
+    return isinstance(value, str) and _SYNTHETIC_VISIT_TOKEN.fullmatch(value) is not None
+
+
+def _member_patient_id(member: object) -> str | None:
+    try:
+        patient_id = member.demographics.patient_id
+    except Exception:  # noqa: BLE001 - evaluator failures must be redacted
+        return None
+    if not _is_synthetic_patient_id(patient_id):
+        return None
+    return patient_id
+
+
+def _trajectory_events(
+    member: object,
+    expected_patient_id: str,
+) -> tuple[tuple[ClinicalEvent, ...], str | None]:
+    """Validate private source events before they contribute to a layer rate."""
+
+    try:
+        trajectory = member.trajectory
+        if not isinstance(trajectory, AgeRegimeDisorderTrajectory):
+            return (), "STRUCTURAL_INVALID"
+        events = trajectory.events
+        if not isinstance(events, tuple) or not all(
+            isinstance(event, ClinicalEvent) for event in events
+        ):
+            return (), "STRUCTURAL_INVALID"
+        previous_age = -1
+        previous_phase = -1
+        for event in events:
+            if (
+                not _is_synthetic_patient_id(event.patient_id)
+                or event.patient_id != expected_patient_id
+                or isinstance(event.age_days, bool)
+                or not isinstance(event.age_days, int)
+                or event.age_days < 0
+                or event.age_days < previous_age
+                or not isinstance(event.event_type, str)
+                or event.event_type not in _SOURCE_EVENT_TYPES
+                or event.code is not None
+                or not isinstance(event.hidden, bool)
+                or (event.event_type == "latent_onset" and not event.hidden)
+            ):
+                return (), "STRUCTURAL_INVALID"
+            phase = _SOURCE_EVENT_PHASES[event.event_type]
+            if phase <= previous_phase:
+                return (), "STRUCTURAL_INVALID"
+            previous_age = event.age_days
+            previous_phase = phase
+        return events, None
+    except Exception:  # noqa: BLE001 - evaluator failures must be redacted
+        return (), "MALFORMED_COHORT"
+
+
+def _measurements_are_valid(measurements: object) -> bool:
+    try:
+        if not isinstance(measurements, tuple) or not measurements:
+            return False
+        channels: set[MeasurementChannel] = set()
+        for measurement in measurements:
+            if not isinstance(measurement, MeasurementObservation):
+                return False
+            if not isinstance(measurement.channel, MeasurementChannel):
+                return False
+            if measurement.channel in channels:
+                return False
+            channels.add(measurement.channel)
+            if not isinstance(measurement.availability, MeasurementAvailability):
+                return False
+            value = measurement.recorded_value
+            if measurement.availability is MeasurementAvailability.OBSERVED:
+                if (
+                    type(value) not in (int, float)
+                    or not math.isfinite(float(value))
+                    or value <= 0
+                ):
+                    return False
+            elif value is not None:
+                return False
+        return True
+    except Exception:  # noqa: BLE001 - evaluator failures must be redacted
+        return False
+
+
+def _frame_records(
+    member: object,
+    expected_patient_id: str,
+) -> tuple[tuple[ObservedVisit, ...], tuple[RecordedEvent, ...], str | None]:
+    """Validate visible visits/events before counting observation coverage."""
+
+    try:
+        frame = member.frame
+        if not isinstance(frame, ObservationFrame):
+            return (), (), "STRUCTURAL_INVALID"
+        if frame.patient_id != expected_patient_id or not _is_synthetic_patient_id(
+            frame.patient_id
+        ):
+            return (), (), "STRUCTURAL_INVALID"
+        if not isinstance(frame.policy_version, str):
+            return (), (), "STRUCTURAL_INVALID"
+        visits = frame.visits
+        events = frame.events
+        if not isinstance(visits, tuple) or not all(
+            isinstance(visit, ObservedVisit) for visit in visits
+        ):
+            return (), (), "STRUCTURAL_INVALID"
+        if not isinstance(events, tuple) or not all(
+            isinstance(event, RecordedEvent) for event in events
+        ):
+            return (), (), "STRUCTURAL_INVALID"
+
+        previous_age = -1
+        visit_ids: set[str] = set()
+        for visit in visits:
+            if (
+                not _is_synthetic_patient_id(visit.patient_id)
+                or visit.patient_id != expected_patient_id
+                or not _is_synthetic_visit_id(visit.visit_id)
+                or visit.visit_id in visit_ids
+                or isinstance(visit.age_days, bool)
+                or not isinstance(visit.age_days, int)
+                or visit.age_days < 0
+                or visit.age_days <= previous_age
+                or not isinstance(visit.encounter_type, EncounterType)
+                or not _measurements_are_valid(visit.measurements)
+            ):
+                return (), (), "STRUCTURAL_INVALID"
+            visit_ids.add(visit.visit_id)
+            previous_age = visit.age_days
+
+        previous_age = -1
+        for event in events:
+            if not isinstance(event.event_kind, RecordedEventKind):
+                return (), (), "STRUCTURAL_INVALID"
+            expected_code = RECORDED_EVENT_CODES[event.event_kind]
+            if (
+                not _is_synthetic_patient_id(event.patient_id)
+                or event.patient_id != expected_patient_id
+                or isinstance(event.age_days, bool)
+                or not isinstance(event.age_days, int)
+                or event.age_days < 0
+                or event.age_days < previous_age
+                or event.code != expected_code
+                or (
+                    event.opportunity_index is not None
+                    and (
+                        isinstance(event.opportunity_index, bool)
+                        or not isinstance(event.opportunity_index, int)
+                        or event.opportunity_index < 0
+                    )
+                )
+            ):
+                return (), (), "STRUCTURAL_INVALID"
+            previous_age = event.age_days
+        return visits, events, None
+    except Exception:  # noqa: BLE001 - evaluator failures must be redacted
+        return (), (), "MALFORMED_COHORT"
+
+
 def _trajectory_points(
     member: object,
 ) -> tuple[tuple[AgeRegimePoint, ...], str | None]:
@@ -806,7 +1014,7 @@ def _trajectory_points(
         points = physiology.points
         if not isinstance(points, tuple) or not points:
             return (), "STRUCTURAL_INVALID"
-        if not isinstance(patient_id, str) or not patient_id:
+        if not _is_synthetic_patient_id(patient_id):
             return (), "STRUCTURAL_INVALID"
         previous_age = -1
         for point in points:
@@ -916,9 +1124,26 @@ def _growth_comparison(
             denominator,
             "INSUFFICIENT_SUPPORT",
         )
-    mean = math.fsum(values) / len(values)
+    try:
+        mean = math.fsum(values) / len(values)
+        difference = abs(mean)
+    except (OverflowError, ValueError):
+        return _failed_status_comparison(
+            name,
+            "growth",
+            len(values),
+            denominator,
+            "INVALID_VALUE",
+        )
+    if not math.isfinite(mean) or not math.isfinite(difference):
+        return _failed_status_comparison(
+            name,
+            "growth",
+            len(values),
+            denominator,
+            "INVALID_VALUE",
+        )
     tolerance = policy.growth_tolerances[metric]
-    difference = abs(mean)
     status = (
         CohortValidationStatus.PASS
         if difference <= tolerance
@@ -996,61 +1221,26 @@ def _coverage_comparisons(
     structural_reason: str | None = None
     for member in members:
         try:
-            patient_id = member.demographics.patient_id
-            if (
-                not isinstance(patient_id, str)
-                or not patient_id
-                or patient_id in seen_patient_ids
-            ):
+            patient_id = _member_patient_id(member)
+            if patient_id is None or patient_id in seen_patient_ids:
                 structural_reason = "STRUCTURAL_INVALID"
+                continue
             seen_patient_ids.add(patient_id)
 
             _points, point_reason = _trajectory_points(member)
             if point_reason is not None:
                 structural_reason = point_reason
+                continue
 
-            frame = member.frame
-            if not isinstance(frame, ObservationFrame) or frame.patient_id != patient_id:
-                structural_reason = "STRUCTURAL_INVALID"
+            _source_events, event_reason = _trajectory_events(member, patient_id)
+            if event_reason is not None:
+                structural_reason = event_reason
                 continue
-            visits = frame.visits
-            events = frame.events
-            if not isinstance(visits, tuple) or not all(
-                isinstance(visit, ObservedVisit) for visit in visits
-            ):
-                structural_reason = "STRUCTURAL_INVALID"
+
+            visits, events, frame_reason = _frame_records(member, patient_id)
+            if frame_reason is not None:
+                structural_reason = frame_reason
                 continue
-            if not isinstance(events, tuple) or not all(
-                isinstance(event, RecordedEvent) for event in events
-            ):
-                structural_reason = "STRUCTURAL_INVALID"
-                continue
-            previous_age = -1
-            visit_ids: set[str] = set()
-            for visit in visits:
-                if (
-                    visit.patient_id != patient_id
-                    or visit.visit_id in visit_ids
-                    or isinstance(visit.age_days, bool)
-                    or not isinstance(visit.age_days, int)
-                    or visit.age_days < 0
-                    or visit.age_days < previous_age
-                ):
-                    structural_reason = "STRUCTURAL_INVALID"
-                visit_ids.add(visit.visit_id)
-                previous_age = visit.age_days
-            previous_age = -1
-            for event in events:
-                if (
-                    event.patient_id != patient_id
-                    or not isinstance(event.event_kind, RecordedEventKind)
-                    or isinstance(event.age_days, bool)
-                    or not isinstance(event.age_days, int)
-                    or event.age_days < 0
-                    or event.age_days < previous_age
-                ):
-                    structural_reason = "STRUCTURAL_INVALID"
-                previous_age = event.age_days
             if visits:
                 members_with_observation += 1
             if events:
@@ -1213,11 +1403,13 @@ def _observable_comparison(
     invalid_reason: str | None = None
     for member in members:
         try:
-            events = member.trajectory.events
-            if not isinstance(events, tuple) or not all(
-                isinstance(event, ClinicalEvent) for event in events
-            ):
+            patient_id = _member_patient_id(member)
+            if patient_id is None:
                 invalid_reason = "STRUCTURAL_INVALID"
+                continue
+            events, event_reason = _trajectory_events(member, patient_id)
+            if event_reason is not None:
+                invalid_reason = event_reason
                 continue
             if any(event.event_type == "observable_phenotype" for event in events):
                 support += 1
@@ -1252,11 +1444,13 @@ def _recorded_comparisons(
         invalid_reason: str | None = None
         for member in members:
             try:
-                events = member.frame.events
-                if not isinstance(events, tuple) or not all(
-                    isinstance(event, RecordedEvent) for event in events
-                ):
+                patient_id = _member_patient_id(member)
+                if patient_id is None:
                     invalid_reason = "STRUCTURAL_INVALID"
+                    continue
+                _visits, events, frame_reason = _frame_records(member, patient_id)
+                if frame_reason is not None:
+                    invalid_reason = frame_reason
                     continue
                 if any(event.event_kind is event_kind for event in events):
                     support += 1

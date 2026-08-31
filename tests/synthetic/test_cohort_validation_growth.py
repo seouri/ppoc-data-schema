@@ -10,6 +10,8 @@ from synthetic.cohort_validation import (
     CohortValidationStatus,
     validate_native_cohort,
 )
+from synthetic.models import ClinicalEvent
+from synthetic.native.observations import RecordedEvent, RecordedEventKind
 from tests.synthetic.test_cohort_validation_layers import _cohort, _comparison, _policy
 
 
@@ -90,6 +92,66 @@ def test_first_none_velocity_is_omitted_from_the_growth_mean() -> None:
     assert height_velocity.support == 1
     assert height_velocity.denominator == 2
     assert height_velocity.observed_value == pytest.approx(point_velocity)
+
+
+def test_window_tokens_with_dots_remain_parseable_in_growth_names() -> None:
+    cohort = _cohort(patient_count=1)
+    report = validate_native_cohort(
+        cohort,
+        _policy(
+            minimum_cell_support=1,
+            required_age_windows=(("childhood.v1", 730, 4380),),
+            growth_tolerances={
+                "height_z_score": 10.0,
+                "bmi_z_score": 10.0,
+                "height_velocity_cm_per_year": 20.0,
+                "weight_velocity_kg_per_year": 20.0,
+            },
+        ),
+    )
+
+    growth = [
+        item
+        for item in report.comparisons
+        if item.name.startswith("growth.childhood.v1.")
+    ]
+    assert [item.name for item in growth] == [
+        f"growth.childhood.v1.{metric}_mean" for metric in _growth_metrics()
+    ]
+    assert all(item.layer == "growth" for item in growth)
+
+
+def test_extreme_finite_values_fail_as_invalid_without_dropping_growth_checks() -> None:
+    cohort = _cohort(patient_count=2)
+    for member in cohort.members:
+        for point in member.trajectory.physiology.points[2:4]:
+            object.__setattr__(point, "height_z", 1e308)
+
+    report = validate_native_cohort(
+        cohort,
+        _policy(
+            minimum_cell_support=1,
+            required_age_windows=(("childhood", 730, 4380),),
+            growth_tolerances={
+                "height_z_score": 10.0,
+                "bmi_z_score": 10.0,
+                "height_velocity_cm_per_year": 20.0,
+                "weight_velocity_kg_per_year": 20.0,
+            },
+        ),
+    )
+
+    height = _comparison(report, "growth.childhood.height_z_score_mean")
+    assert report.status is CohortValidationStatus.FAIL
+    assert height.status is CohortValidationStatus.FAIL
+    assert height.reason_code == "INVALID_VALUE"
+    assert height.support == 8
+    assert height.denominator == 8
+    assert {
+        item.name
+        for item in report.comparisons
+        if item.name.startswith("growth.childhood.")
+    } == {f"growth.childhood.{metric}_mean" for metric in _growth_metrics()}
 
 
 def test_growth_bound_failure_and_insufficient_support_are_distinct() -> None:
@@ -184,6 +246,55 @@ def test_malformed_frame_is_reported_by_recorded_and_coverage_checks() -> None:
     }
     assert _comparison(report, "coverage.members_with_observation").reason_code == "STRUCTURAL_INVALID"
     assert "syn-" not in str(report.to_mapping())
+
+
+def test_malformed_nested_visit_and_record_are_not_counted_as_evidence() -> None:
+    cohort = _cohort(patient_count=1)
+    member = cohort.members[0]
+    visit = member.frame.visits[0]
+    object.__setattr__(visit, "visit_id", "real-patient-visit")
+    report = validate_native_cohort(cohort, _policy())
+
+    observation = _comparison(report, "coverage.members_with_observation")
+    assert observation.status is CohortValidationStatus.FAIL
+    assert observation.support == 0
+
+    clean_cohort = _cohort(patient_count=1)
+    clean_member = clean_cohort.members[0]
+    patient_id = clean_member.frame.patient_id
+    record = RecordedEvent(
+        patient_id,
+        0,
+        RecordedEventKind.RECOGNITION,
+        "SYN-GROWTH-RECOGNITION",
+    )
+    object.__setattr__(record, "code", "real-diagnosis-code")
+    object.__setattr__(clean_member.frame, "events", (record,))
+    report = validate_native_cohort(clean_cohort, _policy())
+
+    recorded = _comparison(report, "recorded_recognition")
+    event_coverage = _comparison(report, "coverage.members_with_event")
+    assert recorded.status is CohortValidationStatus.FAIL
+    assert recorded.support == 0
+    assert event_coverage.status is CohortValidationStatus.FAIL
+    assert event_coverage.support == 0
+    assert "real-diagnosis-code" not in str(report.to_mapping())
+
+
+def test_malformed_clinical_event_is_not_counted_as_observable_phenotype() -> None:
+    cohort = _cohort(patient_count=1)
+    member = cohort.members[0]
+    patient_id = member.demographics.patient_id
+    event = ClinicalEvent(patient_id, 500, "real-clinical-event", None, False)
+    object.__setattr__(member.trajectory, "events", (event,))
+
+    report = validate_native_cohort(cohort, _policy())
+
+    observable = _comparison(report, "observable_phenotype")
+    assert report.status is CohortValidationStatus.FAIL
+    assert observable.status is CohortValidationStatus.FAIL
+    assert observable.support == 0
+    assert "real-clinical-event" not in str(report.to_mapping())
 
 
 def test_nonmonotone_trajectory_is_a_redacted_coverage_failure() -> None:
