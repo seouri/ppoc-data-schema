@@ -71,6 +71,8 @@ causal_event_order
 causal_event_timing
 ```
 
+The fixed reason registry is `OK`, `WITHIN_BOUND`, `INSUFFICIENT_SUPPORT`, `COHORT_TOO_SMALL`, `MISSING_EVIDENCE`, `STRUCTURAL_INVALID`, and `OUTSIDE_BOUND`. A metric may use only the reasons compatible with its status: `OK` or `WITHIN_BOUND` for `PASS`, `OUTSIDE_BOUND` or `STRUCTURAL_INVALID` for `FAIL`, and `INSUFFICIENT_SUPPORT`, `COHORT_TOO_SMALL`, or `MISSING_EVIDENCE` for `UNEVALUABLE`.
+
 For each configured window, the evaluator assigns every trajectory point and visible visit/event to the inclusive-lower/exclusive-upper age interval. `growth_window_coverage` is the number of members with at least `minimum_growth_points` trajectory points in the window divided by cohort size, and passes when it meets `minimum_growth_coverage`. `visible_visit_coverage` is the number of members with at least `minimum_visible_visits` visible visits in the window divided by cohort size, and passes when it meets `minimum_visible_visit_coverage`. `visible_event_rate` is the fraction of members with one or more visible recorded events in the window. These visible aggregate values may be included in comparisons and are never tied to a member identifier.
 
 `mean_inter_visit_days` uses consecutive visible visit ages within the window. A member with fewer than two visits contributes no interval; an empty interval population is `UNEVALUABLE`. A finite aggregate mean above the window policy bound is `FAIL`.
@@ -97,6 +99,8 @@ class TemporalComparison:
     difference: float | None
     support_count: int | None
 ```
+
+`TemporalCheck` is immutable and contains only `name`, `status`, and `reason_code`, with `name` drawn from the fixed check registry `cohort_size`, `window_coverage`, `sequence_metrics`, `causal_event_order`, and `causal_event_timing`.
 
 `target` is the applicable lower/upper bound or `None` for invariant/diagnostic checks. For a lower-bound metric, `difference = max(0, target - observed)`; for an upper-bound metric, `difference = max(0, observed - target)`; for an adjacent-window step, `difference = max(0, abs(observed) - target)`. A passing visible comparison therefore has zero difference. `UNEVALUABLE` comparisons always null `observed`, `target`, `difference`, and `support_count`. Causal comparisons always null numeric fields even when they pass or fail. `TemporalComparison` validates fixed metric/status/reason registries, finite numeric fields, safe window IDs, and no identifier-like text. Its `repr` is evaluator-safe and omits all comparison payloads.
 
