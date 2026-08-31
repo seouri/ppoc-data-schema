@@ -88,6 +88,52 @@ _TRAJECTORY_ASSERTIONS = frozenset(
     }
 )
 
+# These sets are the reviewed, intervention-specific semantics.  They are
+# kept separate from DEFAULT_CHANGE_MATRICES so construction can validate a
+# caller-supplied matrix while the default objects are being created.
+_FIXED_MATRIX_SEMANTICS: dict[
+    InterventionKind, tuple[frozenset[CausalLayer], frozenset[CausalLayer], frozenset[CausalLayer], frozenset[str]]
+] = {
+    InterventionKind.PHYSIOLOGY_SEVERITY: (
+        frozenset({CausalLayer.GROWTH_PHYSIOLOGY}),
+        frozenset(),
+        frozenset(
+            {
+                CausalLayer.AGE_REGIME,
+                CausalLayer.LATENT_DISORDER,
+                CausalLayer.RECOGNITION,
+                CausalLayer.TREATMENT,
+            }
+        ),
+        frozenset({"growth_z_differs", "pre_onset_growth_invariant"}),
+    ),
+    InterventionKind.EARLIER_RECOGNITION: (
+        frozenset({CausalLayer.RECOGNITION}),
+        frozenset({CausalLayer.EVENT_TRACE}),
+        frozenset(
+            {
+                CausalLayer.AGE_REGIME,
+                CausalLayer.LATENT_DISORDER,
+                CausalLayer.GROWTH_PHYSIOLOGY,
+                CausalLayer.TREATMENT,
+            }
+        ),
+        frozenset({"growth_z_invariant", "recognition_timing_earlier"}),
+    ),
+    InterventionKind.TREATMENT_ADHERENCE: (
+        frozenset({CausalLayer.TREATMENT}),
+        frozenset({CausalLayer.GROWTH_PHYSIOLOGY}),
+        frozenset(
+            {
+                CausalLayer.AGE_REGIME,
+                CausalLayer.LATENT_DISORDER,
+                CausalLayer.RECOGNITION,
+            }
+        ),
+        frozenset({"pre_treatment_growth_invariant", "post_treatment_growth_may_change"}),
+    ),
+}
+
 _MATRIX_KEYS = frozenset(
     {
         "version",
@@ -190,8 +236,35 @@ class CounterfactualChangeMatrix:
             raise ValueError("stream resampling is not supported by trajectory replay")
         if not reused:
             raise ValueError("reused_streams must be nonempty")
-        if not _require_assertions(self.trajectory_assertions):
+        assertions = _require_assertions(self.trajectory_assertions)
+        if not assertions:
             raise ValueError("trajectory_assertions must be nonempty")
+
+        fixed = _FIXED_MATRIX_SEMANTICS[self.intervention]
+        fixed_manipulated, fixed_permitted, fixed_invariants, fixed_assertions = fixed
+        if manipulated != fixed_manipulated:
+            raise ValueError("manipulated_nodes are incompatible with the intervention")
+        if not permitted.issubset(fixed_permitted):
+            raise ValueError("permitted_descendants weaken the fixed intervention semantics")
+        if not invariants.issuperset(fixed_invariants):
+            raise ValueError("required_invariants weaken the fixed intervention semantics")
+        if not assertions.issuperset(fixed_assertions) or not assertions.issubset(
+            _TRAJECTORY_ASSERTIONS
+        ):
+            raise ValueError("trajectory assertions are incompatible with the intervention")
+        if "recognition_timing_earlier" in assertions and CausalLayer.EVENT_TRACE not in permitted:
+            raise ValueError(
+                "permitted_descendants must include the event trace for recognition timing"
+            )
+        if (
+            "post_treatment_growth_may_change" in assertions
+            and CausalLayer.GROWTH_PHYSIOLOGY not in permitted
+        ):
+            raise ValueError(
+                "permitted_descendants must include growth physiology for post-treatment growth"
+            )
+        if not reused.issuperset(_NATIVE_STREAM_NAMES):
+            raise ValueError("reused_streams weaken the fixed intervention semantics")
 
     @classmethod
     def from_mapping(cls, mapping: Mapping[str, object]) -> CounterfactualChangeMatrix:
@@ -446,6 +519,10 @@ class CounterfactualPair:
             or baseline_patient != self.baseline_context.patient.patient_id
         ):
             raise ValueError("paired worlds must contain one synthetic patient")
+        if self.baseline.physiology.state != self.intervention.physiology.state:
+            raise ValueError("paired worlds must share one age-regime state")
+        if self.baseline.disorder != self.intervention.disorder:
+            raise ValueError("paired worlds must share one latent disorder state")
         for name in self.matrix.reused_streams:
             if self.baseline_context.stream_identity(
                 name

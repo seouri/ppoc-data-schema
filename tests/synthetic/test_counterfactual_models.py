@@ -124,6 +124,29 @@ def test_default_matrices_encode_the_reviewed_causal_layer_contract() -> None:
     )
 
 
+def test_matrix_construction_rejects_intervention_incompatible_descendants() -> None:
+    severity = default_change_matrix(InterventionKind.PHYSIOLOGY_SEVERITY)
+    with pytest.raises(ValueError, match="permitted_descendants"):
+        dataclasses.replace(severity, permitted_descendants=frozenset({CausalLayer.EVENT_TRACE}))
+
+    recognition = default_change_matrix(InterventionKind.EARLIER_RECOGNITION)
+    with pytest.raises(ValueError, match="assertion"):
+        dataclasses.replace(
+            recognition,
+            trajectory_assertions=frozenset({"post_treatment_growth_may_change"}),
+        )
+
+    adherence = default_change_matrix(InterventionKind.TREATMENT_ADHERENCE)
+    with pytest.raises(ValueError, match="permitted_descendants"):
+        dataclasses.replace(adherence, permitted_descendants=frozenset())
+
+
+def test_matrix_construction_rejects_missing_fixed_assertions() -> None:
+    base = default_change_matrix(InterventionKind.PHYSIOLOGY_SEVERITY)
+    with pytest.raises(ValueError, match="assertions"):
+        dataclasses.replace(base, trajectory_assertions=frozenset({"growth_z_differs"}))
+
+
 def test_matrix_requires_enum_nodes_frozensets_and_disjoint_causal_sets() -> None:
     base = default_change_matrix(InterventionKind.PHYSIOLOGY_SEVERITY)
 
@@ -188,14 +211,13 @@ def test_context_is_immutable_and_requires_a_fictional_patient() -> None:
         CounterfactualContext(PATIENT, 20260831, 7, "../baseline", matrix)
 
 
-def test_context_rejects_a_matrix_that_weakens_fixed_semantics() -> None:
+def test_matrix_rejects_a_matrix_that_weakens_fixed_semantics() -> None:
     base = default_change_matrix(InterventionKind.PHYSIOLOGY_SEVERITY)
-    weaker = dataclasses.replace(
-        base,
-        required_invariants=base.required_invariants - {CausalLayer.TREATMENT},
-    )
-    with pytest.raises(ValueError, match="weaken"):
-        CounterfactualContext(PATIENT, 20260831, 7, "baseline", weaker)
+    with pytest.raises(ValueError, match="required_invariants"):
+        dataclasses.replace(
+            base,
+            required_invariants=base.required_invariants - {CausalLayer.TREATMENT},
+        )
 
 
 def test_context_replays_declared_streams_with_world_independent_identities() -> None:
@@ -261,6 +283,38 @@ def test_pair_rejects_patient_or_context_mismatch_without_echoing_identifiers() 
             matrix=matrix,
         )
     assert PATIENT.patient_id not in str(error.value)
+
+
+def test_pair_requires_shared_age_regime_and_latent_disorder_states() -> None:
+    matrix = default_change_matrix(InterventionKind.PHYSIOLOGY_SEVERITY)
+    baseline_context = CounterfactualContext(PATIENT, 20260831, 7, "baseline", matrix)
+    intervention_context = CounterfactualContext(PATIENT, 20260831, 7, "intervention", matrix)
+    baseline = _trajectory()
+    different_state = dataclasses.replace(
+        baseline.physiology,
+        state=dataclasses.replace(baseline.physiology.state, childhood_height_z=0.9),
+    )
+    with pytest.raises(ValueError, match="age-regime state"):
+        CounterfactualPair(
+            baseline=baseline,
+            intervention=dataclasses.replace(baseline, physiology=different_state),
+            baseline_context=baseline_context,
+            intervention_context=intervention_context,
+            matrix=matrix,
+        )
+
+    different_disorder = dataclasses.replace(
+        baseline,
+        disorder=LatentDisorderState(DisorderKind.FAMILIAL_SHORT_STATURE, 100, 0.5),
+    )
+    with pytest.raises(ValueError, match="latent disorder state"):
+        CounterfactualPair(
+            baseline=baseline,
+            intervention=different_disorder,
+            baseline_context=baseline_context,
+            intervention_context=intervention_context,
+            matrix=matrix,
+        )
 
 
 def test_hidden_hash_is_canonical_and_does_not_embed_patient_data() -> None:
