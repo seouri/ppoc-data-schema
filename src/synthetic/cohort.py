@@ -12,16 +12,31 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from numbers import Real
 
-from synthetic.calibration import require_aggregate_safe_token
+from synthetic.calibration import (
+    CalibrationArtifact,
+    CalibrationTarget,
+    require_aggregate_safe_token,
+)
+from synthetic.calibration_targets import (
+    ETHNICITY_CATEGORY_SLUGS,
+    RACE_CATEGORY_SLUGS,
+    SEX_CATEGORY_SLUGS,
+    TARGET_REGISTRY_VERSION,
+    is_registered_target_key,
+)
 from synthetic.models import AgeRegimeDisorderTrajectory, DisorderKind
 from synthetic.native.age_regimes import AgeRegimeConfig
 from synthetic.native.clinical_modules import GrowthDisorderModule
 from synthetic.native.observations import ObservationFrame, ObservationPolicy
 from synthetic.native.resources import ObservedResourceBundle, SyntheticDemographics
 from synthetic.references import GrowthReference
+from synthetic.schema_contract import EXPECTED_SCHEMA_FINGERPRINT
 
 _REFERENCE_SEX_VALUES = frozenset({"F", "M", "U"})
 _MAX_PATIENT_COUNT = 100_000
+_WEIGHT_SUM_MINIMUM = 0.99
+_WEIGHT_SUM_MAXIMUM = 1.01
+_OBSERVED_STRATUM_ID = "outcome_layer=observed"
 
 
 class CohortGenerationUnavailable(ValueError):
@@ -61,6 +76,94 @@ def _require_weight_pairs(
     if len(categories) != len(set(categories)):
         raise ValueError(f"{field_name} must not contain duplicate categories")
     return tuple(weights)
+
+
+def _select_weighted_category(
+    weights: tuple[tuple[str, float], ...],
+    draw: float,
+) -> str:
+    """Select one category from validated weights with a unit-interval draw."""
+
+    checked = _require_weight_pairs(weights, "weights")
+    probability = _require_probability(draw, "draw")
+    if probability >= 1:
+        raise ValueError("draw must be in [0, 1)")
+    total = sum(weight for _, weight in checked)
+    if total <= 0:
+        raise ValueError("weights must have positive total probability")
+    threshold = probability * total
+    cumulative = 0.0
+    for category, weight in checked:
+        cumulative += weight
+        if threshold < cumulative:
+            return category
+    return checked[-1][0]
+
+
+def _project_visible_category(category: str) -> str:
+    """Map the released blank aggregate cell into the visible vocabulary."""
+
+    if not isinstance(category, str):
+        raise TypeError("category must be a string")
+    return "Unknown" if category == "" else category
+
+
+def _project_race_slots(
+    primary_race: str,
+    secondary_race: str | None,
+) -> tuple[str, ...]:
+    """Project approved primary/optional secondary draws into eight race slots."""
+
+    races = [_project_visible_category(primary_race)]
+    if secondary_race is not None:
+        races.append(_project_visible_category(secondary_race))
+    races.extend("Unknown" for _ in range(8 - len(races)))
+    return tuple(races)
+
+
+def _normalize_category_weights(
+    weights: tuple[tuple[str, float], ...],
+    field_name: str,
+) -> tuple[tuple[str, float], ...]:
+    total = sum(value for _, value in weights)
+    if not _WEIGHT_SUM_MINIMUM <= total <= _WEIGHT_SUM_MAXIMUM:
+        raise ValueError(f"{field_name} values must sum within [0.99, 1.01]")
+    if total <= 0:
+        raise ValueError(f"{field_name} values must have positive total")
+    return tuple((category, value / total) for category, value in weights)
+
+
+def _require_released_proportion(
+    target: CalibrationTarget,
+) -> float:
+    name = target.target_name
+    if target.status != "released":
+        raise ValueError(f"{name} must be released")
+    if target.statistic != "proportion" or target.unit != "proportion":
+        raise ValueError(f"{name} must be a registered proportion target")
+    if (
+        isinstance(target.denominator, bool)
+        or not isinstance(target.denominator, int)
+        or target.denominator <= 0
+    ):
+        raise ValueError(f"{name} must have a positive denominator")
+    if (
+        isinstance(target.support_count, bool)
+        or not isinstance(target.support_count, int)
+        or not 0 <= target.support_count <= target.denominator
+    ):
+        raise ValueError(f"{name} must have valid aggregate support")
+    if isinstance(target.value, bool) or not isinstance(target.value, Real):
+        raise TypeError(f"{name} must have a finite numeric value")
+    try:
+        value = float(target.value)
+    except OverflowError:
+        raise ValueError(f"{name} must have a finite numeric value") from None
+    if not math.isfinite(value):
+        raise ValueError(f"{name} must have a finite numeric value")
+    if not 0 <= value <= 1:
+        raise ValueError(f"{name} must be in [0, 1]")
+    return value
 
 
 @dataclass(frozen=True)
@@ -207,6 +310,106 @@ class CalibrationSamplingProfile:
                 field_name,
                 _require_probability(getattr(self, field_name), field_name),
             )
+
+    @classmethod
+    def from_artifact(
+        cls,
+        artifact: CalibrationArtifact,
+    ) -> CalibrationSamplingProfile:
+        """Extract a complete sampling profile from released aggregate cells."""
+
+        if not isinstance(artifact, CalibrationArtifact):
+            raise TypeError("artifact must be a CalibrationArtifact")
+        if artifact.source_partition != "calibration":
+            raise ValueError("source_partition must be calibration")
+        if artifact.schema_fingerprint != EXPECTED_SCHEMA_FINGERPRINT:
+            raise ValueError("schema_fingerprint does not match the repository contract")
+
+        observed = tuple(
+            stratum
+            for stratum in artifact.strata
+            if stratum.stratum_id == _OBSERVED_STRATUM_ID
+            and stratum.dimensions == (("outcome_layer", "observed"),)
+        )
+        if len(observed) != 1:
+            raise ValueError(
+                "artifact must contain exactly one outcome_layer=observed stratum"
+            )
+
+        for stratum in artifact.strata:
+            names = tuple(target.target_name for target in stratum.targets)
+            if len(names) != len(set(names)):
+                raise ValueError(f"duplicate target in {stratum.stratum_id}")
+            for target in stratum.targets:
+                if not is_registered_target_key(
+                    stratum.stratum_id,
+                    target.target_name,
+                    target.family,
+                    target.statistic,
+                    target.unit,
+                    target.quantile_level,
+                ):
+                    raise ValueError(
+                        f"{target.target_name} does not belong to "
+                        f"{TARGET_REGISTRY_VERSION} registry"
+                    )
+
+        targets = {target.target_name: target for target in observed[0].targets}
+
+        def required_value(target_name: str) -> float:
+            target = targets.get(target_name)
+            if target is None:
+                raise ValueError(f"{target_name} is missing from the observed stratum")
+            return _require_released_proportion(target)
+
+        sex_weights = tuple(
+            (category, required_value(f"sex_{slug}"))
+            for category, slug in SEX_CATEGORY_SLUGS.items()
+        )
+        ethnicity_weights = tuple(
+            (category, required_value(f"ethnicity_{slug}"))
+            for category, slug in ETHNICITY_CATEGORY_SLUGS.items()
+        )
+        race_weights = tuple(
+            (category, required_value(f"race_{slug}"))
+            for category, slug in RACE_CATEGORY_SLUGS.items()
+        )
+
+        return cls(
+            artifact_id=artifact.artifact_id,
+            target_registry_version=TARGET_REGISTRY_VERSION,
+            sex_weights=_normalize_category_weights(sex_weights, "sex_weights"),
+            ethnicity_weights=_normalize_category_weights(
+                ethnicity_weights,
+                "ethnicity_weights",
+            ),
+            race_weights=_normalize_category_weights(race_weights, "race_weights"),
+            race_multiselect_probability=required_value("race_multiselect"),
+            recorded_healthy_probability=required_value("healthy_flag"),
+            recorded_growth_dx_probability=required_value("growth_dx_flag"),
+        )
+
+    def to_mapping(self) -> dict[str, object]:
+        """Return only released aggregate probabilities and safe identities."""
+
+        def weight_mapping(
+            weights: tuple[tuple[str, float], ...],
+        ) -> list[dict[str, str | float]]:
+            return [
+                {"category": category, "probability": probability}
+                for category, probability in weights
+            ]
+
+        return {
+            "artifact_id": self.artifact_id,
+            "target_registry_version": self.target_registry_version,
+            "sex_weights": weight_mapping(self.sex_weights),
+            "ethnicity_weights": weight_mapping(self.ethnicity_weights),
+            "race_weights": weight_mapping(self.race_weights),
+            "race_multiselect_probability": self.race_multiselect_probability,
+            "recorded_healthy_probability": self.recorded_healthy_probability,
+            "recorded_growth_dx_probability": self.recorded_growth_dx_probability,
+        }
 
     def __repr__(self) -> str:
         return "CalibrationSamplingProfile(<aggregate-only>)"
