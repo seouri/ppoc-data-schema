@@ -215,6 +215,31 @@ def test_malformed_optional_packages_never_abort_the_primary_audit(
         assert control.reason_code == "insufficient_shadow_runs"
 
 
+@pytest.mark.parametrize("use_alias", [False, True])
+def test_audit_rejects_one_package_serving_as_both_control_roles_without_leaking_identity(
+    tmp_path: Path, use_alias: bool
+) -> None:
+    """Catches one filesystem identity satisfying both independent control roles."""
+    package = _independent_generated(tmp_path / "shared-control", id_prefix="SHARED")
+    positive_root = package
+    if use_alias:
+        positive_root = tmp_path / "shared-control-alias"
+        positive_root.symlink_to(package, target_is_directory=True)
+
+    with pytest.raises(ValueError) as error:
+        audit_privacy(
+            _config(
+                tmp_path / "audit",
+                negative_control_root=package,
+                positive_control_root=positive_root,
+            )
+        )
+
+    assert str(error.value) == "privacy audit inputs invalid"
+    assert str(package) not in str(error.value)
+    assert "SHARED-P-001" not in str(error.value)
+
+
 def test_report_writer_rejects_forged_control_pass_metrics(tmp_path: Path) -> None:
     """Catches promoting caller-supplied PASS statuses that conflict with policy thresholds."""
     result = audit_privacy(_config(tmp_path))
@@ -377,6 +402,89 @@ def test_report_writer_rejects_heldout_baseline_that_hides_raw_nearest_signal(tm
 
     with pytest.raises(ValueError, match="could not be promoted"):
         write_privacy_report(forged, tmp_path / "forged-heldout")
+
+
+@pytest.mark.parametrize(
+    ("control_id", "copied_trajectories"),
+    [
+        ("nearest_neighbor", False),
+        ("linkage", False),
+        ("attribute_disclosure", True),
+    ],
+)
+def test_report_writer_rejects_required_heldout_dependent_pass_without_heldout_evidence(
+    tmp_path: Path, control_id: str, copied_trajectories: bool
+) -> None:
+    """Catches policy promotion making a reference-only PASS satisfy a required control."""
+    changes: dict[str, object] = {}
+    if copied_trajectories:
+        changes["synthetic_root"] = write_generated_package(
+            tmp_path / "copied", id_prefix="GEN"
+        )
+    result = audit_privacy(_config(tmp_path / "audit", **changes))
+    control = next(item for item in result.report.controls if item.control_id == control_id)
+    assert control.status == "PASS"
+    assert "heldout_count" not in control.metrics
+    required_policy = replace(
+        result.report.policy,
+        required_controls=tuple(
+            sorted(set(result.report.policy.required_controls) | {control_id})
+        ),
+    )
+    forged = PrivacyAuditResult(replace(result.report, policy=required_policy))
+    output = tmp_path / f"forged-required-{control_id}"
+
+    with pytest.raises(ValueError, match="could not be promoted"):
+        write_privacy_report(forged, output)
+
+    assert not output.exists()
+
+
+def test_report_writer_rejects_required_composition_pass_below_prior_release_minimum(
+    tmp_path: Path,
+) -> None:
+    """Catches a required composition PASS supported by too few prior releases."""
+    thresholds = policy_mapping()["thresholds"]
+    assert isinstance(thresholds, dict)
+    policy = write_policy(
+        tmp_path / "policy.json",
+        minimum_prior_releases=2,
+        required_controls=["composition", "exact_reproduction", "identifier_overlap"],
+        thresholds=thresholds
+        | {
+            "composition_reproduction_rate": 1.0,
+            "linkage_advantage": 1.0,
+            "nearest_neighbor_unique_rate": 1.0,
+        },
+    )
+    result = audit_privacy(
+        _config(
+            tmp_path / "audit",
+            policy=policy,
+            prior_release_roots=(
+                _independent_generated(tmp_path / "prior-one", id_prefix="PRIOR-A"),
+                _independent_generated(tmp_path / "prior-two", id_prefix="PRIOR-B"),
+            ),
+        )
+    )
+    composition = next(
+        item for item in result.report.controls if item.control_id == "composition"
+    )
+    assert composition.status == "PASS"
+    assert composition.metrics["prior_release_count"] == 2
+    controls = tuple(
+        replace(item, metrics={**item.metrics, "prior_release_count": 1})
+        if item.control_id == "composition"
+        else item
+        for item in result.report.controls
+    )
+    forged = PrivacyAuditResult(replace(result.report, controls=controls))
+    output = tmp_path / "forged-composition-minimum"
+
+    with pytest.raises(ValueError, match="could not be promoted"):
+        write_privacy_report(forged, output)
+
+    assert not output.exists()
 
 
 @pytest.mark.parametrize(

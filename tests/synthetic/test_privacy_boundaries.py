@@ -7,6 +7,15 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
+_VISIBLE_GENERATOR_MODULES = (
+    "__init__.py",
+    "generate.py",
+    "csv_package.py",
+    "manifest.py",
+    "derivation.py",
+    "native/__init__.py",
+    "native/trajectories.py",
+)
 
 
 def _module_context(path: Path) -> tuple[str, bool]:
@@ -77,6 +86,12 @@ def _transitive_imports(paths: tuple[Path, ...]) -> set[str]:
     return imported
 
 
+def _visible_generator_imports() -> set[str]:
+    return _transitive_imports(
+        tuple(ROOT / "src" / "synthetic" / module for module in _VISIBLE_GENERATOR_MODULES)
+    )
+
+
 @pytest.mark.parametrize(
     ("relative_path", "source", "forbidden"),
     [
@@ -110,13 +125,34 @@ def test_import_scanner_qualifies_relative_forbidden_imports(
 
 def test_visible_generator_interfaces_do_not_import_governed_privacy_inputs() -> None:
     """Catches privacy-audit imports crossing into visible generation and package APIs."""
-    visible_modules = (
-        "generate.py", "csv_package.py", "manifest.py", "derivation.py", "native/trajectories.py",
-    )
     forbidden = {"synthetic.privacy_audit", "synthetic.calibration_input"}
 
-    imported = _transitive_imports(
-        tuple(ROOT / "src" / "synthetic" / module for module in visible_modules)
-    )
+    imported = _visible_generator_imports()
 
     assert not imported & forbidden
+
+
+@pytest.mark.parametrize(
+    ("initializer", "source"),
+    [
+        ("src/synthetic/__init__.py", "from . import privacy_audit\n"),
+        ("src/synthetic/native/__init__.py", "from .. import privacy_audit\n"),
+    ],
+)
+def test_visible_generator_scan_includes_implicitly_executed_package_initializers(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    initializer: str,
+    source: str,
+) -> None:
+    """Catches the real boundary roots omitting an implicitly executed package initializer."""
+    for module in _VISIBLE_GENERATOR_MODULES:
+        path = tmp_path / "src" / "synthetic" / module
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("", encoding="utf-8")
+    initializer_path = tmp_path / initializer
+    initializer_path.parent.mkdir(parents=True, exist_ok=True)
+    initializer_path.write_text(source, encoding="utf-8")
+    monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
+
+    assert "synthetic.privacy_audit" in _visible_generator_imports()

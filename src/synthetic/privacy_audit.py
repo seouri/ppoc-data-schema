@@ -1706,6 +1706,20 @@ def _audit_privacy(config: PrivacyRunConfig) -> PrivacyAuditResult:
         prior_invalid = prior_invalid or invalid
         if package is not None:
             prior_releases.append(package)
+    if (
+        config.negative_control_root is not None
+        and config.positive_control_root is not None
+    ):
+        try:
+            control_identities = {
+                _private_package_root_identity(config.negative_control_root),
+                _private_package_root_identity(config.positive_control_root),
+            }
+        except ValueError:
+            pass
+        else:
+            if len(control_identities) != 2:
+                raise ValueError("privacy control package roles require distinct identities")
     negative, negative_invalid = _load_optional_package(
         config.negative_control_root, synthetic=True, policy=policy
     )
@@ -1843,6 +1857,22 @@ def _validate_evaluated_metrics(control: PrivacyControlResult, policy: PrivacyPo
             raise ValueError("privacy report rates must be bounded")
     if int(metrics["evaluated_count"]) < policy.minimum_evaluable_patients:
         raise ValueError("privacy report evidence is underpowered")
+    heldout_required_by_control = {
+        "nearest_neighbor": {
+            "heldout_count",
+            "heldout_zero_proximity_rate",
+            "heldout_unique_nearest_rate",
+        },
+        "linkage": {"heldout_count", "heldout_unique_candidate_rate"},
+        "attribute_disclosure": {"heldout_count", "heldout_majority_accuracy"},
+    }
+    required_heldout_metrics = heldout_required_by_control.get(control.control_id)
+    if (
+        control.control_id in policy.required_controls
+        and required_heldout_metrics is not None
+        and not required_heldout_metrics <= set(metrics)
+    ):
+        raise ValueError("privacy report held-out metrics are incomplete")
     if any(
         name in metrics and int(metrics[name]) < policy.minimum_evaluable_patients
         for name in ("heldout_count", "harness_heldout_count")
@@ -1970,6 +2000,8 @@ def _validate_evaluated_metrics(control: PrivacyControlResult, policy: PrivacyPo
             raise ValueError("privacy report attribute advantage is incompatible")
         _validate_report_interval(metrics, attack_count, int(metrics["evaluated_count"]))
     elif control.control_id == "composition":
+        if int(metrics["prior_release_count"]) < max(1, policy.minimum_prior_releases):
+            raise ValueError("privacy report prior-release evidence is insufficient")
         _validate_report_rate(
             metrics, "composition_reproduction_rate", "evaluated_count", "reproduction_count"
         )
