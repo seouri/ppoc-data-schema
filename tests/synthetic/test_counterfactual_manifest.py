@@ -234,6 +234,117 @@ def test_truth_manifest_write_failure_removes_partial_and_allows_retry(
     assert destination.is_file()
 
 
+def test_truth_manifest_fstat_creation_failure_quarantines_child_and_allows_retry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pair, report = _validated_pair()
+    destination = tmp_path / "truth.json"
+
+    def fail_fstat(_descriptor: int) -> os.stat_result:
+        raise OSError("injected fstat failure")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(counterfactual_module.os, "fstat", fail_fstat)
+        with pytest.raises(ValueError, match="could not be created"):
+            write_truth_manifest(pair, report, destination)
+
+    assert not destination.exists()
+    quarantine = next(tmp_path.glob(".counterfactual-truth-cleanup-*"))
+    assert (quarantine / destination.name).is_file()
+    assert (quarantine / destination.name).read_bytes() == b""
+
+    write_truth_manifest(pair, report, destination)
+    assert destination.is_file()
+
+
+def test_truth_manifest_quarantine_rename_never_overwrites_existing_child(
+    tmp_path: Path,
+) -> None:
+    source_directory = tmp_path / "source"
+    quarantine_directory = tmp_path / "quarantine"
+    source_directory.mkdir()
+    quarantine_directory.mkdir()
+    (source_directory / "truth.json").write_bytes(b"owner")
+    (quarantine_directory / "truth.json").write_bytes(b"preexisting")
+    source_descriptor = os.open(source_directory, os.O_RDONLY)
+    quarantine_descriptor = os.open(quarantine_directory, os.O_RDONLY)
+    try:
+        with pytest.raises(FileExistsError, match="already exists"):
+            counterfactual_module._rename_truth_manifest_child_exclusive(
+                "truth.json",
+                source_descriptor,
+                "truth.json",
+                quarantine_descriptor,
+            )
+    finally:
+        os.close(source_descriptor)
+        os.close(quarantine_descriptor)
+
+    assert (source_directory / "truth.json").read_bytes() == b"owner"
+    assert (quarantine_directory / "truth.json").read_bytes() == b"preexisting"
+
+
+def test_truth_manifest_cleanup_uses_pinned_namespace_after_path_swap(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    destination = tmp_path / "truth.json"
+    destination.write_bytes(b"created by this invocation")
+    _absolute_parent, parent_descriptor = counterfactual_module._open_regular_parent(tmp_path)
+    try:
+        metadata = os.stat(destination, follow_symlinks=False)
+        identity = counterfactual_module._truth_manifest_identity(metadata)
+        original_match = counterfactual_module._truth_manifest_entry_matches
+        original_open_namespace = (
+            counterfactual_module._open_truth_manifest_cleanup_namespace
+        )
+        swapped = False
+
+        def swap_namespace_path(descriptor: int) -> tuple[str, int]:
+            nonlocal swapped
+            name, namespace_descriptor = original_open_namespace(descriptor)
+            namespace = tmp_path / name
+            original_namespace = tmp_path / f"{name}-original"
+            attacker = tmp_path / f"{name}-attacker"
+            namespace.rename(original_namespace)
+            attacker.mkdir()
+            namespace.symlink_to(attacker, target_is_directory=True)
+            swapped = True
+            return name, namespace_descriptor
+
+        monkeypatch.setattr(
+            counterfactual_module,
+            "_truth_manifest_entry_matches",
+            lambda descriptor, name, expected_identity: original_match(
+                descriptor, name, expected_identity
+            ),
+        )
+        monkeypatch.setattr(
+            counterfactual_module,
+            "_open_truth_manifest_cleanup_namespace",
+            swap_namespace_path,
+        )
+
+        with pytest.raises(ValueError, match="owner retained"):
+            counterfactual_module._remove_truth_manifest_entry_if_owned(
+                parent_descriptor, destination.name, identity
+            )
+    finally:
+        os.close(parent_descriptor)
+
+    assert swapped
+    assert destination is not None and not destination.exists()
+    original_namespaces = list(tmp_path.glob(".counterfactual-truth-cleanup-*-original"))
+    attackers = list(tmp_path.glob(".counterfactual-truth-cleanup-*-attacker"))
+    assert len(original_namespaces) == 1
+    assert len(attackers) == 1
+    assert (original_namespaces[0] / destination.name).read_bytes() == (
+        b"created by this invocation"
+    )
+    assert not list(attackers[0].iterdir())
+
+
 def test_truth_manifest_verification_does_not_read_or_remove_recreated_child(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
