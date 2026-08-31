@@ -22,8 +22,20 @@ from synthetic.calibration_targets import (
     SEX_CATEGORY_SLUGS,
 )
 from synthetic.cohort import CalibrationSamplingProfile, CohortMember, NativeCohort
-from synthetic.models import DisorderKind
-from synthetic.native.observations import RecordedEventKind
+from synthetic.models import (
+    AgeRegimeDisorderTrajectory,
+    AgeRegimePoint,
+    AgeRegimeTrajectory,
+    ClinicalEvent,
+    DisorderKind,
+    GrowthRegime,
+)
+from synthetic.native.observations import (
+    ObservationFrame,
+    ObservedVisit,
+    RecordedEvent,
+    RecordedEventKind,
+)
 
 COHORT_VALIDATION_REPORT_VERSION = "cohort-validation-report-v1"
 
@@ -32,6 +44,17 @@ GROWTH_TOLERANCE_KEYS = (
     "bmi_z_score",
     "height_velocity_cm_per_year",
     "weight_velocity_kg_per_year",
+)
+_GROWTH_FIELDS = MappingProxyType(
+    {
+        "height_z_score": "height_z",
+        "bmi_z_score": "bmi_z",
+        "height_velocity_cm_per_year": "height_velocity_cm_per_year",
+        "weight_velocity_kg_per_year": "weight_velocity_kg_per_year",
+    }
+)
+_GROWTH_METRIC_ORDER = MappingProxyType(
+    {name: index for index, name in enumerate(GROWTH_TOLERANCE_KEYS)}
 )
 
 # These names are deliberately closed.  Dynamic names below are permitted only
@@ -73,6 +96,7 @@ _DEMOGRAPHIC_VALUES = MappingProxyType(
 _FIXED_COMPARISON_NAMES = frozenset(
     {
         "cohort_size",
+        "coverage.cohort_size",
         "observable_phenotype",
         "recorded_recognition",
         "recorded_workup",
@@ -332,9 +356,16 @@ def _comparison_sort_key(comparison: CohortComparison) -> tuple[object, ...]:
     if name.startswith("recorded_"):
         return (4, ("recorded_recognition", "recorded_workup", "recorded_diagnosis").index(name), name)
     if name.startswith("growth."):
-        return (5, name)
+        _prefix, window, metric_name = name.split(".", 2)
+        metric = metric_name.removesuffix("_mean")
+        return (5, window, _GROWTH_METRIC_ORDER[metric])
     if name.startswith("coverage."):
-        return (6, name)
+        coverage_order = {
+            "coverage.cohort_size": 0,
+            "coverage.members_with_observation": 1,
+            "coverage.members_with_event": 2,
+        }
+        return (6, coverage_order[name])
     return (99, _LAYER_ORDER[comparison.layer], name)
 
 
@@ -519,6 +550,8 @@ def validate_native_cohort(
         comparisons.extend(_latent_comparisons(members, policy))
         comparisons.append(_observable_comparison(members, policy))
         comparisons.extend(_recorded_comparisons(members, policy))
+        comparisons.extend(_growth_comparisons(members, policy))
+        comparisons.extend(_coverage_comparisons(members, policy))
         ordered = tuple(comparisons)
         return CohortValidationReport(
             report_version=COHORT_VALIDATION_REPORT_VERSION,
@@ -553,13 +586,25 @@ def _malformed_cohort_report(
         denominator=1,
         reason_code="MALFORMED_COHORT",
     )
+    coverage_comparison = CohortComparison(
+        name="coverage.cohort_size",
+        layer="coverage",
+        status=CohortValidationStatus.FAIL,
+        observed_value=0.0,
+        target_value=None,
+        difference=None,
+        tolerance=None,
+        support=0,
+        denominator=1,
+        reason_code="MALFORMED_COHORT",
+    )
     return CohortValidationReport(
         report_version=COHORT_VALIDATION_REPORT_VERSION,
         policy_id=policy_id,
         cohort_profile=profile,
         seed=seed,
         status=CohortValidationStatus.FAIL,
-        comparisons=(comparison,),
+        comparisons=(comparison, coverage_comparison),
     )
 
 
@@ -589,8 +634,8 @@ def _status_only_comparison(
     support: int,
     minimum_cohort_size: int,
 ) -> CohortComparison:
-    denominator = observed_value if name == "cohort_size" else None
-    if name != "cohort_size":
+    denominator = observed_value if name in {"cohort_size", "coverage.cohort_size"} else None
+    if name not in {"cohort_size", "coverage.cohort_size"}:
         raise ValueError("status-only cohort comparison requires a proportion denominator")
     if not isinstance(denominator, int):
         raise TypeError("status-only cohort size must be an integer")
@@ -720,6 +765,342 @@ def _status_rate_comparison(
     )
 
 
+def _failed_status_comparison(
+    name: str,
+    layer: str,
+    support: int,
+    denominator: int,
+    reason_code: str,
+) -> CohortComparison:
+    """Return a redacted status-only failure with safe aggregate counts."""
+
+    denominator = max(1, denominator)
+    support = min(max(0, support), denominator)
+    return CohortComparison(
+        name=name,
+        layer=layer,
+        status=CohortValidationStatus.FAIL,
+        observed_value=0.0,
+        target_value=None,
+        difference=None,
+        tolerance=None,
+        support=support,
+        denominator=denominator,
+        reason_code=reason_code,
+    )
+
+
+def _trajectory_points(
+    member: object,
+) -> tuple[tuple[AgeRegimePoint, ...], str | None]:
+    """Return points plus a fixed reason when evaluator structure is invalid."""
+
+    try:
+        patient_id = member.demographics.patient_id
+        trajectory = member.trajectory
+        if not isinstance(trajectory, AgeRegimeDisorderTrajectory):
+            return (), "STRUCTURAL_INVALID"
+        physiology = trajectory.physiology
+        if not isinstance(physiology, AgeRegimeTrajectory):
+            return (), "STRUCTURAL_INVALID"
+        points = physiology.points
+        if not isinstance(points, tuple) or not points:
+            return (), "STRUCTURAL_INVALID"
+        if not isinstance(patient_id, str) or not patient_id:
+            return (), "STRUCTURAL_INVALID"
+        previous_age = -1
+        for point in points:
+            if not isinstance(point, AgeRegimePoint):
+                return (), "STRUCTURAL_INVALID"
+            if point.patient_id != patient_id:
+                return (), "STRUCTURAL_INVALID"
+            if (
+                isinstance(point.age_days, bool)
+                or not isinstance(point.age_days, int)
+                or point.age_days < 0
+                or point.age_days <= previous_age
+            ):
+                return (), "STRUCTURAL_INVALID"
+            if not isinstance(point.regime, GrowthRegime):
+                return (), "STRUCTURAL_INVALID"
+            previous_age = point.age_days
+        return points, None
+    except Exception:  # noqa: BLE001 - evaluator failures must be redacted
+        return (), "MALFORMED_COHORT"
+
+
+def _point_numeric_values_are_valid(point: AgeRegimePoint) -> bool:
+    """Check typed finite/physical point values without exposing point data."""
+
+    try:
+        if point.regime is GrowthRegime.INFANCY and point.length_cm is None:
+            return False
+        if point.regime is GrowthRegime.TRANSITION and (
+            point.length_cm is None or point.height_cm is None
+        ):
+            return False
+        if point.regime in (
+            GrowthRegime.CHILDHOOD,
+            GrowthRegime.PUBERTY,
+            GrowthRegime.ADOLESCENCE,
+        ) and (point.height_cm is None or point.bmi is None):
+            return False
+        if (
+            point.regime is not GrowthRegime.INFANCY
+            and point.regime is not GrowthRegime.TRANSITION
+            and point.length_cm is not None
+        ):
+            return False
+        for field_name in (
+            "length_cm",
+            "height_cm",
+            "weight_kg",
+            "bmi",
+            "head_circumference_cm",
+        ):
+            value = getattr(point, field_name)
+            if value is not None and (
+                type(value) not in (int, float)
+                or not math.isfinite(float(value))
+                or value <= 0
+            ):
+                return False
+        if point.height_cm is not None and point.bmi is not None:
+            try:
+                expected_weight = point.bmi * (point.height_cm / 100.0) ** 2
+            except OverflowError:
+                return False
+            if not math.isfinite(expected_weight) or not math.isclose(
+                point.weight_kg, expected_weight, rel_tol=1e-9, abs_tol=1e-9
+            ):
+                return False
+        for field_name in (
+            "length_z",
+            "height_z",
+            "weight_z",
+            "bmi_z",
+            "height_velocity_cm_per_year",
+            "weight_velocity_kg_per_year",
+        ):
+            value = getattr(point, field_name)
+            if value is not None and (
+                type(value) not in (int, float) or not math.isfinite(float(value))
+            ):
+                return False
+    except Exception:  # noqa: BLE001 - malformed evaluator values are redacted
+        return False
+    return True
+
+
+def _growth_comparison(
+    name: str,
+    metric: str,
+    values: list[float],
+    denominator: int,
+    policy: CohortValidationPolicy,
+    invalid_reason: str | None,
+) -> CohortComparison:
+    if invalid_reason is not None:
+        return _failed_status_comparison(
+            name,
+            "growth",
+            len(values),
+            denominator,
+            invalid_reason,
+        )
+    if len(values) < policy.minimum_cell_support:
+        return _unevaluable_comparison(
+            name,
+            "growth",
+            len(values),
+            denominator,
+            "INSUFFICIENT_SUPPORT",
+        )
+    mean = math.fsum(values) / len(values)
+    tolerance = policy.growth_tolerances[metric]
+    difference = abs(mean)
+    status = (
+        CohortValidationStatus.PASS
+        if difference <= tolerance
+        else CohortValidationStatus.FAIL
+    )
+    return CohortComparison(
+        name=name,
+        layer="growth",
+        status=status,
+        observed_value=mean,
+        target_value=0.0,
+        difference=difference,
+        tolerance=tolerance,
+        support=len(values),
+        denominator=denominator,
+        reason_code="WITHIN_TOLERANCE" if status is CohortValidationStatus.PASS else "OUTSIDE_TOLERANCE",
+    )
+
+
+def _growth_comparisons(
+    members: tuple[object, ...],
+    policy: CohortValidationPolicy,
+) -> tuple[CohortComparison, ...]:
+    comparisons: list[CohortComparison] = []
+    for window_name, lower_age, upper_age in policy.required_age_windows:
+        for metric in GROWTH_TOLERANCE_KEYS:
+            values: list[float] = []
+            candidate_count = 0
+            invalid_reason: str | None = None
+            field_name = _GROWTH_FIELDS[metric]
+            for member in members:
+                points, structural_reason = _trajectory_points(member)
+                if structural_reason is not None:
+                    invalid_reason = structural_reason
+                    continue
+                for point in points:
+                    if not lower_age <= point.age_days < upper_age:
+                        continue
+                    candidate_count += 1
+                    if not _point_numeric_values_are_valid(point):
+                        invalid_reason = "INVALID_VALUE"
+                        continue
+                    try:
+                        value = getattr(point, field_name)
+                    except Exception:  # noqa: BLE001 - malformed values are redacted
+                        invalid_reason = "INVALID_VALUE"
+                        continue
+                    if value is None:
+                        continue
+                    if type(value) not in (int, float) or not math.isfinite(float(value)):
+                        invalid_reason = "INVALID_VALUE"
+                        continue
+                    values.append(float(value))
+            comparisons.append(
+                _growth_comparison(
+                    f"growth.{window_name}.{metric}_mean",
+                    metric,
+                    values,
+                    candidate_count,
+                    policy,
+                    invalid_reason,
+                )
+            )
+    return tuple(comparisons)
+
+
+def _coverage_comparisons(
+    members: tuple[object, ...],
+    policy: CohortValidationPolicy,
+) -> tuple[CohortComparison, ...]:
+    denominator = len(members)
+    members_with_observation = 0
+    members_with_event = 0
+    seen_patient_ids: set[str] = set()
+    structural_reason: str | None = None
+    for member in members:
+        try:
+            patient_id = member.demographics.patient_id
+            if (
+                not isinstance(patient_id, str)
+                or not patient_id
+                or patient_id in seen_patient_ids
+            ):
+                structural_reason = "STRUCTURAL_INVALID"
+            seen_patient_ids.add(patient_id)
+
+            _points, point_reason = _trajectory_points(member)
+            if point_reason is not None:
+                structural_reason = point_reason
+
+            frame = member.frame
+            if not isinstance(frame, ObservationFrame) or frame.patient_id != patient_id:
+                structural_reason = "STRUCTURAL_INVALID"
+                continue
+            visits = frame.visits
+            events = frame.events
+            if not isinstance(visits, tuple) or not all(
+                isinstance(visit, ObservedVisit) for visit in visits
+            ):
+                structural_reason = "STRUCTURAL_INVALID"
+                continue
+            if not isinstance(events, tuple) or not all(
+                isinstance(event, RecordedEvent) for event in events
+            ):
+                structural_reason = "STRUCTURAL_INVALID"
+                continue
+            previous_age = -1
+            visit_ids: set[str] = set()
+            for visit in visits:
+                if (
+                    visit.patient_id != patient_id
+                    or visit.visit_id in visit_ids
+                    or isinstance(visit.age_days, bool)
+                    or not isinstance(visit.age_days, int)
+                    or visit.age_days < 0
+                    or visit.age_days < previous_age
+                ):
+                    structural_reason = "STRUCTURAL_INVALID"
+                visit_ids.add(visit.visit_id)
+                previous_age = visit.age_days
+            previous_age = -1
+            for event in events:
+                if (
+                    event.patient_id != patient_id
+                    or not isinstance(event.event_kind, RecordedEventKind)
+                    or isinstance(event.age_days, bool)
+                    or not isinstance(event.age_days, int)
+                    or event.age_days < 0
+                    or event.age_days < previous_age
+                ):
+                    structural_reason = "STRUCTURAL_INVALID"
+                previous_age = event.age_days
+            if visits:
+                members_with_observation += 1
+            if events:
+                members_with_event += 1
+        except Exception:  # noqa: BLE001 - malformed evaluator values are redacted
+            structural_reason = "MALFORMED_COHORT"
+
+    if structural_reason is not None:
+        return tuple(
+            _failed_status_comparison(
+                name,
+                "coverage",
+                support,
+                denominator,
+                structural_reason,
+            )
+            for name, support in (
+                ("coverage.cohort_size", denominator),
+                ("coverage.members_with_observation", members_with_observation),
+                ("coverage.members_with_event", members_with_event),
+            )
+        )
+
+    return (
+        _status_only_comparison(
+            "coverage.cohort_size",
+            "coverage",
+            denominator,
+            denominator,
+            policy.minimum_cohort_size,
+        ),
+        _status_rate_comparison(
+            "coverage.members_with_observation",
+            "coverage",
+            members_with_observation,
+            denominator,
+            policy.minimum_event_support,
+            policy.minimum_cohort_size,
+        ),
+        _status_rate_comparison(
+            "coverage.members_with_event",
+            "coverage",
+            members_with_event,
+            denominator,
+            policy.minimum_event_support,
+            policy.minimum_cohort_size,
+        ),
+    )
+
+
 def _demographic_comparisons(
     members: tuple[object, ...],
     calibration: object,
@@ -743,24 +1124,44 @@ def _demographic_comparisons(
             slug: value / total for slug, value in projected_targets.items()
         }
         counts = Counter()
+        invalid_reason: str | None = None
         for member in members:
-            demographics = member.demographics
-            value = demographics.races[0] if attribute == "race" else getattr(demographics, attribute)
-            visible_category = "Unknown" if value == "" else value
-            counts[registry[visible_category]] += 1
+            try:
+                demographics = member.demographics
+                value = (
+                    demographics.races[0]
+                    if attribute == "race"
+                    else getattr(demographics, attribute)
+                )
+                visible_category = "Unknown" if value == "" else value
+                counts[registry[visible_category]] += 1
+            except Exception:  # noqa: BLE001 - evaluator failures must be redacted
+                invalid_reason = "MALFORMED_COHORT"
         for category, slug in registry.items():
             if category == "":
                 continue
-            comparisons.append(
-                _targeted_comparison(
-                    f"demographics.{dimension}.{slug}",
-                    "demographics",
-                    counts[slug],
-                    len(members),
-                    projected_targets[slug],
-                    policy,
+            name = f"demographics.{dimension}.{slug}"
+            if invalid_reason is not None:
+                comparisons.append(
+                    _failed_status_comparison(
+                        name,
+                        "demographics",
+                        counts[slug],
+                        len(members),
+                        invalid_reason,
+                    )
                 )
-            )
+            else:
+                comparisons.append(
+                    _targeted_comparison(
+                        name,
+                        "demographics",
+                        counts[slug],
+                        len(members),
+                        projected_targets[slug],
+                        policy,
+                    )
+                )
     return tuple(comparisons)
 
 
@@ -768,8 +1169,29 @@ def _latent_comparisons(
     members: tuple[object, ...],
     policy: CohortValidationPolicy,
 ) -> tuple[CohortComparison, ...]:
-    counts = Counter(member.trajectory.disorder.kind for member in members)
+    counts = Counter()
+    invalid_reason: str | None = None
+    for member in members:
+        try:
+            kind = member.trajectory.disorder.kind
+            if not isinstance(kind, DisorderKind):
+                invalid_reason = "STRUCTURAL_INVALID"
+            else:
+                counts[kind] += 1
+        except Exception:  # noqa: BLE001 - evaluator failures must be redacted
+            invalid_reason = "MALFORMED_COHORT"
     denominator = len(members)
+    if invalid_reason is not None:
+        return tuple(
+            _failed_status_comparison(
+                f"latent_module.{kind.value}",
+                "latent",
+                counts[kind],
+                denominator,
+                invalid_reason,
+            )
+            for kind in DisorderKind
+        )
     return tuple(
         _status_rate_comparison(
             f"latent_module.{kind.value}",
@@ -787,10 +1209,28 @@ def _observable_comparison(
     members: tuple[object, ...],
     policy: CohortValidationPolicy,
 ) -> CohortComparison:
-    support = sum(
-        any(event.event_type == "observable_phenotype" for event in member.trajectory.events)
-        for member in members
-    )
+    support = 0
+    invalid_reason: str | None = None
+    for member in members:
+        try:
+            events = member.trajectory.events
+            if not isinstance(events, tuple) or not all(
+                isinstance(event, ClinicalEvent) for event in events
+            ):
+                invalid_reason = "STRUCTURAL_INVALID"
+                continue
+            if any(event.event_type == "observable_phenotype" for event in events):
+                support += 1
+        except Exception:  # noqa: BLE001 - evaluator failures must be redacted
+            invalid_reason = "MALFORMED_COHORT"
+    if invalid_reason is not None:
+        return _failed_status_comparison(
+            "observable_phenotype",
+            "observable",
+            support,
+            len(members),
+            invalid_reason,
+        )
     return _status_rate_comparison(
         "observable_phenotype",
         "observable",
@@ -808,20 +1248,41 @@ def _recorded_comparisons(
     denominator = len(members)
     comparisons: list[CohortComparison] = []
     for event_kind, name in _RECORDED_LAYER_NAMES:
-        support = sum(
-            any(event.event_kind is event_kind for event in member.frame.events)
-            for member in members
-        )
-        comparisons.append(
-            _status_rate_comparison(
-                name,
-                "recorded",
-                support,
-                denominator,
-                policy.minimum_event_support,
-                policy.minimum_cohort_size,
+        support = 0
+        invalid_reason: str | None = None
+        for member in members:
+            try:
+                events = member.frame.events
+                if not isinstance(events, tuple) or not all(
+                    isinstance(event, RecordedEvent) for event in events
+                ):
+                    invalid_reason = "STRUCTURAL_INVALID"
+                    continue
+                if any(event.event_kind is event_kind for event in events):
+                    support += 1
+            except Exception:  # noqa: BLE001 - evaluator failures must be redacted
+                invalid_reason = "MALFORMED_COHORT"
+        if invalid_reason is not None:
+            comparisons.append(
+                _failed_status_comparison(
+                    name,
+                    "recorded",
+                    support,
+                    denominator,
+                    invalid_reason,
+                )
             )
-        )
+        else:
+            comparisons.append(
+                _status_rate_comparison(
+                    name,
+                    "recorded",
+                    support,
+                    denominator,
+                    policy.minimum_event_support,
+                    policy.minimum_cohort_size,
+                )
+            )
     return tuple(comparisons)
 
 
