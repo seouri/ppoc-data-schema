@@ -107,27 +107,27 @@
 - Consumes: Task 2 evaluator and models, `AgeRegimePoint`, `ObservationFrame`, `ObservedVisit`, and existing cohort fixtures.
 - Produces: deterministic growth means, bounded velocity checks, coverage checks, overall status aggregation, redacted malformed-input behavior, and static boundary coverage.
 
-- [ ] **Step 1: Write failing growth, coverage, and boundary tests**
+- [x] **Step 1: Write failing growth, coverage, and boundary tests**
 
   Assert each configured age window/metric mean, omission of the first `None` velocity, finite bound failure, insufficient support, no-visit/no-event coverage, `FAIL` for malformed typed members, and `UNEVALUABLE` for insufficient evidence. Add AST/import assertions forbidding governed imports, DuckDB, `Path` parameters, file/output calls, package writers, hidden-report arguments, and sensitive tokens in public output. Assert report ordering, overall status precedence, mapping/repr redaction, and no cohort mutation.
 
-- [ ] **Step 2: Run focused tests to verify they fail**
+- [x] **Step 2: Run focused tests to verify they fail**
 
   Run: `uv run pytest -q tests/synthetic/test_cohort_validation_growth.py tests/synthetic/test_cohort_validation_boundaries.py`
 
   Expected: growth/coverage and boundary assertions fail because the evaluator has no trajectory checks or boundary-safe implementation yet.
 
-- [ ] **Step 3: Implement age-window and coverage evaluators**
+- [x] **Step 3: Implement age-window and coverage evaluators**
 
   Iterate only evaluator-held trajectory points and observation frames. For each required window and canonical metric, collect finite values, calculate an arithmetic mean, apply minimum support and absolute bound, and emit a fixed comparison name. Add fixed `coverage.cohort_size`, `coverage.members_with_observation`, and `coverage.members_with_event` checks for cohort size, visited members, and members with recorded events; validate patient identity/age ordering without exposing offending values. Aggregate statuses as `FAIL` > `UNEVALUABLE` > `PASS`. Keep the module pure and avoid imports or calls that cross governed/filesystem/package boundaries.
 
-- [ ] **Step 4: Run focused tests and lint**
+- [x] **Step 4: Run focused tests and lint**
 
   Run: `uv run pytest -q tests/synthetic/test_cohort_validation_growth.py tests/synthetic/test_cohort_validation_boundaries.py tests/synthetic/test_cohort_validation_layers.py tests/synthetic/test_cohort_validation_models.py && uv run ruff check src/synthetic/cohort_validation.py tests/synthetic/test_cohort_validation_growth.py tests/synthetic/test_cohort_validation_boundaries.py`
 
   Expected: all focused tests pass and Ruff reports no issues.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
   ```bash
   git add src/synthetic/cohort_validation.py tests/synthetic/test_cohort_validation_growth.py tests/synthetic/test_cohort_validation_boundaries.py
