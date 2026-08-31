@@ -58,11 +58,12 @@ Files:
 - [x] Dispatch a fresh reviewer for every task; implement fixes through fresh implementer agents and run one scoped re-review after each fix round.
 - [x] Run one broad final review from merge base through branch tip and resolve all Critical/Important findings with fresh fix/re-review passes.
 - [x] From the feature worktree run full pytest, Ruff, schema check, staged diff checks, and targeted leakage/boundary checks.
-- [ ] Merge to `main`, rerun all verification on merged `main`, push, verify `HEAD == origin/main`, and remove only this slice's worktree/branch/ignored SDD workspace.
+- [x] Merge to `main`, rerun all verification on merged `main`, push, verify `HEAD == origin/main`, and remove only this slice's worktree/branch/ignored SDD workspace.
 
-### Completion evidence before integration
+### Completion evidence
 
-- Branch tip: `d6ee18f` (`fix: gate bmi on structural height applicability`).
-- Observation-focused suite: `74 passed`; full suite: `806 passed`.
+- Main tip: `a9711e8` (`docs: close observation frame review gates`), pushed to `origin/main`.
+- Observation-focused suite: `74 passed`; post-merge full suite: `806 passed`.
 - Ruff: clean; schema check: `validated 8 resources`; merge-base and working-tree diff checks: clean.
 - Scoped final re-review: PASS; broad final review: PASS with no Critical/Important findings.
+- Verified `HEAD == origin/main`; only generated untracked cache directories remain in the long-lived main worktree.
