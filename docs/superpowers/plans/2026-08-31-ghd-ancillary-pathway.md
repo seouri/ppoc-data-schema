@@ -147,27 +147,27 @@
 - Consumes: Task 3 public API and fixed semantics.
 - Produces: user-facing exact-row usage documentation and regression assertions that package/export, derivation, held-out, privacy, CLI, and existing empty-ancillary contracts remain unchanged.
 
-- [ ] **Step 1: Write failing documentation tests**
+- [x] **Step 1: Write failing documentation tests**
 
   Assert the guide names `GhdAncillaryPolicy`, `AncillaryResourceProjection`, `AncillaryValidationReport`, `project_ghd_ancillary_resources`, and `validate_ghd_ancillary_resources`; describes all four resources, fixed fictional values, event-to-row timing, hidden-treatment/visible-diagnosis rule, exact field order, result delay, aggregate statuses, evaluator-only boundary, and every deferred claim. Assert README links the guide and does not present the pathway as package/export, prevalence, clinical, privacy/non-matchability, derivation, release, or Synthea evidence.
 
-- [ ] **Step 2: Run documentation tests to verify they fail**
+- [x] **Step 2: Run documentation tests to verify they fail**
 
   Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_ancillary_docs.py`
 
   Expected: assertions fail before the documentation section is added.
 
-- [ ] **Step 3: Add the guide section and docs assertions**
+- [x] **Step 3: Add the guide section and docs assertions**
 
   Add a concise evaluator-only GHD ancillary section with an exact Python example using a previously generated in-memory `CohortMember` and `ResourceShape`, the four resource-row mappings, validation/status semantics, and explicit fictional-terminology and hidden-truth boundaries. Add one README roadmap paragraph. State that `ObservedResourceBundle`, exact-schema export, augmented derivation, other disorders, held-out validation, privacy/non-matchability, clinical review, task utility, and Synthea remain unchanged/deferred. Keep existing production CLI fail-closed and empty-ancillary tests intact.
 
-- [ ] **Step 4: Run documentation/static/schema checks**
+- [x] **Step 4: Run documentation/static/schema checks**
 
   Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_ancillary_docs.py tests/synthetic/test_ancillary_boundaries.py tests/synthetic/test_cohort_boundaries.py && UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run ruff check src tests && python3 schema/build.py --check && git diff --check`
 
   Expected: focused tests pass, Ruff/schema/whitespace checks are clean, and the existing base-resource boundary suite remains green.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
   ```bash
   git add README.md docs/synthetic-generator.md tests/synthetic/test_ancillary_docs.py
