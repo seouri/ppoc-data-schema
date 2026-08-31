@@ -79,6 +79,11 @@ _METRIC_KEYS = frozenset({
     "linkage_advantage", "membership_inference_advantage", "attribute_disclosure_advantage",
     "composition_reproduction_rate", "negative_control_advantage", "positive_control_advantage",
     "shadow_run_count", "prior_release_count", "membership_match_rate",
+    "membership_positive_count", "membership_negative_count", "membership_true_positive_count",
+    "membership_false_positive_count", "membership_true_positive_rate",
+    "membership_false_positive_rate", "reproduction_rate", "harness_unique_candidate_rate",
+    "harness_permutation_unique_rate", "harness_heldout_count",
+    "harness_heldout_unique_candidate_rate",
     "attribute_attack_accuracy", "reference_majority_accuracy", "heldout_majority_accuracy",
     "advantage_ci_lower", "advantage_ci_upper",
     "rate_ci_lower", "rate_ci_upper", "margin_zero_rate", "margin_positive_rate",
@@ -1146,6 +1151,12 @@ def _evaluate_membership_inference_control(
                 "evaluated_count": len(labels),
                 "membership_match_rate": round(match_count / len(labels), 6),
                 "membership_inference_advantage": round(max(0.0, true_positive_rate - false_positive_rate), 6),
+                "membership_positive_count": positives,
+                "membership_negative_count": negatives,
+                "membership_true_positive_count": true_positive,
+                "membership_false_positive_count": false_positive,
+                "membership_true_positive_rate": round(true_positive_rate, 6),
+                "membership_false_positive_rate": round(false_positive_rate, 6),
                 "_match_count": match_count,
                 "_true_positive": true_positive,
                 "_false_positive": false_positive,
@@ -1338,7 +1349,7 @@ def _control_harness_advantage(
     reference: _PrivatePackage,
     control: _PrivatePackage,
     heldout: _PrivatePackage | None,
-) -> tuple[int, int, float] | None:
+) -> dict[str, int | float] | None:
     packages = (reference, control) if heldout is None else (reference, control, heldout)
     if not _packages_have_profile_evidence(policy, *packages):
         return None
@@ -1348,10 +1359,21 @@ def _control_harness_advantage(
     reproduction_count = sum(
         profile._trajectory_signature in reference._trajectory_signatures for profile in control._profiles
     )
-    reproduction_rate = reproduction_count / len(control._profiles)
-    return len(control._profiles), reproduction_count, round(
-        max(float(linkage["linkage_advantage"]), reproduction_rate), 6
-    )
+    evaluated_count = len(control._profiles)
+    reproduction_rate = round(reproduction_count / evaluated_count, 6)
+    metrics: dict[str, int | float] = {
+        "evaluated_count": evaluated_count,
+        "reproduction_count": reproduction_count,
+        "reproduction_rate": reproduction_rate,
+        "harness_unique_candidate_rate": linkage["unique_candidate_rate"],
+        "harness_permutation_unique_rate": linkage["permutation_unique_rate"],
+    }
+    if "heldout_count" in linkage:
+        metrics["harness_heldout_count"] = linkage["heldout_count"]
+        metrics["harness_heldout_unique_candidate_rate"] = linkage[
+            "heldout_unique_candidate_rate"
+        ]
+    return metrics
 
 
 def _evaluate_control_package(
@@ -1370,14 +1392,23 @@ def _evaluate_control_package(
         return _unevaluable_control(control_id, "control_harness_unavailable")
     if harness is None:
         return _unevaluable_control(control_id, "insufficient_evidence")
-    evaluated_count, reproduction_count, advantage = harness
+    evaluated_count = int(harness["evaluated_count"])
+    reproduction_count = int(harness["reproduction_count"])
+    linkage_advantage = round(
+        max(
+            0.0,
+            float(harness["harness_unique_candidate_rate"])
+            - max(
+                float(harness["harness_permutation_unique_rate"]),
+                float(harness.get("harness_heldout_unique_candidate_rate", 0.0)),
+            ),
+        ),
+        6,
+    )
+    advantage = round(max(linkage_advantage, float(harness["reproduction_rate"])), 6)
     metric_name = f"{control_id}_advantage"
     metrics = _with_interval(
-        {
-            "evaluated_count": evaluated_count,
-            "reproduction_count": reproduction_count,
-            metric_name: advantage,
-        },
+        harness | {metric_name: advantage},
         reproduction_count,
         evaluated_count,
     )
@@ -1631,11 +1662,11 @@ def _validate_evaluated_metrics(control: PrivacyControlResult, policy: PrivacyPo
         "exact_reproduction": {"evaluated_count", "reproduction_count", "exact_reproduction_rate", "rate_ci_lower", "rate_ci_upper"},
         "nearest_neighbor": {"evaluated_count", "zero_proximity_rate", "unique_nearest_rate", "margin_zero_rate", "margin_positive_rate", "rate_ci_lower", "rate_ci_upper"},
         "linkage": {"evaluated_count", "unique_candidate_rate", "permutation_unique_rate", "linkage_advantage", "rate_ci_lower", "rate_ci_upper"},
-        "membership_inference": {"evaluated_count", "shadow_run_count", "membership_match_rate", "membership_inference_advantage", "advantage_ci_lower", "advantage_ci_upper", "rate_ci_lower", "rate_ci_upper"},
+        "membership_inference": {"evaluated_count", "shadow_run_count", "membership_match_rate", "membership_inference_advantage", "membership_positive_count", "membership_negative_count", "membership_true_positive_count", "membership_false_positive_count", "membership_true_positive_rate", "membership_false_positive_rate", "advantage_ci_lower", "advantage_ci_upper", "rate_ci_lower", "rate_ci_upper"},
         "attribute_disclosure": {"evaluated_count", "attribute_attack_accuracy", "reference_majority_accuracy", "attribute_disclosure_advantage", "rate_ci_lower", "rate_ci_upper"},
         "composition": {"evaluated_count", "prior_release_count", "reproduction_count", "composition_reproduction_rate", "rate_ci_lower", "rate_ci_upper"},
-        "negative_control": {"evaluated_count", "reproduction_count", "negative_control_advantage", "rate_ci_lower", "rate_ci_upper"},
-        "positive_control": {"evaluated_count", "reproduction_count", "positive_control_advantage", "rate_ci_lower", "rate_ci_upper"},
+        "negative_control": {"evaluated_count", "reproduction_count", "reproduction_rate", "harness_unique_candidate_rate", "harness_permutation_unique_rate", "negative_control_advantage", "rate_ci_lower", "rate_ci_upper"},
+        "positive_control": {"evaluated_count", "reproduction_count", "reproduction_rate", "harness_unique_candidate_rate", "harness_permutation_unique_rate", "positive_control_advantage", "rate_ci_lower", "rate_ci_upper"},
     }
     metrics = control.metrics
     if not required_by_control[control.control_id] <= set(metrics):
@@ -1658,11 +1689,15 @@ def _validate_evaluated_metrics(control: PrivacyControlResult, policy: PrivacyPo
         if numerator in metrics and int(metrics[numerator]) > int(metrics[denominator]):
             raise ValueError("privacy report count relationship is invalid")
     if control.control_id == "identifier_overlap":
-        _validate_report_rate(metrics, "overlap_rate", "identifier_count", "overlap_count")
+        overlap_count = _validate_report_rate(
+            metrics, "overlap_rate", "identifier_count", "overlap_count"
+        )
+        _validate_report_interval(metrics, overlap_count, int(metrics["identifier_count"]))
     elif control.control_id == "exact_reproduction":
-        _validate_report_rate(
+        reproduction_count = _validate_report_rate(
             metrics, "exact_reproduction_rate", "evaluated_count", "reproduction_count"
         )
+        _validate_report_interval(metrics, reproduction_count, int(metrics["evaluated_count"]))
     elif control.control_id == "nearest_neighbor":
         zero_count = _validate_report_rate(metrics, "zero_proximity_rate", "evaluated_count")
         unique_count = _validate_report_rate(metrics, "unique_nearest_rate", "evaluated_count")
@@ -1672,7 +1707,12 @@ def _validate_evaluated_metrics(control: PrivacyControlResult, policy: PrivacyPo
         if metrics["margin_zero_rate"] != expected_margin_zero:
             raise ValueError("privacy report nearest-neighbor metrics are incompatible")
         _validate_report_interval(metrics, zero_count, int(metrics["evaluated_count"]))
-        if ("heldout_count" in metrics) != ("heldout_zero_proximity_rate" in metrics):
+        heldout_keys = {
+            "heldout_count",
+            "heldout_zero_proximity_rate",
+            "heldout_unique_nearest_rate",
+        }
+        if set(metrics) & heldout_keys and not heldout_keys <= set(metrics):
             raise ValueError("privacy report held-out metrics are incomplete")
         if "heldout_count" in metrics:
             _validate_report_rate(metrics, "heldout_zero_proximity_rate", "heldout_count")
@@ -1698,7 +1738,43 @@ def _validate_evaluated_metrics(control: PrivacyControlResult, policy: PrivacyPo
             raise ValueError("privacy report linkage advantage is incompatible")
         _validate_report_interval(metrics, unique_count, int(metrics["evaluated_count"]))
     elif control.control_id == "membership_inference":
+        positives = int(metrics["membership_positive_count"])
+        negatives = int(metrics["membership_negative_count"])
+        true_positive = int(metrics["membership_true_positive_count"])
+        false_positive = int(metrics["membership_false_positive_count"])
+        if (
+            positives <= 0
+            or negatives <= 0
+            or positives + negatives != int(metrics["evaluated_count"])
+            or true_positive > positives
+            or false_positive > negatives
+        ):
+            raise ValueError("privacy report membership counts are incompatible")
+        _validate_report_rate(
+            metrics,
+            "membership_true_positive_rate",
+            "membership_positive_count",
+            "membership_true_positive_count",
+        )
+        _validate_report_rate(
+            metrics,
+            "membership_false_positive_rate",
+            "membership_negative_count",
+            "membership_false_positive_count",
+        )
         match_count = _validate_report_rate(metrics, "membership_match_rate", "evaluated_count")
+        if match_count != true_positive + false_positive:
+            raise ValueError("privacy report membership counts are incompatible")
+        expected_advantage = round(
+            max(
+                0.0,
+                float(metrics["membership_true_positive_rate"])
+                - float(metrics["membership_false_positive_rate"]),
+            ),
+            6,
+        )
+        if metrics["membership_inference_advantage"] != expected_advantage:
+            raise ValueError("privacy report membership advantage is incompatible")
         _validate_report_interval(metrics, match_count, int(metrics["evaluated_count"]))
     elif control.control_id == "attribute_disclosure":
         attack_count = _validate_report_rate(metrics, "attribute_attack_accuracy", "evaluated_count")
@@ -1721,8 +1797,39 @@ def _validate_evaluated_metrics(control: PrivacyControlResult, policy: PrivacyPo
             metrics, int(metrics["reproduction_count"]), int(metrics["evaluated_count"])
         )
     elif control.control_id in {"negative_control", "positive_control"}:
+        reproduction_count = _validate_report_rate(
+            metrics, "reproduction_rate", "evaluated_count", "reproduction_count"
+        )
+        reproduction_rate = float(metrics["reproduction_rate"])
+        _validate_report_rate(metrics, "harness_unique_candidate_rate", "evaluated_count")
+        _validate_report_rate(metrics, "harness_permutation_unique_rate", "evaluated_count")
+        heldout_rate = 0.0
+        harness_heldout_keys = {
+            "harness_heldout_count",
+            "harness_heldout_unique_candidate_rate",
+        }
+        if set(metrics) & harness_heldout_keys and not harness_heldout_keys <= set(metrics):
+            raise ValueError("privacy report held-out metrics are incomplete")
+        if "harness_heldout_count" in metrics:
+            _validate_report_rate(
+                metrics,
+                "harness_heldout_unique_candidate_rate",
+                "harness_heldout_count",
+            )
+            heldout_rate = float(metrics["harness_heldout_unique_candidate_rate"])
+        linkage_advantage = round(
+            max(
+                0.0,
+                float(metrics["harness_unique_candidate_rate"])
+                - max(float(metrics["harness_permutation_unique_rate"]), heldout_rate),
+            ),
+            6,
+        )
+        advantage_name = f"{control.control_id}_advantage"
+        if metrics[advantage_name] != round(max(linkage_advantage, reproduction_rate), 6):
+            raise ValueError("privacy report control-harness advantage is incompatible")
         _validate_report_interval(
-            metrics, int(metrics["reproduction_count"]), int(metrics["evaluated_count"])
+            metrics, reproduction_count, int(metrics["evaluated_count"])
         )
 
 

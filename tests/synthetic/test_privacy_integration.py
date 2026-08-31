@@ -11,6 +11,7 @@ import pytest
 from synthetic.privacy_audit import (
     PrivacyAuditResult,
     PrivacyRunConfig,
+    _validate_evaluated_metrics,
     audit_privacy,
     write_privacy_report,
 )
@@ -231,6 +232,129 @@ def test_report_writer_rejects_forged_linkage_advantage(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="could not be promoted"):
         write_privacy_report(forged, tmp_path / "forged-linkage")
+
+
+def test_report_validation_rejects_incomplete_heldout_nearest_metrics(tmp_path: Path) -> None:
+    """Catches an orphan held-out nearest rate from reducing a generated nearest-neighbor failure."""
+    result = audit_privacy(_config(tmp_path))
+    nearest = next(item for item in result.report.controls if item.control_id == "nearest_neighbor")
+    forged = replace(
+        nearest,
+        metrics={
+            **nearest.metrics,
+            "heldout_count": nearest.metrics["evaluated_count"],
+            "heldout_zero_proximity_rate": nearest.metrics["zero_proximity_rate"],
+        },
+    )
+
+    with pytest.raises(ValueError, match="held-out metrics are incomplete"):
+        _validate_evaluated_metrics(forged, result.report.policy)
+
+
+@pytest.mark.parametrize(
+    ("control_id", "metrics"),
+    [
+        (
+            "identifier_overlap",
+            {
+                "identifier_count": 1,
+                "overlap_count": 0,
+                "overlap_rate": 0.0,
+            },
+        ),
+        (
+            "exact_reproduction",
+            {
+                "reproduction_count": 0,
+                "exact_reproduction_rate": 0.0,
+            },
+        ),
+    ],
+)
+def test_report_writer_rejects_forged_mandatory_wilson_interval(
+    tmp_path: Path, control_id: str, metrics: dict[str, int | float]
+) -> None:
+    """Catches arbitrary Wilson endpoints on an otherwise passing mandatory aggregate."""
+    result = audit_privacy(_config(tmp_path))
+    controls = tuple(
+        replace(
+            item,
+            metrics={
+                **item.metrics,
+                **metrics,
+                "rate_ci_lower": 1.0,
+                "rate_ci_upper": 1.0,
+            },
+        )
+        if item.control_id == control_id
+        else item
+        for item in result.report.controls
+    )
+    forged = PrivacyAuditResult(replace(result.report, controls=controls))
+
+    with pytest.raises(ValueError, match="could not be promoted"):
+        write_privacy_report(forged, tmp_path / f"forged-{control_id}-interval")
+
+
+def _replace_report_control(
+    result: PrivacyAuditResult, control_id: str, *, status: str, metric_name: str, value: float
+) -> PrivacyAuditResult:
+    controls = tuple(
+        replace(item, status=status, metrics={**item.metrics, metric_name: value})
+        if item.control_id == control_id
+        else item
+        for item in result.report.controls
+    )
+    control_counts = {name: sum(item.status == name for item in controls) for name in ("PASS", "FAIL", "UNEVALUABLE")}
+    return PrivacyAuditResult(
+        replace(
+            result.report,
+            status="FAIL",
+            controls=controls,
+            control_counts=control_counts,
+            decision_reasons=("evaluated_control_failed",),
+        )
+    )
+
+
+def test_report_writer_rejects_forged_membership_advantage(tmp_path: Path) -> None:
+    """Catches a forged membership advantage and failure status despite unchanged component rates."""
+    shadow = _independent_generated(tmp_path / "shadow", id_prefix="SHD")
+    manifest = write_shadow_manifest(
+        tmp_path / "shadows.json",
+        [{"run_id": "shadow-one", "package_root": str(shadow), "members": ["REAL-P-001", "REAL-P-002", "REAL-P-003"]}],
+    )
+    result = audit_privacy(_config(tmp_path, shadow_manifest=manifest))
+    forged = _replace_report_control(
+        result,
+        "membership_inference",
+        status="FAIL",
+        metric_name="membership_inference_advantage",
+        value=1.0,
+    )
+
+    with pytest.raises(ValueError, match="could not be promoted"):
+        write_privacy_report(forged, tmp_path / "forged-membership")
+
+
+def test_report_writer_rejects_forged_positive_control_advantage(tmp_path: Path) -> None:
+    """Catches a forged control-harness advantage and status despite unchanged component rates."""
+    result = audit_privacy(
+        _config(
+            tmp_path,
+            positive_control_root=write_generated_package(tmp_path / "positive", id_prefix="POS"),
+        )
+    )
+    forged = _replace_report_control(
+        result,
+        "positive_control",
+        status="FAIL",
+        metric_name="positive_control_advantage",
+        value=0.0,
+    )
+
+    with pytest.raises(ValueError, match="could not be promoted"):
+        write_privacy_report(forged, tmp_path / "forged-positive")
 
 
 def test_audit_copied_package_fails_mandatory_controls_and_promotes_only_aggregate_files(tmp_path: Path) -> None:

@@ -141,6 +141,10 @@ def test_membership_requires_all_shadow_runs_and_reports_only_maximum_aggregate_
 
     assert result.status == "FAIL"
     assert result.metrics["membership_inference_advantage"] == 1.0
+    assert result.metrics["membership_true_positive_rate"] == 1.0
+    assert result.metrics["membership_false_positive_rate"] == 0.0
+    assert result.metrics["membership_true_positive_count"] == 3
+    assert result.metrics["membership_false_positive_count"] == 0
     assert result.metrics["shadow_run_count"] == 2
     assert 0 <= result.metrics["advantage_ci_lower"] <= result.metrics["advantage_ci_upper"] <= 1
     assert underpowered.status == "UNEVALUABLE"
@@ -269,6 +273,12 @@ def test_negative_and_positive_controls_distinguish_independent_from_copied_pack
     assert negative.status == "PASS"
     assert positive.status == "PASS"
     assert positive.metrics["positive_control_advantage"] == 1.0
+    for result in (negative, positive):
+        assert {
+            "harness_unique_candidate_rate",
+            "harness_permutation_unique_rate",
+            "reproduction_rate",
+        } <= set(result.metrics)
     assert missing.status == "UNEVALUABLE"
     assert "private-one" not in repr(positive)
 
