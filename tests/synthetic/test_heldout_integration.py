@@ -27,7 +27,7 @@ from synthetic.heldout_validate import (
 )
 from synthetic.schema_contract import load_descriptor, resource_spec
 from tests.synthetic.calibration_fixtures import write_mock_snapshot
-from tests.synthetic.heldout_fixtures import write_synthetic_package
+from tests.synthetic.heldout_fixtures import write_header_only_package, write_synthetic_package
 
 ROOT = Path(__file__).resolve().parents[2]
 PARTITION_KEY = b"0123456789abcdef"
@@ -244,6 +244,78 @@ def test_high_disclosure_minimum_produces_promotable_unevaluable(tmp_path: Path)
     assert result.report.status == "UNEVALUABLE"
     assert result.report.comparison_counts["UNEVALUABLE"] > 0
     assert config.output.is_dir()
+
+
+def test_header_only_generated_package_promotes_unevaluable_aggregate_report(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    write_header_only_package(config.synthetic_root)
+
+    result = validate_heldout(config)
+    write_heldout_report(result, config.output)
+
+    assert result.report.status == "UNEVALUABLE"
+    assert result.report.comparisons
+    assert {comparison.status for comparison in result.report.comparisons} == {"UNEVALUABLE"}
+    assert sorted(path.name for path in config.output.iterdir()) == [
+        "heldout-validation-report.json",
+        "heldout-validation-summary.txt",
+    ]
+
+
+@pytest.mark.parametrize("malformation", ["symlink", "duplicate_key", "nonfinite"])
+def test_real_descriptor_rejects_insecure_or_non_strict_json_without_leakage(
+    tmp_path: Path, malformation: str
+) -> None:
+    config = _config(tmp_path)
+    descriptor = tmp_path / "real-descriptor.json"
+    original = (ROOT / "datapackage.json").read_text(encoding="utf-8")
+    if malformation == "symlink":
+        trusted = tmp_path / "trusted-descriptor.json"
+        trusted.write_text(original, encoding="utf-8")
+        descriptor.symlink_to(trusted.name)
+    elif malformation == "duplicate_key":
+        descriptor.write_text(
+            original.replace(
+                '"profile": "tabular-data-package"',
+                '"profile": "untrusted", "profile": "tabular-data-package"',
+                1,
+            ),
+            encoding="utf-8",
+        )
+    else:
+        descriptor.write_text(
+            original.rstrip()[:-1] + ', "x-untrusted": NaN}\n', encoding="utf-8"
+        )
+
+    with pytest.raises(ValueError) as error:
+        validate_heldout(replace(config, real_descriptor=descriptor))
+
+    assert "REAL-" not in str(error.value)
+    assert str(config.real_root) not in str(error.value)
+    assert not config.output.exists()
+
+
+def test_heldout_report_is_repeatable_and_binds_key_and_generated_comparisons(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    initial = validate_heldout(config)
+    repeated = validate_heldout(config)
+
+    assert repeated.report.to_json_bytes() == initial.report.to_json_bytes()
+    try:
+        changed_key = validate_heldout(replace(config, partition_key=b"fedcba9876543210"))
+    except ValueError:
+        pass
+    else:
+        assert changed_key.report.heldout_aggregate_sha256 != initial.report.heldout_aggregate_sha256
+
+    _shift_generated_physiology(config.synthetic_root)
+    changed_package = validate_heldout(config)
+
+    assert changed_package.report.synthetic_aggregate_sha256 == initial.report.synthetic_aggregate_sha256
+    assert changed_package.report.to_json_bytes() != initial.report.to_json_bytes()
+    assert changed_package.report.status == "FAIL"
 
 
 @pytest.mark.parametrize(

@@ -8,6 +8,7 @@ from synthetic.calibration import CalibrationStratum, CalibrationTarget
 from synthetic.heldout_validate import (
     FidelityPolicy,
     HeldoutCheck,
+    HeldoutComparison,
     HeldoutValidationReport,
     compare_targets,
     validation_status,
@@ -235,6 +236,40 @@ def test_compare_targets_rejects_a_target_outside_the_fixed_registry() -> None:
 
     with pytest.raises(ValueError, match="fixed target registry"):
         compare_targets(heldout, synthetic, policy(required_families=["physiology"]))
+
+
+def test_report_rejects_an_unregistered_direct_comparison_key() -> None:
+    comparison = HeldoutComparison(
+        stratum_id="age_regime=infancy|recorded_sex=F",
+        target_name="unregistered_target",
+        family="physiology",
+        statistic="mean",
+        unit="z_score",
+        quantile_level=None,
+        status="PASS",
+        heldout_value=2.0,
+        synthetic_value=2.0,
+        difference=0.0,
+        tolerance=1.0,
+    )
+
+    with pytest.raises(ValueError, match="fixed target registry"):
+        HeldoutValidationReport(
+            report_version="heldout-validation-report-v1",
+            status="PASS",
+            source_snapshot="snapshot-v1",
+            synthetic_artifact_id="synthetic-v1",
+            schema_fingerprint="a" * 64,
+            partition_policy={"policy_id": "partition-v1", "policy_version": "1"},
+            disclosure_policy={"policy_id": "disclosure-v1", "policy_version": "1"},
+            fidelity_policy=policy(required_families=["physiology"]),
+            heldout_aggregate_sha256="b" * 64,
+            synthetic_aggregate_sha256="c" * 64,
+            comparison_counts={"PASS": 1, "FAIL": 0, "UNEVALUABLE": 0},
+            family_counts={"physiology": {"PASS": 1, "FAIL": 0, "UNEVALUABLE": 0}},
+            checks=(HeldoutCheck("fidelity", True, "frozen policy matched"),),
+            comparisons=(comparison,),
+        )
 
 
 def test_check_rejects_multiline_detail() -> None:

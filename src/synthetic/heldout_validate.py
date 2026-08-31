@@ -724,6 +724,11 @@ class HeldoutValidationReport:
             isinstance(comparison, HeldoutComparison) for comparison in self.comparisons
         ):
             raise ValueError("comparisons must be a tuple of HeldoutComparison values")
+        if any(
+            not is_registered_target_key(*_comparison_sort_key(comparison))
+            for comparison in self.comparisons
+        ):
+            raise ValueError("comparison target is outside the fixed target registry")
         if len({_comparison_sort_key(comparison) for comparison in self.comparisons}) != len(self.comparisons):
             raise ValueError("comparisons must not contain duplicate canonical keys")
         sorted_comparisons = tuple(sorted(self.comparisons, key=_comparison_sort_key))
@@ -944,7 +949,9 @@ def validate_heldout(config: HeldoutRunConfig) -> HeldoutValidationResult:
                 partition_label="calibration",
             )
             heldout_strata = disclose_targets(heldout_raw, calibration_config)
-            synthetic_strata = disclose_targets(synthetic_raw, calibration_config)
+            synthetic_strata = (
+                disclose_targets(synthetic_raw, calibration_config) if synthetic_raw else ()
+            )
         finally:
             synthetic_connection.close()
     finally:

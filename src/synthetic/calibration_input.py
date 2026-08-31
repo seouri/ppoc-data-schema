@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import hmac
+import json
 import os
 import stat
 from collections.abc import Mapping
@@ -42,6 +43,7 @@ _DUCKDB_ENCODINGS = {
     "utf-8": "utf-8",
     "iso-8859-1": "latin-1",
 }
+MAX_GOVERNED_DESCRIPTOR_BYTES = 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -120,9 +122,82 @@ def _repository_fingerprint() -> str:
     return schema_fingerprint(load_descriptor(_REPOSITORY_ROOT / "datapackage.json"))
 
 
+def _reject_duplicate_descriptor_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    descriptor: dict[str, object] = {}
+    for key, value in pairs:
+        if key in descriptor:
+            raise ValueError("governed descriptor contains a duplicate key")
+        descriptor[key] = value
+    return descriptor
+
+
+def _reject_nonfinite_descriptor_constant(_value: str) -> None:
+    raise ValueError("governed descriptor contains a nonfinite value")
+
+
+def _read_governed_descriptor(path: Path) -> bytes:
+    if not isinstance(path, Path):
+        raise ValueError("governed descriptor must be a Path")  # noqa: TRY004
+    nofollow = getattr(os, "O_NOFOLLOW", None)
+    if nofollow is None:
+        raise ValueError("governed descriptor requires secure no-follow opening")
+    try:
+        descriptor_fd = os.open(path, os.O_RDONLY | nofollow | getattr(os, "O_NONBLOCK", 0))
+    except OSError as exc:
+        raise ValueError("governed descriptor must be a regular non-symlink file") from exc
+    try:
+        initial_status = os.fstat(descriptor_fd)
+        if not stat.S_ISREG(initial_status.st_mode):
+            raise ValueError("governed descriptor must be a regular non-symlink file")
+        if initial_status.st_size > MAX_GOVERNED_DESCRIPTOR_BYTES:
+            raise ValueError("governed descriptor exceeds the maximum size")
+        chunks: list[bytes] = []
+        size = 0
+        while True:
+            read_size = min(64 * 1024, MAX_GOVERNED_DESCRIPTOR_BYTES + 1 - size)
+            if read_size <= 0:
+                break
+            chunk = os.read(descriptor_fd, read_size)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            size += len(chunk)
+        final_status = os.fstat(descriptor_fd)
+    except OSError as exc:
+        raise ValueError("governed descriptor could not be securely read") from exc
+    finally:
+        os.close(descriptor_fd)
+    payload = b"".join(chunks)
+    if (
+        len(payload) > MAX_GOVERNED_DESCRIPTOR_BYTES
+        or final_status.st_size > MAX_GOVERNED_DESCRIPTOR_BYTES
+        or final_status.st_size > len(payload)
+    ):
+        raise ValueError("governed descriptor exceeds the maximum size")
+    return payload
+
+
+def _load_governed_descriptor(path: Path) -> dict[str, Any]:
+    try:
+        descriptor = json.loads(
+            _read_governed_descriptor(path).decode("utf-8"),
+            object_pairs_hook=_reject_duplicate_descriptor_keys,
+            parse_constant=_reject_nonfinite_descriptor_constant,
+        )
+    except (UnicodeError, json.JSONDecodeError, RecursionError, ValueError) as exc:
+        raise ValueError("governed descriptor is invalid") from exc
+    if not isinstance(descriptor, dict):
+        raise TypeError("governed descriptor must be an object")
+    if descriptor.get("profile") != "tabular-data-package":
+        raise ValueError("governed descriptor is not a tabular-data-package")
+    if not isinstance(descriptor.get("resources"), list):
+        raise TypeError("governed descriptor resources must be a list")
+    return descriptor
+
+
 def _validate_descriptor(config: CalibrationRunConfig) -> dict[str, Any]:
     try:
-        descriptor = load_descriptor(config.source_descriptor)
+        descriptor = _load_governed_descriptor(config.source_descriptor)
     except (OSError, TypeError, ValueError) as exc:
         raise ValueError("descriptor is invalid") from exc
     return _validate_descriptor_mapping(descriptor)

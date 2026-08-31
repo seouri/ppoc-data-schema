@@ -21,6 +21,8 @@ def _visible_modules() -> tuple[Path, ...]:
         ROOT / "src" / "synthetic" / "generate.py",
         ROOT / "src" / "synthetic" / "manifest.py",
         ROOT / "src" / "synthetic" / "derivation.py",
+        ROOT / "src" / "synthetic" / "csv_package.py",
+        ROOT / "src" / "synthetic" / "base_resources.py",
         *sorted((ROOT / "src" / "synthetic" / "native").rglob("*.py")),
     )
 
@@ -69,6 +71,10 @@ def test_visible_generator_paths_do_not_consume_governed_validation_inputs() -> 
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         assert _forbidden_imports(tree, _module_name(path)) == set(), path
         assert _forbidden_arguments(tree) == set(), path
+
+
+def test_visible_generator_paths_include_csv_export_and_base_resource_modules() -> None:
+    assert {path.name for path in _visible_modules()} >= {"base_resources.py", "csv_package.py"}
 
 
 @pytest.mark.parametrize(
