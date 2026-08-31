@@ -199,7 +199,7 @@
 - [x] Dispatch a fresh implementer and task reviewer for each task; resolve every Critical/Important finding through implementer-only fix rounds and one scoped re-review per round, recording any deferred Minor only in the ledger.
 - [x] Dispatch the most capable broad reviewer over the merge-base diff, resolve all Critical/Important findings with one complete fix wave and one scoped re-review, and record rulings before integration.
 - [x] From the feature worktree run the focused package/bundle suites, complete `pytest`, Ruff, schema validation, `git diff --check`, deterministic two-destination smoke, output-file inventory, and a leakage/boundary scan.
-- [ ] Merge to `main`, rerun verification on merged `main`, push, verify `HEAD == origin/main`, and remove only this slice's worktree/branch/ignored SDD workspace.
+- [x] Merge to `main`, rerun verification on merged `main`, push, verify `HEAD == origin/main`, and remove only this slice's worktree/branch/ignored SDD workspace.
 
 ## Completion evidence
 
@@ -207,4 +207,5 @@
 - Task 1, Task 2, and Task 3 task reviews passed after their implementer-only fix rounds; the final broad review found three Important and three Minor findings, all addressed by `36e739b`, and its scoped re-review was approved.
 - Feature-branch verification: 210 focused tests and 980 full tests passed; Ruff passed; `schema/build.py --check` validated 8 resources; range `git diff --check` passed.
 - Deterministic two-destination observed-package smoke passed with exact 11-file inventory and no private truth/source/evaluator tokens.
-- Merge/push parity and exact worktree/branch/ledger cleanup are recorded after integration.
+- Merged-main verification: 210 focused tests and 980 full tests passed; Ruff, schema, and `git diff --check` passed after the fast-forward to `6e6b097`.
+- Push/parity: `main` pushed to `origin/main` at `6e6b09786259b71c11a55a93385cd29f1840f294`; cleanup of only this slice's worktree, branch, and ignored SDD workspace follows this commit.
