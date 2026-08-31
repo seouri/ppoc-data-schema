@@ -7,6 +7,8 @@ import stat
 from pathlib import Path
 from typing import Any
 
+EXPECTED_SCHEMA_FINGERPRINT = "795724ec4838df8afa9c09b7c059fa76f644d7f8fb6dcc8ce808da203c2f8597"
+
 
 def load_descriptor(path: Path) -> dict[str, Any]:
     descriptor = json.loads(path.read_text(encoding="utf-8"))

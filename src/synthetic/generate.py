@@ -16,6 +16,7 @@ from synthetic.derivation import DerivationOracle, DerivationUnavailable, requir
 from synthetic.manifest import RunManifest
 from synthetic.models import PatientState
 from synthetic.native.healthy import HealthyKernel
+from synthetic.package_export import _allowed_tree, _scan_tree
 from synthetic.randomness import NamedRandomStreams, synthetic_id
 from synthetic.references import GrowthReference
 from synthetic.run_directory import RunDirectory
@@ -26,27 +27,6 @@ from synthetic.schema_contract import (
     validate_resource_paths,
 )
 from synthetic.validate import validate_structure
-
-
-def _allowed_tree(descriptor: dict, names: tuple[str, ...]) -> tuple[set[str], set[str]]:
-    files = {Path(resource_spec(descriptor, name)["path"]).as_posix() for name in names}
-    dirs = {
-        parent.as_posix()
-        for item in files
-        for parent in Path(item).parents
-        if parent.as_posix() != "."
-    }
-    return files, dirs
-
-
-def _scan_tree(root: Path, files: set[str], dirs: set[str]) -> None:
-    for path in root.rglob("*"):
-        relative = path.relative_to(root).as_posix()
-        mode = path.lstat().st_mode
-        allowed_file = relative in files and stat.S_ISREG(mode)
-        allowed_dir = relative in dirs and stat.S_ISDIR(mode)
-        if not (allowed_file or allowed_dir):
-            raise DerivationUnavailable(f"unexpected run artifact: {relative}")
 
 
 def generate_smoke(
