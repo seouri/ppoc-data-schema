@@ -34,25 +34,25 @@
 - Consumes: standard-library mappings and the observation-frame model types.
 - Produces: `BASE_RESOURCE_NAMES`, `ResourceProjectionUnavailable`, `ResourceSpec`, `ResourceShape`, `SyntheticDemographics`, `ResourceRow`, `ClinicalDescendant`, `ObservedResourceBundle`, `ResourceValidationStatus`, `ResourceCheck`, `ResourceValidationReport`.
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
   Cover exact six-resource extraction from the checked-in descriptor mapping, ordered field names, missing/duplicate resource and field rejection, synthetic-only IDs, closed demographic values, immutable rows, fictional event-code enforcement, private source-frame references, missing-value mapping, fixed report check names, and status aggregation.
 
-- [ ] **Step 2: Run the focused model tests to verify they fail**
+- [x] **Step 2: Run the focused model tests to verify they fail**
 
   Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_observed_resource_models.py`
 
   Expected: collection or assertion failures because the resource contract does not yet exist.
 
-- [ ] **Step 3: Implement the strict models**
+- [x] **Step 3: Implement the strict models**
 
   Parse only the descriptor's `resources`/`schema.fields` mappings into immutable `ResourceShape` values. Require all six base resource names, unique nonempty field-name strings, synthetic patient IDs, descriptor-valid demographic tokens, ordered immutable row pairs, fixed fictional descendant codes, and a private `ObservationFrame` on each bundle. Implement visible-only `to_mapping()` and `repr()` methods.
 
-- [ ] **Step 4: Run focused tests, Ruff, and diff checks**
+- [x] **Step 4: Run focused tests, Ruff, and diff checks**
 
   Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_observed_resource_models.py`; `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run ruff check src tests`; `git diff --check`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
   ```bash
   git add src/synthetic/native/resources.py tests/synthetic/test_observed_resource_models.py
@@ -69,25 +69,25 @@
 - Consumes: `ObservationFrame`, `ResourceShape`, and `SyntheticDemographics` from Task 1.
 - Produces: `project_observed_resources(frame, descriptor, demographics=None) -> ObservedResourceBundle` and deterministic visible resource rows/clinical descendants.
 
-- [ ] **Step 1: Write failing projection tests**
+- [x] **Step 1: Write failing projection tests**
 
   Cover default synthetic demographics, exact descriptor field order, one patient row, one row per visible visit, `weight_oz`/`height_in`/`head_circ_cm`/`BMI` conversion, empty-string missingness, fictional encounter/source tokens, event-to-visit links, diagnosis-slot placement, ancillary empty resources, deterministic replay, and observed-length rejection.
 
-- [ ] **Step 2: Run projection tests to verify they fail**
+- [x] **Step 2: Run projection tests to verify they fail**
 
   Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_observed_resource_projection.py`
 
   Expected: failures because projection and resource rows are not implemented.
 
-- [ ] **Step 3: Implement pure projection**
+- [x] **Step 3: Implement pure projection**
 
   Require `validate_observation_frame(frame)` to be `PASS`; extract a shape from the in-memory descriptor; fill patient demographics with strict defaults; project visible measurements without accessing latent truth; reject any observed length; map fixed event codes to exact visible visits and next available `enc_diag_*` slots; and emit explicit empty tuples for labs, medications, problem-list, and referrals. Do not draw randomness or write files.
 
-- [ ] **Step 4: Run focused tests, full observation tests, Ruff, and diff checks**
+- [x] **Step 4: Run focused tests, full observation tests, Ruff, and diff checks**
 
   Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_observed_resource_models.py tests/synthetic/test_observed_resource_projection.py tests/synthetic/test_observation_models.py tests/synthetic/test_observation_generation.py tests/synthetic/test_observation_validation.py tests/synthetic/test_observation_boundaries.py`; `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run ruff check src tests`; `git diff --check`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
   ```bash
   git add src/synthetic/native/resources.py tests/synthetic/test_observed_resource_projection.py
@@ -107,25 +107,25 @@
 - Consumes: `ObservedResourceBundle`, `ObservationFrame`, and the fixed resource shape/projection contracts.
 - Produces: `validate_observed_resources(bundle) -> ResourceValidationReport`, boundary assertions, usage documentation, and explicit deferred-gate language.
 
-- [ ] **Step 1: Write failing validation and boundary tests**
+- [x] **Step 1: Write failing validation and boundary tests**
 
   Cover malformed/private source evidence → `UNEVALUABLE`; patient/field-order/key/unit/BMI/event/ancillary violations → `FAIL`; exact frame correspondence; no hidden-truth/report leakage; deterministic mappings; no governed/file/schema/CLI imports; and unchanged eight-resource descriptor behavior.
 
-- [ ] **Step 2: Run validation tests to verify they fail**
+- [x] **Step 2: Run validation tests to verify they fail**
 
   Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_observed_resource_validation.py tests/synthetic/test_observed_resource_boundaries.py`
 
   Expected: failures because aggregate validation and boundary assertions are not implemented.
 
-- [ ] **Step 3: Implement fixed aggregate checks and documentation**
+- [x] **Step 3: Implement fixed aggregate checks and documentation**
 
   Validate patient identity, extracted field order, exact frame visits, unit conversion/missingness/BMI identity, one-to-one fictional descendants, empty ancillary resources, and non-failing source-frame evidence. Keep reports aggregate-only and add a concise guide section with examples and limitations.
 
-- [ ] **Step 4: Run focused tests, full suite, Ruff, schema, and diff checks**
+- [x] **Step 4: Run focused tests, full suite, Ruff, schema, and diff checks**
 
   Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q`; `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run ruff check src tests`; `python3 schema/build.py --check`; `git diff --check`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
   ```bash
   git add src/synthetic/native/resources.py tests/synthetic/test_observed_resource_validation.py tests/synthetic/test_observed_resource_boundaries.py docs/synthetic-generator.md README.md
@@ -134,12 +134,18 @@
 
 ### Task 4: Independent reviews and handoff
 
-- [ ] Create the ignored SDD ledger for this plan and record implementation/review/fix status for each task.
-- [ ] Dispatch a fresh reviewer for each implementation task; resolve Critical/Important findings with fresh implementer fix rounds and scoped re-reviews.
-- [ ] Dispatch one broad final reviewer over the merge-base diff and resolve all Critical/Important findings.
-- [ ] Run full tests, Ruff, schema validation, diff checks, leakage/boundary checks, and a generated frame/resource smoke example from the feature worktree.
+- [x] Create the ignored SDD ledger for this plan and record implementation/review/fix status for each task.
+- [x] Dispatch a fresh reviewer for each implementation task; resolve Critical/Important findings with fresh implementer fix rounds and scoped re-reviews.
+- [x] Dispatch one broad final reviewer over the merge-base diff and resolve all Critical/Important findings.
+- [x] Run full tests, Ruff, schema validation, diff checks, leakage/boundary checks, and a generated frame/resource smoke example from the feature worktree.
 - [ ] Merge to `main`, rerun verification on merged `main`, push, verify `HEAD == origin/main`, and remove only this slice's worktree/branch/ignored SDD workspace.
 
 ### Completion evidence
 
 - Branch tip, review commits, focused/full test counts, schema/lint/diff output, merge/push hash parity, and cleanup evidence are recorded before handoff.
+
+### Feature-branch evidence before integration
+
+- Implementation/fix commits: `d53d749`, `ddfd1b0`, `d869baf`, `f1935af`, `487a69f`, `b6643c6`, `0a5414f`, `894c475`, `121d14f`, `ddee7ba`.
+- Review outcome: task reviews and scoped re-reviews found and resolved all reported findings; broad re-review at `ddee7ba87177b76d956836e1e64232379f77aaeb` was `READY` with no Critical, Important, or Minor findings.
+- Fresh verification: focused observed-resource suite `117 passed`; full suite `923 passed`; Ruff clean; schema checker `validated 8 resources in datapackage.json`; `git diff --check 2d74641..HEAD` clean; deterministic in-memory smoke report `PASS` with seven passing checks.
