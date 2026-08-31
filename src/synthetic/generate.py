@@ -12,6 +12,7 @@ from synthetic.models import PatientState
 from synthetic.native.healthy import HealthyKernel
 from synthetic.package_export import (
     PackageExportMetadata,
+    _require_output_available,
     _scan_tree,  # noqa: F401 - public import compatibility.
     export_exact_schema_package,
 )
@@ -44,6 +45,7 @@ def generate_smoke(
         raise ValueError("trusted_derivation_fingerprint cannot be a placeholder")
     if not isinstance(trusted_derivation_test_only, bool):
         raise TypeError("trusted_derivation_test_only must be a boolean")
+    _require_output_available(output)
     descriptor = load_descriptor(descriptor_path)
     smoke_configuration = {
         "patient_count": patient_count,

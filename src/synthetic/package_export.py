@@ -4,18 +4,19 @@ import dataclasses
 import hashlib
 import json
 import math
+import os
 import re
 import shutil
 import stat
 import tempfile
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from synthetic.base_resources import BASE_RESOURCES
 from synthetic.csv_package import write_resource, write_synthetic_descriptor
-from synthetic.derivation import DerivationOracle, DerivationUnavailable, require_augmented_outputs
+from synthetic.derivation import DerivationOracle, DerivationUnavailable
 from synthetic.manifest import RunManifest
 from synthetic.native.resources import (
     ObservedResourceBundle,
@@ -37,10 +38,24 @@ _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 _FAILURE_REASON = "observed package export failed"
 _AUGMENTED_RESOURCES = ("patients_augmented", "visits_augmented")
 _PACKAGE_ARTIFACTS = {"datapackage.json", "validation-report.json", "manifest.json"}
+_DIRECTORY_OPEN_FLAGS = (
+    os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+)
+_FILE_OPEN_FLAGS = (
+    os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_NOFOLLOW", 0)
+)
 
 
 class PackageExportUnavailable(DerivationUnavailable):
     """Raised when an exact-schema package cannot be safely exported."""
+
+
+def _require_output_available(output: Path) -> None:
+    """Perform the read-only half of the no-replace output lifecycle check."""
+    if not isinstance(output, Path):
+        raise TypeError("output must be a Path")
+    if os.path.lexists(output):
+        raise FileExistsError("run directory target already exists")
 
 
 @dataclass(frozen=True)
@@ -159,6 +174,68 @@ def _scan_tree(root: Path, files: set[str], dirs: set[str]) -> None:
             raise DerivationUnavailable("unexpected run artifact")
 
 
+def _open_pinned_directory(path: Path) -> tuple[int, tuple[int, int]]:
+    """Open and identify a real directory without following its final component."""
+    before = path.lstat()
+    if not stat.S_ISDIR(before.st_mode):
+        raise DerivationUnavailable("derivation staging directory was replaced")
+    descriptor = os.open(path, _DIRECTORY_OPEN_FLAGS)
+    opened = os.fstat(descriptor)
+    identity = (opened.st_dev, opened.st_ino)
+    if not stat.S_ISDIR(opened.st_mode) or identity != (before.st_dev, before.st_ino):
+        os.close(descriptor)
+        raise DerivationUnavailable("derivation staging directory was replaced")
+    return descriptor, identity
+
+
+def _require_directory_identity(path: Path, identity: tuple[int, int]) -> None:
+    try:
+        current = path.lstat()
+    except OSError as error:
+        raise DerivationUnavailable("derivation staging directory was replaced") from error
+    if not stat.S_ISDIR(current.st_mode) or (current.st_dev, current.st_ino) != identity:
+        raise DerivationUnavailable("derivation staging directory was replaced")
+
+
+def _read_regular_at(directory_descriptor: int, relative: str) -> bytes:
+    """Read a pinned regular file beneath a directory descriptor without symlinks."""
+    path = Path(relative)
+    if path.is_absolute() or not path.parts or any(part in {"", ".", ".."} for part in path.parts):
+        raise DerivationUnavailable("unsafe staged resource path")
+    parent_descriptor = os.dup(directory_descriptor)
+    file_descriptor: int | None = None
+    try:
+        for component in path.parts[:-1]:
+            child_descriptor = os.open(
+                component,
+                _DIRECTORY_OPEN_FLAGS,
+                dir_fd=parent_descriptor,
+            )
+            child_status = os.fstat(child_descriptor)
+            if not stat.S_ISDIR(child_status.st_mode):
+                os.close(child_descriptor)
+                raise DerivationUnavailable("staged resource parent is not a directory")
+            os.close(parent_descriptor)
+            parent_descriptor = child_descriptor
+        file_descriptor = os.open(
+            path.parts[-1],
+            _FILE_OPEN_FLAGS,
+            dir_fd=parent_descriptor,
+        )
+        file_status = os.fstat(file_descriptor)
+        if not stat.S_ISREG(file_status.st_mode):
+            raise DerivationUnavailable("staged resource is not a regular file")
+        with os.fdopen(file_descriptor, "rb") as handle:
+            file_descriptor = None
+            return handle.read()
+    except OSError as error:
+        raise DerivationUnavailable("staged resource is unavailable") from error
+    finally:
+        if file_descriptor is not None:
+            os.close(file_descriptor)
+        os.close(parent_descriptor)
+
+
 def _normalize_base_rows(
     descriptor: dict[str, Any], base_rows: Mapping[str, Iterable[Mapping[str, object]]]
 ) -> dict[str, list[dict[str, object]]]:
@@ -193,12 +270,18 @@ def _validate_preflight(
     derivation_oracle: DerivationOracle | None,
     trusted_derivation_fingerprint: str,
     trusted_derivation_test_only: bool,
-) -> tuple[dict[str, Any], dict[str, list[dict[str, object]]]]:
+) -> tuple[
+    dict[str, Any],
+    dict[str, list[dict[str, object]]],
+    Callable[[Path, dict[str, Any]], object],
+    str,
+]:
     if not isinstance(metadata, PackageExportMetadata):
         raise TypeError("metadata must be PackageExportMetadata")
-    if not isinstance(output, Path):
-        raise TypeError("output must be a Path")
-    if derivation_oracle is None or not callable(getattr(derivation_oracle, "derive", None)):
+    if derivation_oracle is None:
+        raise DerivationUnavailable("authoritative derivation oracle is not configured")
+    derive = getattr(derivation_oracle, "derive", None)
+    if not callable(derive):
         raise DerivationUnavailable("authoritative derivation oracle is not configured")
     oracle_id = getattr(derivation_oracle, "oracle_id", None)
     if not isinstance(oracle_id, str) or not oracle_id.strip():
@@ -215,7 +298,12 @@ def _validate_preflight(
     if schema_fingerprint(canonical_descriptor) != EXPECTED_SCHEMA_FINGERPRINT:
         raise ValueError("descriptor does not match the exact schema contract")
     validate_resource_paths(canonical_descriptor, output)
-    return canonical_descriptor, _normalize_base_rows(canonical_descriptor, base_rows)
+    return (
+        canonical_descriptor,
+        _normalize_base_rows(canonical_descriptor, base_rows),
+        derive,
+        oracle_id,
+    )
 
 
 def _sha256(path: Path) -> str:
@@ -239,7 +327,8 @@ def export_exact_schema_package(
 ) -> Path:
     """Export staged, oracle-augmented rows as an atomically promoted package."""
     try:
-        copied_descriptor, normalized_rows = _validate_preflight(
+        _require_output_available(output)
+        copied_descriptor, normalized_rows, derive, oracle_id = _validate_preflight(
             descriptor,
             base_rows,
             output,
@@ -253,7 +342,6 @@ def export_exact_schema_package(
     except Exception:  # noqa: BLE001 - public package errors are deliberately redacted.
         raise PackageExportUnavailable(_FAILURE_REASON) from None
 
-
     run_id = hashlib.sha256(
         f"{metadata.seed}:{len(normalized_rows['patients'])}:{metadata.reference_time}".encode()
     ).hexdigest()[:12]
@@ -266,65 +354,109 @@ def export_exact_schema_package(
                 run.partial_path / resource["path"], resource, normalized_rows[name]
             )
 
-        with tempfile.TemporaryDirectory(prefix="synthetic-derive-") as staging_name:
-            staging = Path(staging_name)
-            staging_parent_entries = set(staging.parent.iterdir())
-            stage_descriptor = _copy_descriptor(copied_descriptor)
-            validate_resource_paths(stage_descriptor, staging)
-            for name in BASE_RESOURCES:
-                resource = resource_spec(stage_descriptor, name)
-                source = run.partial_path / resource["path"]
-                target = staging / resource["path"]
-                target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(source, target)
-            base_hashes = {
-                resource_spec(stage_descriptor, name)["path"]: _sha256(
-                    staging / resource_spec(stage_descriptor, name)["path"]
-                )
-                for name in BASE_RESOURCES
-            }
+        partial_descriptor, partial_identity = _open_pinned_directory(run.partial_path)
+        try:
             partial_base_hashes = {
-                resource_spec(copied_descriptor, name)["path"]: _sha256(
-                    run.partial_path / resource_spec(copied_descriptor, name)["path"]
-                )
+                resource_spec(copied_descriptor, name)["path"]: hashlib.sha256(
+                    _read_regular_at(
+                        partial_descriptor,
+                        resource_spec(copied_descriptor, name)["path"],
+                    )
+                ).hexdigest()
                 for name in BASE_RESOURCES
             }
-            derivation = derivation_oracle.derive(staging, stage_descriptor)
-            if set(staging.parent.iterdir()) != staging_parent_entries:
-                raise DerivationUnavailable("derivation escaped staging directory")
-            returned_oracle_id = getattr(derivation, "oracle_id", None)
-            if not isinstance(returned_oracle_id, str) or not returned_oracle_id.strip():
-                raise DerivationUnavailable("derivation oracle returned no identity")
-            if returned_oracle_id != derivation_oracle.oracle_id:
-                raise DerivationUnavailable("derivation oracle identity changed")
-            implementation_fingerprint = getattr(derivation, "implementation_fingerprint", None)
-            if implementation_fingerprint != trusted_derivation_fingerprint:
-                raise DerivationUnavailable("derivation fingerprint does not match trusted configuration")
-            test_only = getattr(derivation, "test_only", None)
-            if not isinstance(test_only, bool) or test_only != trusted_derivation_test_only:
-                raise DerivationUnavailable("derivation test-only classification does not match")
-            allowed_files, allowed_dirs = _allowed_tree(
-                copied_descriptor, BASE_RESOURCES + _AUGMENTED_RESOURCES
-            )
-            _scan_tree(staging, allowed_files, allowed_dirs)
-            for name in BASE_RESOURCES:
-                staged = staging / resource_spec(copied_descriptor, name)["path"]
-                if not staged.is_file() or not stat.S_ISREG(staged.lstat().st_mode):
-                    raise DerivationUnavailable("derivation removed or replaced a base resource")
-            if any(_sha256(staging / path) != digest for path, digest in base_hashes.items()):
-                raise DerivationUnavailable("derivation mutated a base resource")
-            for path, digest in partial_base_hashes.items():
-                partial = run.partial_path / path
-                if not partial.is_file() or not stat.S_ISREG(partial.lstat().st_mode) or _sha256(partial) != digest:
+            with tempfile.TemporaryDirectory(prefix="synthetic-derive-") as outer_name:
+                outer = Path(outer_name)
+                staging = outer / "staging"
+                staging.mkdir()
+                outer_descriptor, outer_identity = _open_pinned_directory(outer)
+                try:
+                    staging_descriptor, staging_identity = _open_pinned_directory(staging)
+                    try:
+                        stage_descriptor = _copy_descriptor(copied_descriptor)
+                        validate_resource_paths(stage_descriptor, staging)
+                        for name in BASE_RESOURCES:
+                            resource = resource_spec(stage_descriptor, name)
+                            source = run.partial_path / resource["path"]
+                            target = staging / resource["path"]
+                            target.parent.mkdir(parents=True, exist_ok=True)
+                            shutil.copyfile(source, target)
+                        base_hashes = {
+                            resource_spec(stage_descriptor, name)["path"]: hashlib.sha256(
+                                _read_regular_at(
+                                    staging_descriptor,
+                                    resource_spec(stage_descriptor, name)["path"],
+                                )
+                            ).hexdigest()
+                            for name in BASE_RESOURCES
+                        }
+
+                        derivation = derive(staging, stage_descriptor)
+                        _require_directory_identity(outer, outer_identity)
+                        _require_directory_identity(staging, staging_identity)
+                        returned_oracle_id = getattr(derivation, "oracle_id", None)
+                        if not isinstance(returned_oracle_id, str) or not returned_oracle_id.strip():
+                            raise DerivationUnavailable("derivation oracle returned no identity")
+                        if returned_oracle_id != oracle_id:
+                            raise DerivationUnavailable("derivation oracle identity changed")
+                        implementation_fingerprint = getattr(
+                            derivation, "implementation_fingerprint", None
+                        )
+                        if implementation_fingerprint != trusted_derivation_fingerprint:
+                            raise DerivationUnavailable(
+                                "derivation fingerprint does not match trusted configuration"
+                            )
+                        test_only = getattr(derivation, "test_only", None)
+                        if not isinstance(test_only, bool) or test_only != trusted_derivation_test_only:
+                            raise DerivationUnavailable(
+                                "derivation test-only classification does not match"
+                            )
+                        allowed_files, allowed_dirs = _allowed_tree(
+                            copied_descriptor, BASE_RESOURCES + _AUGMENTED_RESOURCES
+                        )
+                        outer_files = {
+                            (Path("staging") / path).as_posix() for path in allowed_files
+                        }
+                        outer_dirs = {"staging"} | {
+                            (Path("staging") / path).as_posix() for path in allowed_dirs
+                        }
+                        _scan_tree(outer, outer_files, outer_dirs)
+                        _require_directory_identity(outer, outer_identity)
+                        _require_directory_identity(staging, staging_identity)
+                        staged_payloads = {
+                            resource_spec(copied_descriptor, name)["path"]: _read_regular_at(
+                                staging_descriptor,
+                                resource_spec(copied_descriptor, name)["path"],
+                            )
+                            for name in BASE_RESOURCES + _AUGMENTED_RESOURCES
+                        }
+                        if any(
+                            hashlib.sha256(staged_payloads[path]).hexdigest() != digest
+                            for path, digest in base_hashes.items()
+                        ):
+                            raise DerivationUnavailable("derivation mutated a base resource")
+                        _require_directory_identity(outer, outer_identity)
+                        _require_directory_identity(staging, staging_identity)
+                    finally:
+                        os.close(staging_descriptor)
+                finally:
+                    os.close(outer_descriptor)
+
+                _require_directory_identity(run.partial_path, partial_identity)
+                if any(
+                    hashlib.sha256(_read_regular_at(partial_descriptor, path)).hexdigest()
+                    != digest
+                    for path, digest in partial_base_hashes.items()
+                ):
                     raise DerivationUnavailable("derivation mutated a base resource")
-            require_augmented_outputs(staging, copied_descriptor, oracle_id=returned_oracle_id)
-            for name in _AUGMENTED_RESOURCES:
-                resource = resource_spec(copied_descriptor, name)
-                source = staging / resource["path"]
-                target = run.partial_path / resource["path"]
-                target.parent.mkdir(parents=True, exist_ok=True)
-                with target.open("xb") as handle:
-                    handle.write(source.read_bytes())
+                for name in _AUGMENTED_RESOURCES:
+                    resource = resource_spec(copied_descriptor, name)
+                    target = run.partial_path / resource["path"]
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    with target.open("xb") as handle:
+                        handle.write(staged_payloads[resource["path"]])
+        finally:
+            os.close(partial_descriptor)
 
         csv_files, csv_dirs = _allowed_tree(
             copied_descriptor, tuple(item["name"] for item in copied_descriptor["resources"])
@@ -334,7 +466,12 @@ def export_exact_schema_package(
         if report.errors:
             raise ValueError("structural validation failed")
         row_counts.update(report.row_counts)
-        write_synthetic_descriptor(run.partial_path, copied_descriptor, row_counts)
+        write_synthetic_descriptor(
+            run.partial_path,
+            copied_descriptor,
+            row_counts,
+            profile=metadata.profile,
+        )
         _write_json(run.partial_path / "validation-report.json", dataclasses.asdict(report))
         package_files = csv_files | _PACKAGE_ARTIFACTS
         _scan_tree(run.partial_path, package_files - {"manifest.json"}, csv_dirs)
@@ -380,6 +517,7 @@ def export_observed_resource_package(
 ) -> Path:
     """Export validated observed-resource bundles through the exact-schema lifecycle."""
     try:
+        _require_output_available(output)
         materialized = tuple(bundles)
         if not materialized:
             raise ValueError("at least one observed resource bundle is required")
@@ -404,6 +542,8 @@ def export_observed_resource_package(
             name: [row.to_mapping() for bundle in ordered for row in bundle.rows[name]]
             for name in BASE_RESOURCES
         }
+    except FileExistsError:
+        raise
     except Exception:  # noqa: BLE001 - bundle-boundary failures are deliberately redacted.
         raise PackageExportUnavailable(_FAILURE_REASON) from None
 

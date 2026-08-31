@@ -110,24 +110,56 @@ def _replace_logical_link_statistics(package_root: Path, descriptor: dict[str, A
 
 
 def write_synthetic_descriptor(
-    package_root: Path, source_descriptor: dict[str, Any], row_counts: dict[str, int]
+    package_root: Path,
+    source_descriptor: dict[str, Any],
+    row_counts: dict[str, int],
+    *,
+    profile: str = "smoke",
 ) -> Path:
     generated = copy.deepcopy(source_descriptor)
     generated["name"] = f"{source_descriptor['name']}-synthetic"
     generated["title"] = f"{source_descriptor['title']} -- Completely Generated"
-    generated["description"] = (
-        "Synthetic smoke-profile package; contains no real patient records and makes no "
-        "claims of demographic representativeness, prevalence calibration, clinical validity, "
-        "privacy approval, release approval, or development/golden/validated fixture status."
+    profile_metadata = {
+        "smoke": {
+            "description": (
+                "Synthetic smoke-profile package; contains no real patient records and makes no "
+                "claims of demographic representativeness, prevalence calibration, clinical "
+                "validity, privacy approval, release approval, or development/golden/validated "
+                "fixture status."
+            ),
+            "version": "synthetic-smoke-v1",
+            "keywords": ["synthetic", "smoke-profile"],
+        },
+        "observed-development": {
+            "description": (
+                "Synthetic observed-development package; contains no real patient records and "
+                "makes no claims of demographic representativeness, prevalence calibration, "
+                "clinical validity, privacy approval, release approval, or golden/validated "
+                "fixture status."
+            ),
+            "version": "synthetic-observed-development-v1",
+            "keywords": ["synthetic", "observed-development"],
+        },
+    }.get(
+        profile,
+        {
+            "description": (
+                "Synthetic package; contains no real patient records and makes no claims of "
+                "demographic representativeness, prevalence calibration, clinical validity, "
+                "privacy approval, release approval, or development/golden/validated fixture "
+                "status."
+            ),
+            "version": "synthetic-package-v1",
+            "keywords": ["synthetic"],
+        },
     )
+    generated.update(profile_metadata)
     generated["x-synthetic"] = True
     generated["homepage"] = None
     generated["sources"] = []
     generated["licenses"] = []
     generated["contributors"] = []
     generated.pop("created", None)
-    generated["version"] = "synthetic-smoke-v1"
-    generated["keywords"] = ["synthetic", "smoke-profile"]
     for key in list(generated):
         if key.startswith("x-"):
             generated.pop(key)

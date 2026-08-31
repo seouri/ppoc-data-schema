@@ -1,6 +1,7 @@
 import copy
 import dataclasses
 import json
+import shutil
 from pathlib import Path
 from types import MappingProxyType
 
@@ -232,6 +233,9 @@ def test_export_writes_only_exact_schema_package_and_is_deterministic(tmp_path: 
 
     generated = json.loads((first / "datapackage.json").read_text(encoding="utf-8"))
     assert generated["x-synthetic"] is True
+    assert generated["description"].startswith("Synthetic observed-development package")
+    assert generated["version"] == "synthetic-observed-development-v1"
+    assert generated["keywords"] == ["synthetic", "observed-development"]
     assert schema_fingerprint(generated) == EXPECTED_SCHEMA_FINGERPRINT
     assert validate_structure(first, generated).errors == ()
 
@@ -297,6 +301,102 @@ def test_oracle_failures_are_unavailable_and_do_not_promote(tmp_path: Path, mode
         "status": "FAILED",
         "reason": "observed package export failed",
     }
+
+
+def test_dynamic_oracle_callable_and_identity_are_pinned_during_preflight(
+    tmp_path: Path,
+) -> None:
+    class DynamicOracle:
+        implementation_fingerprint = TRUSTED_FINGERPRINT
+
+        def __init__(self) -> None:
+            self.identity = "identity-preserving-test-oracle-v1"
+            self.derive_lookups = 0
+            self.derive_calls = 0
+
+        @property
+        def oracle_id(self) -> str:
+            return self.identity
+
+        @property
+        def derive(self):
+            self.derive_lookups += 1
+
+            def mutate_identity(package_root: Path, descriptor: dict) -> DerivationResult:
+                self.derive_calls += 1
+                result = IdentityPreservingTestDerivationOracle().derive(
+                    package_root, descriptor
+                )
+                self.identity = "changed-during-derivation"
+                return DerivationResult(
+                    self.identity, result.implementation_fingerprint, result.test_only
+                )
+
+            return mutate_identity
+
+    oracle = DynamicOracle()
+
+    with pytest.raises(PackageExportUnavailable):
+        _export(tmp_path, derivation_oracle=oracle)
+
+    assert oracle.derive_lookups == 1
+    assert oracle.derive_calls == 1
+    assert not (tmp_path / "package").exists()
+
+
+def test_oracle_cannot_replace_staging_root_with_symlink_to_existing_sibling(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    temporary_root = tmp_path / "temporary"
+    temporary_root.mkdir()
+    sibling = temporary_root / "existing-sibling"
+    sibling.mkdir()
+    staging = temporary_root / "controlled-temporary-directory"
+
+    class PersistentTemporaryDirectory:
+        def __init__(self, **kwargs: object) -> None:
+            del kwargs
+
+        def __enter__(self) -> str:
+            staging.mkdir()
+            return str(staging)
+
+        def __exit__(self, *args: object) -> None:
+            del args
+
+    monkeypatch.setattr(
+        "synthetic.package_export.tempfile.TemporaryDirectory",
+        PersistentTemporaryDirectory,
+    )
+
+    class ReplacingOracle(IdentityPreservingTestDerivationOracle):
+        def derive(self, package_root: Path, descriptor: dict) -> DerivationResult:
+            shutil.copytree(package_root, sibling, dirs_exist_ok=True)
+            result = IdentityPreservingTestDerivationOracle().derive(sibling, descriptor)
+            shutil.rmtree(package_root)
+            package_root.symlink_to(sibling, target_is_directory=True)
+            return result
+
+    with pytest.raises(PackageExportUnavailable):
+        _export(tmp_path, derivation_oracle=ReplacingOracle())
+
+    assert not (tmp_path / "package").exists()
+
+
+@pytest.mark.parametrize("resource_entry", ["directory", "symlink"])
+def test_existing_output_wins_before_resource_path_inspection(
+    tmp_path: Path, resource_entry: str
+) -> None:
+    output = tmp_path / "package"
+    output.mkdir()
+    resource_path = output / "patients.csv"
+    if resource_entry == "directory":
+        resource_path.mkdir()
+    else:
+        resource_path.symlink_to(output / "unrelated.csv")
+
+    with pytest.raises(FileExistsError):
+        _export(tmp_path)
 
 
 def test_export_refuses_existing_output_without_overwriting(tmp_path: Path) -> None:

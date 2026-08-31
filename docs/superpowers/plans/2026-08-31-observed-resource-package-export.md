@@ -204,4 +204,3 @@
 ## Completion evidence
 
 - Implementation and fix commit IDs, task-review verdicts, broad-review verdict, focused/full test counts, schema/lint/diff output, deterministic package smoke result, exact output inventory, merge/push parity, and cleanup evidence are recorded before handoff.
-

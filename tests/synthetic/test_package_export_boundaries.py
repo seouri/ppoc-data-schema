@@ -63,6 +63,7 @@ PACKAGE_EXPORT_IMPORTS = {
     "hashlib",
     "json",
     "math",
+    "os",
     "pathlib",
     "re",
     "shutil",
@@ -90,7 +91,7 @@ PACKAGE_PATH_READERS = {
 }
 LEGACY_READER_CALLS = {
     ROOT / "src" / "synthetic" / "generate.py": ("load_descriptor",),
-    PACKAGE_EXPORT: ("read_bytes", "read_bytes"),
+    PACKAGE_EXPORT: ("read_bytes",),
 }
 RANDOMNESS_IMPORTERS = {
     ROOT / "src" / "synthetic" / "generate.py",

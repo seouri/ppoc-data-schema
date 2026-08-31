@@ -57,6 +57,9 @@ def test_synthetic_descriptor_removes_real_statistics(tmp_path: Path) -> None:
     generated = json.loads(output.read_text())
     assert generated["name"] == "ppoc-pediatric-ehr-synthetic"
     assert generated["x-synthetic"] is True
+    assert generated["description"].startswith("Synthetic smoke-profile package")
+    assert generated["version"] == "synthetic-smoke-v1"
+    assert generated["keywords"] == ["synthetic", "smoke-profile"]
     assert all(resource["x-rowCount"] == 0 for resource in generated["resources"])
     serialized = output.read_text()
     assert '"x-topValues"' not in serialized

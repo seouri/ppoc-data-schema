@@ -1,8 +1,8 @@
 # Observed Resource Exact-Schema Package Export
 
-**Date:** 2026-08-31  
-**Status:** Approved next implementation slice under the synthetic growth-fixture design  
-**Parent:** [Synthetic Pediatric Growth Fixture System Design](2026-08-30-synthetic-growth-fixtures-design.md)  
+**Date:** 2026-08-31
+**Status:** Approved next implementation slice under the synthetic growth-fixture design
+**Parent:** [Synthetic Pediatric Growth Fixture System Design](2026-08-30-synthetic-growth-fixtures-design.md)
 **Prerequisite:** [Evaluator-Only Observed Resource Contract](2026-08-31-observed-resource-contract-design.md)
 
 ## Purpose
@@ -201,4 +201,3 @@ The slice is complete when:
    partial/failed lifecycle; and
 7. focused tests, the complete suite, Ruff, schema validation, diff checks, a
    deterministic package smoke run, and a fresh broad review pass before merge.
-

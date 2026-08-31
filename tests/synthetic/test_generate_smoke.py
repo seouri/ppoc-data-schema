@@ -168,6 +168,38 @@ def test_smoke_generation_delegates_exact_rows_and_metadata_to_shared_package_li
     }
 
 
+def test_smoke_collision_is_detected_before_patient_row_generation(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    output = tmp_path / "run"
+    output.mkdir()
+    (output / "patients.csv").mkdir()
+    generation_calls = 0
+
+    def reject_generation(*args, **kwargs):
+        nonlocal generation_calls
+        generation_calls += 1
+        raise AssertionError("smoke rows must not be generated for an existing target")
+
+    monkeypatch.setattr("synthetic.generate.build_base_rows", reject_generation)
+
+    with pytest.raises(FileExistsError):
+        generate_smoke(
+            descriptor_path=ROOT / "datapackage.json",
+            output=output,
+            patient_count=1,
+            seed=20260830,
+            reference_time="2026-08-30T00:00:00Z",
+            software_revision="test-revision",
+            reference=LinearTestReference(),
+            derivation_oracle=IdentityPreservingTestDerivationOracle(),
+            trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
+            trusted_derivation_test_only=True,
+        )
+
+    assert generation_calls == 0
+
+
 def test_no_derivation_oracle_cannot_promote_output(tmp_path: Path) -> None:
     with pytest.raises(DerivationUnavailable):
         generate_smoke(

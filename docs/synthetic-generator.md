@@ -219,7 +219,7 @@ def project_and_validate(frame, descriptor_mapping):
 
 The validator has seven fixed aggregate checks: patient identity, schema shape, visit references, measurements, clinical descendants, ancillary resources, and source-frame evidence. It returns only `PASS`, `FAIL`, or `UNEVALUABLE` statuses, fixed reason codes, and counts; it never returns identifiers, ages, row values, hidden truth, hashes, descriptor shape, paths, or private source references. Missing or malformed private source evidence is `UNEVALUABLE`; typed visible row, key, unit, event, or ancillary-resource violations are `FAIL`.
 
-This is an evaluator contract, not an augmented-resource implementation, package/export capability, prevalence result, privacy/non-matchability result, or Synthea adapter. Augmented resources, exact-schema file export, package manifests, prevalence and demographic calibration, held-out validation, privacy evaluation, and Synthea conformance remain explicitly deferred gates.
+This evaluator contract does not itself implement augmented resources, exact-schema file export, or package manifests. The development-only bridge below now writes exact-schema files and manifests with an explicit injected oracle; authoritative augmented clinical derivation, prevalence and demographic calibration, ancillary clinical pathways, held-out validation, privacy/non-matchability evaluation, task utility, clinical validity, release approval, and Synthea conformance remain explicitly deferred gates.
 
 ## Exact-schema observed-resource package export
 
