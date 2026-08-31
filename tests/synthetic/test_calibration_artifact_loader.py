@@ -153,6 +153,7 @@ def test_loader_rejects_nonfinite_json_constants_without_parser_exception(
     [
         ("bom.json", b"\xef\xbb\xbf{}", "UTF-8 BOM"),
         ("invalid-utf8.json", b"\xff", "UTF-8"),
+        ("malformed.json", b'{"artifact_version":', "valid JSON"),
         ("array.json", b"[]", "root"),
     ],
 )
@@ -203,18 +204,22 @@ def test_loader_accepts_exact_byte_limit_and_rejects_one_byte_over(tmp_path: Pat
         load_calibration_artifact(over)
 
 
-def test_loader_rejects_file_that_grows_after_size_check(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_loader_rejects_file_that_grows_after_read(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     path = tmp_path / "growing.json"
     write_json(path, valid_mapping())
-    original_open = Path.open
+    original_read = os.read
+    grew = False
 
-    def grow_before_open(self: Path, *args: object, **kwargs: object) -> object:
-        if self == path:
-            with original_open(self, "ab") as handle:
+    def grow_after_read(descriptor: int, length: int) -> bytes:
+        nonlocal grew
+        payload = original_read(descriptor, length)
+        if not grew:
+            with path.open("ab") as handle:
                 handle.write(b" " * MAX_CALIBRATION_ARTIFACT_BYTES)
-        return original_open(self, *args, **kwargs)
+            grew = True
+        return payload
 
-    monkeypatch.setattr(Path, "open", grow_before_open)
+    monkeypatch.setattr(os, "read", grow_after_read)
 
     with pytest.raises(ValueError, match="maximum size"):
         load_calibration_artifact(path)

@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
 import stat
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from errno import ELOOP
 from pathlib import Path
 
 ARTIFACT_VERSION = "calibration-artifact-v1"
@@ -467,25 +469,38 @@ class CalibrationArtifact:
 
 
 def load_calibration_artifact(path: Path) -> CalibrationArtifact:
+    nofollow = getattr(os, "O_NOFOLLOW", None)
+    if nofollow is None:
+        raise ValueError("calibration artifact requires secure no-follow opening")
+
+    flags = os.O_RDONLY | nofollow | getattr(os, "O_NONBLOCK", 0)
     try:
-        file_status = path.lstat()
+        descriptor = os.open(path, flags)
     except FileNotFoundError:
         raise ValueError("calibration artifact path was not found") from None
-    except OSError:
-        raise ValueError("calibration artifact path could not be inspected") from None
-
-    if not stat.S_ISREG(file_status.st_mode):
-        raise ValueError("calibration artifact path must be a regular file")
-    if file_status.st_size > MAX_CALIBRATION_ARTIFACT_BYTES:
-        raise ValueError("calibration artifact exceeds the maximum size")
+    except OSError as error:
+        if error.errno == ELOOP:
+            raise ValueError("calibration artifact path must be a regular file") from None
+        raise ValueError("calibration artifact could not be securely opened") from None
 
     try:
-        with path.open("rb") as file:
-            payload = file.read(MAX_CALIBRATION_ARTIFACT_BYTES + 1)
+        initial_status = os.fstat(descriptor)
+        if not stat.S_ISREG(initial_status.st_mode):
+            raise ValueError("calibration artifact path must be a regular file")
+        if initial_status.st_size > MAX_CALIBRATION_ARTIFACT_BYTES:
+            raise ValueError("calibration artifact exceeds the maximum size")
+        payload = os.read(descriptor, MAX_CALIBRATION_ARTIFACT_BYTES + 1)
+        final_status = os.fstat(descriptor)
     except OSError:
         raise ValueError("calibration artifact could not be read") from None
+    finally:
+        os.close(descriptor)
 
-    if len(payload) > MAX_CALIBRATION_ARTIFACT_BYTES:
+    if (
+        len(payload) > MAX_CALIBRATION_ARTIFACT_BYTES
+        or final_status.st_size > MAX_CALIBRATION_ARTIFACT_BYTES
+        or final_status.st_size > len(payload)
+    ):
         raise ValueError("calibration artifact exceeds the maximum size")
     if payload.startswith(b"\xef\xbb\xbf"):
         raise ValueError("calibration artifact must not include a UTF-8 BOM")
