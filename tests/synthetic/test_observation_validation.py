@@ -7,6 +7,7 @@ import pytest
 
 from synthetic.native import observations as observation_module
 from synthetic.native.observations import (
+    MeasurementAvailability,
     MeasurementChannel,
     ObservationValidationStatus,
     RecordedEvent,
@@ -374,6 +375,148 @@ def test_recorded_descendants_cannot_survive_zero_policy_probability(
         ),
     )
     tampered = dataclasses.replace(frame, truth=resealed_truth)
+
+    report = validate_observation_frame(tampered)
+
+    assert report.status is ObservationValidationStatus.FAIL
+    check = next(check for check in report.checks if check.name == "hidden_events")
+    assert check.reason_code == "FORBIDDEN_EVENT"
+
+
+def test_recorded_recognition_requires_prior_observable_phenotype() -> None:
+    trajectory = _event_trajectory()
+    trajectory = dataclasses.replace(
+        trajectory,
+        events=tuple(
+            event
+            for event in trajectory.events
+            if event.event_type != "observable_phenotype"
+        ),
+    )
+    frame = generate_observation_frame(
+        trajectory,
+        _policy(
+            recognition_probability=1.0,
+            diagnosis_probability=0.0,
+            visit_probability=1.0,
+        ),
+        NamedRandomStreams(20260831, 0),
+    )
+    assert frame.events == ()
+    recognition_source_index = next(
+        index
+        for index, event in enumerate(frame.truth.source_events)
+        if event.event_type == "recognition_opportunity"
+    )
+    recognition_age = frame.truth.source_events[recognition_source_index].age_days
+    opportunity = next(
+        item
+        for item in frame.truth.opportunities
+        if item.realized and item.age_days >= recognition_age
+    )
+    decisions = list(frame.truth.event_decisions)
+    decisions[recognition_source_index] = dataclasses.replace(
+        decisions[recognition_source_index],
+        recorded=True,
+        opportunity_index=opportunity.source_point_index,
+    )
+    unsealed_truth = dataclasses.replace(
+        frame.truth,
+        event_decisions=tuple(decisions),
+        truth_hash=None,
+    )
+    resealed_truth = dataclasses.replace(
+        unsealed_truth,
+        truth_hash=observation_module._canonical_hash(
+            (unsealed_truth.policy.to_mapping(), unsealed_truth)  # type: ignore[union-attr]
+        ),
+    )
+    visible = RecordedEvent(
+        frame.patient_id,
+        opportunity.age_days,
+        RecordedEventKind.RECOGNITION,
+        "SYN-GROWTH-RECOGNITION",
+        opportunity.source_point_index,
+    )
+    tampered = dataclasses.replace(frame, events=(visible,), truth=resealed_truth)
+
+    report = validate_observation_frame(tampered)
+
+    assert report.status is ObservationValidationStatus.FAIL
+    check = next(check for check in report.checks if check.name == "hidden_events")
+    assert check.reason_code == "FORBIDDEN_EVENT"
+
+
+def test_recorded_event_requires_observed_measurement_at_linked_opportunity() -> None:
+    frame = generate_observation_frame(
+        _event_trajectory(),
+        _policy(
+            visit_probability=1.0,
+            length_availability_probability=0.5,
+            height_availability_probability=0.5,
+            weight_availability_probability=0.5,
+            head_circumference_availability_probability=0.5,
+            recognition_probability=1.0,
+            diagnosis_probability=0.0,
+        ),
+        NamedRandomStreams(0, 0),
+    )
+    recognition = next(
+        event for event in frame.events if event.event_kind is RecordedEventKind.RECOGNITION
+    )
+    recognition_source_index = next(
+        index
+        for index, event in enumerate(frame.truth.source_events)
+        if event.event_type == "recognition_opportunity"
+    )
+    observed_physical_by_visit = {
+        visit.age_days: any(
+            measurement.channel is not MeasurementChannel.BMI
+            and measurement.availability is MeasurementAvailability.OBSERVED
+            for measurement in visit.measurements
+        )
+        for visit in frame.visits
+    }
+    recognition_age = frame.truth.source_events[recognition_source_index].age_days
+    target = next(
+        opportunity
+        for opportunity in frame.truth.opportunities
+        if opportunity.realized
+        and opportunity.age_days >= recognition_age
+        and not observed_physical_by_visit[opportunity.age_days]
+    )
+    assert any(
+        observed_physical_by_visit[opportunity.age_days]
+        for opportunity in frame.truth.opportunities
+        if opportunity.realized and opportunity.age_days >= recognition_age
+    )
+    decisions = list(frame.truth.event_decisions)
+    decisions[recognition_source_index] = dataclasses.replace(
+        decisions[recognition_source_index],
+        opportunity_index=target.source_point_index,
+    )
+    unsealed_truth = dataclasses.replace(
+        frame.truth,
+        event_decisions=tuple(decisions),
+        truth_hash=None,
+    )
+    resealed_truth = dataclasses.replace(
+        unsealed_truth,
+        truth_hash=observation_module._canonical_hash(
+            (unsealed_truth.policy.to_mapping(), unsealed_truth)  # type: ignore[union-attr]
+        ),
+    )
+    tampered_events = tuple(
+        dataclasses.replace(
+            event,
+            age_days=target.age_days,
+            opportunity_index=target.source_point_index,
+        )
+        if event is recognition
+        else event
+        for event in frame.events
+    )
+    tampered = dataclasses.replace(frame, events=tampered_events, truth=resealed_truth)
 
     report = validate_observation_frame(tampered)
 

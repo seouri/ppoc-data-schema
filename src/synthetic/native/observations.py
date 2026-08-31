@@ -1888,6 +1888,21 @@ def _check_hidden_events(frame: object) -> tuple[ObservationValidationStatus, st
         return ObservationValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
     if any(event.patient_id != frame.patient_id for event in source_events):
         return ObservationValidationStatus.FAIL, "PATIENT_MISMATCH"
+    expected_visit_ids = _expected_visit_ids(frame)
+    observed_physical_points: set[int] = set()
+    for visit in frame.visits:
+        if not isinstance(visit, ObservedVisit):
+            raise TypeError("visits must contain ObservedVisit values")
+        opportunity = expected_visit_ids.get(visit.visit_id)
+        if opportunity is None:
+            continue
+        if any(
+            isinstance(measurement, MeasurementObservation)
+            and measurement.channel in _PHYSICAL_CHANNELS
+            and measurement.availability is MeasurementAvailability.OBSERVED
+            for measurement in visit.measurements
+        ):
+            observed_physical_points.add(opportunity.source_point_index)
     source_by_type = {
         event.event_type: (index, event) for index, event in enumerate(source_events)
     }
@@ -1904,6 +1919,11 @@ def _check_hidden_events(frame: object) -> tuple[ObservationValidationStatus, st
                 and policy.recognition_probability == 0.0
             ):
                 return ObservationValidationStatus.FAIL, "FORBIDDEN_EVENT"
+            if event.event_type == "recognition_opportunity" and not any(
+                prior.event_type == "observable_phenotype" and not prior.hidden
+                for prior in source_events[:index]
+            ):
+                return ObservationValidationStatus.FAIL, "FORBIDDEN_EVENT"
             if event.event_type == "recorded_diagnosis" and policy.diagnosis_probability == 0.0:
                 return ObservationValidationStatus.FAIL, "FORBIDDEN_EVENT"
             if event.event_type == "workup" and "recognition_opportunity" not in recorded_source_types:
@@ -1912,6 +1932,8 @@ def _check_hidden_events(frame: object) -> tuple[ObservationValidationStatus, st
                 return ObservationValidationStatus.FAIL, "FORBIDDEN_EVENT"
             opportunity = opportunities.get(decision.opportunity_index)
             if opportunity is None or not opportunity.realized:
+                return ObservationValidationStatus.FAIL, "FORBIDDEN_EVENT"
+            if opportunity.source_point_index not in observed_physical_points:
                 return ObservationValidationStatus.FAIL, "FORBIDDEN_EVENT"
             recorded_source_indices.add(index)
             recorded_source_types.add(event.event_type)
