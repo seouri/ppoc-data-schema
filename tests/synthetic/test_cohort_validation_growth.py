@@ -281,6 +281,90 @@ def test_malformed_nested_visit_and_record_are_not_counted_as_evidence() -> None
     assert "real-diagnosis-code" not in str(report.to_mapping())
 
 
+@pytest.mark.parametrize(
+    "events",
+    [
+        (
+            RecordedEvent(
+                "syn-frame-order",
+                100,
+                RecordedEventKind.WORKUP,
+                "SYN-GROWTH-WORKUP",
+            ),
+            RecordedEvent(
+                "syn-frame-order",
+                100,
+                RecordedEventKind.RECOGNITION,
+                "SYN-GROWTH-RECOGNITION",
+            ),
+        ),
+        (
+            RecordedEvent(
+                "syn-frame-order",
+                100,
+                RecordedEventKind.RECOGNITION,
+                "SYN-GROWTH-RECOGNITION",
+            ),
+            RecordedEvent(
+                "syn-frame-order",
+                100,
+                RecordedEventKind.RECOGNITION,
+                "SYN-GROWTH-RECOGNITION",
+            ),
+        ),
+    ],
+)
+def test_reversed_or_repeated_typed_frame_events_fail_without_leaking(
+    events: tuple[RecordedEvent, ...],
+) -> None:
+    cohort = _cohort(patient_count=1)
+    member = cohort.members[0]
+    for event in events:
+        object.__setattr__(event, "patient_id", member.frame.patient_id)
+    object.__setattr__(member.frame, "events", events)
+
+    report = validate_native_cohort(cohort, _policy())
+
+    recorded = _comparison(report, "recorded_recognition")
+    coverage = _comparison(report, "coverage.members_with_event")
+    assert report.status is CohortValidationStatus.FAIL
+    assert recorded.status is CohortValidationStatus.FAIL
+    assert recorded.reason_code == "STRUCTURAL_INVALID"
+    assert recorded.support == 0
+    assert coverage.status is CohortValidationStatus.FAIL
+    assert coverage.reason_code == "STRUCTURAL_INVALID"
+    assert coverage.support == 0
+    assert "syn-frame-order" not in str(report.to_mapping())
+    assert "SYN-GROWTH" not in str(report.to_mapping())
+
+
+def test_same_age_typed_frame_events_in_causal_order_are_accepted() -> None:
+    cohort = _cohort(patient_count=1)
+    member = cohort.members[0]
+    patient_id = member.frame.patient_id
+    events = (
+        RecordedEvent(
+            patient_id,
+            100,
+            RecordedEventKind.RECOGNITION,
+            "SYN-GROWTH-RECOGNITION",
+        ),
+        RecordedEvent(
+            patient_id,
+            100,
+            RecordedEventKind.WORKUP,
+            "SYN-GROWTH-WORKUP",
+        ),
+    )
+    object.__setattr__(member.frame, "events", events)
+
+    report = validate_native_cohort(cohort, _policy())
+
+    assert _comparison(report, "recorded_recognition").status is CohortValidationStatus.PASS
+    assert _comparison(report, "recorded_workup").status is CohortValidationStatus.PASS
+    assert _comparison(report, "coverage.members_with_event").status is CohortValidationStatus.PASS
+
+
 def test_malformed_clinical_event_is_not_counted_as_observable_phenotype() -> None:
     cohort = _cohort(patient_count=1)
     member = cohort.members[0]
@@ -295,6 +379,20 @@ def test_malformed_clinical_event_is_not_counted_as_observable_phenotype() -> No
     assert observable.status is CohortValidationStatus.FAIL
     assert observable.support == 0
     assert "real-clinical-event" not in str(report.to_mapping())
+
+
+def test_missing_required_weight_is_an_invalid_growth_value() -> None:
+    cohort = _cohort(patient_count=1)
+    point = cohort.members[0].trajectory.physiology.points[0]
+    object.__setattr__(point, "weight_kg", None)
+
+    report = validate_native_cohort(cohort, _policy())
+
+    growth = _comparison(report, "growth.infant.height_velocity_cm_per_year_mean")
+    assert report.status is CohortValidationStatus.FAIL
+    assert growth.status is CohortValidationStatus.FAIL
+    assert growth.reason_code == "INVALID_VALUE"
+    assert "syn-" not in str(report.to_mapping())
 
 
 def test_nonmonotone_trajectory_is_a_redacted_coverage_failure() -> None:

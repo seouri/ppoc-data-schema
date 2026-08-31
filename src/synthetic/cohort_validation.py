@@ -60,6 +60,13 @@ _SOURCE_EVENT_PHASES = MappingProxyType(
     }
 )
 _SOURCE_EVENT_TYPES = frozenset(_SOURCE_EVENT_PHASES)
+_RECORDED_EVENT_PHASES = MappingProxyType(
+    {
+        RecordedEventKind.RECOGNITION: 0,
+        RecordedEventKind.WORKUP: 1,
+        RecordedEventKind.DIAGNOSIS: 2,
+    }
+)
 
 GROWTH_TOLERANCE_KEYS = (
     "height_z_score",
@@ -970,10 +977,13 @@ def _frame_records(
             previous_age = visit.age_days
 
         previous_age = -1
+        previous_phase = -1
+        seen_event_kinds: set[RecordedEventKind] = set()
         for event in events:
             if not isinstance(event.event_kind, RecordedEventKind):
                 return (), (), "STRUCTURAL_INVALID"
             expected_code = RECORDED_EVENT_CODES[event.event_kind]
+            phase = _RECORDED_EVENT_PHASES[event.event_kind]
             if (
                 not _is_synthetic_patient_id(event.patient_id)
                 or event.patient_id != expected_patient_id
@@ -981,6 +991,8 @@ def _frame_records(
                 or not isinstance(event.age_days, int)
                 or event.age_days < 0
                 or event.age_days < previous_age
+                or event.event_kind in seen_event_kinds
+                or phase <= previous_phase
                 or event.code != expected_code
                 or (
                     event.opportunity_index is not None
@@ -992,7 +1004,9 @@ def _frame_records(
                 )
             ):
                 return (), (), "STRUCTURAL_INVALID"
+            seen_event_kinds.add(event.event_kind)
             previous_age = event.age_days
+            previous_phase = phase
         return visits, events, None
     except Exception:  # noqa: BLE001 - evaluator failures must be redacted
         return (), (), "MALFORMED_COHORT"
@@ -1067,6 +1081,8 @@ def _point_numeric_values_are_valid(point: AgeRegimePoint) -> bool:
             "head_circumference_cm",
         ):
             value = getattr(point, field_name)
+            if field_name == "weight_kg" and value is None:
+                return False
             if value is not None and (
                 type(value) not in (int, float)
                 or not math.isfinite(float(value))
