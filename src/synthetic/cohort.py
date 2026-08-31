@@ -577,7 +577,11 @@ def generate_native_cohort(
         raise TypeError("config must be a CohortConfig")
     if not isinstance(calibration, CalibrationSamplingProfile):
         raise TypeError("calibration must be a CalibrationSamplingProfile")
-    if not callable(getattr(reference, "value", None)):
+    try:
+        reference_value = getattr(reference, "value", None)
+    except Exception:  # noqa: BLE001 - injected access must be redacted
+        raise CohortGenerationUnavailable("native cohort generation failed") from None
+    if not callable(reference_value):
         raise TypeError("reference must provide a callable value method")
     if not isinstance(modules, Mapping):
         raise TypeError("modules must be a mapping")
@@ -595,21 +599,49 @@ def generate_native_cohort(
         )
     )
     required_kinds = tuple(kind for kind, _ in positive_weights)
-    copied_modules = dict(modules)
+    try:
+        copied_modules = dict(modules)
+    except Exception:  # noqa: BLE001 - injected mapping access must be redacted
+        raise CohortGenerationUnavailable("native cohort generation failed") from None
+    if not all(isinstance(kind, DisorderKind) for kind in copied_modules):
+        raise TypeError("modules keys must be DisorderKind values")
     if set(copied_modules) != set(required_kinds):
         raise ValueError("modules must exactly match positive module-weight kinds")
 
-    physiology = AgeRegimeTrajectoryKernel(reference, config.age_regime_config)
+    try:
+        physiology = AgeRegimeTrajectoryKernel(reference, config.age_regime_config)
+    except Exception:  # noqa: BLE001 - injected kernel construction must be redacted
+        raise CohortGenerationUnavailable("native cohort generation failed") from None
     kernels: dict[DisorderKind, AgeRegimeDisorderKernel] = {}
     for kind in required_kinds:
         module = copied_modules[kind]
         try:
-            validate_growth_disorder_module(module)
-        except (TypeError, ValueError) as exc:
-            raise type(exc)("modules must contain valid growth-disorder modules") from None
-        if module.kind is not kind:
+            module_kind = getattr(module, "kind", None)
+            module_version = getattr(module, "module_version", None)
+            module_methods = tuple(
+                getattr(module, method_name, None)
+                for method_name in (
+                    "sample_state",
+                    "height_z_delta",
+                    "bmi_z_delta",
+                    "events",
+                )
+            )
+        except Exception:  # noqa: BLE001 - injected module access must be redacted
+            raise CohortGenerationUnavailable("native cohort generation failed") from None
+        if not isinstance(module_kind, DisorderKind):
+            raise TypeError("modules must declare DisorderKind values")
+        if not isinstance(module_version, str) or not module_version.strip():
+            raise TypeError("modules must declare nonempty module versions")
+        if not all(callable(method) for method in module_methods):
+            raise TypeError("modules must provide the growth-disorder methods")
+        if module_kind is not kind:
             raise ValueError("modules keys must match module kinds")
-        kernels[kind] = AgeRegimeDisorderKernel(physiology, module)
+        try:
+            validate_growth_disorder_module(module)
+            kernels[kind] = AgeRegimeDisorderKernel(physiology, module)
+        except Exception:  # noqa: BLE001 - injected validation must be redacted
+            raise CohortGenerationUnavailable("native cohort generation failed") from None
 
     reference_sex_by_recorded = dict(config.reference_sex_mapping)
     members: list[CohortMember] = []

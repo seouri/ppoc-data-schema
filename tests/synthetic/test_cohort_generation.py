@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import dataclasses
 import json
+from collections.abc import Iterator, Mapping
 
 import pytest
 
+import synthetic.cohort as cohort_module
 from synthetic.cohort import (
     CalibrationSamplingProfile,
     CohortConfig,
@@ -22,6 +24,7 @@ from synthetic.native.observations import (
     ObservationValidationStatus,
     validate_observation_frame,
 )
+from synthetic.randomness import NamedRandomStreams
 from tests.synthetic.cohort_fixtures import aggregate_calibration_artifact
 from tests.synthetic.fakes import RegimeLinearTestReference
 
@@ -263,6 +266,115 @@ def test_generation_failure_is_redacted_from_mapping_repr_and_exception() -> Non
     assert "real-patient" not in encoded
     assert "source.csv" not in encoded
     assert "truth_hash" not in encoded
+
+
+@pytest.mark.parametrize("failure_kind", ["reference", "module", "mapping"])
+def test_preflight_injected_object_failures_are_redacted(failure_kind: str) -> None:
+    sensitive = "real-patient-preflight /governed/preflight.csv truth_hash"
+
+    class SensitiveReference:
+        @property
+        def value(self) -> object:
+            raise RuntimeError(sensitive)
+
+    class SensitiveModule:
+        module_version = "sensitive-module-v1"
+
+        @property
+        def kind(self) -> DisorderKind:
+            raise RuntimeError(sensitive)
+
+    class SensitiveMapping(Mapping[DisorderKind, object]):
+        def __getitem__(self, key: DisorderKind) -> object:
+            del key
+            raise RuntimeError(sensitive)
+
+        def __iter__(self) -> Iterator[DisorderKind]:
+            raise RuntimeError(sensitive)
+
+        def __len__(self) -> int:
+            return 2
+
+    reference: object = RegimeLinearTestReference()
+    modules: Mapping[DisorderKind, object] = _modules()
+    if failure_kind == "reference":
+        reference = SensitiveReference()
+    elif failure_kind == "module":
+        modules = {
+            DisorderKind.HEALTHY: SensitiveModule(),
+            DisorderKind.GROWTH_HORMONE_DEFICIENCY: GrowthHormoneDeficiencyModule(),
+        }
+    else:
+        modules = SensitiveMapping()
+
+    with pytest.raises(CohortGenerationUnavailable) as error:
+        generate_native_cohort(
+            _config(patient_count=1),
+            reference,  # type: ignore[arg-type]
+            _calibration(),
+            modules=modules,  # type: ignore[arg-type]
+        )
+
+    assert error.value.args == ("native cohort generation failed",)
+    encoded = json.dumps(error.value.args) + repr(error.value)
+    assert "real-patient" not in encoded
+    assert "preflight.csv" not in encoded
+    assert "truth_hash" not in encoded
+
+
+def test_one_named_stream_family_flows_through_module_and_observation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    created: list[RecordingStreams] = []
+
+    class RecordingStreams(NamedRandomStreams):
+        def __init__(self, run_seed: int, patient_index: int) -> None:
+            super().__init__(run_seed, patient_index)
+            self.names: list[str] = []
+            created.append(self)
+
+        def generator(self, name: str):
+            self.names.append(name)
+            return super().generator(name)
+
+    class RecordingHealthyGrowthModule(HealthyGrowthModule):
+        def __init__(self) -> None:
+            super().__init__()
+            self.received: list[NamedRandomStreams] = []
+
+        def sample_state(self, patient, streams):
+            self.received.append(streams)
+            return super().sample_state(patient, streams)
+
+    monkeypatch.setattr(cohort_module, "NamedRandomStreams", RecordingStreams)
+    healthy = RecordingHealthyGrowthModule()
+    modules = {
+        DisorderKind.HEALTHY: healthy,
+        DisorderKind.GROWTH_HORMONE_DEFICIENCY: GrowthHormoneDeficiencyModule(),
+    }
+    config = _config(
+        patient_count=3,
+        module_weights=(
+            CohortModuleWeight(DisorderKind.HEALTHY, 1.0),
+            CohortModuleWeight(DisorderKind.GROWTH_HORMONE_DEFICIENCY, 5e-324),
+        ),
+    )
+
+    generate_native_cohort(
+        config,
+        RegimeLinearTestReference(),
+        _calibration(),
+        modules=modules,
+    )
+
+    assert len(created) == len(healthy.received) == 3
+    assert all(received is created[index] for index, received in enumerate(healthy.received))
+    for index, streams in enumerate(created):
+        assert streams.run_seed == config.seed
+        assert streams.patient_index == index
+        assert {"cohort.demographics", "cohort.module"}.issubset(streams.names)
+        assert any(name.startswith("regime.") for name in streams.names)
+        assert "observation.visit.routine" in streams.names
 
 
 def test_reference_must_expose_callable_value_before_sampling() -> None:
