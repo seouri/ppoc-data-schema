@@ -179,18 +179,18 @@
 - Modify: `docs/superpowers/plans/2026-08-31-cohort-fidelity-profile.md`
 - Create: `.superpowers/sdd/2026-08-31-cohort-fidelity-profile/ledger.md`
 
-- [ ] **Step 1: Run the full focused synthetic suite and static checks**
+- [x] **Step 1: Run the full focused synthetic suite and static checks**
 
   Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic && uv run ruff check src tests && python3 schema/build.py --check && git diff --check`.
 
-- [ ] **Step 2: Dispatch a fresh broad reviewer**
+- [x] **Step 2: Dispatch a fresh broad reviewer**
 
   Review the merge-base-to-HEAD package against every spec/plan acceptance criterion, hidden truth/redaction behavior, status math, blank-category semantics, boundary imports, and regression risk. Record the report under `.superpowers/sdd/2026-08-31-cohort-fidelity-profile/broad-review.md`.
 
-- [ ] **Step 3: Resolve findings through one implementer-only fix wave and scoped re-review**
+- [x] **Step 3: Resolve findings through one implementer-only fix wave and scoped re-review**
 
   If the reviewer finds Critical/Important/Minor defects, send the complete findings to the original task implementer for a scoped fix, run the focused regression tests, and dispatch one fresh scoped re-review. Do not edit implementation files in the controller.
 
-- [ ] **Step 4: Finalize plan/ledger metadata and commit**
+- [x] **Step 4: Finalize plan/ledger metadata and commit**
 
   Mark completed checkboxes, record tests/review verdicts in the ignored ledger, run `git diff --check`, and commit only plan metadata and reviewed documentation if needed.
