@@ -1376,6 +1376,476 @@ class ObservationValidationReport:
         return f"ObservationValidationReport(status={self.status.value!r}, checks={len(self.checks)})"
 
 
+_RECORDED_TO_SOURCE_EVENT = {
+    RecordedEventKind.RECOGNITION: "recognition_opportunity",
+    RecordedEventKind.WORKUP: "workup",
+    RecordedEventKind.DIAGNOSIS: "recorded_diagnosis",
+}
+_RECORDED_EVENT_ORDER = {
+    RecordedEventKind.RECOGNITION: 0,
+    RecordedEventKind.WORKUP: 1,
+    RecordedEventKind.DIAGNOSIS: 2,
+}
+
+
+def _observation_frame_parts(frame: object) -> ObservationFrame:
+    if not isinstance(frame, ObservationFrame):
+        raise TypeError("frame must be an ObservationFrame")
+    if not isinstance(frame.truth, ObservationTruth):
+        raise TypeError("frame truth must be an ObservationTruth")
+    if not isinstance(frame.visits, tuple) or not isinstance(frame.events, tuple):
+        raise TypeError("frame records must be tuples")
+    return frame
+
+
+def _opportunity_map(
+    truth: ObservationTruth,
+) -> dict[int, VisitOpportunity]:
+    if not isinstance(truth.opportunities, tuple):
+        raise TypeError("opportunities must be a tuple")
+    by_index: dict[int, VisitOpportunity] = {}
+    previous_index = -1
+    previous_age = -1
+    for opportunity in truth.opportunities:
+        if not isinstance(opportunity, VisitOpportunity):
+            raise TypeError("opportunities must contain VisitOpportunity values")
+        _require_nonnegative_int(opportunity.source_point_index, "source_point_index")
+        _require_nonnegative_int(opportunity.age_days, "opportunity age_days")
+        _require_enum(opportunity.encounter_type, EncounterType, "encounter_type")
+        if not isinstance(opportunity.realized, bool):
+            raise TypeError("opportunity realized must be a boolean")
+        if opportunity.source_point_index <= previous_index or opportunity.age_days <= previous_age:
+            raise ValueError("opportunity order is invalid")
+        if opportunity.source_point_index in by_index:
+            raise ValueError("opportunities must not duplicate a source point")
+        by_index[opportunity.source_point_index] = opportunity
+        previous_index = opportunity.source_point_index
+        previous_age = opportunity.age_days
+    return by_index
+
+
+def _source_event_data(
+    truth: ObservationTruth,
+) -> tuple[tuple[ClinicalEvent, ...], tuple[EventRecordingDecision, ...]]:
+    if not isinstance(truth.source_events, tuple) or not isinstance(truth.event_decisions, tuple):
+        raise TypeError("source events and decisions must be tuples")
+    events = truth.source_events
+    decisions = truth.event_decisions
+    if len(events) != len(decisions):
+        raise ValueError("source events and decisions must have equal length")
+    for index, (event, decision) in enumerate(zip(events, decisions, strict=True)):
+        if not isinstance(event, ClinicalEvent):
+            raise TypeError("source events must contain ClinicalEvent values")
+        if not isinstance(decision, EventRecordingDecision):
+            raise TypeError("event decisions must contain EventRecordingDecision values")
+        if decision.source_event_index != index:
+            raise ValueError("event decisions must be indexed by source event")
+        if not isinstance(decision.recorded, bool):
+            raise TypeError("event decision recorded must be a boolean")
+        _require_optional_nonnegative_int(decision.opportunity_index, "opportunity_index")
+        if decision.recorded and decision.opportunity_index is None:
+            raise ValueError("recorded event decisions require an opportunity link")
+        if not decision.recorded and decision.opportunity_index is not None:
+            raise ValueError("unrecorded event decisions must not have an opportunity link")
+        _require_synthetic_patient_id(event.patient_id, "source event patient_id")
+        _require_nonnegative_int(event.age_days, "source event age_days")
+        if event.event_type not in _SOURCE_EVENT_TYPES:
+            raise ValueError("source event type must be a native trajectory event")
+        if event.code is not None:
+            raise ValueError("source event code must be None until terminology is reviewed")
+        if not isinstance(event.hidden, bool):
+            raise TypeError("source event hidden must be a boolean")
+    return events, decisions
+
+
+def _validation_check(
+    name: str,
+    evaluator: Any,
+) -> ObservationCheck:
+    try:
+        status, reason_code = evaluator()
+    except (ArithmeticError, AttributeError, IndexError, KeyError, TypeError, ValueError):
+        status, reason_code = ObservationValidationStatus.UNEVALUABLE, "MALFORMED_FRAME"
+    return ObservationCheck(name, status, reason_code)
+
+
+def _check_patient_identity(frame: object) -> tuple[ObservationValidationStatus, str]:
+    frame = _observation_frame_parts(frame)
+    _require_synthetic_patient_id(frame.patient_id)
+    truth = frame.truth
+    if truth.patient_id != frame.patient_id:
+        return ObservationValidationStatus.FAIL, "PATIENT_MISMATCH"
+    for visit in frame.visits:
+        if not isinstance(visit, ObservedVisit):
+            raise TypeError("visits must contain ObservedVisit values")
+        _require_synthetic_patient_id(visit.patient_id)
+        _require_synthetic_visit_id(visit.visit_id)
+        _require_nonnegative_int(visit.age_days, "visit age_days")
+        _require_enum(visit.encounter_type, EncounterType, "encounter_type")
+        if visit.patient_id != frame.patient_id:
+            return ObservationValidationStatus.FAIL, "PATIENT_MISMATCH"
+    for event in frame.events:
+        if not isinstance(event, RecordedEvent):
+            raise TypeError("events must contain RecordedEvent values")
+        _require_synthetic_patient_id(event.patient_id)
+        _require_nonnegative_int(event.age_days, "recorded event age_days")
+        _require_enum(event.event_kind, RecordedEventKind, "event_kind")
+        if event.patient_id != frame.patient_id:
+            return ObservationValidationStatus.FAIL, "PATIENT_MISMATCH"
+    for event in truth.source_events:
+        if not isinstance(event, ClinicalEvent):
+            raise TypeError("source events must contain ClinicalEvent values")
+        _require_synthetic_patient_id(event.patient_id, "source event patient_id")
+        if event.patient_id != frame.patient_id:
+            return ObservationValidationStatus.FAIL, "PATIENT_MISMATCH"
+    return ObservationValidationStatus.PASS, "OK"
+
+
+def _check_window(frame: object) -> tuple[ObservationValidationStatus, str]:
+    frame = _observation_frame_parts(frame)
+    _require_token(frame.policy_version, "policy_version")
+    window = frame.window
+    if not isinstance(window, ObservationWindow):
+        raise TypeError("window must be an ObservationWindow")
+    try:
+        ObservationWindow(
+            window.start_age_days,
+            window.effective_end_age_days,
+            window.administrative_end_age_days,
+            window.censoring_mode,
+        )
+    except (TypeError, ValueError):
+        return ObservationValidationStatus.FAIL, "WINDOW_INVALID"
+    if frame.truth.window != window:
+        return ObservationValidationStatus.FAIL, "WINDOW_INVALID"
+    opportunities = _opportunity_map(frame.truth)
+    for opportunity in opportunities.values():
+        if not window.start_age_days <= opportunity.age_days < window.administrative_end_age_days:
+            return ObservationValidationStatus.FAIL, "WINDOW_INVALID"
+        if opportunity.realized and opportunity.age_days >= window.effective_end_age_days:
+            return ObservationValidationStatus.FAIL, "WINDOW_INVALID"
+    for visit in frame.visits:
+        if not isinstance(visit, ObservedVisit):
+            raise TypeError("visits must contain ObservedVisit values")
+        if not window.start_age_days <= visit.age_days < window.effective_end_age_days:
+            return ObservationValidationStatus.FAIL, "WINDOW_INVALID"
+    for event in frame.events:
+        if not isinstance(event, RecordedEvent):
+            raise TypeError("events must contain RecordedEvent values")
+        if not window.start_age_days <= event.age_days < window.effective_end_age_days:
+            return ObservationValidationStatus.FAIL, "WINDOW_INVALID"
+    return ObservationValidationStatus.PASS, "OK"
+
+
+def _expected_visit_ids(frame: ObservationFrame) -> dict[str, VisitOpportunity]:
+    return {
+        _stable_visit_id(frame.patient_id, frame.policy_version, index): opportunity
+        for index, opportunity in _opportunity_map(frame.truth).items()
+        if opportunity.realized
+    }
+
+
+def _check_visit_references(frame: object) -> tuple[ObservationValidationStatus, str]:
+    frame = _observation_frame_parts(frame)
+    expected = _expected_visit_ids(frame)
+    seen: set[str] = set()
+    previous_age = -1
+    for visit in frame.visits:
+        if not isinstance(visit, ObservedVisit):
+            raise TypeError("visits must contain ObservedVisit values")
+        if visit.age_days <= previous_age:
+            return ObservationValidationStatus.FAIL, "VISIT_REFERENCE_INVALID"
+        previous_age = visit.age_days
+        if visit.visit_id not in expected or visit.visit_id in seen:
+            return ObservationValidationStatus.FAIL, "VISIT_REFERENCE_INVALID"
+        opportunity = expected[visit.visit_id]
+        if visit.age_days != opportunity.age_days or visit.encounter_type is not opportunity.encounter_type:
+            return ObservationValidationStatus.FAIL, "VISIT_REFERENCE_INVALID"
+        seen.add(visit.visit_id)
+    if seen != set(expected):
+        return ObservationValidationStatus.FAIL, "VISIT_REFERENCE_INVALID"
+    return ObservationValidationStatus.PASS, "OK"
+
+
+def _truth_measurements_by_point(
+    truth: ObservationTruth,
+    realized_indices: set[int],
+) -> dict[tuple[int, MeasurementChannel], MeasurementTruth]:
+    if not isinstance(truth.measurement_truth, tuple):
+        raise TypeError("measurement truth must be a tuple")
+    by_key: dict[tuple[int, MeasurementChannel], MeasurementTruth] = {}
+    for item in truth.measurement_truth:
+        if not isinstance(item, MeasurementTruth):
+            raise TypeError("measurement truth must contain MeasurementTruth values")
+        _require_nonnegative_int(item.source_point_index, "measurement source_point_index")
+        if item.channel is MeasurementChannel.BMI or item.channel not in _PHYSICAL_CHANNELS:
+            raise ValueError("measurement truth contains an unsupported channel")
+        if item.source_point_index not in realized_indices:
+            raise ValueError("measurement truth references an unselected point")
+        key = (item.source_point_index, item.channel)
+        if key in by_key:
+            raise ValueError("measurement truth must not duplicate a source channel")
+        by_key[key] = item
+    expected = {
+        (index, channel)
+        for index in realized_indices
+        for channel in _PHYSICAL_CHANNELS
+    }
+    if set(by_key) != expected:
+        raise ValueError("measurement truth is incomplete")
+    return by_key
+
+
+def _valid_truth_measurement(item: MeasurementTruth) -> bool:
+    if item.availability is MeasurementAvailability.NOT_APPLICABLE:
+        return item.latent_value is None and item.error_delta is None
+    try:
+        _require_positive_real(item.latent_value, "latent measurement")
+    except (TypeError, ValueError):
+        return False
+    if item.availability is MeasurementAvailability.MISSING:
+        return item.error_delta is None
+    if item.availability is MeasurementAvailability.OBSERVED:
+        try:
+            _require_finite_real(item.error_delta, "measurement error")
+        except (TypeError, ValueError):
+            return False
+        return True
+    return False
+
+
+def _check_measurements(frame: object) -> tuple[ObservationValidationStatus, str]:
+    frame = _observation_frame_parts(frame)
+    opportunities = _opportunity_map(frame.truth)
+    realized = {index for index, opportunity in opportunities.items() if opportunity.realized}
+    try:
+        truth_by_key = _truth_measurements_by_point(frame.truth, realized)
+    except (TypeError, ValueError):
+        return ObservationValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
+    expected_ids = _expected_visit_ids(frame)
+    for visit in frame.visits:
+        if not isinstance(visit, ObservedVisit):
+            raise TypeError("visits must contain ObservedVisit values")
+        opportunity = expected_ids.get(visit.visit_id)
+        if opportunity is None:
+            return ObservationValidationStatus.FAIL, "MEASUREMENT_INVALID"
+        by_channel: dict[MeasurementChannel, MeasurementObservation] = {}
+        for observation in visit.measurements:
+            if not isinstance(observation, MeasurementObservation):
+                raise TypeError("measurements must contain MeasurementObservation values")
+            if observation.channel in by_channel:
+                return ObservationValidationStatus.FAIL, "MEASUREMENT_INVALID"
+            if not isinstance(observation.channel, MeasurementChannel):
+                raise TypeError("measurement channel must be a MeasurementChannel")
+            if not isinstance(observation.availability, MeasurementAvailability):
+                raise TypeError("measurement availability must be a MeasurementAvailability")
+            by_channel[observation.channel] = observation
+        if set(by_channel) != set(MeasurementChannel):
+            return ObservationValidationStatus.FAIL, "MEASUREMENT_INVALID"
+        for channel in _PHYSICAL_CHANNELS:
+            observation = by_channel[channel]
+            truth_item = truth_by_key.get((opportunity.source_point_index, channel))
+            if truth_item is None or not _valid_truth_measurement(truth_item):
+                return ObservationValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
+            if observation.availability is not truth_item.availability:
+                return ObservationValidationStatus.FAIL, "MEASUREMENT_INVALID"
+            if observation.availability is MeasurementAvailability.OBSERVED:
+                try:
+                    _require_positive_real(observation.recorded_value, "recorded measurement")
+                except (TypeError, ValueError):
+                    return ObservationValidationStatus.FAIL, "MEASUREMENT_INVALID"
+            elif observation.recorded_value is not None:
+                return ObservationValidationStatus.FAIL, "MEASUREMENT_INVALID"
+
+        height = by_channel[MeasurementChannel.HEIGHT]
+        weight = by_channel[MeasurementChannel.WEIGHT]
+        bmi = by_channel[MeasurementChannel.BMI]
+        if height.availability is MeasurementAvailability.NOT_APPLICABLE:
+            expected_bmi_status = MeasurementAvailability.NOT_APPLICABLE
+        elif (
+            height.availability is MeasurementAvailability.OBSERVED
+            and weight.availability is MeasurementAvailability.OBSERVED
+        ):
+            expected_bmi_status = MeasurementAvailability.OBSERVED
+        else:
+            expected_bmi_status = MeasurementAvailability.MISSING
+        if bmi.availability is not expected_bmi_status:
+            return ObservationValidationStatus.FAIL, "MEASUREMENT_INVALID"
+        if expected_bmi_status is MeasurementAvailability.OBSERVED:
+            try:
+                height_value = _require_positive_real(height.recorded_value, "recorded height")
+                weight_value = _require_positive_real(weight.recorded_value, "recorded weight")
+                bmi_value = _require_positive_real(bmi.recorded_value, "recorded BMI")
+                expected_bmi = weight_value / (height_value / 100.0) ** 2
+            except (ArithmeticError, TypeError, ValueError):
+                return ObservationValidationStatus.FAIL, "MEASUREMENT_INVALID"
+            if not math.isclose(bmi_value, expected_bmi, rel_tol=1e-9, abs_tol=1e-9):
+                return ObservationValidationStatus.FAIL, "MEASUREMENT_INVALID"
+        elif bmi.recorded_value is not None:
+            return ObservationValidationStatus.FAIL, "MEASUREMENT_INVALID"
+    return ObservationValidationStatus.PASS, "OK"
+
+
+def _check_hidden_events(frame: object) -> tuple[ObservationValidationStatus, str]:
+    frame = _observation_frame_parts(frame)
+    try:
+        source_events, decisions = _source_event_data(frame.truth)
+        opportunities = _opportunity_map(frame.truth)
+    except (TypeError, ValueError):
+        return ObservationValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
+    if any(event.patient_id != frame.patient_id for event in source_events):
+        return ObservationValidationStatus.FAIL, "PATIENT_MISMATCH"
+    source_by_type = {event.event_type: (index, event) for index, event in enumerate(source_events)}
+    recorded_source_indices: set[int] = set()
+    for index, (event, decision) in enumerate(zip(source_events, decisions, strict=True)):
+        if decision.recorded and event.hidden:
+            return ObservationValidationStatus.FAIL, "HIDDEN_EVENT_VISIBLE"
+        if decision.recorded and event.event_type in _DEFERRED_SOURCE_EVENT_TYPES:
+            return ObservationValidationStatus.FAIL, "FORBIDDEN_EVENT"
+        if decision.recorded:
+            opportunity = opportunities.get(decision.opportunity_index)
+            if opportunity is None or not opportunity.realized:
+                return ObservationValidationStatus.FAIL, "FORBIDDEN_EVENT"
+            recorded_source_indices.add(index)
+
+    visible_for_source: dict[int, RecordedEvent] = {}
+    for record in frame.events:
+        if not isinstance(record, RecordedEvent):
+            raise TypeError("events must contain RecordedEvent values")
+        if not isinstance(record.event_kind, RecordedEventKind):
+            return ObservationValidationStatus.FAIL, "FORBIDDEN_EVENT"
+        expected_code = RECORDED_EVENT_CODES[record.event_kind]
+        if record.code != expected_code:
+            return ObservationValidationStatus.FAIL, "FORBIDDEN_EVENT"
+        source_type = _RECORDED_TO_SOURCE_EVENT[record.event_kind]
+        source_entry = source_by_type.get(source_type)
+        if source_entry is None:
+            return ObservationValidationStatus.FAIL, "HIDDEN_EVENT_VISIBLE"
+        source_index, source_event = source_entry
+        if source_event.hidden:
+            return ObservationValidationStatus.FAIL, "HIDDEN_EVENT_VISIBLE"
+        if not decisions[source_index].recorded:
+            return ObservationValidationStatus.FAIL, "HIDDEN_EVENT_VISIBLE"
+        if source_index in visible_for_source:
+            return ObservationValidationStatus.FAIL, "FORBIDDEN_EVENT"
+        opportunity = opportunities.get(record.opportunity_index)
+        if opportunity is None or not opportunity.realized:
+            return ObservationValidationStatus.FAIL, "FORBIDDEN_EVENT"
+        visible_for_source[source_index] = record
+    if set(visible_for_source) != recorded_source_indices:
+        return ObservationValidationStatus.FAIL, "HIDDEN_EVENT_VISIBLE"
+    return ObservationValidationStatus.PASS, "OK"
+
+
+def _check_event_order(frame: object) -> tuple[ObservationValidationStatus, str]:
+    frame = _observation_frame_parts(frame)
+    try:
+        source_events, decisions = _source_event_data(frame.truth)
+        opportunities = _opportunity_map(frame.truth)
+    except (TypeError, ValueError):
+        return ObservationValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
+    previous_age = -1
+    previous_phase = -1
+    source_by_type: dict[str, ClinicalEvent] = {}
+    for event in source_events:
+        phase = _SOURCE_EVENT_PHASES[event.event_type]
+        if event.age_days < previous_age or phase <= previous_phase:
+            return ObservationValidationStatus.FAIL, "EVENT_ORDER_INVALID"
+        previous_age = event.age_days
+        previous_phase = phase
+        source_by_type[event.event_type] = event
+    previous_record_age = -1
+    previous_record_order = -1
+    seen_source_types: set[str] = set()
+    for record in frame.events:
+        if not isinstance(record, RecordedEvent):
+            raise TypeError("events must contain RecordedEvent values")
+        if not isinstance(record.event_kind, RecordedEventKind):
+            return ObservationValidationStatus.FAIL, "EVENT_ORDER_INVALID"
+        source_type = _RECORDED_TO_SOURCE_EVENT[record.event_kind]
+        source = source_by_type.get(source_type)
+        if source is None:
+            return ObservationValidationStatus.FAIL, "EVENT_ORDER_INVALID"
+        source_index = next(
+            index for index, event in enumerate(source_events) if event.event_type == source_type
+        )
+        opportunity = opportunities.get(record.opportunity_index)
+        if opportunity is None or not opportunity.realized or record.age_days != opportunity.age_days:
+            return ObservationValidationStatus.FAIL, "EVENT_ORDER_INVALID"
+        if record.age_days < source.age_days or record.age_days < previous_record_age:
+            return ObservationValidationStatus.FAIL, "EVENT_ORDER_INVALID"
+        if source_type in seen_source_types:
+            return ObservationValidationStatus.FAIL, "EVENT_ORDER_INVALID"
+        if _RECORDED_EVENT_ORDER[record.event_kind] <= previous_record_order:
+            return ObservationValidationStatus.FAIL, "EVENT_ORDER_INVALID"
+        if not decisions[source_index].recorded:
+            return ObservationValidationStatus.FAIL, "EVENT_ORDER_INVALID"
+        seen_source_types.add(source_type)
+        previous_record_age = record.age_days
+        previous_record_order = _RECORDED_EVENT_ORDER[record.event_kind]
+    return ObservationValidationStatus.PASS, "OK"
+
+
+def _check_evidence(frame: object) -> tuple[ObservationValidationStatus, str]:
+    frame = _observation_frame_parts(frame)
+    opportunities = _opportunity_map(frame.truth)
+    if not opportunities or not any(item.realized for item in opportunities.values()):
+        return ObservationValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
+    if not frame.visits:
+        return ObservationValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
+    observed_physical = 0
+    for visit in frame.visits:
+        if not isinstance(visit, ObservedVisit):
+            raise TypeError("visits must contain ObservedVisit values")
+        observed_physical += sum(
+            observation.availability is MeasurementAvailability.OBSERVED
+            and observation.channel in _PHYSICAL_CHANNELS
+            for observation in visit.measurements
+            if isinstance(observation, MeasurementObservation)
+        )
+    if observed_physical == 0:
+        return ObservationValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
+    try:
+        _truth_measurements_by_point(
+            frame.truth,
+            {index for index, item in opportunities.items() if item.realized},
+        )
+        _source_event_data(frame.truth)
+    except (TypeError, ValueError):
+        return ObservationValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
+    return ObservationValidationStatus.PASS, "OK"
+
+
+def validate_observation_frame(frame: object) -> ObservationValidationReport:
+    """Validate one evaluator-only frame without returning patient-level evidence.
+
+    Malformed frame or private truth evidence is reported as ``UNEVALUABLE``.
+    Violations observed in otherwise typed visible records are ``FAIL``.  The
+    report contains only the fixed check names, statuses, and reason codes.
+    """
+
+    if not isinstance(frame, ObservationFrame):
+        checks = tuple(
+            ObservationCheck(name, ObservationValidationStatus.UNEVALUABLE, "MALFORMED_FRAME")
+            for name in ObservationValidationReport.CHECK_NAMES
+        )
+        return ObservationValidationReport(ObservationValidationStatus.UNEVALUABLE, checks)
+    evaluators = {
+        "patient_identity": _check_patient_identity,
+        "window": _check_window,
+        "visit_references": _check_visit_references,
+        "measurements": _check_measurements,
+        "hidden_events": _check_hidden_events,
+        "event_order": _check_event_order,
+        "evidence": _check_evidence,
+    }
+    checks = tuple(
+        _validation_check(name, lambda evaluator=evaluators[name]: evaluator(frame))
+        for name in ObservationValidationReport.CHECK_NAMES
+    )
+    return ObservationValidationReport(_status_for_checks(checks), checks)
+
+
 __all__ = [
     "OBSERVATION_STREAM_NAMES",
     "RECORDED_EVENT_CODES",
@@ -1401,4 +1871,5 @@ __all__ = [
     "generate_observation_frame",
     "observation_stream_identity",
     "observed_stream_identity",
+    "validate_observation_frame",
 ]

@@ -154,6 +154,47 @@ The minimum growth evidence for a `PASS` is one finite stature z-score (`height_
 
 This trajectory slice does not establish growth-disorder prevalence, demographic representativeness, observation-error fidelity, temporal drift, task utility, privacy or non-matchability, clinical validity, or release authorization. Those are separate approved gates; a complete exact-schema counterfactual package and an optional Synthea-conforming adapter require their own schema, derivation, longitudinal, causal, utility, and privacy evaluation.
 
+## Evaluator-only observation frame
+
+The native observation layer is the evaluator boundary between a completely fictional latent growth trajectory and a visible longitudinal record. It is deliberately separate from the exact-schema generator: it does not read CSVs, calibration or validation artifacts, write files, modify `datapackage.json`, activate the smoke CLI, or generate any visible package resource. It is not prevalence, demographic, clinical, privacy, non-matchability, or release evidence.
+
+Generate and validate a frame with an explicit fictional trajectory, immutable policy, and the existing named random streams:
+
+```python
+from synthetic.native.observations import (
+    ObservationPolicy,
+    ObservationValidationStatus,
+    generate_observation_frame,
+    validate_observation_frame,
+)
+from synthetic.randomness import NamedRandomStreams
+
+frame = generate_observation_frame(
+    trajectory,
+    ObservationPolicy(
+        policy_version="observation-v1",
+        window_start_age_days=0,
+        window_end_age_days=4000,
+        visit_probability=1.0,
+        length_availability_probability=1.0,
+        height_availability_probability=1.0,
+        weight_availability_probability=1.0,
+        head_circumference_availability_probability=1.0,
+    ),
+    NamedRandomStreams(20260831, 0),
+)
+report = validate_observation_frame(frame)
+assert report.status is ObservationValidationStatus.PASS
+print(frame.to_mapping())
+print(report.to_mapping())
+```
+
+The fixed named streams are `observation.window`, `observation.censoring`, `observation.visit.routine`, `observation.measurement-availability`, `observation.measurement-error`, `observation.recognition`, and `observation.recorded-event`. Replaying the same trajectory, policy, seed, and patient index reproduces the same visible frame and hidden truth hashes. The visible frame contains only synthetic patient/visit records, channel statuses and values, recorded fictional recognition/workup/diagnosis descendants, window metadata, and counts; `ObservationTruth` retains the private opportunity, latent/error, and source-event evidence for evaluator checks.
+
+`validate_observation_frame` uses seven fixed aggregate checks: patient identity, effective window, visit references, measurements and derived BMI identity, hidden events, causal event order, and minimum evidence. Reports contain only check names, `PASS`/`FAIL`/`UNEVALUABLE` statuses, fixed reason codes, and status counts. Malformed or missing private evidence is `UNEVALUABLE`, while a typed visible invariant violation is `FAIL`. The report never includes patient IDs, ages tied to a patient, measurement values, source-event payloads, latent values, error deltas, hashes, seeds, paths, or stream identities.
+
+The first observation slice supports routine visit selection, explicit administrative/lost-to-follow-up windows, independent anthropometric availability, additive/rounding error, derived BMI, and recognition/recorded-event projection. Utilization-intensity and measurement-error-removal counterfactuals remain explicitly deferred until observation/resource descendants and their reviewed causal matrices exist. Labs, medications, referrals, exact-schema export, prevalence/demographic calibration, held-out validation, privacy auditing, and an optional Synthea adapter remain separate roadmap gates.
+
 ### Development-only age-regime smoke example
 
 When exercising the latent trajectory layer with an injected reference, cover the five `GrowthRegime` classifier regimes: infancy, transition, childhood, puberty, and adolescence. Infancy runs before the configured transition window; transition spans the configured 24-month window (700–760 days by default, so day 730 is transition); childhood follows that window until the injected puberty schedule; puberty follows onset for its configured tempo; and adolescence continues through the maximum age (including 7305). At every age, generate only two independent anthropometric dimensions: length plus weight before transition, and height plus BMI after transition, with the applicable third value derived explicitly. Do not generate height/length, weight, and BMI as three independent states.
