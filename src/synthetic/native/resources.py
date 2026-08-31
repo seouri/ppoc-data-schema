@@ -501,8 +501,11 @@ def project_observed_resources(
 ) -> ObservedResourceBundle:
     """Project one validated fictional frame into descriptor-shaped base rows.
 
-    The descriptor must already be an in-memory mapping.  This evaluator-only
-    projection consumes recorded observations only and creates no files.
+    The descriptor must already be an in-memory mapping. Visible row values
+    come only from recorded observations. Private realized-opportunity links
+    are consulted solely to route recorded events to visible visits; no latent
+    physiology or hidden measurement values are used or emitted. This
+    evaluator-only projection creates no files.
     """
 
     validation = validate_observation_frame(frame)
