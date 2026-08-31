@@ -1,5 +1,6 @@
 import csv
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 import duckdb
@@ -23,7 +24,7 @@ from synthetic.calibration_targets import (
     RawTarget,
     compute_raw_targets,
 )
-from synthetic.schema_contract import load_descriptor
+from synthetic.schema_contract import load_descriptor, resource_spec
 from tests.synthetic.calibration_fixtures import write_mock_snapshot
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -73,6 +74,24 @@ def _config(root: Path, **changes: object) -> CalibrationRunConfig:
     }
     values.update(changes)
     return CalibrationRunConfig(**values)  # type: ignore[arg-type]
+
+
+def _filter_resource(
+    root: Path, resource_name: str, keep: Callable[[dict[str, str]], bool]
+) -> None:
+    descriptor = load_descriptor(ROOT / "datapackage.json")
+    resource = resource_spec(descriptor, resource_name)
+    path = root / resource["path"]
+    encoding = resource.get("encoding", "utf-8")
+    with path.open(newline="", encoding=encoding) as handle:
+        reader = csv.DictReader(handle)
+        rows = [row for row in reader if keep(row)]
+        headers = reader.fieldnames
+    assert headers is not None
+    with path.open("w", newline="", encoding=encoding) as handle:
+        writer = csv.DictWriter(handle, fieldnames=headers)
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 def _computed(root: Path, **changes: object) -> tuple[RawTarget, ...]:
@@ -212,6 +231,24 @@ def test_recorded_flag_targets_use_patient_level_positive_support(snapshot: Path
         assert target.value == numerator / 9
 
 
+def test_diagnosis_age_targets_are_recorded_finite_summaries(snapshot: Path) -> None:
+    targets = _computed(snapshot)
+    stratum = "outcome_layer=observed"
+
+    mean = _find(targets, stratum, "diagnosis_age_years_mean", "mean")
+    q50 = _find(targets, stratum, "diagnosis_age_years_q50", "quantile")
+    q90 = _find(targets, stratum, "diagnosis_age_years_q90", "quantile")
+    for target in (mean, q50, q90):
+        assert target.family == "recorded_outcome"
+        assert target.unit == "year"
+        assert target.value == 4.5
+        assert target.support_count == 5
+        assert target.denominator is None
+    assert mean.quantile_level is None
+    assert q50.quantile_level == 0.5
+    assert q90.quantile_level == 0.9
+
+
 def test_utilization_targets_have_patient_and_encounter_grain_semantics(snapshot: Path) -> None:
     targets = _computed(snapshot)
     stratum = "visit_window=all"
@@ -235,6 +272,66 @@ def test_utilization_targets_have_patient_and_encounter_grain_semantics(snapshot
     assert _find(
         targets, "age_regime=puberty_window", "encounter_interval_days_q90", "quantile"
     ).value == 2700
+
+
+def test_zero_calibration_encounters_omit_undefined_proportions(tmp_path: Path) -> None:
+    snapshot = _valid_snapshot(tmp_path / "snapshot")
+    calibration_ids = {
+        "SYN-P-003", "SYN-P-005", "SYN-P-006", "SYN-P-007", "SYN-P-008",
+        "SYN-P-009", "SYN-P-010", "SYN-P-011", "SYN-P-012",
+    }
+    for resource_name in ("visits", "visits_augmented"):
+        _filter_resource(
+            snapshot,
+            resource_name,
+            lambda row: row["patient_id"] not in calibration_ids,
+        )
+    config = _config(snapshot)
+
+    with duckdb.connect(":memory:") as connection:
+        prepared = prepare_input(connection, config)
+        assert prepared.partition_summary.resource_row_counts["visits"]["calibration"] == 0
+        targets = compute_raw_targets(connection, prepared, config)
+
+    all_encounter_names = {
+        f"encounter_{slug}" for slug in ENCOUNTER_CATEGORY_SLUGS.values()
+    } | {"epic_origin"}
+    assert not any(
+        target.stratum_id == "visit_window=all" and target.target_name in all_encounter_names
+        for target in targets
+    )
+
+
+def test_singleton_interval_is_emitted_for_minimum_one_policy(tmp_path: Path) -> None:
+    snapshot = _valid_snapshot(tmp_path / "snapshot")
+    held_out_ids = {"SYN-P-001", "SYN-P-002", "SYN-P-004"}
+    for resource_name in ("visits", "visits_augmented"):
+        _filter_resource(
+            snapshot,
+            resource_name,
+            lambda row: row["patient_id"] in held_out_ids
+            or (row["patient_id"] == "SYN-P-003" and row["age_in_days"] in {"100", "800"}),
+        )
+    config = _config(
+        snapshot,
+        partition_policy=PartitionPolicy("partition-v1", "1", "key-2026", 5_000, 1),
+        disclosure_policy=CalibrationDisclosurePolicy("disclosure-v1", "1", 1, 3),
+        age_windows=(CalibrationAgeWindow("edge", 0, 1000),),
+    )
+
+    with duckdb.connect(":memory:") as connection:
+        prepared = prepare_input(connection, config)
+        assert prepared.partition_summary.resource_row_counts["visits"]["calibration"] == 2
+        targets = compute_raw_targets(connection, prepared, config)
+
+    for name, statistic, level in (
+        ("encounter_interval_days_mean", "mean", None),
+        ("encounter_interval_days_q50", "quantile", 0.5),
+        ("encounter_interval_days_q90", "quantile", 0.9),
+    ):
+        target = _find(targets, "age_regime=edge", name, statistic)
+        assert (target.value, target.support_count, target.denominator) == (700, 1, None)
+        assert target.quantile_level == level
 
 
 def test_observation_targets_separate_availability_and_logical_associations(snapshot: Path) -> None:
@@ -299,6 +396,46 @@ def test_physiology_excludes_outliers_and_biv_nulls(snapshot: Path) -> None:
     assert (height.value, height.support_count) == (pytest.approx(0.1), 3)
 
 
+@pytest.mark.parametrize("flag_value", ["", "not-an-integer"])
+@pytest.mark.parametrize(
+    ("flag_column", "changed_columns", "target_expectations"),
+    [
+        (
+            "weight_outlier_flag",
+            ("weight_z_score", "weight_velocity", "bmi_z_score"),
+            (("weight_z_mean", 0.2), ("weight_velocity_mean", 0.12), ("bmi_z_mean", 0.15)),
+        ),
+        (
+            "height_outlier_flag",
+            ("height_z_score", "height_velocity", "bmi_z_score"),
+            (("height_z_mean", 0.1), ("height_velocity_mean", 0.08), ("bmi_z_mean", 0.15)),
+        ),
+    ],
+)
+def test_physiology_requires_explicit_clean_outlier_flags(
+    snapshot: Path,
+    flag_value: str,
+    flag_column: str,
+    changed_columns: tuple[str, ...],
+    target_expectations: tuple[tuple[str, float], ...],
+) -> None:
+    config = _config(snapshot)
+    assignments = ", ".join(f'"{column}" = \'99\'' for column in changed_columns)
+    with duckdb.connect(":memory:") as connection:
+        prepared = prepare_input(connection, config)
+        connection.execute(
+            f'UPDATE calibration_stage_visits_augmented SET {assignments}, '
+            f'"{flag_column}" = ? WHERE patient_id = \'SYN-P-003\' AND age_in_days = \'100\'',
+            [flag_value],
+        )
+        targets = compute_raw_targets(connection, prepared, config)
+
+    stratum = "age_regime=infancy|recorded_sex=U"
+    for target_name, expected_value in target_expectations:
+        target = _find(targets, stratum, target_name, "mean")
+        assert (target.value, target.support_count) == (pytest.approx(expected_value), 3)
+
+
 def test_physiology_omits_registry_cells_with_fewer_than_two_contributors(
     snapshot: Path,
 ) -> None:
@@ -336,6 +473,29 @@ def test_age_windows_are_lower_inclusive_and_upper_exclusive(snapshot: Path) -> 
         target.stratum_id.startswith("age_regime=edge") and target.support_count > 9
         for target in targets
     )
+
+
+def test_config_rejects_duplicate_age_window_ids(snapshot: Path) -> None:
+    duplicate_ids = (
+        CalibrationAgeWindow("same", 0, 730),
+        CalibrationAgeWindow("same", 730, 3287),
+    )
+
+    with pytest.raises(ValueError, match="window_id values must be unique"):
+        _config(snapshot, age_windows=duplicate_ids)
+
+
+def test_compute_defensively_rejects_duplicate_registry_cells(snapshot: Path) -> None:
+    config = _config(snapshot)
+    object.__setattr__(
+        config,
+        "age_windows",
+        (CalibrationAgeWindow("same", 0, 730), CalibrationAgeWindow("same", 730, 3287)),
+    )
+    with duckdb.connect(":memory:") as connection:
+        prepared = prepare_input(connection, config)
+        with pytest.raises(ValueError, match="duplicate cells"):
+            compute_raw_targets(connection, prepared, config)
 
 
 def test_unknown_encounter_category_fails_closed_without_echoing_value(snapshot: Path) -> None:

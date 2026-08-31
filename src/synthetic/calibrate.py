@@ -25,6 +25,7 @@ from synthetic.calibration_input import (  # noqa: F401
     prepare_input,
 )
 from synthetic.calibration_targets import (  # noqa: F401
+    DIAGNOSIS_AGE_SUMMARIES,
     ENCOUNTER_CATEGORY_SLUGS,
     ETHNICITY_CATEGORY_SLUGS,
     LOGICAL_LINK_RESOURCES,
@@ -211,6 +212,8 @@ class CalibrationRunConfig:
             raise ValueError("age_windows must be a nonempty immutable tuple")
         if not all(isinstance(window, CalibrationAgeWindow) for window in self.age_windows):
             raise ValueError("age_windows must contain CalibrationAgeWindow values")
+        if len({window.window_id for window in self.age_windows}) != len(self.age_windows):
+            raise ValueError("age window_id values must be unique")
         for previous, current in zip(self.age_windows, self.age_windows[1:], strict=False):
             if current.lower_age_days < previous.upper_age_days:
                 raise ValueError("age_windows must be ordered and non-overlapping")

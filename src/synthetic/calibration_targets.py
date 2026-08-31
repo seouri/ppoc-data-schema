@@ -97,6 +97,11 @@ RECORDED_FLAGS = {
     "ever_underweight_flag": "ever_underweight_flag",
     "ever_obesity_flag": "ever_obesity_flag",
 }
+DIAGNOSIS_AGE_SUMMARIES = {
+    "diagnosis_age_years_mean": ("mean", None),
+    "diagnosis_age_years_q50": ("quantile", 0.5),
+    "diagnosis_age_years_q90": ("quantile", 0.9),
+}
 MEASUREMENT_AVAILABILITY = {
     "weight_oz": "weight_available",
     "height_in": "height_available",
@@ -125,6 +130,7 @@ ETHNICITY_CATEGORY_SLUGS = MappingProxyType(ETHNICITY_CATEGORY_SLUGS)
 RACE_CATEGORY_SLUGS = MappingProxyType(RACE_CATEGORY_SLUGS)
 ENCOUNTER_CATEGORY_SLUGS = MappingProxyType(ENCOUNTER_CATEGORY_SLUGS)
 RECORDED_FLAGS = MappingProxyType(RECORDED_FLAGS)
+DIAGNOSIS_AGE_SUMMARIES = MappingProxyType(DIAGNOSIS_AGE_SUMMARIES)
 MEASUREMENT_AVAILABILITY = MappingProxyType(MEASUREMENT_AVAILABILITY)
 LOGICAL_LINK_RESOURCES = MappingProxyType(LOGICAL_LINK_RESOURCES)
 PHYSIOLOGY_METRICS = MappingProxyType(PHYSIOLOGY_METRICS)
@@ -416,6 +422,37 @@ def _patient_targets(connection: duckdb.DuckDBPyConnection) -> list[RawTarget]:
                 flag_denominator,
             )
         )
+    diagnosis_age = connection.execute(
+        """
+        WITH diagnosis_ages AS (
+            SELECT try_cast(source.dx_age_years AS DOUBLE) AS value
+            FROM calibration_stage_patients_augmented AS source
+            JOIN patient_partitions AS partitions USING (patient_id)
+            WHERE partitions.partition_label = 'calibration'
+              AND isfinite(try_cast(source.dx_age_years AS DOUBLE))
+        )
+        SELECT count(*), avg(value), quantile_cont(value, 0.5), quantile_cont(value, 0.9)
+        FROM diagnosis_ages
+        """
+    ).fetchone()
+    diagnosis_support = diagnosis_age[0]
+    if diagnosis_support:
+        for index, (target_name, (statistic, level)) in enumerate(
+            DIAGNOSIS_AGE_SUMMARIES.items(), start=1
+        ):
+            targets.append(
+                _target(
+                    dimensions,
+                    target_name,
+                    "recorded_outcome",
+                    statistic,
+                    "year",
+                    diagnosis_age[index],
+                    diagnosis_support,
+                    None,
+                    level,
+                )
+            )
     return targets
 
 
@@ -467,41 +504,42 @@ def _utilization_targets(connection: duckdb.DuckDBPyConnection) -> list[RawTarge
     ).fetchall()
     category_counts = dict(category_rows)
     denominator = sum(category_counts.values())
-    for category, slug in ENCOUNTER_CATEGORY_SLUGS.items():
-        category_support = category_counts.get(category, 0)
+    if denominator:
+        for category, slug in ENCOUNTER_CATEGORY_SLUGS.items():
+            category_support = category_counts.get(category, 0)
+            targets.append(
+                _target(
+                    dimensions,
+                    f"encounter_{slug}",
+                    "utilization",
+                    "proportion",
+                    "proportion",
+                    category_support / denominator,
+                    category_support,
+                    denominator,
+                )
+            )
+        epic_support = connection.execute(
+            """
+            SELECT count(*)
+            FROM calibration_stage_visits AS source
+            JOIN patient_partitions AS partitions USING (patient_id)
+            WHERE partitions.partition_label = 'calibration'
+              AND source.orig_enc_source_Epic_yn = 'Y'
+            """
+        ).fetchone()[0]
         targets.append(
             _target(
                 dimensions,
-                f"encounter_{slug}",
+                "epic_origin",
                 "utilization",
                 "proportion",
                 "proportion",
-                category_support / denominator,
-                category_support,
+                epic_support / denominator,
+                epic_support,
                 denominator,
             )
         )
-    epic_support = connection.execute(
-        """
-        SELECT count(*)
-        FROM calibration_stage_visits AS source
-        JOIN patient_partitions AS partitions USING (patient_id)
-        WHERE partitions.partition_label = 'calibration'
-          AND source.orig_enc_source_Epic_yn = 'Y'
-        """
-    ).fetchone()[0]
-    targets.append(
-        _target(
-            dimensions,
-            "epic_origin",
-            "utilization",
-            "proportion",
-            "proportion",
-            epic_support / denominator,
-            epic_support,
-            denominator,
-        )
-    )
     for relation, target_name in LOGICAL_LINK_RESOURCES.items():
         link_row = connection.execute(
             f"""
@@ -598,7 +636,7 @@ def _age_window_targets(
         [window.lower_age_days, window.upper_age_days],
     ).fetchone()
     support = interval[0]
-    if support >= 2:
+    if support:
         targets.extend(
             [
                 _target(dimensions, "encounter_interval_days_mean", "utilization", "mean", "day", interval[1], support),
@@ -616,7 +654,7 @@ def _physiology_targets(
     targets: list[RawTarget] = []
     for column, (target_prefix, unit, flag_columns) in PHYSIOLOGY_METRICS.items():
         clean_flags = " AND ".join(
-            f'coalesce(try_cast(source."{flag}" AS INTEGER), 0) <> 1'
+            f'try_cast(source."{flag}" AS INTEGER) = 0'
             for flag in flag_columns
         )
         row = connection.execute(
@@ -686,10 +724,14 @@ def compute_raw_targets(
         targets.extend(_age_window_targets(connection, window))
         for sex in SEX_CATEGORY_SLUGS:
             targets.extend(_physiology_targets(connection, window, sex))
+    keys = [(target.stratum_id, target.target_name, target.statistic) for target in targets]
+    if len(set(keys)) != len(keys):
+        raise ValueError("raw target registry contains duplicate cells")
     return tuple(sorted(targets, key=lambda target: (target.stratum_id, target.target_name, target.statistic)))
 
 
 __all__ = [
+    "DIAGNOSIS_AGE_SUMMARIES",
     "ENCOUNTER_CATEGORY_SLUGS",
     "ETHNICITY_CATEGORY_SLUGS",
     "LOGICAL_LINK_RESOURCES",
