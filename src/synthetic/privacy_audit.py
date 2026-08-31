@@ -932,12 +932,14 @@ def _subgroup_query_cells(
     bool,
 ]:
     """Return private overall/sex query cells and whether a requested cell is underpowered."""
-    cells = [
-        (
-            generated._profiles,
-            heldout._profiles if heldout is not None else None,
+    cells = []
+    if "overall" in policy.subgroups:
+        cells.append(
+            (
+                generated._profiles,
+                heldout._profiles if heldout is not None else None,
+            )
         )
-    ]
     underpowered = False
     if "sex" not in policy.subgroups:
         return tuple(cells), underpowered
@@ -980,6 +982,8 @@ def _evaluate_nearest_neighbor_control(
     if not _packages_have_profile_evidence(policy, *packages):
         return _unevaluable_control("nearest_neighbor", "insufficient_evidence")
     query_cells, underpowered = _subgroup_query_cells(policy, generated, heldout)
+    if not query_cells:
+        return _unevaluable_control("nearest_neighbor", "insufficient_evidence")
     group_metrics = tuple(
         _nearest_metrics(reference._profiles, generated_cell, heldout_cell)
         for generated_cell, heldout_cell in query_cells
@@ -1127,6 +1131,8 @@ def _evaluate_linkage_control(
     if not _packages_have_profile_evidence(policy, *packages):
         return _unevaluable_control("linkage", "insufficient_evidence")
     query_cells, underpowered = _subgroup_query_cells(policy, generated, heldout)
+    if not query_cells:
+        return _unevaluable_control("linkage", "insufficient_evidence")
     group_metrics = tuple(
         _linkage_candidate_metrics(
             reference, heldout_cell, generated_cell, _linkage_selections(policy)

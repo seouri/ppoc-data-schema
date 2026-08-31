@@ -550,6 +550,62 @@ def test_nearest_neighbor_suppresses_underpowered_sex_cells_without_passing(
     assert overall_result.status == "PASS"
 
 
+def _sex_only_underpowered_signal_packages() -> tuple[_PrivatePackage, _PrivatePackage]:
+    reference = _private_package(
+        tuple(
+            _private_profile(f"r{index}", tuple(f"{component}{index}" for component in "dturx"))
+            for index in range(4)
+        )
+    )
+    generated = _private_package(
+        (
+            _private_profile("g-risk", tuple(f"{component}0" for component in "dturx"), sex="F"),
+            *(
+                _private_profile(
+                    f"g-safe-{index}",
+                    tuple(f"unmatched-{component}-{index}" for component in "dturx"),
+                    sex="M",
+                )
+                for index in range(3)
+            ),
+        )
+    )
+    return reference, generated
+
+
+def test_sex_only_nearest_neighbor_does_not_evaluate_unrequested_overall_cell() -> None:
+    """Catches overall proximity promoting a failure under a sex-only subgroup policy."""
+    policy = _policy(
+        subgroups=["sex"],
+        thresholds=policy_mapping()["thresholds"]
+        | {"nearest_neighbor_zero_rate": 0.2, "nearest_neighbor_unique_rate": 1.0},
+    )
+    reference, generated = _sex_only_underpowered_signal_packages()
+
+    result = _evaluate_nearest_neighbor_control(policy, reference, generated, heldout=None)
+
+    assert result.status == "UNEVALUABLE"
+    assert result.reason_code == "insufficient_evidence"
+    assert result.metrics == {}
+    assert "sex" not in repr(result).lower()
+
+
+def test_sex_only_linkage_does_not_evaluate_unrequested_overall_cell() -> None:
+    """Catches overall linkage promoting a failure under a sex-only subgroup policy."""
+    policy = _policy(
+        subgroups=["sex"],
+        thresholds=policy_mapping()["thresholds"] | {"linkage_advantage": 0.2},
+    )
+    reference, generated = _sex_only_underpowered_signal_packages()
+
+    result = _evaluate_linkage_control(policy, reference, generated, heldout=None)
+
+    assert result.status == "UNEVALUABLE"
+    assert result.reason_code == "insufficient_evidence"
+    assert result.metrics == {}
+    assert "sex" not in repr(result).lower()
+
+
 def test_evaluable_subgroup_failures_precede_underpowered_subgroup_evidence() -> None:
     """Catches rare-cell suppression downgrading an evaluated nearest or linkage failure."""
     policy = _policy(
