@@ -12,16 +12,18 @@ for ordinary logging.
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields, is_dataclass, replace
 from enum import Enum
 from numbers import Real
 from types import MappingProxyType
 from typing import Any, ClassVar
 
-from synthetic.models import ClinicalEvent
+from synthetic.models import AgeRegimeDisorderTrajectory, ClinicalEvent, GrowthRegime
+from synthetic.randomness import NamedRandomStreams
 
 _VERSION_TOKEN = re.compile(r"^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$")
 _SYNTHETIC_PATIENT_TOKEN = re.compile(r"^syn-[A-Za-z0-9][A-Za-z0-9._-]*$")
@@ -39,6 +41,20 @@ OBSERVATION_STREAM_NAMES = (
     "observation.recorded-event",
 )
 _OBSERVATION_STREAM_NAME_SET = frozenset(OBSERVATION_STREAM_NAMES)
+
+_SOURCE_EVENT_PHASES = {
+    "latent_onset": 0,
+    "observable_phenotype": 1,
+    "recognition_opportunity": 2,
+    "workup": 3,
+    "recorded_diagnosis": 4,
+    "treatment_start": 5,
+    "treatment_response": 6,
+    "treatment_nonresponse": 6,
+}
+_DEFERRED_SOURCE_EVENT_TYPES = frozenset(
+    {"latent_onset", "observable_phenotype", "treatment_start", "treatment_response", "treatment_nonresponse"}
+)
 
 # Native trajectory modules currently emit only these event types.  Their
 # events retain ``code=None`` until a reviewed terminology/resource contract
@@ -95,6 +111,14 @@ class RecordedEventKind(str, Enum):
     RECOGNITION = "recognition"
     WORKUP = "workup"
     DIAGNOSIS = "diagnosis"
+
+
+_PHYSICAL_CHANNELS = (
+    MeasurementChannel.LENGTH,
+    MeasurementChannel.HEIGHT,
+    MeasurementChannel.WEIGHT,
+    MeasurementChannel.HEAD_CIRCUMFERENCE,
+)
 
 
 # These codes are intentionally fictional.  A later package/resource contract
@@ -709,6 +733,506 @@ class ObservationFrame:
         return "ObservationFrame(<evaluator-only>)"
 
 
+def _canonical(value: object) -> object:
+    """Return a deterministic, non-serializing hash representation."""
+
+    if isinstance(value, Enum):
+        return value.value
+    if is_dataclass(value):
+        return {
+            item.name: _canonical(getattr(value, item.name))
+            for item in fields(value)
+        }
+    if isinstance(value, Mapping):
+        return {
+            str(key): _canonical(item)
+            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+        }
+    if isinstance(value, (tuple, list)):
+        return [_canonical(item) for item in value]
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ValueError("hash input must contain only finite values")
+        return value
+    return value
+
+
+def _canonical_hash(value: object) -> str:
+    try:
+        encoded = json.dumps(
+            _canonical(value),
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+    except (TypeError, ValueError) as exc:
+        raise ValueError("observation hash input is not canonicalizable") from exc
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _validate_observation_trajectory(
+    trajectory: object,
+) -> AgeRegimeDisorderTrajectory:
+    if not isinstance(trajectory, AgeRegimeDisorderTrajectory):
+        raise TypeError("trajectory must be an AgeRegimeDisorderTrajectory")
+    points = trajectory.physiology.points
+    patient_id = points[0].patient_id
+    _require_synthetic_patient_id(patient_id)
+    if any(point.patient_id != patient_id for point in points):
+        raise ValueError("trajectory points must identify one synthetic patient")
+
+    previous_age = -1
+    previous_phase = -1
+    for event in trajectory.events:
+        if not isinstance(event, ClinicalEvent):
+            raise TypeError("trajectory events must be ClinicalEvent instances")
+        _require_synthetic_patient_id(event.patient_id, "source event patient_id")
+        if event.patient_id != patient_id:
+            raise ValueError("source events must identify the trajectory patient")
+        _require_nonnegative_int(event.age_days, "source event age_days")
+        if event.event_type not in _SOURCE_EVENT_TYPES:
+            raise ValueError("source event type must be a native trajectory event")
+        if event.code is not None:
+            raise ValueError("source event code must be None until terminology is reviewed")
+        if not isinstance(event.hidden, bool):
+            raise TypeError("source event hidden must be a boolean")
+        phase = _SOURCE_EVENT_PHASES[event.event_type]
+        if event.age_days < previous_age or phase <= previous_phase:
+            raise ValueError("source event schedule must follow causal phase order")
+        if event.event_type == "latent_onset" and not event.hidden:
+            raise ValueError("latent_onset source events must remain hidden")
+        previous_age = event.age_days
+        previous_phase = phase
+
+    if trajectory.disorder.kind.value == "healthy" and any(
+        event.event_type == "recorded_diagnosis" for event in trajectory.events
+    ):
+        raise ValueError("healthy trajectories cannot contain a recorded diagnosis")
+    return trajectory
+
+
+def _stream_generators(
+    streams: NamedRandomStreams,
+) -> tuple[Any, ...]:
+    if not isinstance(streams, NamedRandomStreams):
+        raise TypeError("streams must be NamedRandomStreams")
+    generators = tuple(streams.generator(name) for name in OBSERVATION_STREAM_NAMES)
+    if not all(
+        callable(getattr(generator, "random", None))
+        for generator in generators
+    ):
+        raise TypeError("observation streams must provide random draws")
+    if not callable(getattr(generators[4], "normal", None)):
+        raise TypeError("observation.measurement-error must provide normal draws")
+    return generators
+
+
+def _probability_draw(generator: Any, name: str) -> float:
+    try:
+        value = generator.random()
+    except (ArithmeticError, TypeError, ValueError) as exc:
+        raise ValueError(f"{name} stream returned an invalid probability draw") from exc
+    result = _require_finite_real(value, f"{name} stream draw must be finite")
+    if not 0 <= result <= 1:
+        raise ValueError(f"{name} stream draw must be in [0, 1]")
+    return result
+
+
+def _normal_draw(generator: Any, name: str, standard_deviation: float) -> float:
+    try:
+        value = generator.normal(0.0, standard_deviation)
+    except (ArithmeticError, TypeError, ValueError) as exc:
+        raise ValueError(f"{name} stream returned an invalid error draw") from exc
+    return _require_finite_real(value, f"{name} stream draw must be finite")
+
+
+def _point_channel_value(point: Any, channel: MeasurementChannel) -> float | None:
+    if channel is MeasurementChannel.LENGTH:
+        applicable = point.regime in (GrowthRegime.INFANCY, GrowthRegime.TRANSITION)
+        value = point.length_cm if applicable else None
+    elif channel is MeasurementChannel.HEIGHT:
+        applicable = point.regime in (
+            GrowthRegime.TRANSITION,
+            GrowthRegime.CHILDHOOD,
+            GrowthRegime.PUBERTY,
+            GrowthRegime.ADOLESCENCE,
+        )
+        value = point.height_cm if applicable else None
+    elif channel is MeasurementChannel.WEIGHT:
+        value = point.weight_kg
+    elif channel is MeasurementChannel.HEAD_CIRCUMFERENCE:
+        value = point.head_circumference_cm
+    else:
+        raise ValueError("BMI is derived and has no latent channel draw")
+    if value is None:
+        return None
+    return _require_positive_real(value, f"latent {channel.value} must be finite and positive")
+
+
+def _availability_probability(policy: ObservationPolicy, channel: MeasurementChannel) -> float:
+    return {
+        MeasurementChannel.LENGTH: policy.length_availability_probability,
+        MeasurementChannel.HEIGHT: policy.height_availability_probability,
+        MeasurementChannel.WEIGHT: policy.weight_availability_probability,
+        MeasurementChannel.HEAD_CIRCUMFERENCE: policy.head_circumference_availability_probability,
+    }[channel]
+
+
+def _error_standard_deviation(policy: ObservationPolicy, channel: MeasurementChannel) -> float:
+    return {
+        MeasurementChannel.LENGTH: policy.length_error_sd_cm,
+        MeasurementChannel.HEIGHT: policy.height_error_sd_cm,
+        MeasurementChannel.WEIGHT: policy.weight_error_sd_kg,
+        MeasurementChannel.HEAD_CIRCUMFERENCE: policy.head_circumference_error_sd_cm,
+    }[channel]
+
+
+def _measurement_records(
+    point_index: int,
+    point: Any,
+    policy: ObservationPolicy,
+    availability_generator: Any,
+    error_generator: Any,
+) -> tuple[tuple[MeasurementObservation, ...], tuple[MeasurementTruth, ...]]:
+    observations: list[MeasurementObservation] = []
+    truth: list[MeasurementTruth] = []
+    by_channel: dict[MeasurementChannel, MeasurementObservation] = {}
+
+    for channel in _PHYSICAL_CHANNELS:
+        latent_value = _point_channel_value(point, channel)
+        if latent_value is None:
+            observation = MeasurementObservation(
+                channel,
+                MeasurementAvailability.NOT_APPLICABLE,
+                None,
+            )
+            truth_item = MeasurementTruth(
+                point_index,
+                channel,
+                MeasurementAvailability.NOT_APPLICABLE,
+                None,
+                None,
+            )
+        elif (
+            _probability_draw(availability_generator, "observation.measurement-availability")
+            >= _availability_probability(policy, channel)
+        ):
+            observation = MeasurementObservation(channel, MeasurementAvailability.MISSING, None)
+            truth_item = MeasurementTruth(
+                point_index,
+                channel,
+                MeasurementAvailability.MISSING,
+                latent_value,
+                None,
+            )
+        else:
+            standard_deviation = _error_standard_deviation(policy, channel)
+            error_delta = _normal_draw(
+                error_generator,
+                "observation.measurement-error",
+                standard_deviation,
+            )
+            try:
+                post_error = latent_value + error_delta
+            except ArithmeticError as exc:
+                raise ValueError("post-error measurement must be finite and positive") from exc
+            post_error = _require_finite_real(
+                post_error,
+                "post-error measurement must be finite and positive",
+            )
+            if post_error <= 0:
+                raise ValueError("post-error measurement must be finite and positive")
+            if policy.rounding_digits is not None:
+                try:
+                    recorded = round(post_error, policy.rounding_digits)
+                except (ArithmeticError, TypeError, ValueError) as exc:
+                    raise ValueError("rounded measurement must be finite and positive") from exc
+            else:
+                recorded = post_error
+            recorded = _require_finite_real(
+                recorded,
+                "rounded measurement must be finite and positive",
+            )
+            if recorded <= 0:
+                raise ValueError("rounded measurement must be finite and positive")
+            observation = MeasurementObservation(
+                channel,
+                MeasurementAvailability.OBSERVED,
+                recorded,
+            )
+            truth_item = MeasurementTruth(
+                point_index,
+                channel,
+                MeasurementAvailability.OBSERVED,
+                latent_value,
+                error_delta,
+            )
+        observations.append(observation)
+        truth.append(truth_item)
+        by_channel[channel] = observation
+
+    latent_bmi = point.bmi
+    if point.height_cm is None or latent_bmi is None:
+        bmi_observation = MeasurementObservation(
+            MeasurementChannel.BMI,
+            MeasurementAvailability.NOT_APPLICABLE,
+            None,
+        )
+    elif (
+        by_channel[MeasurementChannel.HEIGHT].availability is MeasurementAvailability.OBSERVED
+        and by_channel[MeasurementChannel.WEIGHT].availability is MeasurementAvailability.OBSERVED
+    ):
+        height = by_channel[MeasurementChannel.HEIGHT].recorded_value
+        weight = by_channel[MeasurementChannel.WEIGHT].recorded_value
+        assert height is not None and weight is not None
+        try:
+            bmi = weight / (height / 100.0) ** 2
+        except ArithmeticError as exc:
+            raise ValueError("derived BMI must be finite and positive") from exc
+        bmi = _require_positive_real(bmi, "derived BMI must be finite and positive")
+        bmi_observation = MeasurementObservation(
+            MeasurementChannel.BMI,
+            MeasurementAvailability.OBSERVED,
+            bmi,
+        )
+    else:
+        bmi_observation = MeasurementObservation(
+            MeasurementChannel.BMI,
+            MeasurementAvailability.MISSING,
+            None,
+        )
+    observations.append(bmi_observation)
+    return tuple(observations), tuple(truth)
+
+
+def _stable_visit_id(patient_id: str, policy_version: str, point_index: int) -> str:
+    material = f"observation-visit-v1\x1f{patient_id}\x1f{policy_version}\x1f{point_index}".encode()
+    return f"syn-{hashlib.sha256(material).hexdigest()[:32]}"
+
+
+def _selected_opportunity(
+    opportunities: tuple[VisitOpportunity, ...],
+    minimum_age_days: int,
+) -> VisitOpportunity | None:
+    for opportunity in opportunities:
+        if opportunity.realized and opportunity.age_days >= minimum_age_days:
+            return opportunity
+    return None
+
+
+def _event_projection(
+    trajectory: AgeRegimeDisorderTrajectory,
+    policy: ObservationPolicy,
+    opportunities: tuple[VisitOpportunity, ...],
+    recognition_generator: Any,
+    recorded_event_generator: Any,
+) -> tuple[tuple[RecordedEvent, ...], tuple[EventRecordingDecision, ...]]:
+    selected_opportunities = tuple(item for item in opportunities if item.realized)
+    source_events = trajectory.events
+    decisions: list[EventRecordingDecision] = []
+    records: list[RecordedEvent] = []
+    recognition_recorded = False
+    workup_recorded = False
+    last_recorded_age: int | None = None
+
+    for source_index, event in enumerate(source_events):
+        recorded = False
+        opportunity_index: int | None = None
+        if event.event_type == "recognition_opportunity":
+            recognition_roll = _probability_draw(
+                recognition_generator,
+                "observation.recognition",
+            )
+            has_observable_phenotype = any(
+                prior.event_type == "observable_phenotype"
+                and not prior.hidden
+                for prior in source_events[:source_index]
+            )
+            minimum_age = event.age_days + policy.recognition_delay_days
+            if last_recorded_age is not None:
+                minimum_age = max(minimum_age, last_recorded_age)
+            opportunity = _selected_opportunity(selected_opportunities, minimum_age)
+            if (
+                not event.hidden
+                and has_observable_phenotype
+                and recognition_roll < policy.recognition_probability
+                and opportunity is not None
+            ):
+                recorded = True
+                opportunity_index = opportunity.source_point_index
+                recognition_recorded = True
+                last_recorded_age = opportunity.age_days
+                records.append(
+                    RecordedEvent(
+                        trajectory.physiology.points[0].patient_id,
+                        opportunity.age_days,
+                        RecordedEventKind.RECOGNITION,
+                        RECORDED_EVENT_CODES[RecordedEventKind.RECOGNITION],
+                        opportunity_index,
+                    )
+                )
+        elif event.event_type == "workup":
+            recording_roll = _probability_draw(
+                recorded_event_generator,
+                "observation.recorded-event",
+            )
+            minimum_age = event.age_days
+            if last_recorded_age is not None:
+                minimum_age = max(minimum_age, last_recorded_age)
+            opportunity = _selected_opportunity(selected_opportunities, minimum_age)
+            if (
+                not event.hidden
+                and recognition_recorded
+                and recording_roll < 1.0
+                and opportunity is not None
+            ):
+                recorded = True
+                opportunity_index = opportunity.source_point_index
+                workup_recorded = True
+                last_recorded_age = opportunity.age_days
+                records.append(
+                    RecordedEvent(
+                        trajectory.physiology.points[0].patient_id,
+                        opportunity.age_days,
+                        RecordedEventKind.WORKUP,
+                        RECORDED_EVENT_CODES[RecordedEventKind.WORKUP],
+                        opportunity_index,
+                    )
+                )
+        elif event.event_type == "recorded_diagnosis":
+            recording_roll = _probability_draw(
+                recorded_event_generator,
+                "observation.recorded-event",
+            )
+            minimum_age = event.age_days
+            if last_recorded_age is not None:
+                minimum_age = max(minimum_age, last_recorded_age)
+            opportunity = _selected_opportunity(selected_opportunities, minimum_age)
+            if (
+                not event.hidden
+                and workup_recorded
+                and recording_roll < policy.diagnosis_probability
+                and opportunity is not None
+            ):
+                recorded = True
+                opportunity_index = opportunity.source_point_index
+                last_recorded_age = opportunity.age_days
+                records.append(
+                    RecordedEvent(
+                        trajectory.physiology.points[0].patient_id,
+                        opportunity.age_days,
+                        RecordedEventKind.DIAGNOSIS,
+                        RECORDED_EVENT_CODES[RecordedEventKind.DIAGNOSIS],
+                        opportunity_index,
+                    )
+                )
+        decisions.append(EventRecordingDecision(source_index, recorded, opportunity_index))
+    return tuple(records), tuple(decisions)
+
+
+def generate_observation_frame(
+    trajectory: AgeRegimeDisorderTrajectory,
+    policy: ObservationPolicy,
+    streams: NamedRandomStreams,
+) -> ObservationFrame:
+    """Generate one deterministic evaluator-only observation frame.
+
+    The policy determines the effective window.  All stochastic choices are
+    isolated to the declared observation streams; latent trajectory values are
+    never resampled or altered by this function.
+    """
+
+    trajectory = _validate_observation_trajectory(trajectory)
+    if not isinstance(policy, ObservationPolicy):
+        raise TypeError("policy must be an ObservationPolicy")
+    (
+        _window_generator,
+        _censoring_generator,
+        visit_generator,
+        availability_generator,
+        error_generator,
+        recognition_generator,
+        recorded_event_generator,
+    ) = _stream_generators(streams)
+    del _window_generator, _censoring_generator
+
+    points = trajectory.physiology.points
+    patient_id = points[0].patient_id
+    window = ObservationWindow(
+        policy.window_start_age_days,
+        policy.effective_end_age_days,
+        policy.window_end_age_days,
+        policy.censoring_mode,
+    )
+
+    opportunities: list[VisitOpportunity] = []
+    for point_index, point in enumerate(points):
+        if not window.start_age_days <= point.age_days < window.administrative_end_age_days:
+            continue
+        visit_roll = _probability_draw(visit_generator, "observation.visit.routine")
+        realized = (
+            point.age_days < window.effective_end_age_days
+            and visit_roll < policy.visit_probability
+        )
+        opportunities.append(
+            VisitOpportunity(point_index, point.age_days, EncounterType.ROUTINE, realized)
+        )
+
+    visits: list[ObservedVisit] = []
+    measurement_truth: list[MeasurementTruth] = []
+    for opportunity in opportunities:
+        if not opportunity.realized:
+            continue
+        point = points[opportunity.source_point_index]
+        measurements, truth_items = _measurement_records(
+            opportunity.source_point_index,
+            point,
+            policy,
+            availability_generator,
+            error_generator,
+        )
+        measurement_truth.extend(truth_items)
+        visits.append(
+            ObservedVisit(
+                patient_id,
+                _stable_visit_id(patient_id, policy.policy_version, opportunity.source_point_index),
+                point.age_days,
+                EncounterType.ROUTINE,
+                measurements,
+            )
+        )
+
+    events, event_decisions = _event_projection(
+        trajectory,
+        policy,
+        tuple(opportunities),
+        recognition_generator,
+        recorded_event_generator,
+    )
+    latent_trajectory_hash = _canonical_hash(trajectory)
+    base_truth = ObservationTruth(
+        patient_id=patient_id,
+        window=window,
+        opportunities=tuple(opportunities),
+        measurement_truth=tuple(measurement_truth),
+        event_decisions=event_decisions,
+        source_events=trajectory.events,
+        latent_trajectory_hash=latent_trajectory_hash,
+        truth_hash=None,
+    )
+    truth_hash = _canonical_hash((policy.to_mapping(), base_truth))
+    truth = replace(base_truth, truth_hash=truth_hash)
+    return ObservationFrame(
+        patient_id=patient_id,
+        policy_version=policy.policy_version,
+        window=window,
+        visits=tuple(visits),
+        events=events,
+        truth=truth,
+    )
+
+
 class ObservationValidationStatus(str, Enum):
     """Aggregate validation result for one observation frame."""
 
@@ -848,6 +1372,7 @@ __all__ = [
     "RecordedEventKind",
     "ValidationStatus",
     "VisitOpportunity",
+    "generate_observation_frame",
     "observation_stream_identity",
     "observed_stream_identity",
 ]
