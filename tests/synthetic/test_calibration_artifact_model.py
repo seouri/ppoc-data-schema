@@ -341,3 +341,27 @@ def test_target_family_rejects_hidden_or_record_like_indicators(family: str) -> 
 def test_target_name_rejects_hidden_or_record_like_indicators(target_name: str) -> None:
     with pytest.raises(ValueError, match="target_name"):
         CalibrationArtifact.from_mapping(valid_mapping_with_target(target_name=target_name))
+
+
+@pytest.mark.parametrize(
+    "target_name",
+    [
+        "membership_inference_risk",
+        "linkage_score",
+        "Privacy_Attack_Score",
+        "attribute_inference_score",
+        "model_inversion_risk",
+        "reidentification_score",
+        "singling_out_risk",
+    ],
+)
+def test_target_name_rejects_attack_and_privacy_outputs(target_name: str) -> None:
+    with pytest.raises(ValueError, match="target_name"):
+        CalibrationArtifact.from_mapping(valid_mapping_with_target(target_name=target_name))
+
+
+def test_model_rejects_overflowing_numeric_value_as_controlled_validation_error() -> None:
+    with pytest.raises(ValueError, match="value must be a finite number") as error:
+        CalibrationArtifact.from_mapping(valid_mapping_with_target(value=10**400))
+
+    assert error.value.__cause__ is None

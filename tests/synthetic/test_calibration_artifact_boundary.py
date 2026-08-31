@@ -23,6 +23,10 @@ def is_calibration_module(module: str | None) -> bool:
     )
 
 
+def is_relative_calibration_module(module: str | None) -> bool:
+    return module == "calibration" or bool(module and module.startswith("calibration."))
+
+
 def forbidden_calibration_import(tree: ast.AST) -> bool:
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -32,6 +36,12 @@ def forbidden_calibration_import(tree: ast.AST) -> bool:
             if node.level == 0 and is_calibration_module(node.module):
                 return True
             if node.level == 0 and node.module == "synthetic" and any(
+                alias.name == "calibration" for alias in node.names
+            ):
+                return True
+            if node.level > 0 and is_relative_calibration_module(node.module):
+                return True
+            if node.level > 0 and node.module is None and any(
                 alias.name == "calibration" for alias in node.names
             ):
                 return True
@@ -55,6 +65,19 @@ def forbidden_calibration_call(tree: ast.AST) -> bool:
     ],
 )
 def test_forbidden_calibration_import_rejects_submodules(source: str) -> None:
+    assert forbidden_calibration_import(ast.parse(source))
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "from .calibration import load_calibration_artifact",
+        "from . import calibration",
+        "from ..calibration import load_calibration_artifact",
+        "from .. import calibration",
+    ],
+)
+def test_forbidden_calibration_import_rejects_relative_modules(source: str) -> None:
     assert forbidden_calibration_import(ast.parse(source))
 
 

@@ -81,7 +81,18 @@ _UTC_TIMESTAMP_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0
 _RECORD_INDICATORS = frozenset(
     {"patient", "visit", "identifier", "uuid", "sequence", "truth", "candidate", "match", "row", "resource"}
 )
-_TARGET_NAME_INDICATORS = _RECORD_INDICATORS | {"latent"}
+_ATTACK_OUTPUT_INDICATORS = frozenset(
+    {
+        "attribute_inference",
+        "linkage",
+        "membership_inference",
+        "model_inversion",
+        "privacy_attack",
+        "reidentification",
+        "singling_out",
+    }
+)
+_TARGET_NAME_INDICATORS = _RECORD_INDICATORS | _ATTACK_OUTPUT_INDICATORS | {"latent"}
 _RESERVED_DIMENSION_VALUES = frozenset({"latent", "truth", "sequence", "candidate"})
 _MAX_STRATUM_DIMENSIONS = 4
 
@@ -103,7 +114,10 @@ def _require_integer(value: object, field: str, *, minimum: int | None = None) -
 def _require_finite_number(value: object, field: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{field} must be a finite number")  # noqa: TRY004
-    number = float(value)
+    try:
+        number = float(value)
+    except OverflowError:
+        raise ValueError(f"{field} must be a finite number") from None
     if not math.isfinite(number):
         raise ValueError(f"{field} must be a finite number")
     return number
@@ -124,7 +138,7 @@ def _validate_target_name(value: object) -> str:
     if _TOKEN_RE.fullmatch(target_name) is None:
         raise ValueError("target_name must be an ASCII token without whitespace or path separators")
     if any(indicator in target_name.lower() for indicator in _TARGET_NAME_INDICATORS):
-        raise ValueError("target_name must not contain record or hidden-state indicators")
+        raise ValueError("target_name must not contain record, hidden-state, or attack-output indicators")
     return target_name
 
 
@@ -514,7 +528,7 @@ def load_calibration_artifact(path: Path) -> CalibrationArtifact:
             object_pairs_hook=_reject_duplicate_json_keys,
             parse_constant=_reject_nonfinite_json_constant,
         )
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, RecursionError):
         raise ValueError("calibration artifact must be valid JSON") from None
 
     if not isinstance(value, Mapping):

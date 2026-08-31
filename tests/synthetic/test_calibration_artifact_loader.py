@@ -223,3 +223,26 @@ def test_loader_rejects_file_that_grows_after_read(tmp_path: Path, monkeypatch: 
 
     with pytest.raises(ValueError, match="maximum size"):
         load_calibration_artifact(path)
+
+
+def test_loader_rejects_overflowing_numeric_value_as_controlled_validation_error(tmp_path: Path) -> None:
+    path = tmp_path / "overflow.json"
+    payload = json.dumps(valid_mapping(), separators=(",", ":")).replace(
+        '"value":-0.03', f'"value":{10**400}', 1
+    )
+    path.write_text(payload, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="value must be a finite number") as error:
+        load_calibration_artifact(path)
+
+    assert error.value.__cause__ is None
+
+
+def test_loader_rejects_deeply_nested_json_as_controlled_validation_error(tmp_path: Path) -> None:
+    path = tmp_path / "deeply-nested.json"
+    path.write_text('{"nested":' * 10_000 + "0" + "}" * 10_000, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="valid JSON") as error:
+        load_calibration_artifact(path)
+
+    assert error.value.__cause__ is None
