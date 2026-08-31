@@ -42,6 +42,39 @@ trajectory = kernel.generate(
 
 Velocity and head-circumference fields used by those checks are evaluator-only derived views. The trajectory `.state` and `.points` are likewise evaluator-only and are not exported as latent truth or as a new visible smoke resource; the existing observable CSV contract and its non-matchability limitation remain unchanged. This example uses no WHO/CDC clinical table and creates no disorder-critical descendants. These defaults are uncalibrated development scenarios. Clinical validity, prevalence, demographic calibration, held-out validation, privacy evaluation, Synthea conformance, and any release gate remain deferred until separately approved evidence and governance are available; a Synthea adapter would require its own conformance evaluation.
 
+### Evaluator-only age-regime disorder composition
+
+`AgeRegimeDisorderKernel` composes one injected age-regime physiology kernel with one injected disorder scenario. The following example uses the test-only `RegimeLinearTestReference` and spans infancy, transition, puberty, and adolescence (with childhood represented between transition and puberty):
+
+```python
+from synthetic.models import PatientState
+from synthetic.native.age_regime_disorder import AgeRegimeDisorderKernel
+from synthetic.native.age_regimes import AgeRegimeConfig, AgeRegimeTrajectoryKernel
+from synthetic.native.clinical_modules import FamilialShortStatureModule
+from synthetic.randomness import NamedRandomStreams
+from tests.synthetic.fakes import RegimeLinearTestReference
+
+reference = RegimeLinearTestReference()  # test double; never a clinical reference
+config = AgeRegimeConfig(puberty_min_age_days=4_500, puberty_max_age_days=4_500)
+result = AgeRegimeDisorderKernel(
+    AgeRegimeTrajectoryKernel(reference, config), FamilialShortStatureModule()
+).generate(
+    PatientState("synthetic-disorder", "F", "F"),
+    (0, 730, 761, 4_500, 7_305),
+    NamedRandomStreams(20260830, 0),
+)
+```
+
+The returned `result.physiology`, `result.disorder`, and `result.events` are hidden evaluator objects. They are not CSV columns, descriptor resources, manifest fields, or ordinary-loader fields. This composition API does not alter the visible smoke generator, schema, resource mapping, or export contract.
+
+For `infancy` and `transition`, the module's height effect adjusts the length z-score and its BMI effect adjusts the weight z-score; adjusted `length_cm` and `weight_kg` are then re-requested from the reference. At transition, standing height is the explicit length-to-height conversion and BMI is derived from weight and height. For `childhood`, `puberty`, and `adolescence`, the adjusted height and BMI z-scores are re-requested directly and weight is derived from BMI and height. Thus the anthropometric identities remain explicit: `BMI = weight_kg / (height_cm / 100) ** 2` whenever standing height and BMI exist, and pre-transition weight is the independent mass dimension. Transition continuity is rechecked after effects are applied, including sparse age pairs; invalid or nonfinite adjusted references, derived values, or velocities fail closed.
+
+Constitutional delay has one schedule rule: sample the module's onset and delay, add `puberty_delay_days` to the sampled age-regime puberty onset, and replay physiology with that adjusted state. The module API includes a temporary-recovery height effect, but this composition uses its delay state to shift puberty and intentionally skips that overlapping height delta, so delay is applied exactly once. If the shifted onset falls outside the configured domain, composition fails closed rather than extrapolating. Other modules retain their own effects and event schedules: `HealthyGrowthModule` has zero anthropometric effect; `FamilialShortStatureModule` applies a constant negative height effect; `ConstitutionalDelayModule` supplies the temporary-recovery effect and delay state described above; and `GrowthHormoneDeficiencyModule` applies progressive impairment with an optional causally ordered treatment response. All four are uncalibrated development scenarios; choosing a module is not prevalence estimation.
+
+The composition requests only named `regime.birth`, `regime.childhood`, `regime.puberty`, `regime.residual`, `regime.head`, and the selected `disorder.<module-kind>` stream (for example, `disorder.familial_short_stature`). It never requests a `growth` stream. The physiology, hidden disorder state, and hidden clinical-event trace remain an evaluator boundary and do not enter visible smoke output.
+
+Diagnosis, laboratory, medication, and referral descendants; prevalence and demographic calibration; held-out validation; privacy auditing; counterfactual worlds; clinical approval of a reference; and Synthea conformance are deferred gates. These scenarios are not clinically validated and do not claim a match to real EHR or growth data. The healthy age-730+ smoke/export boundary remains three visits at ages 730, 1095, and 1460 days, and the existing non-matchability limitation still applies: synthetic generation alone cannot establish that a profile cannot be matched to a real patient.
+
 ## Development-only latent growth-disorder modules
 
 The latent trajectory layer is a development and evaluator harness, not a clinical model. It applies a directionally coherent, uncalibrated scenario module to the existing healthy kernel while keeping hidden truth and event traces separate from observable descendants. For example, using the injected test reference already used by the tests:

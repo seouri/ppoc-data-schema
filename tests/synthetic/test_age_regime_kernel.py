@@ -1,3 +1,4 @@
+import dataclasses
 import math
 
 import pytest
@@ -30,6 +31,48 @@ class RegimeReference:
 
 
 PATIENT = PatientState("syn-patient-a", "F", "F")
+
+
+def test_sampled_state_can_be_replayed_without_resampling() -> None:
+    kernel = AgeRegimeTrajectoryKernel(RegimeReference())
+    streams = NamedRandomStreams(20260830, 0)
+    state = kernel.sample_state(streams)
+
+    replayed = kernel.generate(PATIENT, (0, 730, 761, 4380), streams, state=state)
+    ordinary = kernel.generate(PATIENT, (0, 730, 761, 4380), streams)
+
+    assert replayed.state == ordinary.state
+    assert replayed.points == ordinary.points
+
+
+def test_state_replay_rejects_wrong_version_or_puberty_domain() -> None:
+    kernel = AgeRegimeTrajectoryKernel(RegimeReference())
+    state = kernel.sample_state(NamedRandomStreams(5, 0))
+
+    with pytest.raises(ValueError, match="module_version"):
+        kernel.generate(
+            PATIENT,
+            (730,),
+            NamedRandomStreams(5, 0),
+            state=dataclasses.replace(state, module_version="other-v1"),
+        )
+    with pytest.raises(ValueError, match="puberty"):
+        kernel.generate(
+            PATIENT,
+            (730,),
+            NamedRandomStreams(5, 0),
+            state=dataclasses.replace(state, puberty_onset_age_days=0),
+        )
+
+
+def test_ordinary_generation_preserves_head_circumference_stream() -> None:
+    trajectory = AgeRegimeTrajectoryKernel(RegimeReference()).generate(
+        PATIENT, (0, 365, 730), NamedRandomStreams(5, 0)
+    )
+
+    assert [point.head_circumference_cm for point in trajectory.points] == pytest.approx(
+        [45.694691365078036, 47.41377622324069, 49.099453092386426]
+    )
 
 
 def test_kernel_generates_all_regimes_with_two_dimension_identities() -> None:
