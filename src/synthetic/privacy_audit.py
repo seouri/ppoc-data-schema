@@ -66,12 +66,15 @@ _STATUSES = frozenset({"PASS", "FAIL", "UNEVALUABLE"})
 _SUBGROUPS = frozenset({"overall", "sex"})
 _METRIC_KEYS = frozenset({
     "evaluated_count", "generated_count", "reference_count", "heldout_count", "overlap_count",
-    "reproduction_count", "overlap_rate", "exact_reproduction_rate", "zero_proximity_rate",
-    "unique_nearest_rate", "linkage_advantage", "membership_inference_advantage",
-    "attribute_disclosure_advantage", "composition_reproduction_rate", "negative_control_advantage",
-    "positive_control_advantage", "rate_ci_lower", "rate_ci_upper", "margin_zero_rate",
-    "margin_positive_rate",
+    "identifier_count", "reproduction_count", "overlap_rate", "exact_reproduction_rate",
+    "zero_proximity_rate", "unique_nearest_rate", "heldout_zero_proximity_rate",
+    "heldout_unique_nearest_rate", "unique_candidate_rate", "permutation_unique_rate",
+    "linkage_advantage", "membership_inference_advantage", "attribute_disclosure_advantage",
+    "composition_reproduction_rate", "negative_control_advantage", "positive_control_advantage",
+    "rate_ci_lower", "rate_ci_upper", "margin_zero_rate", "margin_positive_rate",
 })
+_FIXED_COMPONENT_ORDER = ("demographics", "timing", "utilization", "trajectory", "diagnosis")
+_WILSON_95_Z = 1.959963984540054
 
 
 def _repository_fingerprint() -> str:
@@ -613,3 +616,343 @@ def _load_private_package(
         _profile_signatures=frozenset(profile._profile_signature for profile in profiles),
         _ineligible_profile_count=ineligible,
     )
+
+
+def _unevaluable_control(control_id: str, reason_code: str) -> PrivacyControlResult:
+    return PrivacyControlResult(control_id, "UNEVALUABLE", {}, reason_code)
+
+
+def _wilson_95_interval(successes: int, total: int) -> tuple[float, float]:
+    """Return the fixed, rounded Wilson interval for one aggregate count."""
+    if total <= 0 or not 0 <= successes <= total:
+        raise ValueError("Wilson interval inputs are invalid")
+    proportion = successes / total
+    squared_z = _WILSON_95_Z**2
+    denominator = 1 + squared_z / total
+    centre = (proportion + squared_z / (2 * total)) / denominator
+    spread = (_WILSON_95_Z / denominator) * math.sqrt(
+        (proportion * (1 - proportion) / total) + squared_z / (4 * total**2)
+    )
+    return round(max(0.0, centre - spread), 6), round(min(1.0, centre + spread), 6)
+
+
+def _with_interval(
+    metrics: dict[str, int | float], successes: int, total: int
+) -> dict[str, int | float]:
+    lower, upper = _wilson_95_interval(successes, total)
+    return metrics | {"rate_ci_lower": lower, "rate_ci_upper": upper}
+
+
+def _packages_have_patient_evidence(policy: PrivacyPolicy, *packages: _PrivatePackage) -> bool:
+    return all(package.patient_count >= policy.minimum_evaluable_patients for package in packages)
+
+
+def _packages_have_profile_evidence(policy: PrivacyPolicy, *packages: _PrivatePackage) -> bool:
+    return all(len(package._profiles) >= policy.minimum_evaluable_patients for package in packages)
+
+
+def _evaluate_identifier_overlap_control(
+    policy: PrivacyPolicy, reference: _PrivatePackage, generated: _PrivatePackage
+) -> PrivacyControlResult:
+    """Evaluate the mandatory private identifier-overlap gate without retaining identifiers."""
+    if (
+        not _packages_have_patient_evidence(policy, reference, generated)
+        or not reference._identifier_values
+        or not generated._identifier_values
+    ):
+        return _unevaluable_control("identifier_overlap", "insufficient_evidence")
+    overlap_count = len(reference._identifier_values & generated._identifier_values)
+    identifier_count = len(generated._identifier_values)
+    overlap_rate = round(overlap_count / identifier_count, 6)
+    metrics = _with_interval(
+        {
+            "evaluated_count": generated.patient_count,
+            "reference_count": reference.patient_count,
+            "identifier_count": identifier_count,
+            "overlap_count": overlap_count,
+            "overlap_rate": overlap_rate,
+        },
+        overlap_count,
+        identifier_count,
+    )
+    if overlap_count:
+        return PrivacyControlResult(
+            "identifier_overlap", "FAIL", metrics, "identifier_overlap_detected"
+        )
+    if overlap_rate > policy.thresholds["identifier_overlap_rate"]:
+        return PrivacyControlResult(
+            "identifier_overlap", "FAIL", metrics, "identifier_overlap_threshold_exceeded"
+        )
+    return PrivacyControlResult("identifier_overlap", "PASS", metrics, "no_identifier_overlap")
+
+
+def _evaluate_exact_reproduction_control(
+    policy: PrivacyPolicy, reference: _PrivatePackage, generated: _PrivatePackage
+) -> PrivacyControlResult:
+    """Evaluate mandatory exact eligible-trajectory reproduction privately."""
+    if not _packages_have_profile_evidence(policy, reference, generated):
+        return _unevaluable_control("exact_reproduction", "insufficient_evidence")
+    reproduction_count = sum(
+        profile._trajectory_signature in reference._trajectory_signatures
+        for profile in generated._profiles
+    )
+    evaluated_count = len(generated._profiles)
+    reproduction_rate = round(reproduction_count / evaluated_count, 6)
+    metrics = _with_interval(
+        {
+            "evaluated_count": evaluated_count,
+            "reference_count": len(reference._profiles),
+            "reproduction_count": reproduction_count,
+            "exact_reproduction_rate": reproduction_rate,
+        },
+        reproduction_count,
+        evaluated_count,
+    )
+    if reproduction_count:
+        return PrivacyControlResult(
+            "exact_reproduction", "FAIL", metrics, "exact_reproduction_detected"
+        )
+    if reproduction_rate > policy.thresholds["exact_reproduction_rate"]:
+        return PrivacyControlResult(
+            "exact_reproduction", "FAIL", metrics, "exact_reproduction_threshold_exceeded"
+        )
+    return PrivacyControlResult("exact_reproduction", "PASS", metrics, "no_exact_reproduction")
+
+
+def _component_tuple(
+    profile: _PrivatePatientProfile, components: tuple[str, ...]
+) -> tuple[object, ...]:
+    return tuple(profile._component_buckets[name] for name in components)
+
+
+def _bucket_counts(
+    profiles: tuple[_PrivatePatientProfile, ...], components: tuple[str, ...]
+) -> dict[tuple[object, ...], int]:
+    counts: dict[tuple[object, ...], int] = {}
+    for profile in profiles:
+        key = _component_tuple(profile, components)
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
+def _nearest_outcomes(
+    queries: tuple[_PrivatePatientProfile, ...], reference: tuple[_PrivatePatientProfile, ...]
+) -> tuple[int, int, int]:
+    """Return exact, unique-nearest, and tied-nearest counts through fixed bucket indexes."""
+    bucket_indexes: dict[tuple[int, ...], dict[tuple[object, ...], int]] = {}
+    for bitmask in range(1, 1 << len(_FIXED_COMPONENT_ORDER)):
+        positions = tuple(
+            index for index in range(len(_FIXED_COMPONENT_ORDER)) if bitmask & (1 << index)
+        )
+        index: dict[tuple[object, ...], int] = {}
+        for profile in reference:
+            vector = _component_tuple(profile, _FIXED_COMPONENT_ORDER)
+            key = tuple(vector[position] for position in positions)
+            index[key] = index.get(key, 0) + 1
+        bucket_indexes[positions] = index
+    exact_count = unique_count = tied_count = 0
+    for profile in queries:
+        vector = _component_tuple(profile, _FIXED_COMPONENT_ORDER)
+        nearest_count = len(reference)
+        matched_components = 0
+        for match_count in range(len(_FIXED_COMPONENT_ORDER), 0, -1):
+            candidate_count = 0
+            for positions, index in bucket_indexes.items():
+                if len(positions) != match_count:
+                    continue
+                candidate_count += index.get(tuple(vector[position] for position in positions), 0)
+            if candidate_count:
+                nearest_count = candidate_count
+                matched_components = match_count
+                break
+        if matched_components == len(_FIXED_COMPONENT_ORDER):
+            exact_count += 1
+        if nearest_count == 1:
+            unique_count += 1
+        else:
+            tied_count += 1
+    return exact_count, unique_count, tied_count
+
+
+def _nearest_metrics(
+    reference: _PrivatePackage, generated: _PrivatePackage, heldout: _PrivatePackage
+) -> dict[str, int | float]:
+    evaluated_count = len(generated._profiles)
+    zero_count, unique_count, tied_count = _nearest_outcomes(
+        generated._profiles, reference._profiles
+    )
+    heldout_zero, heldout_unique, _ = _nearest_outcomes(generated._profiles, heldout._profiles)
+    return _with_interval(
+        {
+            "evaluated_count": evaluated_count,
+            "heldout_count": len(heldout._profiles),
+            "zero_proximity_rate": round(zero_count / evaluated_count, 6),
+            "unique_nearest_rate": round(unique_count / evaluated_count, 6),
+            "margin_zero_rate": round(tied_count / evaluated_count, 6),
+            "margin_positive_rate": round(unique_count / evaluated_count, 6),
+            "heldout_zero_proximity_rate": round(heldout_zero / evaluated_count, 6),
+            "heldout_unique_nearest_rate": round(heldout_unique / evaluated_count, 6),
+        },
+        zero_count,
+        evaluated_count,
+    )
+
+
+def _evaluate_nearest_neighbor_control(
+    policy: PrivacyPolicy,
+    reference: _PrivatePackage,
+    generated: _PrivatePackage,
+    *,
+    heldout: _PrivatePackage | None,
+) -> PrivacyControlResult:
+    """Evaluate fixed private component-bucket nearest-neighbor aggregate screens."""
+    required = "nearest_neighbor" in policy.required_controls
+    if heldout is None:
+        return _unevaluable_control(
+            "nearest_neighbor", "heldout_required" if required else "heldout_not_supplied"
+        )
+    if not _packages_have_profile_evidence(policy, reference, generated, heldout):
+        return _unevaluable_control("nearest_neighbor", "insufficient_evidence")
+    metrics = _nearest_metrics(reference, generated, heldout)
+    if metrics["zero_proximity_rate"] > policy.thresholds["nearest_neighbor_zero_rate"]:
+        return PrivacyControlResult(
+            "nearest_neighbor", "FAIL", metrics, "zero_proximity_threshold_exceeded"
+        )
+    if metrics["unique_nearest_rate"] > policy.thresholds["nearest_neighbor_unique_rate"]:
+        return PrivacyControlResult(
+            "nearest_neighbor", "FAIL", metrics, "unique_nearest_threshold_exceeded"
+        )
+    return PrivacyControlResult(
+        "nearest_neighbor", "PASS", metrics, "nearest_neighbor_within_threshold"
+    )
+
+
+def _permuted_bucket_counts(
+    profiles: tuple[_PrivatePatientProfile, ...], components: tuple[str, ...]
+) -> dict[tuple[object, ...], int]:
+    """Deterministically break cross-component associations without exporting permuted keys."""
+    columns = [
+        tuple(profile._component_buckets[name] for profile in profiles) for name in components
+    ]
+    count = len(profiles)
+    keys = tuple(
+        tuple(column[(index + offset + 1) % count] for offset, column in enumerate(columns))
+        for index in range(count)
+    )
+    counts: dict[tuple[object, ...], int] = {}
+    for key in keys:
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
+def _unique_candidate_rate(
+    queries: tuple[_PrivatePatientProfile, ...],
+    counts: Mapping[tuple[object, ...], int],
+    components: tuple[str, ...],
+) -> float:
+    return round(
+        sum(counts.get(_component_tuple(profile, components), 0) == 1 for profile in queries)
+        / len(queries),
+        6,
+    )
+
+
+def _linkage_selections(policy: PrivacyPolicy) -> tuple[tuple[str, ...], ...]:
+    individual = tuple((component,) for component in policy.attacker_knowledge)
+    full = tuple(policy.attacker_knowledge)
+    return individual if len(full) == 1 else individual + (full,)
+
+
+def _linkage_candidate_metrics(
+    reference: _PrivatePackage,
+    generated: _PrivatePackage,
+    heldout: _PrivatePackage,
+    queries: tuple[_PrivatePatientProfile, ...],
+    selections: tuple[tuple[str, ...], ...],
+) -> dict[str, int | float]:
+    candidates: list[tuple[float, float, float, int]] = []
+    for components in selections:
+        generated_rate = _unique_candidate_rate(
+            queries, _bucket_counts(reference._profiles, components), components
+        )
+        heldout_rate = _unique_candidate_rate(
+            queries, _bucket_counts(heldout._profiles, components), components
+        )
+        permutation_rate = _unique_candidate_rate(
+            queries, _permuted_bucket_counts(reference._profiles, components), components
+        )
+        candidates.append(
+            (
+                max(0.0, generated_rate - max(heldout_rate, permutation_rate)),
+                generated_rate,
+                permutation_rate,
+                len(queries),
+            )
+        )
+    advantage, unique_rate, permutation_rate, evaluated_count = max(candidates)
+    successes = round(unique_rate * evaluated_count)
+    return _with_interval(
+        {
+            "evaluated_count": evaluated_count,
+            "heldout_count": len(heldout._profiles),
+            "unique_candidate_rate": unique_rate,
+            "permutation_unique_rate": permutation_rate,
+            "linkage_advantage": round(advantage, 6),
+        },
+        successes,
+        evaluated_count,
+    )
+
+
+def _linkage_query_groups(
+    policy: PrivacyPolicy, generated: _PrivatePackage
+) -> tuple[tuple[_PrivatePatientProfile, ...], ...]:
+    groups = [generated._profiles]
+    if "sex" in policy.subgroups:
+        by_sex: dict[str, list[_PrivatePatientProfile]] = {}
+        for profile in generated._profiles:
+            by_sex.setdefault(profile._demographics[0], []).append(profile)
+        groups.extend(
+            tuple(group)
+            for _, group in sorted(by_sex.items())
+            if len(group) >= policy.minimum_evaluable_patients
+        )
+    return tuple(groups)
+
+
+def _evaluate_linkage_control(
+    policy: PrivacyPolicy,
+    reference: _PrivatePackage,
+    generated: _PrivatePackage,
+    *,
+    heldout: _PrivatePackage | None,
+) -> PrivacyControlResult:
+    """Evaluate fixed exact-key linkage rates against private held-out and permutation baselines."""
+    required = "linkage" in policy.required_controls
+    if heldout is None:
+        return _unevaluable_control(
+            "linkage", "heldout_required" if required else "heldout_not_supplied"
+        )
+    if not _packages_have_profile_evidence(policy, reference, generated, heldout):
+        return _unevaluable_control("linkage", "insufficient_evidence")
+    group_metrics = tuple(
+        _linkage_candidate_metrics(
+            reference, generated, heldout, group, _linkage_selections(policy)
+        )
+        for group in _linkage_query_groups(policy, generated)
+    )
+    metrics = max(
+        group_metrics, key=lambda item: (item["linkage_advantage"], item["unique_candidate_rate"])
+    )
+    subgroup_failed = any(
+        item["linkage_advantage"] > policy.thresholds["linkage_advantage"]
+        for item in group_metrics[1:]
+    )
+    if metrics["linkage_advantage"] > policy.thresholds["linkage_advantage"]:
+        reason = (
+            "subgroup_linkage_threshold_exceeded"
+            if subgroup_failed
+            else "linkage_threshold_exceeded"
+        )
+        return PrivacyControlResult("linkage", "FAIL", metrics, reason)
+    return PrivacyControlResult("linkage", "PASS", metrics, "linkage_within_threshold")
