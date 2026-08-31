@@ -6,6 +6,15 @@ from pathlib import Path
 
 from synthetic.native import ancillary
 
+_ALLOWED_REPOSITORY_IMPORTS = frozenset(
+    {
+        "synthetic.cohort",
+        "synthetic.models",
+        "synthetic.native.observations",
+        "synthetic.native.resources",
+    }
+)
+
 
 def _dotted_name(node: ast.expr) -> str | None:
     if isinstance(node, ast.Name):
@@ -32,12 +41,29 @@ def _unsafe_dependency_names(source: str) -> set[str]:
                 names.add(name.lower())
     forbidden = {
         "calibration", "csv", "duckdb", "export", "filesystem", "heldout", "manifest",
-        "os", "package", "pathlib", "privacy", "random", "synthea", "sys",
+        "builtins", "glob", "io", "open", "os", "package", "pathlib", "privacy",
+        "random", "shutil", "subprocess", "synthea", "sys", "tempfile",
     }
     return {
         name for name in names
         if forbidden.intersection(name.replace("_", ".").split("."))
+        or name.startswith("synthetic")
+        and not any(
+            name == allowed or name.startswith(f"{allowed}.")
+            for allowed in _ALLOWED_REPOSITORY_IMPORTS
+        )
     }
+
+
+def _repository_imports(source: str) -> set[str]:
+    tree = ast.parse(source)
+    imports = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imports.update(alias.name for alias in node.names if alias.name.startswith("synthetic."))
+        elif isinstance(node, ast.ImportFrom) and node.module and node.module.startswith("synthetic"):
+            imports.add(node.module)
+    return imports
 
 
 def test_ancillary_module_has_only_native_safe_imports_and_no_lifecycle_calls() -> None:
@@ -48,6 +74,7 @@ def test_ancillary_module_has_only_native_safe_imports_and_no_lifecycle_calls() 
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
             calls.add(node.func.id.lower())
     assert not _unsafe_dependency_names(source)
+    assert _repository_imports(source) <= _ALLOWED_REPOSITORY_IMPORTS
     assert not calls.intersection({"open", "print", "exit", "quit", "seed", "randint", "write"})
 
 
@@ -55,15 +82,27 @@ def test_dependency_scanner_rejects_qualified_and_imported_forbidden_dependencie
     for source in (
         "import synthetic.package_export",
         "from synthetic import calibration",
+        "from synthetic import calibrate",
+        "import synthetic.derivation",
+        "import synthetic.run_directory",
         "from synthetic.heldout import compare",
         "import synthetic.privacy",
         "from duckdb import connect",
         "from pathlib import Path",
         "import os",
+        "from tempfile import NamedTemporaryFile",
+        "import shutil",
+        "import glob",
+        "import io; io.open('x')",
+        "import builtins; builtins.open('x')",
         "import csv",
         "import random",
         "import synthea",
         "synthetic.package_export.write()",
+        "synthetic.derivation.run()",
+        "from synthetic.derivation import run as lifecycle; lifecycle()",
+        "import synthetic.derivation as lifecycle; lifecycle.run()",
+        "from builtins import open as reader; reader('x')",
     ):
         assert _unsafe_dependency_names(source)
 

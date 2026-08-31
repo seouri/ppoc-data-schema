@@ -44,6 +44,12 @@ def _tamper_row(projection: object, resource: str, index: int, values: tuple[tup
     return current
 
 
+def _without_truth(member: object):
+    frame = dataclasses.replace(member.frame)  # type: ignore[union-attr]
+    object.__setattr__(frame, "truth", None)
+    return dataclasses.replace(member, frame=frame)  # type: ignore[arg-type]
+
+
 def test_validator_passes_clean_ghd_and_healthy_projections_with_fixed_checks() -> None:
     member, projection = _projection()
     before = projection.to_mapping()
@@ -135,7 +141,8 @@ def test_validator_rejects_ids_fixed_values_and_required_shape_without_private_t
         )
         report = validate_ghd_ancillary_resources(malformed_member, projection, _policy())
         assert report.status is AncillaryValidationStatus.FAIL
-        assert _check(report, "row_schema")[0] is AncillaryValidationStatus.FAIL
+        expected_reason = "INVALID_ID" if field_name == "lab_order_id" else "INVALID_VALUE"
+        assert _check(report, "row_schema") == (AncillaryValidationStatus.FAIL, expected_reason)
         assert _check(report, "source_evidence")[0] is AncillaryValidationStatus.UNEVALUABLE
 
     member, projection = _projection()
@@ -147,6 +154,80 @@ def test_validator_rejects_ids_fixed_values_and_required_shape_without_private_t
     report = validate_ghd_ancillary_resources(malformed_member, projection, _policy())
     assert report.status is AncillaryValidationStatus.FAIL
     assert _check(report, "row_schema")[0] is AncillaryValidationStatus.FAIL
+
+    for resource, field_name, replacement in (
+        ("problem_list", "problem_list_id", "syn-tampered-problem"),
+        ("problem_list", "pl_diag", "SYN-NOT-GHD"),
+        ("labs", "result_component_name", "SYN-NOT-GHD"),
+    ):
+        member, projection = _projection()
+        row = projection.rows[resource][0]
+        _tamper_row(
+            projection,
+            resource,
+            0,
+            tuple((name, replacement if name == field_name else value) for name, value in row.values),
+        )
+        report = validate_ghd_ancillary_resources(_without_truth(member), projection, _policy())
+        expected_reason = "INVALID_ID" if field_name.endswith("_id") else "INVALID_CODE"
+        assert _check(report, "row_schema") == (AncillaryValidationStatus.FAIL, expected_reason)
+
+
+def test_validator_keeps_visible_empty_pairing_timing_and_identity_failures_above_missing_truth() -> None:
+    cases = (
+        ("medications", 0, "med_end_date_age_in_days", 1),
+        ("problem_list", 0, "resolved_date_age_in_days", 1),
+        ("labs", 0, "lab_result_date_age_in_days", 0),
+        ("labs", 1, "visit_id", "syn-other-visit"),
+        ("medications", 0, "med_start_date_age_in_days", 0),
+    )
+    for resource, index, field_name, replacement in cases:
+        member, projection = _projection()
+        row = projection.rows[resource][index]
+        _tamper_row(
+            projection,
+            resource,
+            index,
+            tuple((name, replacement if name == field_name else value) for name, value in row.values),
+        )
+        report = validate_ghd_ancillary_resources(_without_truth(member), projection, _policy())
+        assert report.status is AncillaryValidationStatus.FAIL
+        assert _check(report, "source_evidence")[0] is AncillaryValidationStatus.UNEVALUABLE
+
+    member, projection = _projection()
+    first, second = projection.rows["labs"]
+    _tamper_row(
+        projection,
+        "labs",
+        0,
+        tuple((name, "SYN-GHD-STIM" if name == "result_component_name" else value) for name, value in first.values),
+    )
+    _tamper_row(
+        projection,
+        "labs",
+        1,
+        tuple((name, "SYN-GHD-IGF1" if name == "result_component_name" else value) for name, value in second.values),
+    )
+    assert validate_ghd_ancillary_resources(_without_truth(member), projection, _policy()).status is AncillaryValidationStatus.FAIL
+
+    member, projection = _projection()
+    for index, row in enumerate(projection.rows["labs"]):
+        _tamper_row(
+            projection,
+            "labs",
+            index,
+            tuple(
+                (name, value + 1 if name == "lab_result_date_age_in_days" else value)
+                for name, value in row.values
+            ),
+        )
+    assert validate_ghd_ancillary_resources(_without_truth(member), projection, _policy()).status is AncillaryValidationStatus.FAIL
+
+    member, projection = _projection()
+    object.__setattr__(projection, "patient_id", "syn-rekeyed")
+    report = validate_ghd_ancillary_resources(_without_truth(member), projection, _policy())
+    assert report.status is AncillaryValidationStatus.FAIL
+    assert _check(report, "cross_resource_links")[0] is AncillaryValidationStatus.FAIL
 
 
 def test_validator_marks_malformed_private_evidence_unevaluable_unless_row_is_invalid() -> None:

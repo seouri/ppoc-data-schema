@@ -182,7 +182,7 @@ _PATH_EXTENSION = re.compile(
 
 
 class AncillaryProjectionUnavailable(ValueError):
-    """Raised while the later GHD projection assembly is not available."""
+    """Fixed redacted error for an unsafe evaluator-pathway boundary."""
 
 
 def _require_aggregate_safe_token(value: object, field_name: str) -> str:
@@ -256,11 +256,11 @@ def _ancillary_row_types_are_valid(values: Mapping[str, object]) -> bool:
     return True
 
 
-def _source_independent_row_is_valid(
+def _source_independent_row_reason(
     resource_name: str,
     values: Mapping[str, object],
     patient_id: str,
-) -> bool:
+) -> str | None:
     """Validate constants and empty conventions without private evidence."""
 
     expected: dict[str, object] = {name: "" for name in values}
@@ -299,16 +299,30 @@ def _source_independent_row_is_valid(
                 "referral_number_of_visits": 1,
             }
         )
-    fixed_values_valid = all(
-        values.get(field_name) == value
-        for field_name, value in expected.items()
-        if field_name not in _ANCILLARY_INTEGER_FIELDS
-        and field_name not in {"visit_id", "result_component_name"}
-    )
-    return fixed_values_valid and (
-        resource_name != "referrals"
-        or values.get("referral_number_of_visits") == 1
-    )
+    identifier_fields = {
+        "labs": {"lab_order_id"},
+        "medications": {"med_record_id"},
+        "problem_list": {"problem_list_id"},
+        "referrals": {"referral_id"},
+    }[resource_name]
+    for field_name in identifier_fields:
+        if values.get(field_name) != expected[field_name]:
+            return "INVALID_ID"
+    if resource_name == "problem_list" and values.get("pl_diag") != GHD_DIAGNOSIS_CODE:
+        return "INVALID_CODE"
+    for field_name, value in expected.items():
+        if field_name in _ANCILLARY_INTEGER_FIELDS or field_name in {
+            "visit_id", "result_component_name", "patient_id"
+        }:
+            continue
+        if values.get(field_name) != value:
+            return "INVALID_VALUE"
+    for field_name in _ANCILLARY_OPTIONAL_INTEGER_FIELDS:
+        if field_name in values and values[field_name] != "":
+            return "INVALID_VALUE"
+    if resource_name == "referrals" and values.get("referral_number_of_visits") != 1:
+        return "INVALID_VALUE"
+    return None
 
 
 @dataclass(frozen=True, repr=False)
@@ -737,6 +751,8 @@ def validate_ghd_ancillary_resources(
     # Structural checks remain possible even if the private source frame has
     # been removed or corrupted after construction.
     try:
+        if projection.patient_id != member.demographics.patient_id:
+            mark("cross_resource_links", AncillaryValidationStatus.FAIL, "PATIENT_MISMATCH")
         if tuple(projection.rows) != GHD_ANCILLARY_RESOURCE_NAMES:
             mark("row_schema", AncillaryValidationStatus.FAIL, "SCHEMA_SHAPE_INVALID")
         for resource_name in GHD_ANCILLARY_RESOURCE_NAMES:
@@ -755,7 +771,11 @@ def validate_ghd_ancillary_resources(
             seen: set[tuple[tuple[str, object], ...]] = set()
             lab_components: set[object] = set()
             lab_lines: set[object] = set()
+            lab_pairs: set[tuple[object, object]] = set()
             lab_order_ids: set[object] = set()
+            lab_visits: set[object] = set()
+            lab_order_ages: set[object] = set()
+            lab_result_ages: set[object] = set()
             fields = projection.shape.field_names(resource_name)
             for row in resource_rows:
                 if not isinstance(row, ResourceRow) or row.resource_name != resource_name:
@@ -769,8 +789,11 @@ def validate_ghd_ancillary_resources(
                 values = _row_values(row)
                 if not _ancillary_row_types_are_valid(values):
                     mark("row_schema", AncillaryValidationStatus.FAIL, "INVALID_VALUE")
-                if not _source_independent_row_is_valid(resource_name, values, projection.patient_id):
-                    mark("row_schema", AncillaryValidationStatus.FAIL, "INVALID_VALUE")
+                fixed_reason = _source_independent_row_reason(
+                    resource_name, values, projection.patient_id
+                )
+                if fixed_reason is not None:
+                    mark("row_schema", AncillaryValidationStatus.FAIL, fixed_reason)
                 if values.get("patient_id") != projection.patient_id:
                     mark("cross_resource_links", AncillaryValidationStatus.FAIL, "PATIENT_MISMATCH")
                 if resource_name == "labs" and values.get("result_component_name") not in GHD_LAB_COMPONENT_NAMES:
@@ -784,13 +807,31 @@ def validate_ghd_ancillary_resources(
                 if resource_name == "labs":
                     lab_components.add(values.get("result_component_name"))
                     lab_lines.add(values.get("result_line_num"))
+                    lab_pairs.add((values.get("result_line_num"), values.get("result_component_name")))
                     lab_order_ids.add(values.get("lab_order_id"))
+                    lab_visits.add(values.get("visit_id"))
+                    lab_order_ages.add(values.get("lab_order_date_age_in_days"))
+                    lab_result_ages.add(values.get("lab_result_date_age_in_days"))
+                if resource_name == "medications" and (
+                    values.get("med_start_date_age_in_days", -1)
+                    < values.get("med_order_date_age_in_days", -1)
+                ):
+                    mark("causal_timing", AncillaryValidationStatus.FAIL, "TIMING_INVALID")
             if resource_name == "labs" and resource_rows and (
-                lab_components != set(GHD_LAB_COMPONENT_NAMES)
-                or lab_lines != {1, 2}
+                lab_pairs != {(1, GHD_IGF1_COMPONENT), (2, GHD_STIM_COMPONENT)}
                 or len(lab_order_ids) != 1
             ):
                 mark("row_schema", AncillaryValidationStatus.FAIL, "ROW_SCHEMA_INVALID")
+            if resource_name == "labs" and resource_rows:
+                if len(lab_visits) != 1:
+                    mark("cross_resource_links", AncillaryValidationStatus.FAIL, "VISIT_REFERENCE_INVALID")
+                if (
+                    len(lab_order_ages) != 1
+                    or len(lab_result_ages) != 1
+                    or next(iter(lab_result_ages))
+                    != next(iter(lab_order_ages)) + policy.result_delay_days
+                ):
+                    mark("causal_timing", AncillaryValidationStatus.FAIL, "TIMING_INVALID")
     except Exception:  # noqa: BLE001 - malformed visible objects are redacted
         mark("row_schema", AncillaryValidationStatus.FAIL, "MALFORMED_PROJECTION")
 
