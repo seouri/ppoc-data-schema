@@ -147,6 +147,25 @@ def test_matrix_construction_rejects_missing_fixed_assertions() -> None:
         dataclasses.replace(base, trajectory_assertions=frozenset({"growth_z_differs"}))
 
 
+@pytest.mark.parametrize(
+    ("intervention", "incompatible"),
+    [
+        (InterventionKind.PHYSIOLOGY_SEVERITY, "growth_z_invariant"),
+        (InterventionKind.EARLIER_RECOGNITION, "growth_z_differs"),
+        (InterventionKind.TREATMENT_ADHERENCE, "growth_z_differs"),
+    ],
+)
+def test_matrix_rejects_intervention_incompatible_extra_assertions(
+    intervention: InterventionKind, incompatible: str
+) -> None:
+    base = default_change_matrix(intervention)
+    with pytest.raises(ValueError, match="assertion"):
+        dataclasses.replace(
+            base,
+            trajectory_assertions=base.trajectory_assertions | {incompatible},
+        )
+
+
 def test_matrix_requires_enum_nodes_frozensets_and_disjoint_causal_sets() -> None:
     base = default_change_matrix(InterventionKind.PHYSIOLOGY_SEVERITY)
 

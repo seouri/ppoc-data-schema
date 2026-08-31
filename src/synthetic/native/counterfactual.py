@@ -134,6 +134,18 @@ _FIXED_MATRIX_SEMANTICS: dict[
     ),
 }
 
+_ALLOWED_ASSERTIONS_BY_INTERVENTION = {
+    InterventionKind.PHYSIOLOGY_SEVERITY: frozenset(
+        {"growth_z_differs", "pre_onset_growth_invariant"}
+    ),
+    InterventionKind.EARLIER_RECOGNITION: frozenset(
+        {"growth_z_invariant", "recognition_timing_earlier"}
+    ),
+    InterventionKind.TREATMENT_ADHERENCE: frozenset(
+        {"pre_treatment_growth_invariant", "post_treatment_growth_may_change"}
+    ),
+}
+
 _MATRIX_KEYS = frozenset(
     {
         "version",
@@ -248,8 +260,9 @@ class CounterfactualChangeMatrix:
             raise ValueError("permitted_descendants weaken the fixed intervention semantics")
         if not invariants.issuperset(fixed_invariants):
             raise ValueError("required_invariants weaken the fixed intervention semantics")
+        allowed_assertions = _ALLOWED_ASSERTIONS_BY_INTERVENTION[self.intervention]
         if not assertions.issuperset(fixed_assertions) or not assertions.issubset(
-            _TRAJECTORY_ASSERTIONS
+            allowed_assertions
         ):
             raise ValueError("trajectory assertions are incompatible with the intervention")
         if "recognition_timing_earlier" in assertions and CausalLayer.EVENT_TRACE not in permitted:
