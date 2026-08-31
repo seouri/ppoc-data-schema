@@ -1,9 +1,9 @@
-"""Evaluator-only value contracts for the fictional GHD ancillary pathway.
+"""Evaluator-only contracts for the fictional GHD ancillary pathway.
 
-The models in this module are deliberately independent of package export,
-governed data, and filesystem state.  Later pathway tasks fill in the pure
-projection and validator functions; the value objects are useful on their own
-for keeping exact descriptor-shaped rows and aggregate reports immutable.
+The pure projection and validation contracts in this module are deliberately
+independent of package export, governed data, and filesystem state.  They keep
+exact descriptor-shaped rows and aggregate reports immutable while preserving
+the separation between visible fictional data and evaluator-held evidence.
 """
 
 from __future__ import annotations
@@ -124,6 +124,39 @@ _ANCILLARY_INTEGER_FIELDS = frozenset(
         "referral_number_of_visits",
     }
 )
+_ANCILLARY_OPTIONAL_INTEGER_FIELDS = frozenset(
+    {"med_end_date_age_in_days", "resolved_date_age_in_days"}
+)
+_ANCILLARY_REQUIRED_FIELDS: Mapping[str, frozenset[str]] = MappingProxyType(
+    {
+        "labs": frozenset(
+            {
+                "patient_id", "visit_id", "lab_order_id", "result_line_num",
+                "lab_order_date_age_in_days", "lab_result_date_age_in_days",
+                "result_component_name", "result_loinc_code", "result_value", "result_flag",
+            }
+        ),
+        "medications": frozenset(
+            {
+                "patient_id", "visit_id", "med_record_id", "med_order_date_age_in_days",
+                "med_start_date_age_in_days", "med_end_date_age_in_days", "med_record_type",
+                "med_simple_generic_name",
+            }
+        ),
+        "problem_list": frozenset(
+            {
+                "patient_id", "problem_list_id", "noted_date_age_in_days",
+                "resolved_date_age_in_days", "pl_diag",
+            }
+        ),
+        "referrals": frozenset(
+            {
+                "patient_id", "visit_id", "referral_id", "referral_date_age_in_days",
+                "requested_specialty", "referral_number_of_visits",
+            }
+        ),
+    }
+)
 _SYNTHETIC_PATIENT_TOKEN = re.compile(r"^syn-[A-Za-z0-9][A-Za-z0-9._-]*$")
 _AGGREGATE_TOKEN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
 _AGGREGATE_UNSAFE_COMPONENTS = frozenset(
@@ -213,11 +246,69 @@ def _ancillary_row_types_are_valid(values: Mapping[str, object]) -> bool:
 
     for field_name, value in values.items():
         if field_name in _ANCILLARY_INTEGER_FIELDS:
-            if value != "" and (isinstance(value, bool) or not isinstance(value, int)):
+            if value == "":
+                if field_name not in _ANCILLARY_OPTIONAL_INTEGER_FIELDS:
+                    return False
+            elif isinstance(value, bool) or not isinstance(value, int) or value < 0:
                 return False
         elif not isinstance(value, str):
             return False
     return True
+
+
+def _source_independent_row_is_valid(
+    resource_name: str,
+    values: Mapping[str, object],
+    patient_id: str,
+) -> bool:
+    """Validate constants and empty conventions without private evidence."""
+
+    expected: dict[str, object] = {name: "" for name in values}
+    expected["patient_id"] = patient_id
+    if resource_name == "labs":
+        expected.update(
+            {
+                "lab_order_id": _synthetic_ancillary_id(patient_id, "lab-order"),
+                "result_loinc_code": "",
+                "result_value": "",
+                "result_flag": GHD_LAB_RESULT_FLAG,
+            }
+        )
+    elif resource_name == "medications":
+        expected.update(
+            {
+                "med_record_id": _synthetic_ancillary_id(patient_id, "medication"),
+                "med_end_date_age_in_days": "",
+                "med_record_type": GHD_MEDICATION_RECORD_TYPE,
+                "med_simple_generic_name": GHD_MEDICATION_NAME,
+            }
+        )
+    elif resource_name == "problem_list":
+        expected.update(
+            {
+                "problem_list_id": _synthetic_ancillary_id(patient_id, "problem-list"),
+                "resolved_date_age_in_days": "",
+                "pl_diag": GHD_DIAGNOSIS_CODE,
+            }
+        )
+    elif resource_name == "referrals":
+        expected.update(
+            {
+                "referral_id": _synthetic_ancillary_id(patient_id, "referral"),
+                "requested_specialty": GHD_REFERRAL_SPECIALTY,
+                "referral_number_of_visits": 1,
+            }
+        )
+    fixed_values_valid = all(
+        values.get(field_name) == value
+        for field_name, value in expected.items()
+        if field_name not in _ANCILLARY_INTEGER_FIELDS
+        and field_name not in {"visit_id", "result_component_name"}
+    )
+    return fixed_values_valid and (
+        resource_name != "referrals"
+        or values.get("referral_number_of_visits") == 1
+    )
 
 
 @dataclass(frozen=True, repr=False)
@@ -649,11 +740,22 @@ def validate_ghd_ancillary_resources(
         if tuple(projection.rows) != GHD_ANCILLARY_RESOURCE_NAMES:
             mark("row_schema", AncillaryValidationStatus.FAIL, "SCHEMA_SHAPE_INVALID")
         for resource_name in GHD_ANCILLARY_RESOURCE_NAMES:
+            if not _ANCILLARY_REQUIRED_FIELDS[resource_name].issubset(
+                projection.shape.field_names(resource_name)
+            ):
+                mark("row_schema", AncillaryValidationStatus.FAIL, "SCHEMA_SHAPE_INVALID")
             resource_rows = projection.rows.get(resource_name)
             if not isinstance(resource_rows, tuple):
                 mark("row_schema", AncillaryValidationStatus.FAIL, "SCHEMA_SHAPE_INVALID")
                 continue
+            if len(resource_rows) > (2 if resource_name == "labs" else 1):
+                mark("row_schema", AncillaryValidationStatus.FAIL, "DUPLICATE_ROW")
+            if resource_name == "labs" and len(resource_rows) == 1:
+                mark("row_schema", AncillaryValidationStatus.FAIL, "ROW_SCHEMA_INVALID")
             seen: set[tuple[tuple[str, object], ...]] = set()
+            lab_components: set[object] = set()
+            lab_lines: set[object] = set()
+            lab_order_ids: set[object] = set()
             fields = projection.shape.field_names(resource_name)
             for row in resource_rows:
                 if not isinstance(row, ResourceRow) or row.resource_name != resource_name:
@@ -667,6 +769,8 @@ def validate_ghd_ancillary_resources(
                 values = _row_values(row)
                 if not _ancillary_row_types_are_valid(values):
                     mark("row_schema", AncillaryValidationStatus.FAIL, "INVALID_VALUE")
+                if not _source_independent_row_is_valid(resource_name, values, projection.patient_id):
+                    mark("row_schema", AncillaryValidationStatus.FAIL, "INVALID_VALUE")
                 if values.get("patient_id") != projection.patient_id:
                     mark("cross_resource_links", AncillaryValidationStatus.FAIL, "PATIENT_MISMATCH")
                 if resource_name == "labs" and values.get("result_component_name") not in GHD_LAB_COMPONENT_NAMES:
@@ -677,6 +781,16 @@ def validate_ghd_ancillary_resources(
                     mark("row_schema", AncillaryValidationStatus.FAIL, "INVALID_VALUE")
                 if resource_name == "medications" and values.get("med_simple_generic_name") != GHD_MEDICATION_NAME:
                     mark("row_schema", AncillaryValidationStatus.FAIL, "INVALID_VALUE")
+                if resource_name == "labs":
+                    lab_components.add(values.get("result_component_name"))
+                    lab_lines.add(values.get("result_line_num"))
+                    lab_order_ids.add(values.get("lab_order_id"))
+            if resource_name == "labs" and resource_rows and (
+                lab_components != set(GHD_LAB_COMPONENT_NAMES)
+                or lab_lines != {1, 2}
+                or len(lab_order_ids) != 1
+            ):
+                mark("row_schema", AncillaryValidationStatus.FAIL, "ROW_SCHEMA_INVALID")
     except Exception:  # noqa: BLE001 - malformed visible objects are redacted
         mark("row_schema", AncillaryValidationStatus.FAIL, "MALFORMED_PROJECTION")
 

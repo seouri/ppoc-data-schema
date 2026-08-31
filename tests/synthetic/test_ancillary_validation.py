@@ -117,6 +117,38 @@ def test_validator_rejects_float_for_descriptor_integer_even_when_values_compare
     assert _check(report, "source_evidence")[0] is AncillaryValidationStatus.UNEVALUABLE
 
 
+def test_validator_rejects_ids_fixed_values_and_required_shape_without_private_truth() -> None:
+    for field_name, replacement in (
+        ("lab_order_id", "syn-tampered-order"),
+        ("result_flag", "not-synthetic"),
+    ):
+        member, projection = _projection()
+        malformed_frame = dataclasses.replace(member.frame)
+        object.__setattr__(malformed_frame, "truth", None)
+        malformed_member = dataclasses.replace(member, frame=malformed_frame)
+        row = projection.rows["labs"][0]
+        _tamper_row(
+            projection,
+            "labs",
+            0,
+            tuple((name, replacement if name == field_name else value) for name, value in row.values),
+        )
+        report = validate_ghd_ancillary_resources(malformed_member, projection, _policy())
+        assert report.status is AncillaryValidationStatus.FAIL
+        assert _check(report, "row_schema")[0] is AncillaryValidationStatus.FAIL
+        assert _check(report, "source_evidence")[0] is AncillaryValidationStatus.UNEVALUABLE
+
+    member, projection = _projection()
+    malformed_frame = dataclasses.replace(member.frame)
+    object.__setattr__(malformed_frame, "truth", None)
+    malformed_member = dataclasses.replace(member, frame=malformed_frame)
+    lab_spec = next(spec for spec in projection.shape.resources if spec.name == "labs")
+    object.__setattr__(lab_spec, "field_names", tuple(name for name in lab_spec.field_names if name != "result_flag"))
+    report = validate_ghd_ancillary_resources(malformed_member, projection, _policy())
+    assert report.status is AncillaryValidationStatus.FAIL
+    assert _check(report, "row_schema")[0] is AncillaryValidationStatus.FAIL
+
+
 def test_validator_marks_malformed_private_evidence_unevaluable_unless_row_is_invalid() -> None:
     member, projection = _projection()
     malformed_frame = dataclasses.replace(member.frame)
