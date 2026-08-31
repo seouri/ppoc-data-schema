@@ -93,6 +93,45 @@ def _copy_descriptor(descriptor: Mapping[str, object]) -> dict[str, Any]:
     return copied
 
 
+def _canonical_descriptor(descriptor: dict[str, Any]) -> dict[str, Any]:
+    """Retain only schema-fingerprinted descriptor values for publication."""
+    resources: list[dict[str, Any]] = []
+    for source_resource in descriptor["resources"]:
+        source_schema = source_resource["schema"]
+        resource: dict[str, Any] = {
+            "name": source_resource["name"],
+            "path": source_resource["path"],
+            "encoding": source_resource.get("encoding", "utf-8"),
+            "dialect": source_resource.get("dialect", {}),
+            "schema": {
+                "fields": [
+                    {
+                        key: field[key]
+                        for key in ("name", "type", "constraints")
+                        if key in field
+                    }
+                    for field in source_schema["fields"]
+                ],
+                "missingValues": source_schema.get("missingValues", []),
+                "primaryKey": source_schema.get("primaryKey"),
+                "foreignKeys": source_schema.get("foreignKeys", []),
+            },
+        }
+        logical_links = source_resource.get("x-logicalForeignKeys", [])
+        if logical_links:
+            resource["x-logicalForeignKeys"] = [
+                {"fields": link["fields"], "reference": link["reference"]}
+                for link in logical_links
+            ]
+        resources.append(resource)
+    return {
+        "profile": "tabular-data-package",
+        "name": "ppoc-pediatric-ehr",
+        "title": "PPOC Pediatric EHR Data Package",
+        "resources": resources,
+    }
+
+
 def _allowed_tree(descriptor: dict[str, Any], names: tuple[str, ...]) -> tuple[set[str], set[str]]:
     files = {Path(resource_spec(descriptor, name)["path"]).as_posix() for name in names}
     dirs = {
@@ -166,8 +205,11 @@ def _validate_preflight(
     copied_descriptor = _copy_descriptor(descriptor)
     if schema_fingerprint(copied_descriptor) != EXPECTED_SCHEMA_FINGERPRINT:
         raise ValueError("descriptor does not match the exact schema contract")
-    validate_resource_paths(copied_descriptor, output)
-    return copied_descriptor, _normalize_base_rows(copied_descriptor, base_rows)
+    canonical_descriptor = _canonical_descriptor(copied_descriptor)
+    if schema_fingerprint(canonical_descriptor) != EXPECTED_SCHEMA_FINGERPRINT:
+        raise ValueError("descriptor does not match the exact schema contract")
+    validate_resource_paths(canonical_descriptor, output)
+    return canonical_descriptor, _normalize_base_rows(canonical_descriptor, base_rows)
 
 
 def _sha256(path: Path) -> str:

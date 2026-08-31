@@ -153,6 +153,20 @@ def test_export_copies_json_compatible_descriptor_without_mutating_caller(tmp_pa
     assert descriptor == original
 
 
+def test_export_does_not_publish_unfingerprinted_descriptor_metadata(tmp_path: Path) -> None:
+    descriptor = _descriptor()
+    secrets = ("source-frame-token", "truth-token", "evaluator-artifact-token")
+    descriptor["name"] = secrets[0]
+    descriptor["provenance"] = secrets[1]
+    descriptor["resources"][0]["evaluatorArtifact"] = secrets[2]
+    assert schema_fingerprint(descriptor) == EXPECTED_SCHEMA_FINGERPRINT
+
+    package = _export(tmp_path, descriptor=descriptor)
+
+    serialized_package = b"".join(_package_bytes(package).values()).decode("utf-8")
+    assert all(secret not in serialized_package for secret in secrets)
+
+
 @pytest.mark.parametrize("mutation", ["missing", "unknown", "field-order", "unsafe-path"])
 def test_export_rejects_nonexact_or_unsafe_descriptors_before_lifecycle(
     tmp_path: Path, mutation: str
@@ -252,11 +266,15 @@ def test_export_rejects_missing_oracle_and_invalid_trusted_configuration_before_
         assert _lifecycle_paths(tmp_path, f"invalid-{index}") == []
 
 
-@pytest.mark.parametrize("mode", ["fingerprint", "classification", "base", "extra", "missing-output"])
+@pytest.mark.parametrize(
+    "mode", ["identity", "fingerprint", "classification", "base", "extra", "missing-output"]
+)
 def test_oracle_failures_are_unavailable_and_do_not_promote(tmp_path: Path, mode: str) -> None:
     class HostileOracle(IdentityPreservingTestDerivationOracle):
         def derive(self, package_root: Path, descriptor: dict) -> DerivationResult:
             result = super().derive(package_root, descriptor)
+            if mode == "identity":
+                return DerivationResult("changed-oracle-id", result.implementation_fingerprint, True)
             if mode == "fingerprint":
                 return DerivationResult(result.oracle_id, "f" * 64, True)
             if mode == "classification":
