@@ -47,15 +47,22 @@ Files:
 - Modify: `docs/synthetic-generator.md`
 - Modify: `README.md`
 
-- [ ] Write failing tests for malformed evidence → `UNEVALUABLE`, invariant/causal violations → `FAIL`, no latent truth/report leakage, no governed imports, no schema/CLI changes, and deferred utilization/error-removal interventions.
-- [ ] Implement fixed aggregate checks/reason codes and evaluator-only boundary assertions.
-- [ ] Document the observation API, streams, hidden truth boundary, and deferred package/resource scope.
-- [ ] Run focused tests, full suite, Ruff, schema check, and diff check; commit `feat: document evaluator observation frames`.
+- [x] Write failing tests for malformed evidence → `UNEVALUABLE`, invariant/causal violations → `FAIL`, no latent truth/report leakage, no governed imports, no schema/CLI changes, and deferred utilization/error-removal interventions.
+- [x] Implement fixed aggregate checks/reason codes and evaluator-only boundary assertions.
+- [x] Document the observation API, streams, hidden truth boundary, and deferred package/resource scope.
+- [x] Run focused tests, full suite, Ruff, schema check, and diff check; commit `feat: document evaluator observation frames`.
 
 ### Task 4: Independent reviews and handoff
 
-- [ ] Create an ignored SDD ledger and record each task's implementation/review/fix status.
-- [ ] Dispatch a fresh reviewer for every task; implement fixes through fresh implementer agents and run one scoped re-review after each fix round.
-- [ ] Run one broad final review from merge base through branch tip and resolve all Critical/Important findings with fresh fix/re-review passes.
-- [ ] From the feature worktree run full pytest, Ruff, schema check, staged diff checks, and targeted leakage/boundary checks.
+- [x] Create an ignored SDD ledger and record each task's implementation/review/fix status.
+- [x] Dispatch a fresh reviewer for every task; implement fixes through fresh implementer agents and run one scoped re-review after each fix round.
+- [x] Run one broad final review from merge base through branch tip and resolve all Critical/Important findings with fresh fix/re-review passes.
+- [x] From the feature worktree run full pytest, Ruff, schema check, staged diff checks, and targeted leakage/boundary checks.
 - [ ] Merge to `main`, rerun all verification on merged `main`, push, verify `HEAD == origin/main`, and remove only this slice's worktree/branch/ignored SDD workspace.
+
+### Completion evidence before integration
+
+- Branch tip: `d6ee18f` (`fix: gate bmi on structural height applicability`).
+- Observation-focused suite: `74 passed`; full suite: `806 passed`.
+- Ruff: clean; schema check: `validated 8 resources`; merge-base and working-tree diff checks: clean.
+- Scoped final re-review: PASS; broad final review: PASS with no Critical/Important findings.
