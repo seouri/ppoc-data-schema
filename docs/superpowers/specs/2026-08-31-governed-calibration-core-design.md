@@ -67,7 +67,7 @@ def calibrate(config: CalibrationRunConfig) -> CalibrationResult:
     ...
 ```
 
-`PartitionPolicy` validates canonical identifiers, a basis-point fraction in `1..9999`, a positive minimum count, and a nonempty key identifier. The key itself is supplied only as in-memory bytes to `CalibrationRunConfig`; it is never serialized, hashed into a public identifier, or written to a report. The keyed assignment is `HMAC-SHA256(partition_key, patient_id)` interpreted as an unsigned big-endian integer modulo 10,000. Buckets below `calibration_basis_points` are `calibration`; the remainder is `held_out`. The algorithm and policy version are recorded, but patient assignments are not.
+`PartitionPolicy` validates canonical identifiers, a basis-point fraction in `1..9999`, a positive minimum count, and a nonempty key identifier. The key itself is supplied only as at least 16 in-memory bytes to `CalibrationRunConfig`; it is never serialized, hashed into a public identifier, or written to a report. The keyed assignment is `HMAC-SHA256(partition_key, patient_id)` interpreted as an unsigned big-endian integer modulo 10,000. Buckets below `calibration_basis_points` are `calibration`; the remainder is `held_out`. The algorithm and policy version are recorded, but patient assignments are not.
 
 `CalibrationAgeWindow` contains a canonical window identifier and inclusive lower/exclusive upper age in days. The default public windows are `infancy` (`0..729`), `childhood` (`730..3286`), `puberty_window` (`3287..5478`), and `adolescence` (`5479..7305`). These are observable age bins for aggregation, not latent puberty labels. A run must provide at least one window, windows must be ordered and non-overlapping, and all upper bounds must be finite positive integers.
 
