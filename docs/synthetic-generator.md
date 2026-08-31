@@ -337,6 +337,66 @@ The validator has seven fixed aggregate checks: patient identity, schema shape, 
 
 This evaluator contract does not itself implement augmented resources, exact-schema file export, or package manifests. The development-only bridge below now writes exact-schema files and manifests with an explicit injected oracle; authoritative augmented clinical derivation, prevalence and demographic calibration, ancillary clinical pathways, held-out validation, privacy/non-matchability evaluation, task utility, clinical validity, release approval, and Synthea conformance remain explicitly deferred gates.
 
+## Evaluator-only GHD ancillary pathway
+
+`project_ghd_ancillary_resources(member, shape, policy)` is a deterministic,
+in-memory projection for one previously generated fictional `CohortMember`.
+The caller supplies the already extracted `ResourceShape` and a
+`GhdAncillaryPolicy(policy_id, policy_version, result_delay_days)`; no path,
+CSV, key, report, output, or governed input is accepted. The return value is
+an immutable `AncillaryResourceProjection` with exactly four resource tuples:
+`labs`, `medications`, `problem_list`, and `referrals`. Validation is a
+separate aggregate-only call:
+
+```python
+from synthetic.native.ancillary import (
+    AncillaryValidationStatus,
+    GhdAncillaryPolicy,
+    project_ghd_ancillary_resources,
+    validate_ghd_ancillary_resources,
+)
+
+# member and shape came from a prior in-memory synthetic generation step.
+policy = GhdAncillaryPolicy("ghd-ancillary-v1", "1", result_delay_days=7)
+projection = project_ghd_ancillary_resources(member, shape, policy)
+report = validate_ghd_ancillary_resources(member, projection, policy)
+assert report.status is AncillaryValidationStatus.PASS
+```
+
+Only a GHD member with the existing valid observation frame can produce
+nonempty rows. The first visible `recognition` event emits one referral to
+`Synthetic Pediatric Endocrinology`; the first `workup` emits two `labs`
+components (`SYN-GHD-IGF1` and `SYN-GHD-STIM`); and the first visible
+`diagnosis` emits one unresolved `problem_list` row with `SYN-GHD`. A hidden
+`treatment_start` event is consulted only after visible diagnosis and then
+permits one medication, `Synthetic growth hormone`, with record type
+`Internal`; hidden treatment alone never creates a visible row. Event ages
+control order, noted, referral, and start timing, while each lab result is
+delayed by `policy.result_delay_days`.
+
+Every row follows `shape.field_names(resource)` in exact descriptor order.
+Unlisted optional values use the exact empty string (empty-string) convention (`""`): labs
+have no LOINC claim and synthetic result flags, the problem has no visit key
+and an empty resolved age, medication end age is empty, and referral count is
+`1`. The four fixed fictional values above are test vocabulary, not ICD,
+LOINC, RxNorm, or clinical terminology/reference values. Healthy, non-GHD,
+and unrecognized members return four empty tuples. Replaying the same inputs
+is deterministic and mutates neither member nor shape.
+
+`AncillaryValidationReport` has fixed checks for pathway scope, row schema,
+causal timing, cross-resource links, and source evidence. Its aggregate status
+is `PASS`, `FAIL`, or `UNEVALUABLE`: `FAIL` wins over `UNEVALUABLE`, which wins
+over `PASS`. Reports expose only check names, statuses, reason codes, and
+counts; row identifiers, ages, values, hidden events, and source payloads are
+never returned.
+
+This is an evaluator-only exact-row contract. `ObservedResourceBundle`, exact
+complete package export, augmented derivation, other disorders, prevalence
+calibration, held-out validation, privacy and non-matchability evidence,
+clinical review, task utility, release approval, and Synthea conformance are
+unchanged and deferred. The production CLI remains fail-closed, and existing
+empty-ancillary base-resource contracts remain in force.
+
 ## Exact-schema observed-resource package export
 
 `export_observed_resource_package` is the development-only bridge from one or more passing in-memory observed-resource bundles to an exact-schema, synthetic-only package. The caller supplies an already-loaded descriptor mapping; the exporter does not accept a descriptor path, a real-data root, a calibration input, a held-out report, a privacy policy, or a Synthea input. Every bundle must already validate as `PASS`. The exporter checks each bundle against the supplied descriptor shape, rejects duplicate synthetic patient and visit identifiers, then sorts bundles deterministically by synthetic patient ID before it writes the shared exact-schema lifecycle.
