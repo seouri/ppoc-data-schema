@@ -1389,7 +1389,7 @@ def audit_privacy(config: PrivacyRunConfig) -> PrivacyAuditResult:
         raise TypeError("config must be a PrivacyRunConfig")
     try:
         return _audit_privacy(config)
-    except (duckdb.Error, OSError, RecursionError, TypeError, UnicodeError, ValueError):
+    except (KeyError, duckdb.Error, OSError, RecursionError, TypeError, UnicodeError, ValueError):
         raise ValueError("privacy audit inputs invalid") from None
 
 

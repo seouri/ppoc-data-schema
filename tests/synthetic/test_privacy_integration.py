@@ -236,3 +236,19 @@ def test_library_input_failures_are_redacted(tmp_path: Path) -> None:
         audit_privacy(config)
 
     assert str(error.value) == "privacy audit inputs invalid"
+
+
+def test_library_primary_descriptor_malformation_is_redacted(tmp_path: Path) -> None:
+    """Catches a raw descriptor KeyError escaping the public audit input boundary."""
+    config = _config(tmp_path)
+    descriptor = config.real_root / "datapackage.json"
+    payload = json.loads(descriptor.read_text(encoding="utf-8"))
+    payload["resources"][0].pop("schema")
+    descriptor.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError) as error:
+        audit_privacy(config)
+
+    assert str(error.value) == "privacy audit inputs invalid"
+    assert "schema" not in str(error.value)
+    assert str(config.real_root) not in str(error.value)
