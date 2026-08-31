@@ -104,6 +104,38 @@ def test_valid_mapping_builds_frozen_artifact_and_canonical_shape() -> None:
         artifact.artifact_id = "changed"  # type: ignore[misc]
 
 
+@pytest.mark.parametrize("identifier", ["SYN-P-001", "SYN-V-001"])
+@pytest.mark.parametrize(
+    "metadata_channel",
+    [
+        "artifact_id",
+        "source_snapshot",
+        "disclosure_policy_id",
+        "disclosure_policy_version",
+        "age_regime",
+        "target_name",
+        "unit",
+    ],
+)
+def test_artifact_rejects_fixture_identifiers_in_serialized_metadata(
+    identifier: str, metadata_channel: str
+) -> None:
+    value = valid_mapping()
+    if metadata_channel in {"artifact_id", "source_snapshot"}:
+        value[metadata_channel] = identifier
+    elif metadata_channel.startswith("disclosure_policy_"):
+        policy_field = metadata_channel.removeprefix("disclosure_")
+        value["disclosure_policy"][policy_field] = identifier  # type: ignore[index]
+    elif metadata_channel == "age_regime":
+        value["strata"][0]["dimensions"]["age_regime"] = identifier  # type: ignore[index]
+        value["strata"][0]["stratum_id"] = f"age_regime={identifier}|reference_sex=F"  # type: ignore[index]
+    else:
+        value["strata"][0]["targets"][0][metadata_channel] = identifier  # type: ignore[index]
+
+    with pytest.raises(ValueError, match="aggregate|identifier|record"):
+        CalibrationArtifact.from_mapping(value)
+
+
 def test_mapping_normalizes_stratum_and_target_order() -> None:
     value = valid_mapping_with_strata_and_targets_in_reverse_order()
 
@@ -341,6 +373,27 @@ def test_target_family_rejects_hidden_or_record_like_indicators(family: str) -> 
 def test_target_name_rejects_hidden_or_record_like_indicators(target_name: str) -> None:
     with pytest.raises(ValueError, match="target_name"):
         CalibrationArtifact.from_mapping(valid_mapping_with_target(target_name=target_name))
+
+
+def test_target_name_accepts_approved_growth_dx_flag_without_weakening_component_guards() -> None:
+    artifact = CalibrationArtifact.from_mapping(
+        valid_mapping_with_target(target_name="growth_dx_flag")
+    )
+
+    assert artifact.strata[0].targets[0].target_name == "growth_dx_flag"
+    for unsafe in (
+        "row",
+        "height_row_mean",
+        "heightRowMean",
+        "ABCRowMetric",
+        "patient_count",
+        "APIKeyMetric",
+        "SYN-P-001",
+        "target.csv",
+        "privacyAuditScore",
+    ):
+        with pytest.raises(ValueError, match="target_name"):
+            CalibrationArtifact.from_mapping(valid_mapping_with_target(target_name=unsafe))
 
 
 @pytest.mark.parametrize(
