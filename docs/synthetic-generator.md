@@ -221,6 +221,68 @@ The validator has seven fixed aggregate checks: patient identity, schema shape, 
 
 This is an evaluator contract, not an augmented-resource implementation, package/export capability, prevalence result, privacy/non-matchability result, or Synthea adapter. Augmented resources, exact-schema file export, package manifests, prevalence and demographic calibration, held-out validation, privacy evaluation, and Synthea conformance remain explicitly deferred gates.
 
+## Exact-schema observed-resource package export
+
+`export_observed_resource_package` is the development-only bridge from one or more passing in-memory observed-resource bundles to an exact-schema, synthetic-only package. The caller supplies an already-loaded descriptor mapping; the exporter does not accept a descriptor path, a real-data root, a calibration input, a held-out report, a privacy policy, or a Synthea input. Every bundle must already validate as `PASS`. The exporter checks each bundle against the supplied descriptor shape, rejects duplicate synthetic patient and visit identifiers, then sorts bundles deterministically by synthetic patient ID before it writes the shared exact-schema lifecycle.
+
+The complete export call below receives `bundles` from the evaluator-only projection step above. Its `IdentityPreservingTestDerivationOracle` is an explicit injected test-only oracle: it owns the two augmented rows and is not an authoritative clinical derivation implementation. The descriptor mapping is loaded by this caller for illustration; no package-path reader is passed into the exporter.
+
+```python
+from pathlib import Path
+
+from synthetic.native.resources import ResourceValidationStatus, validate_observed_resources
+from synthetic.package_export import (
+    PackageExportMetadata,
+    export_observed_resource_package,
+)
+from synthetic.schema_contract import load_descriptor
+from tests.synthetic.fakes import IdentityPreservingTestDerivationOracle
+
+
+def export_passing_observed_bundles(repository: Path, bundles: list[object], output: Path) -> Path:
+    descriptor_mapping = load_descriptor(repository / "datapackage.json")
+    for bundle in bundles:
+        assert validate_observed_resources(bundle).status is ResourceValidationStatus.PASS
+
+    return export_observed_resource_package(
+        bundles,
+        descriptor_mapping,
+        output,
+        metadata=PackageExportMetadata(
+            profile="observed-development",
+            seed=20260831,
+            reference_time="2026-08-31T00:00:00Z",
+            reference_id="fictional-observed-reference-v1",
+            reference_sha256="b" * 64,
+            configuration_sha256="a" * 64,
+            software_revision="development-example",
+        ),
+        derivation_oracle=IdentityPreservingTestDerivationOracle(),
+        trusted_derivation_fingerprint="0123456789abcdef" * 4,
+        trusted_derivation_test_only=True,
+    )
+```
+
+The promoted package contains exactly these eleven output files:
+
+```text
+patients.csv
+patients_augmented.csv
+visits.csv
+visits_augmented-20251209150512.csv
+labs.csv
+medications.csv
+problem_list.csv
+referrals.csv
+datapackage.json
+validation-report.json
+manifest.json
+```
+
+The two augmented resources are oracle-owned. Empty ancillary base resources remain schema-correct rather than becoming clinical claims. The exact descriptor fields, order, dialects, encodings, constraints, keys, logical links, generated-only descriptor, structural validation report, manifest hashes, and atomic lifecycle are shared with the smoke export contract below.
+
+The exporter refuses an existing target and redacts bundle or lifecycle failures as `observed package export failed`; a failed lifecycle is retained only as an unvalidated sibling failure archive. A successful package is a synthetic-only development artifact. Its structural success is not privacy/non-matchability or prevalence evidence, and it is not evidence of demographic calibration, ancillary clinical pathways, held-out validation, task utility, clinical validity, release readiness, or Synthea conformance. Those remain separate deferred gates with their own approved evidence and governance.
+
 ### Development-only age-regime smoke example
 
 When exercising the latent trajectory layer with an injected reference, cover the five `GrowthRegime` classifier regimes: infancy, transition, childhood, puberty, and adolescence. Infancy runs before the configured transition window; transition spans the configured 24-month window (700–760 days by default, so day 730 is transition); childhood follows that window until the injected puberty schedule; puberty follows onset for its configured tempo; and adolescence continues through the maximum age (including 7305). At every age, generate only two independent anthropometric dimensions: length plus weight before transition, and height plus BMI after transition, with the applicable third value derived explicitly. Do not generate height/length, weight, and BMI as three independent states.
