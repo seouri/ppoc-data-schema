@@ -367,6 +367,6 @@ If a reviewer reports a real defect, dispatch the responsible implementer with t
 
 Run the full pytest suite, Ruff, schema check, `git diff --check`, and a clean-tree check. Confirm the feature branch contains only the governed calibrator slice and its tests/docs. Check that no files under a real-data root, key material, patient partition, generated artifact, or temporary output are staged.
 
-- [ ] **Step 4: Merge, push, and verify remote parity**
+- [x] **Step 4: Merge, push, and verify remote parity**
 
 Using the finishing-development-branch workflow, update local `main` fast-forward-only, merge the feature branch with the repository’s normal merge style, rerun full verification on merged `main`, push `origin main`, and verify `git rev-parse HEAD` equals `git rev-parse origin/main`. Remove the clean feature worktree and branch only after remote parity is confirmed.
