@@ -58,7 +58,7 @@ def valid_mapping_with_strata_and_targets_in_reverse_order() -> dict[str, object
             "dimensions": {"reference_sex": "M", "age_regime": "infancy"},
             "targets": [
                 {
-                    "target_name": "visit_rate",
+                    "target_name": "service_rate",
                     "family": "utilization",
                     "statistic": "rate",
                     "unit": "per_year",
@@ -114,7 +114,7 @@ def test_mapping_normalizes_stratum_and_target_order() -> None:
     )
     assert [target.target_name for target in artifact.strata[-1].targets] == [
         "height_z",
-        "visit_rate",
+        "service_rate",
     ]
 
 
@@ -326,7 +326,17 @@ def test_target_family_rejects_hidden_or_record_like_indicators(family: str) -> 
 
 @pytest.mark.parametrize(
     "target_name",
-    ["latent", "truth", "patient", "sequence", "candidate", "match", "row", "resource"],
+    [
+        "latent",
+        "truth",
+        "patient",
+        "visit_rate",
+        "sequence",
+        "candidate",
+        "match",
+        "row",
+        "resource",
+    ],
 )
 def test_target_name_rejects_hidden_or_record_like_indicators(target_name: str) -> None:
     with pytest.raises(ValueError, match="target_name"):

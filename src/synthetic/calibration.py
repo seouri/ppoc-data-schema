@@ -118,11 +118,7 @@ def _validate_target_name(value: object) -> str:
     target_name = _require_string(value, "target_name")
     if _TOKEN_RE.fullmatch(target_name) is None:
         raise ValueError("target_name must be an ASCII token without whitespace or path separators")
-    normalized_name = target_name.lower()
-    if (
-        normalized_name != "visit_rate"
-        and any(indicator in normalized_name for indicator in _TARGET_NAME_INDICATORS)
-    ):
+    if any(indicator in target_name.lower() for indicator in _TARGET_NAME_INDICATORS):
         raise ValueError("target_name must not contain record or hidden-state indicators")
     return target_name
 
