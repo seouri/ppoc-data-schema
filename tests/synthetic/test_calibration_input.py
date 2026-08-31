@@ -1,5 +1,6 @@
 import csv
 import json
+import multiprocessing
 import os
 import shutil
 from dataclasses import replace
@@ -76,6 +77,16 @@ def _valid_snapshot(root: Path) -> Path:
             writer.writeheader()
             writer.writerows(rows)
     return snapshot
+
+
+def _open_source_in_child(data_root: Path, resource: dict[str, object], result: object) -> None:
+    try:
+        source = calibration_input._open_validated_source(data_root, resource)
+    except ValueError:
+        result.put("rejected")  # type: ignore[union-attr]
+    else:
+        os.close(source.fd)
+        result.put("accepted")  # type: ignore[union-attr]
 
 
 def test_assign_partition_is_stable_keyed_and_digest_free() -> None:
@@ -203,3 +214,36 @@ def test_prepare_input_stages_checked_file_descriptor_after_path_replacement(
     with duckdb.connect(":memory:") as connection:
         prepared = prepare_input(connection, config_for(root))
     assert sum(prepared.partition_summary.resource_row_counts["labs"].values()) == 12
+
+
+def test_open_validated_source_rejects_fifo_promptly(tmp_path: Path) -> None:
+    root = _valid_snapshot(tmp_path / "snapshot")
+    resource = resource_spec(load_descriptor(ROOT / "datapackage.json"), "labs")
+    path = _resource_path(root, "labs")
+    path.unlink()
+    os.mkfifo(path)
+    context = multiprocessing.get_context("fork")
+    result = context.Queue()
+    process = context.Process(target=_open_source_in_child, args=(root, resource, result))
+    process.start()
+    process.join(timeout=1)
+    try:
+        assert not process.is_alive(), "FIFO validation blocked before rejecting the entry"
+        assert result.get(timeout=1) == "rejected"
+    finally:
+        if process.is_alive():
+            process.terminate()
+            process.join()
+
+
+def test_open_validated_source_does_not_leak_descriptors_for_directory_entries(tmp_path: Path) -> None:
+    root = _valid_snapshot(tmp_path / "snapshot")
+    resource = resource_spec(load_descriptor(ROOT / "datapackage.json"), "labs")
+    path = _resource_path(root, "labs")
+    path.unlink()
+    path.mkdir()
+    before = len(list(Path("/dev/fd").iterdir()))
+    for _ in range(10):
+        with pytest.raises(ValueError, match="labs"):
+            calibration_input._open_validated_source(root, resource)
+    assert len(list(Path("/dev/fd").iterdir())) == before

@@ -147,15 +147,18 @@ def _open_validated_source(data_root: Path, resource: Mapping[str, Any]) -> _Ope
             next_directory_fd = os.open(component, directory_flags, dir_fd=directory_fd)
             os.close(directory_fd)
             directory_fd = next_directory_fd
-        source_fd = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW, dir_fd=directory_fd)
-    except OSError as exc:
+        entry = os.stat(parts[-1], dir_fd=directory_fd, follow_symlinks=False)
+        if not stat.S_ISREG(entry.st_mode):
+            raise ValueError(f"{name} resource is unavailable")
+        source_fd = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory_fd)
+    except (OSError, ValueError) as exc:
         raise ValueError(f"{name} resource is unavailable") from exc
     finally:
         os.close(directory_fd)
     try:
         if not stat.S_ISREG(os.fstat(source_fd).st_mode):
             raise ValueError(f"{name} resource is unavailable")
-    except OSError as exc:
+    except (OSError, ValueError) as exc:
         os.close(source_fd)
         raise ValueError(f"{name} resource is unavailable") from exc
     return _OpenedSource(name, source_fd)
