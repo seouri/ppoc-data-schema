@@ -116,7 +116,7 @@ def test_report_is_canonical_and_aggregate_only() -> None:
         target_family_counts={"demographics": 3},
         suppression_counts={"demographics": 1},
         source_aggregate_sha256="b" * 64,
-        checks=(CalibrationCheck("schema", True, "matched expected resource contract"),),
+        checks=(CalibrationCheck("schema", True, "schema contract matched"),),
     )
     assert set(report.to_mapping()) == {
         "report_version", "status", "source_snapshot", "schema_fingerprint", "partition_policy",
@@ -142,7 +142,7 @@ def test_report_rejects_record_or_key_material(changes: dict[str, object]) -> No
         "schema_fingerprint": "a" * 64, "partition_policy": {"policy_id": "partition-v1", "policy_version": "1"},
         "partition_counts": {"calibration": 8, "held_out": 4}, "resource_row_counts": {"patients": {"calibration": 8, "held_out": 4}},
         "target_family_counts": {"demographics": 3}, "suppression_counts": {"demographics": 1},
-        "source_aggregate_sha256": "b" * 64, "checks": (CalibrationCheck("schema", True, "matched contract"),),
+        "source_aggregate_sha256": "b" * 64, "checks": (CalibrationCheck("schema", True, "schema contract matched"),),
     }
     values.update(changes)
     with pytest.raises(ValueError, match="aggregate|integer"):
@@ -155,8 +155,29 @@ def test_check_rejects_key_material_in_detail() -> None:
 
 
 @pytest.mark.parametrize(
+    ("name", "detail"),
+    [
+        ("schema", "schema contract matched"),
+        ("partition", "partition counts available"),
+        ("target_registry", "target registry complete"),
+        ("disclosure", "disclosure controls applied"),
+    ],
+)
+def test_check_accepts_only_registered_aggregate_details(name: str, detail: str) -> None:
+    assert CalibrationCheck(name, True, detail).to_mapping() == {
+        "name": name,
+        "passed": True,
+        "detail": detail,
+    }
+    with pytest.raises(ValueError, match="aggregate"):
+        CalibrationCheck(name, True, f"{detail} with extra context")
+
+
+@pytest.mark.parametrize(
     "detail",
     [
+        "unknown MRN 8675309",
+        "unknown 550e8400-e29b-41d4-a716-446655440000",
         "unknown SYN-P-001",
         "unknown syn-p-001",
         "opened /restricted/patients.csv",
@@ -174,7 +195,7 @@ def test_check_rejects_identifier_path_and_key_alias_details(detail: str) -> Non
 @pytest.mark.parametrize("identifier", ["SYN-P-001", "SYN-V-001"])
 def test_check_rejects_fixture_identifier_as_serialized_name(identifier: str) -> None:
     with pytest.raises(ValueError, match="aggregate"):
-        CalibrationCheck(identifier, True, "matched contract")
+        CalibrationCheck(identifier, True, "schema contract matched")
 
 
 @pytest.mark.parametrize(
@@ -194,7 +215,7 @@ def test_report_rejects_identifier_values_and_field_aliases(changes: dict[str, o
         "schema_fingerprint": "a" * 64, "partition_policy": {"policy_id": "partition-v1", "policy_version": "1"},
         "partition_counts": {"calibration": 8, "held_out": 4}, "resource_row_counts": {"patients": {"calibration": 8, "held_out": 4}},
         "target_family_counts": {"demographics": 3}, "suppression_counts": {"demographics": 1},
-        "source_aggregate_sha256": "b" * 64, "checks": (CalibrationCheck("schema", True, "matched contract"),),
+        "source_aggregate_sha256": "b" * 64, "checks": (CalibrationCheck("schema", True, "schema contract matched"),),
     }
     values.update(changes)
     with pytest.raises(ValueError, match="aggregate|integer"):

@@ -89,6 +89,14 @@ _TARGET_FAMILIES = frozenset(
     {"demographics", "observation", "physiology", "utilization", "recorded_outcome"}
 )
 _SENSITIVE_DETAIL_WORDS = frozenset({"patient", "visit", "path", "key", "identifier"})
+_AGGREGATE_CHECK_DETAILS = frozenset(
+    {
+        ("schema", "schema contract matched"),
+        ("partition", "partition counts available"),
+        ("target_registry", "target registry complete"),
+        ("disclosure", "disclosure controls applied"),
+    }
+)
 _ARTIFACT_FILENAME = "calibration-artifact.json"
 _REPORT_FILENAME = "calibration-report.json"
 MAX_CALIBRATION_REPORT_BYTES = 1024 * 1024
@@ -152,10 +160,10 @@ def _contains_sensitive_report_material(value: str) -> bool:
     )
 
 
-def _require_aggregate_detail(value: object, field: str) -> str:
+def _require_aggregate_detail(name: str, value: object, field: str) -> str:
     if not isinstance(value, str) or not value:
         raise ValueError(f"{field} must be a nonempty aggregate detail")
-    if _contains_sensitive_report_material(value):
+    if (name, value) not in _AGGREGATE_CHECK_DETAILS:
         raise ValueError(f"{field} must be aggregate-only")
     return value
 
@@ -255,10 +263,10 @@ class CalibrationCheck:
     detail: str
 
     def __post_init__(self) -> None:
-        _require_safe_report_token(self.name, "check name")
+        name = _require_safe_report_token(self.name, "check name")
         if not isinstance(self.passed, bool):
             raise ValueError("check passed must be a boolean")  # noqa: TRY004
-        _require_aggregate_detail(self.detail, "check detail")
+        _require_aggregate_detail(name, self.detail, "check detail")
 
     def to_mapping(self) -> dict[str, object]:
         return {"name": self.name, "passed": self.passed, "detail": self.detail}
