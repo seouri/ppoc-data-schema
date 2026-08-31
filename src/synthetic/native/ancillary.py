@@ -593,10 +593,117 @@ def validate_ghd_ancillary_resources(
     projection: AncillaryResourceProjection,
     policy: GhdAncillaryPolicy,
 ) -> AncillaryValidationReport:
-    """Reserve the aggregate validator seam for the later pathway task."""
+    """Return fixed aggregate checks for one fictional ancillary projection.
 
-    del member, projection, policy
-    raise AncillaryProjectionUnavailable("GHD ancillary projection unavailable")
+    This deliberately compares typed values in memory and never includes the
+    compared rows or source evidence in its report or error boundary.
+    """
+
+    states: dict[str, tuple[AncillaryValidationStatus, str]] = {
+        name: (AncillaryValidationStatus.PASS, "OK") for name in ANCILLARY_CHECK_NAMES
+    }
+
+    def mark(name: str, status: AncillaryValidationStatus, reason: str) -> None:
+        current = states[name][0]
+        if current is AncillaryValidationStatus.FAIL:
+            return
+        if status is AncillaryValidationStatus.FAIL or current is AncillaryValidationStatus.PASS:
+            states[name] = (status, reason)
+
+    if (
+        not isinstance(policy, GhdAncillaryPolicy)
+        or not isinstance(member, CohortMember)
+        or not isinstance(projection, AncillaryResourceProjection)
+    ):
+        raise AncillaryProjectionUnavailable("GHD ancillary projection unavailable")
+
+    # Structural checks remain possible even if the private source frame has
+    # been removed or corrupted after construction.
+    try:
+        if tuple(projection.rows) != GHD_ANCILLARY_RESOURCE_NAMES:
+            mark("row_schema", AncillaryValidationStatus.FAIL, "SCHEMA_SHAPE_INVALID")
+        for resource_name in GHD_ANCILLARY_RESOURCE_NAMES:
+            resource_rows = projection.rows.get(resource_name)
+            if not isinstance(resource_rows, tuple):
+                mark("row_schema", AncillaryValidationStatus.FAIL, "SCHEMA_SHAPE_INVALID")
+                continue
+            seen: set[tuple[tuple[str, object], ...]] = set()
+            fields = projection.shape.field_names(resource_name)
+            for row in resource_rows:
+                if not isinstance(row, ResourceRow) or row.resource_name != resource_name:
+                    mark("row_schema", AncillaryValidationStatus.FAIL, "ROW_SCHEMA_INVALID")
+                    continue
+                if tuple(name for name, _ in row.values) != fields:
+                    mark("row_schema", AncillaryValidationStatus.FAIL, "SCHEMA_SHAPE_INVALID")
+                if row.values in seen:
+                    mark("row_schema", AncillaryValidationStatus.FAIL, "DUPLICATE_ROW")
+                seen.add(row.values)
+                values = _row_values(row)
+                if values.get("patient_id") != projection.patient_id:
+                    mark("cross_resource_links", AncillaryValidationStatus.FAIL, "PATIENT_MISMATCH")
+                if resource_name == "labs" and values.get("result_component_name") not in GHD_LAB_COMPONENT_NAMES:
+                    mark("row_schema", AncillaryValidationStatus.FAIL, "INVALID_CODE")
+                if resource_name == "problem_list" and values.get("pl_diag") != GHD_DIAGNOSIS_CODE:
+                    mark("row_schema", AncillaryValidationStatus.FAIL, "INVALID_CODE")
+                if resource_name == "referrals" and values.get("requested_specialty") != GHD_REFERRAL_SPECIALTY:
+                    mark("row_schema", AncillaryValidationStatus.FAIL, "INVALID_VALUE")
+                if resource_name == "medications" and values.get("med_simple_generic_name") != GHD_MEDICATION_NAME:
+                    mark("row_schema", AncillaryValidationStatus.FAIL, "INVALID_VALUE")
+    except Exception:  # noqa: BLE001 - malformed visible objects are redacted
+        mark("row_schema", AncillaryValidationStatus.FAIL, "MALFORMED_PROJECTION")
+
+    try:
+        observation = validate_observation_frame(member.frame)
+        if observation.status is not ObservationValidationStatus.PASS:
+            source_status = (
+                AncillaryValidationStatus.FAIL
+                if observation.status is ObservationValidationStatus.FAIL
+                else AncillaryValidationStatus.UNEVALUABLE
+            )
+            source_reason = "SOURCE_EVIDENCE_INVALID" if source_status is AncillaryValidationStatus.FAIL else "SOURCE_EVIDENCE_UNAVAILABLE"
+            mark("source_evidence", source_status, source_reason)
+            if any(check.name == "event_order" and check.status is ObservationValidationStatus.FAIL for check in observation.checks):
+                mark("causal_timing", AncillaryValidationStatus.FAIL, "EVENT_ORDER_INVALID")
+            return _ancillary_report(states)
+
+        expected = project_ghd_ancillary_resources(member, projection.shape, policy)
+        if projection.patient_id != expected.patient_id:
+            mark("cross_resource_links", AncillaryValidationStatus.FAIL, "PATIENT_MISMATCH")
+        for resource_name in GHD_ANCILLARY_RESOURCE_NAMES:
+            actual_rows = projection.rows.get(resource_name, ())
+            expected_rows = expected.rows[resource_name]
+            if len(actual_rows) != len(expected_rows):
+                mark("pathway_scope", AncillaryValidationStatus.FAIL, "PATHWAY_SCOPE_INVALID")
+                continue
+            for actual, wanted in zip(actual_rows, expected_rows, strict=True):
+                if not isinstance(actual, ResourceRow):
+                    continue
+                actual_values = _row_values(actual)
+                wanted_values = _row_values(wanted)
+                if actual_values == wanted_values:
+                    continue
+                differing = {name for name in wanted_values if actual_values.get(name) != wanted_values[name]}
+                if "patient_id" in differing or "visit_id" in differing:
+                    mark("cross_resource_links", AncillaryValidationStatus.FAIL, "VISIT_REFERENCE_INVALID")
+                if any("age_in_days" in name for name in differing):
+                    mark("causal_timing", AncillaryValidationStatus.FAIL, "TIMING_INVALID")
+                if any(name.endswith("_id") for name in differing):
+                    mark("row_schema", AncillaryValidationStatus.FAIL, "INVALID_ID")
+                if not differing.intersection({"patient_id", "visit_id"}) and not any("age_in_days" in name for name in differing) and not any(name.endswith("_id") for name in differing):
+                    mark("row_schema", AncillaryValidationStatus.FAIL, "INVALID_VALUE")
+    except Exception:  # noqa: BLE001 - private evidence cannot escape evaluator boundary
+        mark("source_evidence", AncillaryValidationStatus.UNEVALUABLE, "SOURCE_EVIDENCE_UNAVAILABLE")
+    return _ancillary_report(states)
+
+
+def _ancillary_report(
+    states: Mapping[str, tuple[AncillaryValidationStatus, str]],
+) -> AncillaryValidationReport:
+    checks = tuple(
+        AncillaryCheck(name, states[name][0], states[name][1])
+        for name in ANCILLARY_CHECK_NAMES
+    )
+    return AncillaryValidationReport(_status_for_checks(checks), checks)
 
 
 __all__ = [
