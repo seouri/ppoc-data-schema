@@ -83,10 +83,14 @@ _RECORD_INDICATORS = frozenset(
 )
 _ATTACK_OUTPUT_INDICATORS = frozenset(
     {
+        "attribute_disclosure",
         "attribute_inference",
+        "composition",
+        "differential_privacy",
         "linkage",
         "membership_inference",
         "model_inversion",
+        "privacy_audit",
         "privacy_attack",
         "reidentification",
         "singling_out",
