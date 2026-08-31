@@ -11,12 +11,16 @@ import dataclasses
 import hashlib
 import json
 import math
+import os
 import re
+import stat
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum
+from errno import ELOOP
 from itertools import pairwise
 from numbers import Real
+from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
@@ -41,6 +45,8 @@ _VERSION_TOKEN = re.compile(r"^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$")
 _SYNTHETIC_PATIENT_TOKEN = re.compile(r"^syn-[A-Za-z0-9][A-Za-z0-9._-]*$")
 _WORLDS = frozenset({"baseline", "intervention"})
 _STREAM_IDENTITY_VERSION = "counterfactual-stream-identity-v1"
+TRUTH_MANIFEST_VERSION = "counterfactual-truth-v1"
+MAX_TRUTH_MANIFEST_BYTES = 4 * 1024 * 1024
 
 
 class InterventionKind(str, Enum):
@@ -1401,3 +1407,271 @@ def generate_counterfactual_pair(
     if report.status is CounterfactualValidationStatus.FAIL:
         raise ValueError("generated counterfactual pair failed causal validation")
     return pair
+
+
+_TRUTH_MANIFEST_KEYS = frozenset(
+    {
+        "manifest_version",
+        "contract",
+        "engine",
+        "status",
+        "patient",
+        "pairing",
+        "intervention",
+        "causal_change_matrix",
+        "ages_days",
+        "stream_identities",
+        "worlds",
+        "checks",
+    }
+)
+
+
+def _truth_world_mapping(
+    pair: CounterfactualPair,
+    world: str,
+    layer_hashes: Mapping[CausalLayer, tuple[str, str]],
+) -> dict[str, object]:
+    if world == "baseline":
+        trajectory = pair.baseline
+        context = pair.baseline_context
+        hash_index = 0
+    elif world == "intervention":
+        trajectory = pair.intervention
+        context = pair.intervention_context
+        hash_index = 1
+    else:  # pragma: no cover - fixed internal call sites
+        raise ValueError("unknown counterfactual world")
+
+    return {
+        "world": world,
+        "age_regime_state": _canonical_value(trajectory.physiology.state),
+        "disorder": _canonical_value(trajectory.disorder),
+        "event_trace": _canonical_value(trajectory.events),
+        "event_trace_sha256": canonical_hidden_hash(trajectory.events),
+        "layer_sha256": {
+            layer.value: hashes[hash_index]
+            for layer, hashes in sorted(layer_hashes.items(), key=lambda item: item[0].value)
+        },
+        "stream_identities": {
+            "reused": {
+                name: context.stream_identity(name)
+                for name in sorted(pair.matrix.reused_streams)
+            },
+            "resampled": {
+                name: context.stream_identity(name)
+                for name in sorted(pair.matrix.resampled_streams)
+            },
+        },
+    }
+
+
+def _truth_manifest_mapping(
+    pair: CounterfactualPair,
+    report: CounterfactualValidationReport,
+) -> dict[str, object]:
+    """Build the explicit evaluator-only mapping used by the truth writer."""
+
+    if not isinstance(pair, CounterfactualPair):
+        raise TypeError("pair must be a CounterfactualPair")
+    if not isinstance(report, CounterfactualValidationReport):
+        raise TypeError("report must be a CounterfactualValidationReport")
+    current_report = validate_counterfactual_pair(pair)
+    if report != current_report:
+        raise ValueError("validation report does not match counterfactual pair")
+
+    layer_hashes = _layer_hashes(pair)
+    patient = pair.baseline_context.patient
+    return {
+        "manifest_version": TRUTH_MANIFEST_VERSION,
+        "contract": "counterfactual-trajectory-pair-v1",
+        "engine": "native-age-regime-disorder",
+        "status": report.status.value,
+        "patient": _canonical_value(patient),
+        "pairing": {
+            "run_seed": pair.baseline_context.run_seed,
+            "patient_index": pair.baseline_context.patient_index,
+        },
+        "intervention": pair.matrix.intervention.value,
+        "causal_change_matrix": pair.matrix.to_mapping(),
+        "ages_days": [
+            point.age_days for point in pair.baseline.physiology.points
+        ],
+        "stream_identities": {
+            "reused": {
+                name: pair.baseline_context.stream_identity(name)
+                for name in sorted(pair.matrix.reused_streams)
+            },
+            "resampled": {
+                name: {
+                    "baseline": pair.baseline_context.stream_identity(name),
+                    "intervention": pair.intervention_context.stream_identity(name),
+                }
+                for name in sorted(pair.matrix.resampled_streams)
+            },
+        },
+        "worlds": {
+            world: _truth_world_mapping(pair, world, layer_hashes)
+            for world in ("baseline", "intervention")
+        },
+        "checks": report.to_mapping(),
+    }
+
+
+def _truth_manifest_json_bytes(mapping: Mapping[str, object]) -> bytes:
+    if set(mapping) != _TRUTH_MANIFEST_KEYS:
+        raise ValueError("truth manifest has an invalid key set")
+    try:
+        payload = (
+            json.dumps(
+                _canonical_value(mapping),
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=True,
+                allow_nan=False,
+            )
+            + "\n"
+        ).encode("ascii")
+    except (UnicodeEncodeError, OverflowError, TypeError, ValueError) as exc:
+        raise ValueError("truth manifest is not canonical") from exc
+    if len(payload) > MAX_TRUTH_MANIFEST_BYTES:
+        raise ValueError("truth manifest exceeds the maximum size")
+    return payload
+
+
+def _reject_truth_path_parts(path: Path) -> None:
+    if any(part in {"", ".", ".."} for part in path.parts):
+        raise ValueError("truth manifest destination path is invalid")
+
+
+def _assert_regular_parent(path: Path) -> Path:
+    """Require every existing destination-parent component to be non-symlink."""
+
+    _reject_truth_path_parts(path)
+    absolute = Path(os.path.abspath(path))
+    current = Path(absolute.anchor)
+    for part in absolute.parts[1:]:
+        current /= part
+        try:
+            metadata = os.lstat(current)
+        except FileNotFoundError:
+            raise ValueError(
+                "truth manifest destination parent must be an existing directory"
+            ) from None
+        except OSError:
+            raise ValueError("truth manifest destination parent is unavailable") from None
+        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+            raise ValueError(
+                "truth manifest destination parent must be a regular non-symlink directory"
+            )
+    return absolute
+
+
+def _read_truth_manifest_bytes(path: Path) -> bytes:
+    nofollow = getattr(os, "O_NOFOLLOW", None)
+    if nofollow is None:
+        raise ValueError("truth manifest requires secure no-follow opening")
+    try:
+        descriptor = os.open(path, os.O_RDONLY | nofollow | getattr(os, "O_NONBLOCK", 0))
+    except FileNotFoundError:
+        raise ValueError("truth manifest output disappeared") from None
+    except OSError as exc:
+        if exc.errno == ELOOP:
+            raise ValueError("truth manifest must be a regular non-symlink file") from None
+        raise ValueError("truth manifest could not be securely opened") from None
+    try:
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode):
+            raise ValueError("truth manifest must be a regular non-symlink file")
+        if metadata.st_size > MAX_TRUTH_MANIFEST_BYTES:
+            raise ValueError("truth manifest exceeds the maximum size")
+        payload = os.read(descriptor, MAX_TRUTH_MANIFEST_BYTES + 1)
+        final_metadata = os.fstat(descriptor)
+    except OSError:
+        raise ValueError("truth manifest could not be read") from None
+    finally:
+        os.close(descriptor)
+    if (
+        len(payload) > MAX_TRUTH_MANIFEST_BYTES
+        or final_metadata.st_size > MAX_TRUTH_MANIFEST_BYTES
+        or final_metadata.st_size > len(payload)
+    ):
+        raise ValueError("truth manifest exceeds the maximum size")
+    return payload
+
+
+def _write_truth_manifest_exclusive(path: Path, payload: bytes) -> None:
+    nofollow = getattr(os, "O_NOFOLLOW", None)
+    if nofollow is None:
+        raise ValueError("truth manifest requires secure no-follow opening")
+    try:
+        descriptor = os.open(
+            path,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | nofollow,
+            0o600,
+        )
+    except FileExistsError:
+        raise FileExistsError("truth manifest destination already exists") from None
+    except OSError as exc:
+        if exc.errno == ELOOP:
+            raise ValueError("truth manifest must be a regular non-symlink file") from None
+        raise ValueError("truth manifest could not be created") from None
+    try:
+        view = memoryview(payload)
+        while view:
+            written = os.write(descriptor, view)
+            if written <= 0:
+                raise OSError("truth manifest write did not progress")
+            view = view[written:]
+        os.fsync(descriptor)
+    except OSError:
+        raise ValueError("truth manifest could not be written") from None
+    finally:
+        os.close(descriptor)
+
+
+def write_truth_manifest(
+    pair: CounterfactualPair,
+    report: CounterfactualValidationReport,
+    output: Path,
+) -> Path:
+    """Write a canonical evaluator-only manifest to one new regular file.
+
+    The destination is deliberately separate from visible package output. The
+    function refuses existing files, directories, symlinks, and path traversal;
+    it never creates parent directories or exposes the manifest through pair or
+    report mappings.
+    """
+
+    if not isinstance(output, Path):
+        raise TypeError("output must be a Path")
+    _reject_truth_path_parts(output)
+    if not output.name:
+        raise ValueError("truth manifest destination path is invalid")
+    absolute_output = _assert_regular_parent(output.parent) / output.name
+    if os.path.lexists(absolute_output):
+        if os.path.islink(absolute_output):
+            raise ValueError("truth manifest must be a regular non-symlink file")
+        raise FileExistsError("truth manifest destination already exists")
+
+    payload = _truth_manifest_json_bytes(_truth_manifest_mapping(pair, report))
+    _write_truth_manifest_exclusive(absolute_output, payload)
+    try:
+        written = _read_truth_manifest_bytes(absolute_output)
+        if written != payload:
+            raise ValueError("truth manifest output is not canonical")
+        parsed = json.loads(
+            written.decode("ascii"),
+            parse_constant=_reject_truth_manifest_json_constant,
+        )
+        if not isinstance(parsed, Mapping):
+            raise TypeError("truth manifest output is not an object")
+        if _truth_manifest_json_bytes(parsed) != written:
+            raise ValueError("truth manifest output is not canonical")
+    except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
+        raise ValueError("truth manifest output could not be verified") from None
+    return output
+
+
+def _reject_truth_manifest_json_constant(_value: str) -> object:
+    raise ValueError("truth manifest contains a nonfinite value")

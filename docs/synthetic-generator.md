@@ -103,6 +103,55 @@ The report contains aggregate control metrics, policy identity, counts, statuses
 
 A passing report is qualified, policy-bound privacy evidence only: under the approved recipient, release context, attacker knowledge, controls, and tolerances, it found no measured linkage, membership, or attribute-inference signal above tolerance. It is not a proof of non-matchability or zero risk, a HIPAA de-identification determination, or release authorization. A privacy expert and data custodian remain responsible for release approval. Temporal drift, task utility, prevalence, and Synthea remain separate deferred evidence gates.
 
+## Evaluator-only trajectory counterfactual validation
+
+The native counterfactual layer replays one completely fictional `AgeRegimeDisorderKernel` patient into a baseline world and one intervention world. It is the trajectory component of the counterfactual roadmap: it does not read visible CSV rows, alter the eight-resource descriptor, or turn the fail-closed smoke command into a cohort generator. Package-level counterfactual EHR worlds remain deferred until observation, diagnosis, treatment, and ancillary-resource generation are available.
+
+Use the paired API with a test or separately approved fictional kernel and a new external truth-manifest destination whose parent already exists:
+
+```python
+from pathlib import Path
+
+from synthetic.models import PatientState
+from synthetic.native.age_regime_disorder import AgeRegimeDisorderKernel
+from synthetic.native.age_regimes import AgeRegimeTrajectoryKernel
+from synthetic.native.clinical_modules import FamilialShortStatureModule
+from synthetic.native.counterfactual import (
+    CounterfactualValidationStatus,
+    InterventionKind,
+    generate_counterfactual_pair,
+    validate_counterfactual_pair,
+    write_truth_manifest,
+)
+from tests.synthetic.fakes import RegimeLinearTestReference
+
+patient = PatientState("synthetic-counterfactual", "F", "F")
+kernel = AgeRegimeDisorderKernel(
+    AgeRegimeTrajectoryKernel(RegimeLinearTestReference()),
+    FamilialShortStatureModule(),
+)
+pair = generate_counterfactual_pair(
+    kernel,
+    patient,
+    (0, 365, 730, 1460, 1825, 2190, 4000),
+    run_seed=20260831,
+    patient_index=0,
+    intervention=InterventionKind.EARLIER_RECOGNITION,
+)
+report = validate_counterfactual_pair(pair)
+if report.status is not CounterfactualValidationStatus.PASS:
+    raise RuntimeError(report.to_mapping())
+write_truth_manifest(pair, report, Path("counterfactual-truth.json"))
+```
+
+The fixed trajectory matrices support `physiology_severity`, `earlier_recognition`, and `treatment_adherence`. Physiology severity changes only the growth-physiology layer; earlier recognition changes recognition timing and permits the event-trace descendant; treatment adherence changes treatment response and permits post-treatment growth. Utilization-intensity and measurement-error-removal are rejected until the visible observation/resource layer exists. Every matrix names manipulated nodes, permitted descendants, required invariants, reused streams, rejected resampling, and trajectory assertions; callers cannot weaken those fixed semantics.
+
+`validate_counterfactual_pair` returns an aggregate-only report. Each fixed check has status `PASS`, `FAIL`, or `UNEVALUABLE`; the report is `FAIL` if any check fails, otherwise `UNEVALUABLE` when required evidence is missing, otherwise `PASS`. Reports contain only check names, statuses, reason codes, and counts. They do not contain patient IDs, seeds, event payloads, hidden state, layer hashes, stream identities, paths, or candidate links. A `PASS` is evidence that this causal replay contract held for the supplied fictional pair, not clinical efficacy or release evidence.
+
+`write_truth_manifest(pair, report, path)` is an explicit evaluator-only boundary. It serializes the hidden patient/state/event trace, causal-layer hashes, and stream identities to canonical JSON outside the visible package. The destination must be a new regular non-symlink file with an existing non-symlink parent; writes are exclusive, size-bounded, fsynced, reparsed, and never overwrite an existing path. Ordinary pair/report mappings and `manifest.json` remain truth-free. Keep the truth manifest in evaluator-controlled storage and do not copy it beside a released fixture package.
+
+This trajectory slice does not establish growth-disorder prevalence, demographic representativeness, observation-error fidelity, temporal drift, task utility, privacy or non-matchability, clinical validity, or release authorization. Those are separate approved gates; a complete exact-schema counterfactual package and an optional Synthea-conforming adapter require their own schema, derivation, longitudinal, causal, utility, and privacy evaluation.
+
 ### Development-only age-regime smoke example
 
 When exercising the latent trajectory layer with an injected reference, cover the five `GrowthRegime` classifier regimes: infancy, transition, childhood, puberty, and adolescence. Infancy runs before the configured transition window; transition spans the configured 24-month window (700–760 days by default, so day 730 is transition); childhood follows that window until the injected puberty schedule; puberty follows onset for its configured tempo; and adolescence continues through the maximum age (including 7305). At every age, generate only two independent anthropometric dimensions: length plus weight before transition, and height plus BMI after transition, with the applicable third value derived explicitly. Do not generate height/length, weight, and BMI as three independent states.
@@ -166,7 +215,7 @@ Constitutional delay has one schedule rule: sample the module's onset and delay,
 
 The composition requests only named `regime.birth`, `regime.childhood`, `regime.puberty`, `regime.residual`, `regime.head`, and the selected `disorder.<module-kind>` stream (for example, `disorder.familial_short_stature`). It never requests a `growth` stream. The physiology, hidden disorder state, and hidden clinical-event trace remain an evaluator boundary and do not enter visible smoke output.
 
-Diagnosis, laboratory, medication, and referral descendants; prevalence and demographic calibration; held-out validation; privacy auditing; counterfactual worlds; clinical approval of a reference; and Synthea conformance are deferred gates. These scenarios are not clinically validated and do not claim a match to real EHR or growth data. The healthy age-730+ smoke/export boundary remains three visits at ages 730, 1095, and 1460 days, and the existing non-matchability limitation still applies: synthetic generation alone cannot establish that a profile cannot be matched to a real patient.
+Diagnosis, laboratory, medication, and referral descendants; prevalence and demographic calibration; held-out validation; privacy auditing; package-level counterfactual worlds; clinical approval of a reference; and Synthea conformance are deferred gates. These scenarios are not clinically validated and do not claim a match to real EHR or growth data. The healthy age-730+ smoke/export boundary remains three visits at ages 730, 1095, and 1460 days, and the existing non-matchability limitation still applies: synthetic generation alone cannot establish that a profile cannot be matched to a real patient.
 
 ## Development-only latent growth-disorder modules
 
@@ -199,7 +248,7 @@ The available modules and their directional signatures are:
 
 Each module and its frozen configuration exposes a stable, unique `module_version` identifier (currently the module name plus `-v1`). The identifier changes when the mechanism or its state/event semantics change; changing only scenario parameter values does not silently change the identifier, so callers should record both the identifier and configuration. Zero-effect states emit only their hidden latent-onset event; a treated zero-response state emits `treatment_nonresponse` rather than a treatment-response event, and a nonzero response always requires a treatment start.
 
-These defaults are uncalibrated development scenarios. `LatentTrajectory.disorder` and `LatentTrajectory.events` are evaluator-only hidden truth and event traces; they are not exported, and visible CSV generation remains unchanged. Prevalence, demographic calibration, disorder-critical labs/medications/referrals, held-out validation, and privacy auditing remain later gates. No real patient data, clinical claim, or privacy claim is introduced by this layer.
+These defaults are uncalibrated development scenarios. `LatentTrajectory.disorder` and `LatentTrajectory.events` are evaluator-only hidden truth and event traces; they are not exported, and visible CSV generation remains unchanged. Prevalence, demographic calibration, disorder-critical labs/medications/referrals, held-out validation, privacy auditing, and package-level counterfactual worlds remain later gates. No real patient data, clinical claim, or privacy claim is introduced by this layer.
 
 ## Prerequisites
 
