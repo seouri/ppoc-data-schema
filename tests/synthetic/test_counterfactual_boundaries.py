@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import ast
 import inspect
+import json
 from pathlib import Path
 
+from synthetic.manifest import RunManifest
 from synthetic.models import PatientState
 from synthetic.native.counterfactual import (
     InterventionKind,
@@ -76,9 +78,37 @@ def test_ordinary_pair_and_report_mappings_exclude_hidden_truth() -> None:
 def test_visible_manifest_module_does_not_import_counterfactual_truth() -> None:
     source = ROOT / "src" / "synthetic" / "manifest.py"
     tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
-    imports = {
-        node.module
-        for node in ast.walk(tree)
-        if isinstance(node, ast.ImportFrom) and node.module
-    }
+    imports = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imports.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imports.add(node.module)
+
+    assert {"json", "dataclasses"} <= imports
     assert "synthetic.native.counterfactual" not in imports
+
+    serialized = RunManifest.smoke(
+        seed=20260831,
+        schema_fingerprint="a" * 64,
+        reference_time="2026-08-31T00:00:00Z",
+        reference_id="linear-test-reference-v1",
+        configuration_sha256="b" * 64,
+        software_revision="test-revision",
+    ).to_json_bytes()
+    visible = json.loads(serialized)
+    assert visible["profile"] == "smoke"
+    assert b"counterfactual" not in serialized
+    assert not {
+        "patient_id",
+        "event_trace",
+        "layer_sha256",
+        "stream_identities",
+    } & visible.keys()
+
+
+def test_counterfactual_documentation_uses_a_valid_synthetic_patient_id() -> None:
+    source = (ROOT / "docs" / "synthetic-generator.md").read_text(encoding="utf-8")
+
+    assert 'PatientState("syn-counterfactual", "F", "F")' in source
+    assert 'PatientState("synthetic-counterfactual", "F", "F")' not in source

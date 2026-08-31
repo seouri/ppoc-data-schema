@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+import synthetic.native.counterfactual as counterfactual_module
 from synthetic.models import PatientState
 from synthetic.native.counterfactual import (
     CounterfactualValidationStatus,
@@ -111,6 +112,52 @@ def test_truth_manifest_rejects_symlink_parent(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="regular non-symlink"):
         write_truth_manifest(pair, report, symlink_parent / "truth.json")
+
+
+def test_truth_manifest_rejects_symlink_ancestor(tmp_path: Path) -> None:
+    pair, report = _validated_pair()
+    real_root = tmp_path / "real-root"
+    (real_root / "nested").mkdir(parents=True)
+    outer = tmp_path / "outer"
+    outer.mkdir()
+    linked_ancestor = outer / "linked-root"
+    linked_ancestor.symlink_to(real_root, target_is_directory=True)
+
+    with pytest.raises(ValueError, match="regular non-symlink"):
+        write_truth_manifest(pair, report, linked_ancestor / "nested" / "truth.json")
+
+
+@pytest.mark.parametrize("failure", ["write", "fsync"])
+def test_truth_manifest_write_failure_removes_partial_and_allows_retry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+) -> None:
+    pair, report = _validated_pair()
+    destination = tmp_path / "truth.json"
+
+    with monkeypatch.context() as patch:
+        if failure == "write":
+
+            def fail_write(*_args: object) -> int:
+                raise OSError("injected write failure")
+
+            patch.setattr(counterfactual_module.os, "write", fail_write)
+        else:
+
+            def fail_fsync(_descriptor: int) -> None:
+                raise OSError("injected fsync failure")
+
+            patch.setattr(counterfactual_module.os, "fsync", fail_fsync)
+
+        with pytest.raises(ValueError, match="could not be written"):
+            write_truth_manifest(pair, report, destination)
+
+    assert not destination.exists()
+    assert not list(tmp_path.glob(".truth.json.*.partial"))
+
+    write_truth_manifest(pair, report, destination)
+    assert destination.is_file()
 
 
 @pytest.mark.parametrize("destination", ["truth.json", Path("a") / ".." / "truth.json"])

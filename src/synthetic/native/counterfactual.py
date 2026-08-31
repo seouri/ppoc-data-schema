@@ -14,6 +14,7 @@ import math
 import os
 import re
 import stat
+import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum
@@ -1545,7 +1546,13 @@ def _reject_truth_path_parts(path: Path) -> None:
 
 
 def _assert_regular_parent(path: Path) -> Path:
-    """Require every existing destination-parent component to be non-symlink."""
+    """Require every ancestor through the parent to be a real directory.
+
+    ``lstat`` is used component-by-component so this invariant does not
+    depend on platform-specific path resolution or follow an ancestor
+    symlink.  The caller must therefore pre-create the complete destination
+    parent tree without symlinks.
+    """
 
     _reject_truth_path_parts(path)
     absolute = Path(os.path.abspath(path))
@@ -1601,33 +1608,67 @@ def _read_truth_manifest_bytes(path: Path) -> bytes:
 
 
 def _write_truth_manifest_exclusive(path: Path, payload: bytes) -> None:
-    nofollow = getattr(os, "O_NOFOLLOW", None)
-    if nofollow is None:
-        raise ValueError("truth manifest requires secure no-follow opening")
+    """Publish a fully written manifest without replacing the destination.
+
+    The payload is first written to a private same-directory temporary file.
+    The requested destination is created only after the temporary file has
+    been flushed, so a write or file-fsync failure cannot leave a partial
+    requested artifact.  The temporary file is removed on every exit; a
+    cleanup failure is surfaced as an explicit error while the requested
+    destination remains absent.
+    """
+
+    if not hasattr(os, "link"):
+        raise ValueError("truth manifest requires no-replace file publication")
     try:
-        descriptor = os.open(
-            path,
-            os.O_WRONLY | os.O_CREAT | os.O_EXCL | nofollow,
-            0o600,
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{path.name}.",
+            suffix=".partial",
+            dir=path.parent,
         )
-    except FileExistsError:
-        raise FileExistsError("truth manifest destination already exists") from None
     except OSError as exc:
-        if exc.errno == ELOOP:
-            raise ValueError("truth manifest must be a regular non-symlink file") from None
+        del exc
         raise ValueError("truth manifest could not be created") from None
+
+    temporary_path = Path(temporary_name)
+    failure: Exception | None = None
     try:
-        view = memoryview(payload)
-        while view:
-            written = os.write(descriptor, view)
-            if written <= 0:
-                raise OSError("truth manifest write did not progress")
-            view = view[written:]
-        os.fsync(descriptor)
-    except OSError:
-        raise ValueError("truth manifest could not be written") from None
+        try:
+            view = memoryview(payload)
+            while view:
+                written = os.write(descriptor, view)
+                if written <= 0:
+                    raise OSError("truth manifest write did not progress")
+                view = view[written:]
+            os.fsync(descriptor)
+            try:
+                # A hard link is an atomic no-replace publication on the same
+                # filesystem.  The source is our mkstemp-created regular
+                # file, and a pre-existing destination cannot be replaced.
+                os.link(temporary_path, path)
+            except FileExistsError:
+                raise FileExistsError(
+                    "truth manifest destination already exists"
+                ) from None
+        except FileExistsError as exc:
+            failure = exc
+        except OSError:
+            failure = ValueError("truth manifest could not be written")
     finally:
-        os.close(descriptor)
+        try:
+            os.close(descriptor)
+        except OSError:
+            if failure is None:
+                failure = ValueError("truth manifest could not be closed")
+        try:
+            os.unlink(temporary_path)
+        except FileNotFoundError:
+            pass
+        except OSError:
+            failure = ValueError("truth manifest temporary output could not be cleared")
+
+    if failure is not None:
+        raise failure
 
 
 def write_truth_manifest(

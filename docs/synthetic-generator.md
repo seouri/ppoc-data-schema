@@ -125,7 +125,7 @@ from synthetic.native.counterfactual import (
 )
 from tests.synthetic.fakes import RegimeLinearTestReference
 
-patient = PatientState("synthetic-counterfactual", "F", "F")
+patient = PatientState("syn-counterfactual", "F", "F")
 kernel = AgeRegimeDisorderKernel(
     AgeRegimeTrajectoryKernel(RegimeLinearTestReference()),
     FamilialShortStatureModule(),
@@ -148,7 +148,7 @@ The fixed trajectory matrices support `physiology_severity`, `earlier_recognitio
 
 `validate_counterfactual_pair` returns an aggregate-only report. Each fixed check has status `PASS`, `FAIL`, or `UNEVALUABLE`; the report is `FAIL` if any check fails, otherwise `UNEVALUABLE` when required evidence is missing, otherwise `PASS`. Reports contain only check names, statuses, reason codes, and counts. They do not contain patient IDs, seeds, event payloads, hidden state, layer hashes, stream identities, paths, or candidate links. A `PASS` is evidence that this causal replay contract held for the supplied fictional pair, not clinical efficacy or release evidence.
 
-`write_truth_manifest(pair, report, path)` is an explicit evaluator-only boundary. It serializes the hidden patient/state/event trace, causal-layer hashes, and stream identities to canonical JSON outside the visible package. The destination must be a new regular non-symlink file with an existing non-symlink parent; writes are exclusive, size-bounded, fsynced, reparsed, and never overwrite an existing path. Ordinary pair/report mappings and `manifest.json` remain truth-free. Keep the truth manifest in evaluator-controlled storage and do not copy it beside a released fixture package.
+`write_truth_manifest(pair, report, path)` is an explicit evaluator-only boundary. It serializes the hidden patient/state/event trace, causal-layer hashes, and stream identities to canonical JSON outside the visible package. The destination must be a new regular non-symlink file with an existing non-symlink parent; every existing ancestor from the filesystem root through that parent must also be a regular non-symlink directory. This strict ancestor rule is checked with portable `lstat` calls because the writer must not follow a directory symlink. Writes use a private same-directory temporary file, publish only after the payload is written and fsynced, are size-bounded and reparsed, and never overwrite an existing path. A failed write removes the temporary file before returning an explicit error, so the requested destination remains available for a retry. Ordinary pair/report mappings and `manifest.json` remain truth-free. Keep the truth manifest in evaluator-controlled storage and do not copy it beside a released fixture package.
 
 This trajectory slice does not establish growth-disorder prevalence, demographic representativeness, observation-error fidelity, temporal drift, task utility, privacy or non-matchability, clinical validity, or release authorization. Those are separate approved gates; a complete exact-schema counterfactual package and an optional Synthea-conforming adapter require their own schema, derivation, longitudinal, causal, utility, and privacy evaluation.
 
