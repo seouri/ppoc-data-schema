@@ -323,6 +323,78 @@ def test_malformed_truth_object_is_structural_not_missing() -> None:
     assert _comparison(report, "causal_event_timing").reason_code == "STRUCTURAL_INVALID"
 
 
+def test_nested_trajectory_and_truth_corruption_prevents_any_causal_pass() -> None:
+    def later_point_patient(cohort: NativeCohort) -> None:
+        object.__setattr__(
+            cohort.members[0].trajectory.physiology.points[1],
+            "patient_id",
+            "syn-secret-later-point",
+        )
+
+    def later_point_age(cohort: NativeCohort) -> None:
+        points = cohort.members[0].trajectory.physiology.points
+        object.__setattr__(points[1], "age_days", points[0].age_days)
+
+    def truth_patient(cohort: NativeCohort) -> None:
+        object.__setattr__(
+            cohort.members[0].frame.truth,
+            "patient_id",
+            "syn-secret-truth-patient",
+        )
+
+    def truth_window(cohort: NativeCohort) -> None:
+        mismatched = dataclasses.replace(
+            cohort.members[0].frame.window,
+            effective_end_age_days=900,
+            administrative_end_age_days=900,
+        )
+        object.__setattr__(cohort.members[0].frame.truth, "window", mismatched)
+
+    for mutation in (
+        later_point_patient,
+        later_point_age,
+        truth_patient,
+        truth_window,
+    ):
+        cohort = _valid_cohort()
+        mutation(cohort)
+
+        report = validate_temporal_drift(cohort, temporal_policy())
+        encoded = json.dumps(report.to_mapping(), sort_keys=True)
+
+        assert report.status is TemporalDriftStatus.FAIL
+        for metric in ("causal_event_order", "causal_event_timing"):
+            comparison = _comparison(report, metric)
+            assert (comparison.status, comparison.reason_code) == (
+                TemporalDriftStatus.FAIL,
+                "STRUCTURAL_INVALID",
+            )
+        assert "syn-secret" not in encoded
+
+
+class _ExplodingMembers(tuple[CohortMember, ...]):
+    def __len__(self) -> int:
+        raise RuntimeError("syn-secret-members raw exception age 987654")
+
+
+def test_malformed_member_container_returns_redacted_structural_report() -> None:
+    cohort = _valid_cohort()
+    object.__setattr__(cohort, "members", _ExplodingMembers(cohort.members))
+
+    report = validate_temporal_drift(cohort, temporal_policy())
+    encoded = json.dumps(report.to_mapping(), sort_keys=True)
+
+    assert report.status is TemporalDriftStatus.FAIL
+    assert all(
+        comparison.status is TemporalDriftStatus.FAIL
+        and comparison.reason_code == "STRUCTURAL_INVALID"
+        for comparison in report.comparisons
+    )
+    assert "syn-secret-members" not in encoded
+    assert "987654" not in encoded
+    assert "raw exception" not in encoded
+
+
 def test_cohort_below_minimum_is_unevaluable_even_when_comparisons_pass() -> None:
     policy = temporal_policy(minimum_cohort_size=3)
 

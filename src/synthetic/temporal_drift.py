@@ -16,8 +16,10 @@ from synthetic.cohort import CohortMember, NativeCohort
 from synthetic.models import (
     AgeRegimeDisorderTrajectory,
     AgeRegimePoint,
+    AgeRegimeState,
     AgeRegimeTrajectory,
     ClinicalEvent,
+    LatentDisorderState,
 )
 from synthetic.native.observations import (
     ObservationFrame,
@@ -26,6 +28,7 @@ from synthetic.native.observations import (
     ObservedVisit,
     RecordedEvent,
 )
+from synthetic.native.resources import SyntheticDemographics
 
 TEMPORAL_DRIFT_REPORT_VERSION = "temporal-drift-report-v1"
 
@@ -556,9 +559,9 @@ def _is_in_window(age_days: int, window: TemporalWindowPolicy) -> bool:
 
 
 def _extract_visible_window_metrics(
-    cohort: NativeCohort, window: TemporalWindowPolicy
+    members: tuple[CohortMember, ...], window: TemporalWindowPolicy
 ) -> _VisibleWindowMetrics:
-    member_support = len(cohort.members)
+    member_support = len(members)
     growth_member_count = 0
     visit_member_count = 0
     event_member_count = 0
@@ -566,7 +569,7 @@ def _extract_visible_window_metrics(
     interval_member_support = 0
     intervals: list[int] = []
 
-    for member in cohort.members:
+    for member in members:
         growth_count = sum(
             _is_in_window(point.age_days, window)
             for point in member.trajectory.physiology.points
@@ -907,6 +910,40 @@ def _source_event_timing_is_valid(
     )
 
 
+def _nested_causal_invariants_are_valid(
+    member: CohortMember, truth: ObservationTruth
+) -> bool:
+    if not isinstance(member.demographics, SyntheticDemographics):
+        return False
+    trajectory = member.trajectory
+    if not isinstance(trajectory.disorder, LatentDisorderState):
+        return False
+    physiology = trajectory.physiology
+    if not isinstance(physiology.state, AgeRegimeState):
+        return False
+    points = physiology.points
+    patient_id = member.demographics.patient_id
+    if any(point.patient_id != patient_id for point in points):
+        return False
+    point_ages = tuple(point.age_days for point in points)
+    if any(
+        isinstance(age_days, bool)
+        or not isinstance(age_days, int)
+        or age_days < 0
+        for age_days in point_ages
+    ):
+        return False
+    if any(current <= previous for previous, current in pairwise(point_ages)):
+        return False
+    frame = member.frame
+    return (
+        frame.patient_id == patient_id
+        and truth.patient_id == frame.patient_id
+        and isinstance(frame.window, ObservationWindow)
+        and truth.window == frame.window
+    )
+
+
 def _member_causal_statuses(
     member: CohortMember,
 ) -> tuple[TemporalDriftStatus, TemporalDriftStatus]:
@@ -933,6 +970,8 @@ def _member_causal_statuses(
                 TemporalDriftStatus.UNEVALUABLE,
             )
         if not isinstance(truth, ObservationTruth):
+            return TemporalDriftStatus.FAIL, TemporalDriftStatus.FAIL
+        if not _nested_causal_invariants_are_valid(member, truth):
             return TemporalDriftStatus.FAIL, TemporalDriftStatus.FAIL
         source_events = truth.source_events
         trajectory_events = member.trajectory.events
@@ -1026,10 +1065,12 @@ def _causal_check(comparison: TemporalComparison) -> TemporalCheck:
 
 
 def _assemble_report(
-    cohort: NativeCohort,
     policy: TemporalDriftPolicy,
     comparisons: tuple[TemporalComparison, ...],
     *,
+    cohort_profile: str,
+    cohort_seed: int,
+    cohort_size: int,
     required_window_lacks_support: bool,
 ) -> TemporalDriftReport:
     coverage_comparisons = tuple(
@@ -1047,7 +1088,7 @@ def _assemble_report(
         for comparison in comparisons
         if comparison.metric in _CAUSAL_METRICS
     }
-    cohort_is_too_small = len(cohort.members) < policy.minimum_cohort_size
+    cohort_is_too_small = cohort_size < policy.minimum_cohort_size
     cohort_check = (
         TemporalCheck("cohort_size", TemporalDriftStatus.PASS, "OK")
         if not cohort_is_too_small
@@ -1087,9 +1128,9 @@ def _assemble_report(
         report_version=TEMPORAL_DRIFT_REPORT_VERSION,
         policy_id=policy.policy_id,
         policy_version=policy.policy_version,
-        cohort_profile=cohort.profile,
-        cohort_seed=cohort.seed,
-        cohort_size=len(cohort.members),
+        cohort_profile=cohort_profile,
+        cohort_seed=cohort_seed,
+        cohort_size=cohort_size,
         status=report_status,
         status_counts={
             status.value: counted_statuses[status.value]
@@ -1112,20 +1153,27 @@ def validate_temporal_drift(
     if not isinstance(policy, TemporalDriftPolicy):
         raise TypeError("policy must be a TemporalDriftPolicy")
 
+    cohort_profile = cohort.profile
+    cohort_seed = cohort.seed
+    cohort_size = 0
     try:
-        if not isinstance(cohort.members, tuple) or not all(
-            isinstance(member, CohortMember) for member in cohort.members
+        members = cohort.members
+        if type(members) is not tuple or not all(
+            isinstance(member, CohortMember) for member in members
         ):
             raise TypeError("members must contain CohortMember values")
+        cohort_size = len(members)
         window_metrics = tuple(
-            _extract_visible_window_metrics(cohort, window)
+            _extract_visible_window_metrics(members, window)
             for window in policy.windows
         )
     except Exception:  # noqa: BLE001 - injected evidence must fail closed
         return _assemble_report(
-            cohort,
             policy,
             _structural_comparisons(policy),
+            cohort_profile=cohort_profile,
+            cohort_seed=cohort_seed,
+            cohort_size=cohort_size,
             required_window_lacks_support=False,
         )
 
@@ -1142,12 +1190,14 @@ def validate_temporal_drift(
     comparisons = (
         window_comparisons
         + step_comparisons
-        + _causal_comparisons(cohort.members)
+        + _causal_comparisons(members)
     )
     return _assemble_report(
-        cohort,
         policy,
         comparisons,
+        cohort_profile=cohort_profile,
+        cohort_seed=cohort_seed,
+        cohort_size=cohort_size,
         required_window_lacks_support=any(
             metrics.member_support < metrics.window.minimum_member_support
             for metrics in window_metrics
