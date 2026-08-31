@@ -270,7 +270,7 @@ def test_negative_and_positive_controls_distinguish_independent_from_copied_pack
     positive = _evaluate_positive_control(policy, reference, copied, heldout=heldout)
     missing = _evaluate_positive_control(policy, reference, None, heldout=heldout)
 
-    assert negative.status == "PASS"
+    assert negative.status == "FAIL"
     assert positive.status == "PASS"
     assert positive.metrics["positive_control_advantage"] == 1.0
     for result in (negative, positive):

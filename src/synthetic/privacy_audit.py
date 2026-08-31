@@ -877,6 +877,26 @@ def _nearest_metrics(
     )
 
 
+def _nearest_failure_reason(
+    metrics: Mapping[str, int | float], policy: PrivacyPolicy
+) -> str | None:
+    raw_zero_signal = float(metrics["zero_proximity_rate"])
+    raw_unique_signal = float(metrics["unique_nearest_rate"])
+    zero_signal = max(0.0, raw_zero_signal - float(metrics.get("heldout_zero_proximity_rate", 0.0)))
+    unique_signal = max(0.0, raw_unique_signal - float(metrics.get("heldout_unique_nearest_rate", 0.0)))
+    if (
+        raw_zero_signal > policy.thresholds["nearest_neighbor_zero_rate"]
+        or zero_signal > policy.thresholds["nearest_neighbor_zero_rate"]
+    ):
+        return "zero_proximity_threshold_exceeded"
+    if (
+        raw_unique_signal > policy.thresholds["nearest_neighbor_unique_rate"]
+        or unique_signal > policy.thresholds["nearest_neighbor_unique_rate"]
+    ):
+        return "unique_nearest_threshold_exceeded"
+    return None
+
+
 def _evaluate_nearest_neighbor_control(
     policy: PrivacyPolicy,
     reference: _PrivatePackage,
@@ -895,19 +915,8 @@ def _evaluate_nearest_neighbor_control(
     if not _packages_have_profile_evidence(policy, *packages):
         return _unevaluable_control("nearest_neighbor", "insufficient_evidence")
     metrics = _nearest_metrics(reference, generated, heldout)
-    zero_signal = float(metrics["zero_proximity_rate"])
-    unique_signal = float(metrics["unique_nearest_rate"])
-    if heldout is not None:
-        zero_signal = max(0.0, zero_signal - float(metrics["heldout_zero_proximity_rate"]))
-        unique_signal = max(0.0, unique_signal - float(metrics["heldout_unique_nearest_rate"]))
-    if zero_signal > policy.thresholds["nearest_neighbor_zero_rate"]:
-        return PrivacyControlResult(
-            "nearest_neighbor", "FAIL", metrics, "zero_proximity_threshold_exceeded"
-        )
-    if unique_signal > policy.thresholds["nearest_neighbor_unique_rate"]:
-        return PrivacyControlResult(
-            "nearest_neighbor", "FAIL", metrics, "unique_nearest_threshold_exceeded"
-        )
+    if reason := _nearest_failure_reason(metrics, policy):
+        return PrivacyControlResult("nearest_neighbor", "FAIL", metrics, reason)
     reason = "nearest_neighbor_within_threshold" if heldout is not None else "nearest_neighbor_reference_only"
     return PrivacyControlResult("nearest_neighbor", "PASS", metrics, reason)
 
@@ -1003,6 +1012,13 @@ def _linkage_candidate_metrics(
     )
 
 
+def _linkage_failure(metrics: Mapping[str, int | float], policy: PrivacyPolicy) -> bool:
+    return (
+        float(metrics["unique_candidate_rate"]) > policy.thresholds["linkage_advantage"]
+        or float(metrics["linkage_advantage"]) > policy.thresholds["linkage_advantage"]
+    )
+
+
 def _linkage_query_groups(
     policy: PrivacyPolicy, generated: _PrivatePackage
 ) -> tuple[tuple[_PrivatePatientProfile, ...], ...]:
@@ -1043,13 +1059,14 @@ def _evaluate_linkage_control(
         for group in _linkage_query_groups(policy, generated)
     )
     metrics = max(
-        group_metrics, key=lambda item: (item["linkage_advantage"], item["unique_candidate_rate"])
+        group_metrics,
+        key=lambda item: (item["unique_candidate_rate"], item["linkage_advantage"]),
     )
     subgroup_failed = any(
-        item["linkage_advantage"] > policy.thresholds["linkage_advantage"]
+        _linkage_failure(item, policy)
         for item in group_metrics[1:]
     )
-    if metrics["linkage_advantage"] > policy.thresholds["linkage_advantage"]:
+    if _linkage_failure(metrics, policy):
         reason = (
             "subgroup_linkage_threshold_exceeded"
             if subgroup_failed
@@ -1413,11 +1430,14 @@ def _evaluate_control_package(
         evaluated_count,
     )
     threshold = policy.thresholds[metric_name]
+    raw_signal = max(
+        float(harness["harness_unique_candidate_rate"]), float(harness["reproduction_rate"])
+    )
     if control_id == "negative_control":
-        if advantage >= threshold:
+        if raw_signal >= threshold or advantage >= threshold:
             return PrivacyControlResult(control_id, "FAIL", metrics, "negative_control_threshold_exceeded")
         return PrivacyControlResult(control_id, "PASS", metrics, "negative_control_within_threshold")
-    if advantage >= threshold:
+    if raw_signal >= threshold:
         return PrivacyControlResult(control_id, "PASS", metrics, "positive_control_detected")
     return PrivacyControlResult(control_id, "FAIL", metrics, "positive_control_not_detected")
 
@@ -1743,11 +1763,12 @@ def _validate_evaluated_metrics(control: PrivacyControlResult, policy: PrivacyPo
         true_positive = int(metrics["membership_true_positive_count"])
         false_positive = int(metrics["membership_false_positive_count"])
         if (
-            positives <= 0
-            or negatives <= 0
+            positives < policy.minimum_evaluable_patients
+            or negatives < policy.minimum_evaluable_patients
             or positives + negatives != int(metrics["evaluated_count"])
             or true_positive > positives
             or false_positive > negatives
+            or int(metrics["shadow_run_count"]) < max(1, policy.minimum_shadow_runs)
         ):
             raise ValueError("privacy report membership counts are incompatible")
         _validate_report_rate(
@@ -1776,6 +1797,19 @@ def _validate_evaluated_metrics(control: PrivacyControlResult, policy: PrivacyPo
         if metrics["membership_inference_advantage"] != expected_advantage:
             raise ValueError("privacy report membership advantage is incompatible")
         _validate_report_interval(metrics, match_count, int(metrics["evaluated_count"]))
+        true_positive_lower, true_positive_upper = _wilson_95_interval(true_positive, positives)
+        false_positive_lower, false_positive_upper = _wilson_95_interval(false_positive, negatives)
+        expected_advantage_lower = round(
+            max(0.0, true_positive_lower - false_positive_upper), 6
+        )
+        expected_advantage_upper = round(
+            max(0.0, true_positive_upper - false_positive_lower), 6
+        )
+        if (
+            metrics["advantage_ci_lower"] != expected_advantage_lower
+            or metrics["advantage_ci_upper"] != expected_advantage_upper
+        ):
+            raise ValueError("privacy report membership interval is incompatible")
     elif control.control_id == "attribute_disclosure":
         attack_count = _validate_report_rate(metrics, "attribute_attack_accuracy", "evaluated_count")
         baseline = float(metrics["reference_majority_accuracy"])
@@ -1871,11 +1905,9 @@ def _status_from_control_metrics(control: PrivacyControlResult, policy: PrivacyP
     elif control_id == "exact_reproduction":
         failed = int(metrics["reproduction_count"]) > 0 or metrics["exact_reproduction_rate"] > policy.thresholds["exact_reproduction_rate"]
     elif control_id == "nearest_neighbor":
-        zero_signal = float(metrics["zero_proximity_rate"]) - float(metrics.get("heldout_zero_proximity_rate", 0))
-        unique_signal = float(metrics["unique_nearest_rate"]) - float(metrics.get("heldout_unique_nearest_rate", 0))
-        failed = max(0.0, zero_signal) > policy.thresholds["nearest_neighbor_zero_rate"] or max(0.0, unique_signal) > policy.thresholds["nearest_neighbor_unique_rate"]
+        failed = _nearest_failure_reason(metrics, policy) is not None
     elif control_id == "linkage":
-        failed = metrics["linkage_advantage"] > policy.thresholds["linkage_advantage"]
+        failed = _linkage_failure(metrics, policy)
     elif control_id == "membership_inference":
         failed = metrics["membership_inference_advantage"] > policy.thresholds["membership_inference_advantage"]
     elif control_id == "attribute_disclosure":
@@ -1883,10 +1915,157 @@ def _status_from_control_metrics(control: PrivacyControlResult, policy: PrivacyP
     elif control_id == "composition":
         failed = metrics["composition_reproduction_rate"] > policy.thresholds["composition_reproduction_rate"]
     elif control_id == "negative_control":
-        failed = metrics["negative_control_advantage"] >= policy.thresholds["negative_control_advantage"]
+        failed = max(
+            float(metrics["harness_unique_candidate_rate"]), float(metrics["reproduction_rate"])
+        ) >= policy.thresholds["negative_control_advantage"]
     else:
-        failed = metrics["positive_control_advantage"] < policy.thresholds["positive_control_advantage"]
+        failed = max(
+            float(metrics["harness_unique_candidate_rate"]), float(metrics["reproduction_rate"])
+        ) < policy.thresholds["positive_control_advantage"]
     return "FAIL" if failed else "PASS"
+
+
+_UNEVALUABLE_REASON_CODES = {
+    "identifier_overlap": frozenset({"insufficient_evidence"}),
+    "exact_reproduction": frozenset({"insufficient_evidence"}),
+    "nearest_neighbor": frozenset(
+        {
+            "heldout_required",
+            "insufficient_evidence",
+            "optional_package_invalid",
+            "heldout_not_patient_disjoint",
+            "control_evaluation_unavailable",
+        }
+    ),
+    "linkage": frozenset(
+        {
+            "heldout_required",
+            "insufficient_evidence",
+            "optional_package_invalid",
+            "heldout_not_patient_disjoint",
+            "control_evaluation_unavailable",
+        }
+    ),
+    "membership_inference": frozenset(
+        {
+            "insufficient_shadow_runs",
+            "invalid_shadow_runs",
+            "insufficient_evidence",
+            "inconsistent_shadow_labels",
+            "optional_package_invalid",
+            "control_evaluation_unavailable",
+        }
+    ),
+    "attribute_disclosure": frozenset(
+        {
+            "heldout_required",
+            "insufficient_evidence",
+            "inconsistent_sensitive_labels",
+            "no_non_target_attacker_knowledge",
+            "optional_package_invalid",
+            "heldout_not_patient_disjoint",
+            "control_evaluation_unavailable",
+        }
+    ),
+    "composition": frozenset(
+        {
+            "insufficient_prior_releases",
+            "insufficient_evidence",
+            "optional_package_invalid",
+            "control_evaluation_unavailable",
+        }
+    ),
+    "negative_control": frozenset(
+        {
+            "control_package_missing",
+            "control_harness_unavailable",
+            "insufficient_evidence",
+            "optional_package_invalid",
+            "control_evaluation_unavailable",
+        }
+    ),
+    "positive_control": frozenset(
+        {
+            "control_package_missing",
+            "control_harness_unavailable",
+            "insufficient_evidence",
+            "optional_package_invalid",
+            "control_evaluation_unavailable",
+        }
+    ),
+}
+
+
+def _canonical_control_reason_codes(
+    control: PrivacyControlResult, policy: PrivacyPolicy
+) -> frozenset[str]:
+    if control.status == "UNEVALUABLE":
+        reasons = _UNEVALUABLE_REASON_CODES[control.control_id]
+        if (
+            control.control_id not in policy.required_controls
+            and "heldout_required" in reasons
+        ):
+            reasons = reasons - {"heldout_required"}
+        return reasons
+    metrics = control.metrics
+    if control.control_id == "identifier_overlap":
+        if int(metrics["overlap_count"]):
+            return frozenset({"identifier_overlap_detected"})
+        if float(metrics["overlap_rate"]) > policy.thresholds["identifier_overlap_rate"]:
+            return frozenset({"identifier_overlap_threshold_exceeded"})
+        return frozenset({"no_identifier_overlap"})
+    if control.control_id == "exact_reproduction":
+        if int(metrics["reproduction_count"]):
+            return frozenset({"exact_reproduction_detected"})
+        if float(metrics["exact_reproduction_rate"]) > policy.thresholds["exact_reproduction_rate"]:
+            return frozenset({"exact_reproduction_threshold_exceeded"})
+        return frozenset({"no_exact_reproduction"})
+    if control.control_id == "nearest_neighbor":
+        reason = _nearest_failure_reason(metrics, policy)
+        if reason is not None:
+            return frozenset({reason})
+        return frozenset(
+            {"nearest_neighbor_within_threshold"}
+            if "heldout_count" in metrics
+            else {"nearest_neighbor_reference_only"}
+        )
+    if control.control_id == "linkage":
+        if _linkage_failure(metrics, policy):
+            return frozenset({"linkage_threshold_exceeded", "subgroup_linkage_threshold_exceeded"})
+        return frozenset(
+            {"linkage_within_threshold"}
+            if "heldout_count" in metrics
+            else {"linkage_reference_permutation_only"}
+        )
+    if control.control_id == "membership_inference":
+        return frozenset(
+            {"membership_inference_threshold_exceeded"}
+            if control.status == "FAIL"
+            else {"membership_inference_within_threshold"}
+        )
+    if control.control_id == "attribute_disclosure":
+        return frozenset(
+            {"attribute_disclosure_threshold_exceeded"}
+            if control.status == "FAIL"
+            else {"attribute_disclosure_within_threshold"}
+        )
+    if control.control_id == "composition":
+        return frozenset(
+            {"composition_threshold_exceeded"}
+            if control.status == "FAIL"
+            else {"composition_within_threshold"}
+        )
+    if control.control_id == "negative_control":
+        return frozenset(
+            {"negative_control_threshold_exceeded"}
+            if control.status == "FAIL"
+            else {"negative_control_within_threshold"}
+        )
+    return frozenset(
+        {"positive_control_not_detected"}
+        if control.status == "FAIL"
+        else {"positive_control_detected"}
+    )
 
 
 def _validate_privacy_report_semantics(report: PrivacyAuditReport) -> None:
@@ -1897,6 +2076,8 @@ def _validate_privacy_report_semantics(report: PrivacyAuditReport) -> None:
         expected = _status_from_control_metrics(control, report.policy)
         if control.status != expected:
             raise ValueError("privacy report control status is incompatible with metrics")
+        if control.reason_code not in _canonical_control_reason_codes(control, report.policy):
+            raise ValueError("privacy report control reason is incompatible with metrics")
         statuses.append(expected)
     expected_status = "FAIL" if "FAIL" in statuses else "PASS"
     if expected_status == "PASS" and any(
@@ -1906,6 +2087,8 @@ def _validate_privacy_report_semantics(report: PrivacyAuditReport) -> None:
         expected_status = "UNEVALUABLE"
     if report.status != expected_status:
         raise ValueError("privacy report status is incompatible with controls")
+    if report.decision_reasons != _decision_reasons(report.controls, report.policy):
+        raise ValueError("privacy report decision reasons are incompatible with controls")
 
 
 def _reparse_written_privacy_report(run: RunDirectory, result: PrivacyAuditResult) -> None:

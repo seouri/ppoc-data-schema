@@ -276,8 +276,8 @@ def test_heldout_baselines_query_heldout_profiles_against_reference_only() -> No
     assert linkage.metrics["heldout_unique_candidate_rate"] == 0.0
 
 
-def test_heldout_nearest_baseline_changes_the_threshold_decision() -> None:
-    """Catches reporting a held-out rate without subtracting it from the nearest-neighbor signal."""
+def test_heldout_nearest_baseline_cannot_hide_a_raw_threshold_failure() -> None:
+    """Catches treating a high held-out baseline as permission to pass a raw nearest-neighbor risk."""
     policy = _policy(
         subgroups=["overall"],
         thresholds=policy_mapping()["thresholds"]
@@ -297,14 +297,17 @@ def test_heldout_nearest_baseline_changes_the_threshold_decision() -> None:
     with_heldout = _evaluate_nearest_neighbor_control(policy, reference, generated, heldout=heldout)
 
     assert without_heldout.status == "FAIL"
-    assert with_heldout.status == "PASS"
+    assert with_heldout.status == "FAIL"
     assert with_heldout.metrics["zero_proximity_rate"] == 1.0
     assert with_heldout.metrics["heldout_zero_proximity_rate"] == 1.0
 
 
 def test_linkage_uses_fixed_components_and_heldout_permutation_baselines(tmp_path: Path) -> None:
     """Catches omitting held-out/permutation baselines or leaking component values."""
-    policy = _policy(required_controls=["exact_reproduction", "identifier_overlap", "linkage"])
+    policy = _policy(
+        required_controls=["exact_reproduction", "identifier_overlap", "linkage"],
+        thresholds=policy_mapping()["thresholds"] | {"linkage_advantage": 1.0},
+    )
     reference = _package(tmp_path / "real", synthetic=False, prefix="REAL")
     generated = _package(tmp_path / "generated", synthetic=True, prefix="GEN", independent=True)
     heldout = _package(tmp_path / "heldout", synthetic=False, prefix="HLD", independent=True)
@@ -464,9 +467,14 @@ def test_linkage_suppresses_underpowered_sex_cells_without_turning_them_into_pas
     tmp_path: Path,
 ) -> None:
     """Catches treating an undersized subgroup as evaluated evidence or exposing its category."""
-    policy = _policy(required_controls=["exact_reproduction", "identifier_overlap", "linkage"])
+    policy = _policy(
+        required_controls=["exact_reproduction", "identifier_overlap", "linkage"],
+        thresholds=policy_mapping()["thresholds"] | {"linkage_advantage": 1.0},
+    )
     overall_only = _policy(
-        required_controls=["exact_reproduction", "identifier_overlap", "linkage"], subgroups=["overall"]
+        required_controls=["exact_reproduction", "identifier_overlap", "linkage"],
+        subgroups=["overall"],
+        thresholds=policy_mapping()["thresholds"] | {"linkage_advantage": 1.0},
     )
     reference = _package(tmp_path / "real", synthetic=False, prefix="REAL")
     generated = _package(

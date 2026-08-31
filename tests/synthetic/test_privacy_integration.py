@@ -51,7 +51,8 @@ def _config(tmp_path: Path, **changes: object) -> PrivacyRunConfig:
         "synthetic_root": _independent_generated(tmp_path / "generated", id_prefix="GEN"),
         "policy": write_policy(
             tmp_path / "policy.json",
-            thresholds=thresholds | {"nearest_neighbor_unique_rate": 1.0},
+            thresholds=thresholds
+            | {"linkage_advantage": 1.0, "nearest_neighbor_unique_rate": 1.0},
         ),
         "output": tmp_path / "privacy-output",
     }
@@ -81,7 +82,8 @@ def test_optional_nearest_neighbor_screen_can_fail_without_heldout_evidence(tmp_
     assert isinstance(thresholds, dict)
     policy = write_policy(
         tmp_path / "policy.json",
-        thresholds=thresholds | {"nearest_neighbor_unique_rate": 0.1},
+        thresholds=thresholds
+        | {"linkage_advantage": 1.0, "nearest_neighbor_unique_rate": 0.1},
     )
 
     result = audit_privacy(_config(tmp_path / "audit", policy=policy))
@@ -251,6 +253,47 @@ def test_report_validation_rejects_incomplete_heldout_nearest_metrics(tmp_path: 
         _validate_evaluated_metrics(forged, result.report.policy)
 
 
+def test_report_writer_rejects_heldout_baseline_that_hides_raw_nearest_signal(tmp_path: Path) -> None:
+    """Catches injecting a complete held-out baseline to turn a generated nearest-neighbor failure into PASS."""
+    thresholds = policy_mapping()["thresholds"]
+    assert isinstance(thresholds, dict)
+    policy = write_policy(
+        tmp_path / "policy.json",
+        thresholds=thresholds
+        | {"linkage_advantage": 1.0, "nearest_neighbor_unique_rate": 0.1},
+    )
+    result = audit_privacy(_config(tmp_path / "audit", policy=policy))
+    nearest = next(item for item in result.report.controls if item.control_id == "nearest_neighbor")
+    assert nearest.status == result.report.status == "FAIL"
+    controls = tuple(
+        replace(
+            item,
+            status="PASS",
+            metrics={
+                **item.metrics,
+                "heldout_count": item.metrics["evaluated_count"],
+                "heldout_zero_proximity_rate": item.metrics["zero_proximity_rate"],
+                "heldout_unique_nearest_rate": item.metrics["unique_nearest_rate"],
+            },
+        )
+        if item.control_id == "nearest_neighbor"
+        else item
+        for item in result.report.controls
+    )
+    forged = PrivacyAuditResult(
+        replace(
+            result.report,
+            status="PASS",
+            controls=controls,
+            control_counts={name: sum(item.status == name for item in controls) for name in ("PASS", "FAIL", "UNEVALUABLE")},
+            decision_reasons=("all_required_controls_passed",),
+        )
+    )
+
+    with pytest.raises(ValueError, match="could not be promoted"):
+        write_privacy_report(forged, tmp_path / "forged-heldout")
+
+
 @pytest.mark.parametrize(
     ("control_id", "metrics"),
     [
@@ -357,6 +400,64 @@ def test_report_writer_rejects_forged_positive_control_advantage(tmp_path: Path)
         write_privacy_report(forged, tmp_path / "forged-positive")
 
 
+@pytest.mark.parametrize("field", ["undersized", "interval"])
+def test_report_writer_rejects_forged_membership_evidence(tmp_path: Path, field: str) -> None:
+    """Catches undersized membership partitions and arbitrary advantage intervals in a PASS report."""
+    shadow = _independent_generated(tmp_path / "shadow", id_prefix="SHD")
+    manifest = write_shadow_manifest(
+        tmp_path / "shadows.json",
+        [{"run_id": "shadow-one", "package_root": str(shadow), "members": ["REAL-P-001", "REAL-P-002", "REAL-P-003"]}],
+    )
+    result = audit_privacy(_config(tmp_path, shadow_manifest=manifest))
+    metrics = {
+        **next(item.metrics for item in result.report.controls if item.control_id == "membership_inference"),
+        "membership_positive_count": 1,
+        "membership_negative_count": 11,
+        "shadow_run_count": 0,
+    }
+    if field == "interval":
+        metrics |= {"advantage_ci_lower": 1.0, "advantage_ci_upper": 1.0}
+    controls = tuple(
+        replace(item, metrics=metrics) if item.control_id == "membership_inference" else item
+        for item in result.report.controls
+    )
+    forged = PrivacyAuditResult(replace(result.report, controls=controls))
+
+    with pytest.raises(ValueError, match="could not be promoted"):
+        write_privacy_report(forged, tmp_path / f"forged-membership-{field}")
+
+
+@pytest.mark.parametrize("forgery", ["decision", "control", "optional_unevaluable"])
+def test_report_writer_rejects_forged_reasons(tmp_path: Path, forgery: str) -> None:
+    """Catches caller-supplied decision or control reasons that do not match aggregate semantics."""
+    result = audit_privacy(_config(tmp_path))
+    if forgery == "decision":
+        forged = PrivacyAuditResult(replace(result.report, decision_reasons=("evaluated_control_failed",)))
+    elif forgery == "optional_unevaluable":
+        controls = tuple(
+            replace(item, status="UNEVALUABLE", metrics={}, reason_code="heldout_required")
+            if item.control_id == "nearest_neighbor"
+            else item
+            for item in result.report.controls
+        )
+        forged = PrivacyAuditResult(
+            replace(
+                result.report,
+                controls=controls,
+                control_counts={name: sum(item.status == name for item in controls) for name in ("PASS", "FAIL", "UNEVALUABLE")},
+            )
+        )
+    else:
+        controls = tuple(
+            replace(item, reason_code="forged_reason") if item.control_id == "identifier_overlap" else item
+            for item in result.report.controls
+        )
+        forged = PrivacyAuditResult(replace(result.report, controls=controls))
+
+    with pytest.raises(ValueError, match="could not be promoted"):
+        write_privacy_report(forged, tmp_path / f"forged-reason-{forgery}")
+
+
 def test_audit_copied_package_fails_mandatory_controls_and_promotes_only_aggregate_files(tmp_path: Path) -> None:
     """Catches a copied package escaping either mandatory global-fail gate."""
     real_root = write_real_package(tmp_path / "real", id_prefix="COPY")
@@ -388,7 +489,8 @@ def test_audit_required_missing_or_malformed_optional_evidence_is_unevaluable_no
         tmp_path / "policy.json",
         required_controls=["composition", "exact_reproduction", "identifier_overlap"],
         minimum_prior_releases=1,
-        thresholds=policy_mapping()["thresholds"] | {"nearest_neighbor_unique_rate": 1.0},
+        thresholds=policy_mapping()["thresholds"]
+        | {"linkage_advantage": 1.0, "nearest_neighbor_unique_rate": 1.0},
     )
     required_missing = audit_privacy(_config(tmp_path / "required", policy=policy))
     assert required_missing.report.status == "UNEVALUABLE"
