@@ -5,17 +5,18 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
+from synthetic.csv_package import write_synthetic_descriptor as _write_synthetic_descriptor
 from synthetic.schema_contract import field_names, load_descriptor
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
 
-def _patient_id(index: int) -> str:
-    return f"SYN-P-{index:03d}"
+def _patient_id(index: int, id_prefix: str = "SYN") -> str:
+    return f"{id_prefix}-P-{index:03d}"
 
 
-def _visit_id(index: int, age_index: int) -> str:
-    return f"SYN-V-{((index - 1) * 4) + age_index + 1:03d}"
+def _visit_id(index: int, age_index: int, id_prefix: str = "SYN") -> str:
+    return f"{id_prefix}-V-{((index - 1) * 4) + age_index + 1:03d}"
 
 
 def _row(fields: tuple[str, ...], **values: str) -> dict[str, str]:
@@ -68,7 +69,7 @@ def _write_rows(
         writer.writerows(rows)
 
 
-def write_mock_snapshot(root: Path, *, patient_count: int = 12) -> Path:
+def write_mock_snapshot(root: Path, *, patient_count: int = 12, id_prefix: str = "SYN") -> Path:
     """Create an exact-schema package containing deterministic fictional records only."""
     if patient_count < 3:
         raise ValueError("patient_count must be at least 3 to cover F/M/U")
@@ -89,7 +90,7 @@ def write_mock_snapshot(root: Path, *, patient_count: int = 12) -> Path:
     }
 
     for index in range(1, patient_count + 1):
-        patient_id = _patient_id(index)
+        patient_id = _patient_id(index, id_prefix)
         sex = sex_values[(index - 1) % len(sex_values)]
         ethnicity = ethnicities[(index - 1) % len(ethnicities)]
         augmented_ethnicity = ethnicity if ethnicity != "Unknown" else ""
@@ -122,7 +123,7 @@ def write_mock_snapshot(root: Path, *, patient_count: int = 12) -> Path:
             )
         )
         for age_index, age in enumerate(age_days):
-            visit_id = _visit_id(index, age_index)
+            visit_id = _visit_id(index, age_index, id_prefix)
             nullable_measurement = index % 3 == 0 and age_index == 1
             values = {
                 "patient_id": patient_id,
@@ -159,19 +160,19 @@ def write_mock_snapshot(root: Path, *, patient_count: int = 12) -> Path:
                 )
             )
         nullable_link_id = (
-            _visit_id(index, 0)
+            _visit_id(index, 0, id_prefix)
             if index % 3 == 1
-            else f"SYN-ORPHAN-L-{index:03d}"
+            else f"{id_prefix}-ORPHAN-L-{index:03d}"
             if index % 3 == 2
             else ""
         )
         medication_link_id = (
-            _visit_id(index, 0) if index % 2 else f"SYN-ORPHAN-M-{index:03d}"
+            _visit_id(index, 0, id_prefix) if index % 2 else f"{id_prefix}-ORPHAN-M-{index:03d}"
         )
         rows_by_name["labs"].append(
             _row(
                 fields_by_name["labs"], patient_id=patient_id, visit_id=nullable_link_id,
-                lab_order_id=f"SYN-L-{index:03d}", result_line_num="1", lab_order_date_age_in_days="100",
+                lab_order_id=f"{id_prefix}-L-{index:03d}", result_line_num="1", lab_order_date_age_in_days="100",
                 lab_procedure_name="Synthetic panel", lab_procedure_description="Synthetic test",
                 lab_result_date_age_in_days="101", result_component_name="Synthetic component",
                 result_loinc_code="00000-0", result_value="1", result_flag="",
@@ -180,21 +181,21 @@ def write_mock_snapshot(root: Path, *, patient_count: int = 12) -> Path:
         rows_by_name["medications"].append(
             _row(
                 fields_by_name["medications"], patient_id=patient_id, visit_id=medication_link_id,
-                med_record_id=f"SYN-M-{index:03d}", med_order_date_age_in_days="100",
+                med_record_id=f"{id_prefix}-M-{index:03d}", med_order_date_age_in_days="100",
                 med_start_date_age_in_days="100", med_end_date_age_in_days="101",
                 med_record_type="Internal", med_simple_generic_name="synthetic-medication",
             )
         )
         rows_by_name["problem_list"].append(
             _row(
-                fields_by_name["problem_list"], patient_id=patient_id, problem_list_id=f"SYN-PL-{index:03d}",
+                fields_by_name["problem_list"], patient_id=patient_id, problem_list_id=f"{id_prefix}-PL-{index:03d}",
                 noted_date_age_in_days="100", resolved_date_age_in_days="", pl_diag="SYN-DX",
             )
         )
         rows_by_name["referrals"].append(
             _row(
                 fields_by_name["referrals"], patient_id=patient_id, visit_id=nullable_link_id,
-                referral_id=f"SYN-R-{index:03d}", referral_date_age_in_days="100",
+                referral_id=f"{id_prefix}-R-{index:03d}", referral_date_age_in_days="100",
                 requested_specialty="Synthetic specialty", referral_number_of_visits="1",
             )
         )
@@ -207,3 +208,15 @@ def write_mock_snapshot(root: Path, *, patient_count: int = 12) -> Path:
         ]
         _write_rows(root, resource, rows_by_name[name], descriptor)
     return root
+
+
+def write_synthetic_descriptor(root: Path) -> Path:
+    """Attach a synthetic descriptor to exact-schema fictional fixture rows."""
+    descriptor = load_descriptor(REPOSITORY_ROOT / "datapackage.json")
+    row_counts: dict[str, int] = {}
+    for resource in descriptor["resources"]:
+        name = resource["name"]
+        path = root / resource["path"]
+        with path.open(encoding=resource.get("encoding", "utf-8"), newline="") as handle:
+            row_counts[name] = sum(1 for _ in csv.reader(handle)) - 1
+    return _write_synthetic_descriptor(root, descriptor, row_counts)

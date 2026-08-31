@@ -34,6 +34,7 @@ from synthetic.calibration_input import (  # noqa: F401
     PartitionSummary,
     assign_partition,
     prepare_input,
+    prepare_synthetic_input,
 )
 from synthetic.calibration_targets import (  # noqa: F401
     DIAGNOSIS_AGE_SUMMARIES,

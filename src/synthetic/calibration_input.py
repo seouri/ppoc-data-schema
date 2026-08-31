@@ -125,12 +125,23 @@ def _validate_descriptor(config: CalibrationRunConfig) -> dict[str, Any]:
         descriptor = load_descriptor(config.source_descriptor)
     except (OSError, TypeError, ValueError) as exc:
         raise ValueError("descriptor is invalid") from exc
-    names = [resource.get("name") for resource in descriptor["resources"]]
+    return _validate_descriptor_mapping(descriptor)
+
+
+def _validate_descriptor_mapping(descriptor: Mapping[str, Any]) -> dict[str, Any]:
+    if not isinstance(descriptor, Mapping):
+        raise TypeError("descriptor must be a mapping")
+    resources = descriptor.get("resources")
+    if not isinstance(resources, list):
+        raise TypeError("descriptor resources must be a list")
+    if not all(isinstance(resource, Mapping) for resource in resources):
+        raise TypeError("descriptor resources must be mappings")
+    names = [resource.get("name") for resource in resources]
     if set(names) != set(_RESOURCE_NAMES) or len(names) != len(_RESOURCE_NAMES):
         raise ValueError("descriptor must declare required resources")
     if schema_fingerprint(descriptor) != _repository_fingerprint():
         raise ValueError("descriptor schema fingerprint does not match repository")
-    return descriptor
+    return dict(descriptor)
 
 
 def _open_validated_source(data_root: Path, resource: Mapping[str, Any]) -> _OpenedSource:
@@ -321,30 +332,25 @@ def _partition_counts(connection: duckdb.DuckDBPyConnection, relation: str) -> d
     return counts
 
 
-def prepare_input(connection: duckdb.DuckDBPyConnection, config: CalibrationRunConfig) -> CalibrationInput:
-    """Validate and stage a governed snapshot, returning aggregate metadata only."""
-    if not isinstance(connection, duckdb.DuckDBPyConnection):
-        raise TypeError("connection must be a DuckDB connection")
-    descriptor = _validate_descriptor(config)
+def _stage_validated_resources(
+    connection: duckdb.DuckDBPyConnection, descriptor: dict[str, Any], data_root: Path
+) -> dict[str, str]:
     staged: dict[str, str] = {}
     for name in _RESOURCE_NAMES:
         resource = resource_spec(descriptor, name)
-        source = _open_validated_source(config.data_root, resource)
+        source = _open_validated_source(data_root, resource)
         try:
             _validate_csv_header(source, descriptor)
             staged[name] = _stage_relation(connection, source, resource)
             _validate_relation(connection, name, descriptor, staged[name])
         finally:
             os.close(source.fd)
+    return staged
 
-    patient_rows = connection.execute('SELECT patient_id FROM "calibration_stage_patients"').fetchall()
-    partitions = [(patient_id, assign_partition(patient_id, config.partition_policy, config.partition_key)) for patient_id, in patient_rows]
-    connection.execute("CREATE OR REPLACE TEMP TABLE patient_partitions(patient_id VARCHAR, partition_label VARCHAR)")
-    connection.executemany("INSERT INTO patient_partitions VALUES (?, ?)", partitions)
-    patient_counts = _partition_counts(connection, "patient_partitions")
-    if any(count < config.partition_policy.minimum_partition_patients for count in patient_counts.values()):
-        raise ValueError("partition policy minimum_partition_patients is not met")
 
+def _resource_partition_counts(
+    connection: duckdb.DuckDBPyConnection, staged: Mapping[str, str]
+) -> dict[str, dict[str, int]]:
     resource_counts: dict[str, dict[str, int]] = {}
     for name, relation in staged.items():
         if _has_rows(
@@ -361,9 +367,67 @@ def prepare_input(connection: duckdb.DuckDBPyConnection, config: CalibrationRunC
         counts = {label: 0 for label in _PARTITIONS}
         counts.update({label: count for label, count in rows})
         resource_counts[name] = counts
+    return resource_counts
+
+
+def _require_regular_package_descriptor(package_root: Path) -> None:
+    descriptor_path = package_root / "datapackage.json"
+    try:
+        entry = os.stat(descriptor_path, follow_symlinks=False)
+    except OSError as exc:
+        raise ValueError("synthetic descriptor is unavailable") from exc
+    if not stat.S_ISREG(entry.st_mode) or descriptor_path.is_symlink():
+        raise ValueError("synthetic descriptor is unavailable")
+
+
+def prepare_input(connection: duckdb.DuckDBPyConnection, config: CalibrationRunConfig) -> CalibrationInput:
+    """Validate and stage a governed snapshot, returning aggregate metadata only."""
+    if not isinstance(connection, duckdb.DuckDBPyConnection):
+        raise TypeError("connection must be a DuckDB connection")
+    descriptor = _validate_descriptor(config)
+    staged = _stage_validated_resources(connection, descriptor, config.data_root)
+
+    patient_rows = connection.execute('SELECT patient_id FROM "calibration_stage_patients"').fetchall()
+    partitions = [(patient_id, assign_partition(patient_id, config.partition_policy, config.partition_key)) for patient_id, in patient_rows]
+    connection.execute("CREATE OR REPLACE TEMP TABLE patient_partitions(patient_id VARCHAR, partition_label VARCHAR)")
+    connection.executemany("INSERT INTO patient_partitions VALUES (?, ?)", partitions)
+    patient_counts = _partition_counts(connection, "patient_partitions")
+    if any(count < config.partition_policy.minimum_partition_patients for count in patient_counts.values()):
+        raise ValueError("partition policy minimum_partition_patients is not met")
+
+    resource_counts = _resource_partition_counts(connection, staged)
     return CalibrationInput(
         descriptor=descriptor,
         schema_fingerprint=schema_fingerprint(descriptor),
+        partition_summary=PartitionSummary(patient_counts, resource_counts),
+        resource_names=_RESOURCE_NAMES,
+    )
+
+
+def prepare_synthetic_input(
+    connection: duckdb.DuckDBPyConnection, package_root: Path, descriptor: Mapping[str, Any]
+) -> CalibrationInput:
+    """Validate and stage an exact-schema generated package without retaining row details."""
+    if not isinstance(connection, duckdb.DuckDBPyConnection):
+        raise TypeError("connection must be a DuckDB connection")
+    if not isinstance(package_root, Path):
+        raise TypeError("package_root must be a Path")
+    _require_regular_package_descriptor(package_root)
+    if not isinstance(descriptor, Mapping) or descriptor.get("x-synthetic") is not True:
+        raise ValueError("synthetic descriptor marker is required")
+    validated_descriptor = _validate_descriptor_mapping(descriptor)
+    staged = _stage_validated_resources(connection, validated_descriptor, package_root)
+    patient_rows = connection.execute('SELECT patient_id FROM "calibration_stage_patients"').fetchall()
+    connection.execute("CREATE OR REPLACE TEMP TABLE patient_partitions(patient_id VARCHAR, partition_label VARCHAR)")
+    connection.executemany(
+        "INSERT INTO patient_partitions VALUES (?, ?)",
+        [(patient_id, "calibration") for patient_id, in patient_rows],
+    )
+    patient_counts = _partition_counts(connection, "patient_partitions")
+    resource_counts = _resource_partition_counts(connection, staged)
+    return CalibrationInput(
+        descriptor={},
+        schema_fingerprint=schema_fingerprint(validated_descriptor),
         partition_summary=PartitionSummary(patient_counts, resource_counts),
         resource_names=_RESOURCE_NAMES,
     )

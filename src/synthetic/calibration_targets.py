@@ -167,6 +167,7 @@ _TARGET_NAME_INDICATORS = (
 _FAMILIES = {"demographics", "observation", "physiology", "utilization", "recorded_outcome"}
 _STATISTICS = {"count", "proportion", "mean", "sd", "quantile"}
 _QUANTILES = (("q10", 0.1), ("q50", 0.5), ("q90", 0.9))
+_PARTITION_LABELS = frozenset({"calibration", "held_out"})
 
 
 @dataclass(frozen=True)
@@ -326,14 +327,22 @@ def _validate_approved_values(connection: duckdb.DuckDBPyConnection) -> None:
             raise ValueError(f"patients_augmented.{column} contains an unapproved flag")
 
 
-def _patient_targets(connection: duckdb.DuckDBPyConnection) -> list[RawTarget]:
+def _require_partition_label(value: object) -> str:
+    if not isinstance(value, str) or value not in _PARTITION_LABELS:
+        raise ValueError("partition_label must be calibration or held_out")
+    return value
+
+
+def _patient_targets(
+    connection: duckdb.DuckDBPyConnection, partition_label: str = "calibration"
+) -> list[RawTarget]:
     rows = connection.execute(
         """
         WITH calibration_patients AS (
             SELECT source.*
             FROM calibration_stage_patients AS source
             JOIN patient_partitions AS partitions USING (patient_id)
-            WHERE partitions.partition_label = 'calibration'
+            WHERE partitions.partition_label = ?
         )
         SELECT count(*) AS denominator,
                count(*) FILTER (WHERE sex = 'F') AS sex_f,
@@ -350,7 +359,8 @@ def _patient_targets(connection: duckdb.DuckDBPyConnection) -> list[RawTarget]:
                        + (CASE WHEN race_8 = '' THEN 0 ELSE 1 END) > 1
                ) AS race_multiselect
         FROM calibration_patients
-        """
+        """,
+        [partition_label],
     ).fetchone()
     denominator = rows[0]
     dimensions = _dimensions(outcome_layer="observed")
@@ -380,12 +390,13 @@ def _patient_targets(connection: duckdb.DuckDBPyConnection) -> list[RawTarget]:
                 SELECT source.*
                 FROM calibration_stage_patients AS source
                 JOIN patient_partitions AS partitions USING (patient_id)
-                WHERE partitions.partition_label = 'calibration'
+                WHERE partitions.partition_label = ?
             )
             SELECT coalesce("{column}", ''), count(*)
             FROM calibration_patients
             GROUP BY 1
-            """
+            """,
+            [partition_label],
         ).fetchall()
         counts = dict(category_rows)
         for category, slug in registry.items():
@@ -412,11 +423,12 @@ def _patient_targets(connection: duckdb.DuckDBPyConnection) -> list[RawTarget]:
             SELECT source.*
             FROM calibration_stage_patients_augmented AS source
             JOIN patient_partitions AS partitions USING (patient_id)
-            WHERE partitions.partition_label = 'calibration'
+            WHERE partitions.partition_label = ?
         )
         SELECT count(*), {flag_select}
         FROM calibration_people AS source
-        """
+        """,
+        [partition_label],
     ).fetchone()
     flag_denominator = flag_row[0]
     for index, target_name in enumerate(RECORDED_FLAGS.values(), start=1):
@@ -439,12 +451,13 @@ def _patient_targets(connection: duckdb.DuckDBPyConnection) -> list[RawTarget]:
             SELECT try_cast(source.dx_age_years AS DOUBLE) AS value
             FROM calibration_stage_patients_augmented AS source
             JOIN patient_partitions AS partitions USING (patient_id)
-            WHERE partitions.partition_label = 'calibration'
+            WHERE partitions.partition_label = ?
               AND isfinite(try_cast(source.dx_age_years AS DOUBLE))
         )
         SELECT count(*), avg(value), quantile_cont(value, 0.5), quantile_cont(value, 0.9)
         FROM diagnosis_ages
-        """
+        """,
+        [partition_label],
     ).fetchone()
     diagnosis_support = diagnosis_age[0]
     if diagnosis_support:
@@ -467,7 +480,9 @@ def _patient_targets(connection: duckdb.DuckDBPyConnection) -> list[RawTarget]:
     return targets
 
 
-def _utilization_targets(connection: duckdb.DuckDBPyConnection) -> list[RawTarget]:
+def _utilization_targets(
+    connection: duckdb.DuckDBPyConnection, partition_label: str = "calibration"
+) -> list[RawTarget]:
     dimensions = _dimensions(visit_window="all")
     summary = connection.execute(
         """
@@ -476,14 +491,15 @@ def _utilization_targets(connection: duckdb.DuckDBPyConnection) -> list[RawTarge
                    try_cast(source.visits_span_days AS DOUBLE) AS span_days
             FROM calibration_stage_patients_augmented AS source
             JOIN patient_partitions AS partitions USING (patient_id)
-            WHERE partitions.partition_label = 'calibration'
+            WHERE partitions.partition_label = ?
         )
         SELECT count(*),
                avg(encounter_count), quantile_cont(encounter_count, 0.5),
                quantile_cont(encounter_count, 0.9), avg(span_days),
                quantile_cont(span_days, 0.5), quantile_cont(span_days, 0.9)
         FROM calibration_people
-        """
+        """,
+        [partition_label],
     ).fetchone()
     support = summary[0]
     targets = [
@@ -506,12 +522,13 @@ def _utilization_targets(connection: duckdb.DuckDBPyConnection) -> list[RawTarge
             SELECT source.encounter_type, source.orig_enc_source_Epic_yn
             FROM calibration_stage_visits AS source
             JOIN patient_partitions AS partitions USING (patient_id)
-            WHERE partitions.partition_label = 'calibration'
+            WHERE partitions.partition_label = ?
         )
         SELECT encounter_type, count(*)
         FROM calibration_encounters
         GROUP BY encounter_type
-        """
+        """,
+        [partition_label],
     ).fetchall()
     category_counts = dict(category_rows)
     denominator = sum(category_counts.values())
@@ -535,9 +552,10 @@ def _utilization_targets(connection: duckdb.DuckDBPyConnection) -> list[RawTarge
             SELECT count(*)
             FROM calibration_stage_visits AS source
             JOIN patient_partitions AS partitions USING (patient_id)
-            WHERE partitions.partition_label = 'calibration'
+            WHERE partitions.partition_label = ?
               AND source.orig_enc_source_Epic_yn = 'Y'
-            """
+            """,
+            [partition_label],
         ).fetchone()[0]
         targets.append(
             _target(
@@ -558,14 +576,15 @@ def _utilization_targets(connection: duckdb.DuckDBPyConnection) -> list[RawTarge
                 SELECT source.patient_id, source.visit_id
                 FROM "calibration_stage_{relation}" AS source
                 JOIN patient_partitions AS partitions USING (patient_id)
-                WHERE partitions.partition_label = 'calibration'
+                WHERE partitions.partition_label = ?
             )
             SELECT count(*), count(*) FILTER (WHERE visits.visit_id IS NOT NULL)
             FROM calibration_links AS source
             LEFT JOIN calibration_stage_visits AS visits
                 ON source.patient_id = visits.patient_id
                AND source.visit_id = visits.visit_id
-            """
+            """,
+            [partition_label],
         ).fetchone()
         link_denominator, link_support = link_row
         if link_denominator:
@@ -585,7 +604,9 @@ def _utilization_targets(connection: duckdb.DuckDBPyConnection) -> list[RawTarge
 
 
 def _age_window_targets(
-    connection: duckdb.DuckDBPyConnection, window: CalibrationAgeWindow
+    connection: duckdb.DuckDBPyConnection,
+    window: CalibrationAgeWindow,
+    partition_label: str = "calibration",
 ) -> list[RawTarget]:
     dimensions = _dimensions(age_regime=window.window_id)
     availability_expressions = ", ".join(
@@ -598,14 +619,14 @@ def _age_window_targets(
             SELECT source.*
             FROM calibration_stage_visits AS source
             JOIN patient_partitions AS partitions USING (patient_id)
-            WHERE partitions.partition_label = 'calibration'
+            WHERE partitions.partition_label = ?
               AND try_cast(source.age_in_days AS BIGINT) >= ?
               AND try_cast(source.age_in_days AS BIGINT) < ?
         )
         SELECT count(*), {availability_expressions}
         FROM calibration_encounters AS source
         """,
-        [window.lower_age_days, window.upper_age_days],
+        [partition_label, window.lower_age_days, window.upper_age_days],
     ).fetchone()
     denominator = row[0]
     targets: list[RawTarget] = []
@@ -631,7 +652,7 @@ def _age_window_targets(
                    try_cast(source.age_in_days AS BIGINT) AS age_days
             FROM calibration_stage_visits AS source
             JOIN patient_partitions AS partitions USING (patient_id)
-            WHERE partitions.partition_label = 'calibration'
+            WHERE partitions.partition_label = ?
         ), ordered AS (
             SELECT age_days,
                    lag(age_days) OVER (
@@ -647,7 +668,7 @@ def _age_window_targets(
                quantile_cont(interval_days, 0.9)
         FROM intervals
         """,
-        [window.lower_age_days, window.upper_age_days],
+        [partition_label, window.lower_age_days, window.upper_age_days],
     ).fetchone()
     support = interval[0]
     if support:
@@ -662,7 +683,9 @@ def _age_window_targets(
 
 
 def _physiology_targets(
-    connection: duckdb.DuckDBPyConnection, window: CalibrationAgeWindow
+    connection: duckdb.DuckDBPyConnection,
+    window: CalibrationAgeWindow,
+    partition_label: str = "calibration",
 ) -> list[RawTarget]:
     clean_value_expressions: list[str] = []
     aggregate_expressions: list[str] = []
@@ -692,7 +715,7 @@ def _physiology_targets(
             FROM calibration_stage_visits_augmented AS source
             JOIN patient_partitions AS partitions USING (patient_id)
             JOIN calibration_stage_patients AS demographics USING (patient_id)
-            WHERE partitions.partition_label = 'calibration'
+            WHERE partitions.partition_label = ?
               AND try_cast(source.age_in_days AS BIGINT) >= ?
               AND try_cast(source.age_in_days AS BIGINT) < ?
         )
@@ -700,7 +723,7 @@ def _physiology_targets(
         FROM clean_values
         GROUP BY recorded_sex
         """,
-        [window.lower_age_days, window.upper_age_days],
+        [partition_label, window.lower_age_days, window.upper_age_days],
     ).fetchall()
     rows_by_sex = {row[0]: row for row in rows}
     targets: list[RawTarget] = []
@@ -759,6 +782,8 @@ def compute_raw_targets(
     connection: duckdb.DuckDBPyConnection,
     prepared: CalibrationInput,
     config: CalibrationRunConfig,
+    *,
+    partition_label: str = "calibration",
 ) -> tuple[RawTarget, ...]:
     """Compute fixed calibration-partition aggregates without returning identifiers."""
     from synthetic.calibrate import CalibrationRunConfig
@@ -769,11 +794,12 @@ def compute_raw_targets(
         raise TypeError("prepared must be a CalibrationInput")
     if not isinstance(config, CalibrationRunConfig):
         raise TypeError("config must be a CalibrationRunConfig")
+    label = _require_partition_label(partition_label)
     _validate_approved_values(connection)
-    targets = [*_patient_targets(connection), *_utilization_targets(connection)]
+    targets = [*_patient_targets(connection, label), *_utilization_targets(connection, label)]
     for window in config.age_windows:
-        targets.extend(_age_window_targets(connection, window))
-        targets.extend(_physiology_targets(connection, window))
+        targets.extend(_age_window_targets(connection, window, label))
+        targets.extend(_physiology_targets(connection, window, label))
     keys = [(target.stratum_id, target.target_name, target.statistic) for target in targets]
     if len(set(keys)) != len(keys):
         raise ValueError("raw target registry contains duplicate cells")
