@@ -60,21 +60,6 @@ _RACE_VALUES = frozenset(
         "White",
     }
 )
-_RESOURCE_REASON_CODES = frozenset(
-    {
-        "OK",
-        "MALFORMED_BUNDLE",
-        "PATIENT_MISMATCH",
-        "SCHEMA_SHAPE_INVALID",
-        "VISIT_REFERENCE_INVALID",
-        "MEASUREMENT_INVALID",
-        "CLINICAL_DESCENDANT_INVALID",
-        "ANCILLARY_ROWS_PRESENT",
-        "INSUFFICIENT_EVIDENCE",
-    }
-)
-
-
 class ResourceProjectionUnavailable(ValueError):
     """Raised when a visible observation has no safe base-resource projection."""
 
@@ -258,7 +243,12 @@ class ResourceRow:
             field_name, value = pair
             if not isinstance(field_name, str) or not field_name:
                 raise ValueError("row field names must be nonempty strings")
-            normalised.append((field_name, "" if value is None else _require_row_value(value)))
+            if field_name == "patient_id":
+                normalised.append((field_name, _require_synthetic_patient_id(value)))
+            elif field_name == "visit_id":
+                normalised.append((field_name, _require_synthetic_visit_id(value)))
+            else:
+                normalised.append((field_name, "" if value is None else _require_row_value(value)))
         names = tuple(pair[0] for pair in normalised)
         if len(names) != len(set(names)):
             raise ValueError("row values must not contain duplicate field names")
@@ -369,6 +359,26 @@ class ResourceValidationStatus(str, Enum):
     UNEVALUABLE = "UNEVALUABLE"
 
 
+_REASON_CODES_BY_STATUS: Mapping[ResourceValidationStatus, frozenset[str]] = MappingProxyType(
+    {
+        ResourceValidationStatus.PASS: frozenset({"OK"}),
+        ResourceValidationStatus.FAIL: frozenset(
+            {
+                "PATIENT_MISMATCH",
+                "SCHEMA_SHAPE_INVALID",
+                "VISIT_REFERENCE_INVALID",
+                "MEASUREMENT_INVALID",
+                "CLINICAL_DESCENDANT_INVALID",
+                "ANCILLARY_ROWS_PRESENT",
+            }
+        ),
+        ResourceValidationStatus.UNEVALUABLE: frozenset(
+            {"MALFORMED_BUNDLE", "INSUFFICIENT_EVIDENCE"}
+        ),
+    }
+)
+
+
 def _status_for_checks(checks: tuple[ResourceCheck, ...]) -> ResourceValidationStatus:
     if any(check.status is ResourceValidationStatus.FAIL for check in checks):
         return ResourceValidationStatus.FAIL
@@ -390,8 +400,11 @@ class ResourceCheck:
             raise ValueError("unknown fixed resource check name")
         if not isinstance(self.status, ResourceValidationStatus):
             raise TypeError("status must be a ResourceValidationStatus")
-        if not isinstance(self.reason_code, str) or self.reason_code not in _RESOURCE_REASON_CODES:
-            raise ValueError("unknown resource reason code")
+        if (
+            not isinstance(self.reason_code, str)
+            or self.reason_code not in _REASON_CODES_BY_STATUS[self.status]
+        ):
+            raise ValueError("reason_code must be compatible with status")
 
     def to_mapping(self) -> dict[str, str]:
         return {

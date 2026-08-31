@@ -179,6 +179,17 @@ def test_row_pairs_are_ordered_immutable_and_map_missing_values_to_empty_strings
         ResourceRow("patients", (("patient_id", "syn-a"), ("patient_id", "syn-a")))
 
 
+@pytest.mark.parametrize(
+    "field_name",
+    ("patient_id", "visit_id"),
+)
+def test_row_identity_fields_require_nonempty_synthetic_identifiers(field_name: str) -> None:
+    with pytest.raises(ValueError, match="synthetic"):
+        ResourceRow("visits", ((field_name, "real-patient"),))
+    with pytest.raises(ValueError, match="synthetic"):
+        ResourceRow("visits", ((field_name, None),))
+
+
 def test_descendants_only_accept_registered_fictional_codes_and_synthetic_links() -> None:
     descendant = ClinicalDescendant(
         "syn-resource-patient",
@@ -246,6 +257,21 @@ def test_report_requires_fixed_checks_and_aggregates_statuses() -> None:
         ResourceCheck("unknown", ResourceValidationStatus.PASS, "OK")
     with pytest.raises(ValueError, match="every fixed"):
         ResourceValidationReport(ResourceValidationStatus.PASS, _checks(ResourceValidationStatus.PASS)[:-1])
+
+
+@pytest.mark.parametrize(
+    ("status", "reason_code"),
+    [
+        (ResourceValidationStatus.PASS, "MALFORMED_BUNDLE"),
+        (ResourceValidationStatus.FAIL, "INSUFFICIENT_EVIDENCE"),
+        (ResourceValidationStatus.UNEVALUABLE, "MEASUREMENT_INVALID"),
+    ],
+)
+def test_resource_check_rejects_status_reason_contradictions(
+    status: ResourceValidationStatus, reason_code: str
+) -> None:
+    with pytest.raises(ValueError, match="compatible"):
+        ResourceCheck("evidence", status, reason_code)
 
 
 def test_resource_spec_rejects_unknown_resource_and_unordered_fields() -> None:
