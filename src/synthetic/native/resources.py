@@ -494,6 +494,319 @@ def _resource_row(resource_name: str, values: Mapping[str, object], shape: Resou
     )
 
 
+def _resource_check(
+    name: str,
+    evaluator: object,
+) -> ResourceCheck:
+    try:
+        status, reason_code = evaluator()  # type: ignore[operator]
+    except (ArithmeticError, AttributeError, IndexError, KeyError, TypeError, ValueError):
+        status, reason_code = ResourceValidationStatus.UNEVALUABLE, "MALFORMED_BUNDLE"
+    return ResourceCheck(name, status, reason_code)
+
+
+def _row_values(row: object) -> dict[str, object]:
+    if not isinstance(row, ResourceRow) or not isinstance(row.values, tuple):
+        raise TypeError("resource rows must contain ResourceRow values")
+    values: dict[str, object] = {}
+    for pair in row.values:
+        if not isinstance(pair, tuple) or len(pair) != 2:
+            raise TypeError("resource rows must contain field/value pairs")
+        field_name, value = pair
+        if not isinstance(field_name, str) or field_name in values:
+            raise ValueError("resource row fields must be unique strings")
+        values[field_name] = value
+    return values
+
+
+def _is_synthetic_patient_id(value: object) -> bool:
+    return isinstance(value, str) and _SYNTHETIC_PATIENT_TOKEN.fullmatch(value) is not None
+
+
+def _is_synthetic_visit_id(value: object) -> bool:
+    return isinstance(value, str) and _SYNTHETIC_VISIT_TOKEN.fullmatch(value) is not None
+
+
+def _is_positive_real(value: object) -> bool:
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, Real)
+        and math.isfinite(value)
+        and value > 0
+    )
+
+
+def _bundle_rows(bundle: ObservedResourceBundle, resource_name: str) -> tuple[ResourceRow, ...]:
+    if not isinstance(bundle.rows, Mapping):
+        raise TypeError("rows must be a mapping")
+    rows = bundle.rows.get(resource_name)
+    if not isinstance(rows, tuple):
+        raise TypeError("resource rows must be tuples")
+    return rows
+
+
+def _source_frame(bundle: ObservedResourceBundle) -> ObservationFrame | None:
+    return bundle.source_frame if isinstance(bundle.source_frame, ObservationFrame) else None
+
+
+def _check_resource_patient_identity(
+    bundle: ObservedResourceBundle,
+) -> tuple[ResourceValidationStatus, str]:
+    if not _is_synthetic_patient_id(bundle.patient_id):
+        return ResourceValidationStatus.FAIL, "PATIENT_MISMATCH"
+    for resource_name in BASE_RESOURCE_NAMES:
+        for row in _bundle_rows(bundle, resource_name):
+            values = _row_values(row)
+            if "patient_id" in values and (
+                not _is_synthetic_patient_id(values["patient_id"])
+                or values["patient_id"] != bundle.patient_id
+            ):
+                return ResourceValidationStatus.FAIL, "PATIENT_MISMATCH"
+    if not isinstance(bundle.clinical_descendants, tuple):
+        raise TypeError("clinical descendants must be a tuple")
+    for descendant in bundle.clinical_descendants:
+        if not isinstance(descendant, ClinicalDescendant):
+            raise TypeError("clinical descendants must contain ClinicalDescendant values")
+        if (
+            not _is_synthetic_patient_id(descendant.patient_id)
+            or descendant.patient_id != bundle.patient_id
+        ):
+            return ResourceValidationStatus.FAIL, "PATIENT_MISMATCH"
+    return ResourceValidationStatus.PASS, "OK"
+
+
+def _check_resource_schema_shape(
+    bundle: ObservedResourceBundle,
+) -> tuple[ResourceValidationStatus, str]:
+    if not isinstance(bundle.shape, ResourceShape) or not isinstance(bundle.rows, Mapping):
+        return ResourceValidationStatus.FAIL, "SCHEMA_SHAPE_INVALID"
+    if tuple(bundle.rows) != BASE_RESOURCE_NAMES:
+        return ResourceValidationStatus.FAIL, "SCHEMA_SHAPE_INVALID"
+    for resource_name in BASE_RESOURCE_NAMES:
+        rows = _bundle_rows(bundle, resource_name)
+        expected_fields = bundle.shape.field_names(resource_name)
+        for row in rows:
+            if not isinstance(row, ResourceRow) or row.resource_name != resource_name:
+                return ResourceValidationStatus.FAIL, "SCHEMA_SHAPE_INVALID"
+            if tuple(field_name for field_name, _ in row.values) != expected_fields:
+                return ResourceValidationStatus.FAIL, "SCHEMA_SHAPE_INVALID"
+    return ResourceValidationStatus.PASS, "OK"
+
+
+def _resource_visits(
+    bundle: ObservedResourceBundle,
+) -> tuple[tuple[dict[str, object], ...], ObservationFrame | None]:
+    source = _source_frame(bundle)
+    if source is None:
+        return (), None
+    return tuple(_row_values(row) for row in _bundle_rows(bundle, "visits")), source
+
+
+def _check_resource_visit_references(
+    bundle: ObservedResourceBundle,
+) -> tuple[ResourceValidationStatus, str]:
+    rows, source = _resource_visits(bundle)
+    if source is None:
+        return ResourceValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
+    if len(rows) != len(source.visits):
+        return ResourceValidationStatus.FAIL, "VISIT_REFERENCE_INVALID"
+    seen: set[str] = set()
+    previous_age = -1
+    for row, visit in zip(rows, source.visits, strict=True):
+        visit_id = row.get("visit_id")
+        age_days = row.get("age_in_days")
+        if (
+            not _is_synthetic_visit_id(visit_id)
+            or visit_id in seen
+            or not isinstance(age_days, int)
+            or isinstance(age_days, bool)
+            or age_days < 0
+            or age_days <= previous_age
+            or row.get("patient_id") != bundle.patient_id
+            or visit_id != visit.visit_id
+            or age_days != visit.age_days
+            or row.get("encounter_type") != "Office Visit"
+            or row.get("orig_enc_source_Epic_yn") != "N"
+        ):
+            return ResourceValidationStatus.FAIL, "VISIT_REFERENCE_INVALID"
+        seen.add(visit_id)
+        previous_age = age_days
+    return ResourceValidationStatus.PASS, "OK"
+
+
+def _check_resource_measurements(
+    bundle: ObservedResourceBundle,
+) -> tuple[ResourceValidationStatus, str]:
+    rows, source = _resource_visits(bundle)
+    if source is None:
+        return ResourceValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
+    if len(rows) != len(source.visits):
+        return ResourceValidationStatus.FAIL, "MEASUREMENT_INVALID"
+    for row, visit in zip(rows, source.visits, strict=True):
+        observations: dict[MeasurementChannel, object] = {}
+        for measurement in visit.measurements:
+            if measurement.channel in observations:
+                return ResourceValidationStatus.FAIL, "MEASUREMENT_INVALID"
+            observations[measurement.channel] = measurement
+        if set(observations) != set(MeasurementChannel):
+            return ResourceValidationStatus.FAIL, "MEASUREMENT_INVALID"
+        for channel, field_name in _VISIT_MEASUREMENT_FIELDS.items():
+            measurement = observations[channel]
+            availability = measurement.availability
+            value = measurement.recorded_value
+            row_value = row.get(field_name)
+            if availability is MeasurementAvailability.OBSERVED:
+                if not _is_positive_real(value) or not _is_positive_real(row_value):
+                    return ResourceValidationStatus.FAIL, "MEASUREMENT_INVALID"
+                expected = _project_measurement_value(channel, float(value))
+                if not math.isclose(float(row_value), expected, rel_tol=1e-9, abs_tol=1e-9):
+                    return ResourceValidationStatus.FAIL, "MEASUREMENT_INVALID"
+            elif availability in (
+                MeasurementAvailability.MISSING,
+                MeasurementAvailability.NOT_APPLICABLE,
+            ):
+                if value is not None or row_value != "":
+                    return ResourceValidationStatus.FAIL, "MEASUREMENT_INVALID"
+            else:
+                return ResourceValidationStatus.FAIL, "MEASUREMENT_INVALID"
+        length = observations[MeasurementChannel.LENGTH]
+        if length.availability is MeasurementAvailability.OBSERVED:
+            return ResourceValidationStatus.FAIL, "MEASUREMENT_INVALID"
+        height = observations[MeasurementChannel.HEIGHT]
+        weight = observations[MeasurementChannel.WEIGHT]
+        bmi = observations[MeasurementChannel.BMI]
+        if (
+            height.availability is MeasurementAvailability.OBSERVED
+            and weight.availability is MeasurementAvailability.OBSERVED
+            and bmi.availability is MeasurementAvailability.OBSERVED
+        ):
+            expected_bmi = float(weight.recorded_value) / (float(height.recorded_value) / 100.0) ** 2
+            if not math.isclose(
+                float(bmi.recorded_value), expected_bmi, rel_tol=1e-9, abs_tol=1e-9
+            ):
+                return ResourceValidationStatus.FAIL, "MEASUREMENT_INVALID"
+    return ResourceValidationStatus.PASS, "OK"
+
+
+def _expected_descendants(
+    source: ObservationFrame,
+) -> tuple[tuple[str, int, RecordedEventKind, str], ...] | None:
+    truth = source.truth
+    realized = tuple(opportunity for opportunity in truth.opportunities if opportunity.realized)
+    if len(realized) != len(source.visits):
+        return None
+    visits_by_source = {
+        opportunity.source_point_index: visit
+        for opportunity, visit in zip(realized, source.visits, strict=True)
+    }
+    expected: list[tuple[str, int, RecordedEventKind, str]] = []
+    for event in source.events:
+        if event.opportunity_index is None:
+            return None
+        visit = visits_by_source.get(event.opportunity_index)
+        if visit is None or event.code != RECORDED_EVENT_CODES.get(event.event_kind):
+            return None
+        expected.append((visit.visit_id, event.age_days, event.event_kind, event.code))
+    return tuple(expected)
+
+
+def _check_resource_clinical_descendants(
+    bundle: ObservedResourceBundle,
+) -> tuple[ResourceValidationStatus, str]:
+    source = _source_frame(bundle)
+    if source is None:
+        return ResourceValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
+    expected = _expected_descendants(source)
+    if expected is None:
+        return ResourceValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
+    if not isinstance(bundle.clinical_descendants, tuple) or len(bundle.clinical_descendants) != len(expected):
+        return ResourceValidationStatus.FAIL, "CLINICAL_DESCENDANT_INVALID"
+    by_visit: dict[str, list[str]] = {visit.visit_id: [] for visit in source.visits}
+    for descendant, (visit_id, age_days, event_kind, code) in zip(
+        bundle.clinical_descendants, expected, strict=True
+    ):
+        if (
+            not isinstance(descendant, ClinicalDescendant)
+            or descendant.patient_id != bundle.patient_id
+            or descendant.visit_id != visit_id
+            or descendant.age_days != age_days
+            or descendant.event_kind is not event_kind
+            or descendant.code != code
+        ):
+            return ResourceValidationStatus.FAIL, "CLINICAL_DESCENDANT_INVALID"
+        by_visit[visit_id].append(code)
+    rows, _ = _resource_visits(bundle)
+    rows_by_visit = {row.get("visit_id"): row for row in rows}
+    diagnosis_slots = tuple(
+        field_name
+        for field_name in bundle.shape.field_names("visits")
+        if field_name.startswith("enc_diag_")
+    )
+    for visit_id, codes in by_visit.items():
+        row = rows_by_visit.get(visit_id)
+        if row is None or len(codes) > len(diagnosis_slots):
+            return ResourceValidationStatus.FAIL, "CLINICAL_DESCENDANT_INVALID"
+        if tuple(row.get(slot) for slot in diagnosis_slots) != (
+            *codes,
+            *("" for _ in range(len(diagnosis_slots) - len(codes))),
+        ):
+            return ResourceValidationStatus.FAIL, "CLINICAL_DESCENDANT_INVALID"
+    return ResourceValidationStatus.PASS, "OK"
+
+
+def _check_resource_ancillary_resources(
+    bundle: ObservedResourceBundle,
+) -> tuple[ResourceValidationStatus, str]:
+    for resource_name in BASE_RESOURCE_NAMES[2:]:
+        if _bundle_rows(bundle, resource_name):
+            return ResourceValidationStatus.FAIL, "ANCILLARY_ROWS_PRESENT"
+    return ResourceValidationStatus.PASS, "OK"
+
+
+def _check_resource_evidence(
+    bundle: ObservedResourceBundle,
+) -> tuple[ResourceValidationStatus, str]:
+    source = _source_frame(bundle)
+    if source is None:
+        return ResourceValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
+    status = validate_observation_frame(source).status
+    if status is ObservationValidationStatus.PASS:
+        return ResourceValidationStatus.PASS, "OK"
+    if status is ObservationValidationStatus.FAIL:
+        return ResourceValidationStatus.FAIL, "MEASUREMENT_INVALID"
+    return ResourceValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
+
+
+def validate_observed_resources(bundle: object) -> ResourceValidationReport:
+    """Validate an in-memory observed-resource bundle with aggregate-only output.
+
+    Missing or malformed private source evidence is unevaluable.  Typed visible
+    row, key, measurement, descendant, and ancillary-resource violations fail.
+    The returned report contains no source-frame, descriptor, or row payload.
+    """
+
+    if not isinstance(bundle, ObservedResourceBundle):
+        checks = tuple(
+            ResourceCheck(name, ResourceValidationStatus.UNEVALUABLE, "MALFORMED_BUNDLE")
+            for name in ResourceValidationReport.CHECK_NAMES
+        )
+        return ResourceValidationReport(ResourceValidationStatus.UNEVALUABLE, checks)
+    evaluators = {
+        "patient_identity": _check_resource_patient_identity,
+        "schema_shape": _check_resource_schema_shape,
+        "visit_references": _check_resource_visit_references,
+        "measurements": _check_resource_measurements,
+        "clinical_descendants": _check_resource_clinical_descendants,
+        "ancillary_resources": _check_resource_ancillary_resources,
+        "evidence": _check_resource_evidence,
+    }
+    checks = tuple(
+        _resource_check(name, lambda evaluator=evaluators[name]: evaluator(bundle))
+        for name in ResourceValidationReport.CHECK_NAMES
+    )
+    return ResourceValidationReport(_status_for_checks(checks), checks)
+
+
 def project_observed_resources(
     frame: ObservationFrame,
     descriptor: Mapping[str, object],
