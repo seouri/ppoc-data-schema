@@ -35,7 +35,15 @@ from synthetic.native.observations import (
     generate_observation_frame,
     validate_observation_frame,
 )
-from synthetic.native.resources import ObservedResourceBundle, SyntheticDemographics
+from synthetic.native.resources import (
+    BASE_RESOURCE_NAMES,
+    ObservedResourceBundle,
+    ResourceShape,
+    ResourceValidationStatus,
+    SyntheticDemographics,
+    project_observed_resources,
+    validate_observed_resources,
+)
 from synthetic.native.trajectories import validate_growth_disorder_module
 from synthetic.randomness import NamedRandomStreams, synthetic_id
 from synthetic.references import GrowthReference
@@ -53,6 +61,43 @@ _RACE_CATEGORIES = tuple(RACE_CATEGORY_SLUGS)
 
 class CohortGenerationUnavailable(ValueError):
     """Raised when the native cohort cannot be assembled safely."""
+
+
+def _resource_projection_contract(
+    descriptor: Mapping[str, object],
+) -> tuple[ResourceShape, dict[str, object]]:
+    """Extract one exact-order shape and a plain in-memory projection mapping."""
+
+    if not isinstance(descriptor, Mapping):
+        raise TypeError("descriptor must be a mapping")
+    resources = descriptor.get("resources")
+    if not isinstance(resources, list):
+        raise TypeError("descriptor resources must be a list")
+    base_order: list[str] = []
+    for resource in resources:
+        if not isinstance(resource, Mapping):
+            raise TypeError("descriptor resources must contain mappings")
+        name = resource.get("name")
+        if name in BASE_RESOURCE_NAMES:
+            base_order.append(name)
+    if tuple(base_order) != BASE_RESOURCE_NAMES:
+        raise ValueError("base descriptor resources must use the fixed order")
+
+    shape = ResourceShape.from_descriptor(descriptor)
+    projection_descriptor: dict[str, object] = {
+        "resources": [
+            {
+                "name": resource.name,
+                "schema": {
+                    "fields": [
+                        {"name": field_name} for field_name in resource.field_names
+                    ]
+                },
+            }
+            for resource in shape.resources
+        ]
+    }
+    return shape, projection_descriptor
 
 
 def _require_probability(value: object, field_name: str) -> float:
@@ -585,8 +630,15 @@ def generate_native_cohort(
         raise TypeError("reference must provide a callable value method")
     if not isinstance(modules, Mapping):
         raise TypeError("modules must be a mapping")
+    resource_shape: ResourceShape | None = None
+    projection_descriptor: dict[str, object] | None = None
     if descriptor is not None:
-        raise CohortGenerationUnavailable("native cohort generation failed")
+        try:
+            resource_shape, projection_descriptor = _resource_projection_contract(
+                descriptor
+            )
+        except Exception:  # noqa: BLE001 - descriptor failures must be redacted
+            raise CohortGenerationUnavailable("native cohort generation failed") from None
 
     positive_weights = tuple(
         sorted(
@@ -651,6 +703,8 @@ def generate_native_cohort(
     reference_sex_by_recorded = dict(config.reference_sex_mapping)
     members: list[CohortMember] = []
     patient_ids: set[str] = set()
+    frame_visit_ids: set[str] = set()
+    seen_bundle_visit_ids: set[str] = set()
     for patient_index in range(config.patient_count):
         try:
             patient_id = synthetic_id(config.seed, "patient", patient_index)
@@ -718,7 +772,45 @@ def generate_native_cohort(
                 is not ObservationValidationStatus.PASS
             ):
                 raise ValueError("observation frame did not pass validation")
-            members.append(CohortMember(demographics, trajectory, frame, None))
+            member_frame_visit_ids = tuple(visit.visit_id for visit in frame.visits)
+            if (
+                len(member_frame_visit_ids) != len(set(member_frame_visit_ids))
+                or not frame_visit_ids.isdisjoint(member_frame_visit_ids)
+            ):
+                raise ValueError("duplicate synthetic visit identifier")
+            frame_visit_ids.update(member_frame_visit_ids)
+            bundle = None
+            if resource_shape is not None:
+                assert projection_descriptor is not None
+                bundle = project_observed_resources(
+                    frame,
+                    projection_descriptor,
+                    demographics,
+                )
+                if bundle.shape != resource_shape:
+                    raise ValueError("resource shape changed during generation")
+                if (
+                    validate_observed_resources(bundle).status
+                    is not ResourceValidationStatus.PASS
+                ):
+                    raise ValueError("observed resources did not pass validation")
+                member_bundle_visit_ids = tuple(
+                    row.to_mapping()["visit_id"] for row in bundle.rows["visits"]
+                )
+                if (
+                    not all(
+                        isinstance(visit_id, str)
+                        for visit_id in member_bundle_visit_ids
+                    )
+                    or len(member_bundle_visit_ids)
+                    != len(set(member_bundle_visit_ids))
+                    or not seen_bundle_visit_ids.isdisjoint(
+                        member_bundle_visit_ids
+                    )
+                ):
+                    raise ValueError("duplicate synthetic visit identifier")
+                seen_bundle_visit_ids.update(member_bundle_visit_ids)
+            members.append(CohortMember(demographics, trajectory, frame, bundle))
         except Exception:  # noqa: BLE001 - injected runtime errors must be redacted
             raise CohortGenerationUnavailable("native cohort generation failed") from None
 
