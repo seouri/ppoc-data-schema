@@ -940,22 +940,44 @@ def _check_stream_reuse(pair: CounterfactualPair):
     return CounterfactualValidationStatus.PASS, "OK"
 
 
-def _event_order_valid(
+def _event_validation_status(
     trajectory: AgeRegimeDisorderTrajectory,
     patient: PatientState,
-) -> bool:
+) -> CounterfactualValidationStatus:
+    previous_age = -1
+    previous_phase = -1
+    for event in trajectory.events:
+        if (
+            event.patient_id != patient.patient_id
+            or isinstance(event.age_days, bool)
+            or not isinstance(event.age_days, int)
+            or event.age_days < 0
+        ):
+            return CounterfactualValidationStatus.UNEVALUABLE
+        phase = _EVENT_PHASE_ORDER.get(event.event_type)
+        if phase is None:
+            return CounterfactualValidationStatus.UNEVALUABLE
+        if event.age_days < previous_age or phase <= previous_phase:
+            return CounterfactualValidationStatus.FAIL
+        previous_age = event.age_days
+        previous_phase = phase
+
     try:
         validate_disorder_events(patient, trajectory.disorder, trajectory.events)
     except (TypeError, ValueError):
-        return False
-    return True
+        return CounterfactualValidationStatus.UNEVALUABLE
+    return CounterfactualValidationStatus.PASS
 
 
 def _check_event_order(pair: CounterfactualPair):
-    if not _event_order_valid(
-        pair.baseline, pair.baseline_context.patient
-    ) or not _event_order_valid(pair.intervention, pair.intervention_context.patient):
+    statuses = (
+        _event_validation_status(pair.baseline, pair.baseline_context.patient),
+        _event_validation_status(pair.intervention, pair.intervention_context.patient),
+    )
+    if CounterfactualValidationStatus.FAIL in statuses:
         return CounterfactualValidationStatus.FAIL, "EVENT_ORDER_INVALID"
+    if CounterfactualValidationStatus.UNEVALUABLE in statuses:
+        return CounterfactualValidationStatus.UNEVALUABLE, "MALFORMED_PAIR"
     return CounterfactualValidationStatus.PASS, "OK"
 
 

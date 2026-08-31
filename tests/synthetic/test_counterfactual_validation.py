@@ -289,7 +289,9 @@ def test_treatment_validation_is_unevaluable_when_the_manipulated_layer_is_uncha
 
 
 @pytest.mark.parametrize("invalid_age", [False, 0.5, -1])
-def test_validation_rejects_non_integer_or_negative_event_ages(invalid_age: object) -> None:
+def test_validation_marks_non_integer_or_negative_event_ages_unevaluable(
+    invalid_age: object,
+) -> None:
     pair = generate_counterfactual_pair(
         _treated_ghd_kernel(),
         PATIENT,
@@ -313,8 +315,9 @@ def test_validation_rejects_non_integer_or_negative_event_ages(invalid_age: obje
     report = validate_counterfactual_pair(malformed)
     event_order = next(check for check in report.checks if check.name == "event_order")
 
-    assert report.status is CounterfactualValidationStatus.FAIL
-    assert event_order.reason_code == "EVENT_ORDER_INVALID"
+    assert report.status is CounterfactualValidationStatus.UNEVALUABLE
+    assert event_order.status is CounterfactualValidationStatus.UNEVALUABLE
+    assert event_order.reason_code == "MALFORMED_PAIR"
 
 
 @pytest.mark.parametrize(
@@ -379,7 +382,7 @@ def test_earlier_recognition_rejects_downstream_event_tampering(
     assert any(check.reason_code == "FORBIDDEN_LAYER_CHANGED" for check in report.checks)
 
 
-def test_validation_rejects_treatment_outcome_that_disagrees_with_state() -> None:
+def test_validation_marks_treatment_outcome_state_mismatch_unevaluable() -> None:
     pair = generate_counterfactual_pair(
         _treated_ghd_kernel(),
         PATIENT,
@@ -401,5 +404,6 @@ def test_validation_rejects_treatment_outcome_that_disagrees_with_state() -> Non
     report = validate_counterfactual_pair(malformed)
     event_order = next(check for check in report.checks if check.name == "event_order")
 
-    assert report.status is CounterfactualValidationStatus.FAIL
-    assert event_order.reason_code == "EVENT_ORDER_INVALID"
+    assert report.status is CounterfactualValidationStatus.UNEVALUABLE
+    assert event_order.status is CounterfactualValidationStatus.UNEVALUABLE
+    assert event_order.reason_code == "MALFORMED_PAIR"
