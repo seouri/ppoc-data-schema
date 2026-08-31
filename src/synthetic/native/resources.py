@@ -19,8 +19,12 @@ from typing import ClassVar
 
 from synthetic.native.observations import (
     RECORDED_EVENT_CODES,
+    MeasurementAvailability,
+    MeasurementChannel,
     ObservationFrame,
+    ObservationValidationStatus,
     RecordedEventKind,
+    validate_observation_frame,
 )
 
 BASE_RESOURCE_NAMES = (
@@ -463,3 +467,149 @@ class ResourceValidationReport:
 
     def __repr__(self) -> str:
         return f"ResourceValidationReport(status={self.status.value!r}, checks={len(self.checks)})"
+
+
+_VISIT_MEASUREMENT_FIELDS: Mapping[MeasurementChannel, str] = MappingProxyType(
+    {
+        MeasurementChannel.WEIGHT: "weight_oz",
+        MeasurementChannel.HEIGHT: "height_in",
+        MeasurementChannel.HEAD_CIRCUMFERENCE: "head_circ_cm",
+        MeasurementChannel.BMI: "BMI",
+    }
+)
+
+
+def _project_measurement_value(channel: MeasurementChannel, value: float) -> float:
+    if channel is MeasurementChannel.WEIGHT:
+        return value * 35.274
+    if channel is MeasurementChannel.HEIGHT:
+        return value / 2.54
+    return value
+
+
+def _resource_row(resource_name: str, values: Mapping[str, object], shape: ResourceShape) -> ResourceRow:
+    return ResourceRow(
+        resource_name,
+        tuple((field_name, values[field_name]) for field_name in shape.field_names(resource_name)),
+    )
+
+
+def project_observed_resources(
+    frame: ObservationFrame,
+    descriptor: Mapping[str, object],
+    demographics: SyntheticDemographics | None = None,
+) -> ObservedResourceBundle:
+    """Project one validated fictional frame into descriptor-shaped base rows.
+
+    The descriptor must already be an in-memory mapping.  This evaluator-only
+    projection consumes recorded observations only and creates no files.
+    """
+
+    validation = validate_observation_frame(frame)
+    if validation.status is not ObservationValidationStatus.PASS:
+        raise ValueError("observation frame validation must PASS before projection")
+    if not isinstance(frame, ObservationFrame):
+        raise TypeError("frame must be an ObservationFrame")
+
+    shape = ResourceShape.from_descriptor(descriptor)
+    if demographics is None:
+        demographics = SyntheticDemographics(frame.patient_id)
+    if not isinstance(demographics, SyntheticDemographics):
+        raise TypeError("demographics must be a SyntheticDemographics or None")
+    if demographics.patient_id != frame.patient_id:
+        raise ValueError("demographics must identify the frame patient")
+
+    for visit in frame.visits:
+        for measurement in visit.measurements:
+            if (
+                measurement.channel is MeasurementChannel.LENGTH
+                and measurement.availability is MeasurementAvailability.OBSERVED
+            ):
+                raise ResourceProjectionUnavailable(
+                    "observed LENGTH cannot be projected into the base visits resource"
+                )
+
+    visit_fields = shape.field_names("visits")
+    required_visit_fields = {
+        "patient_id",
+        "visit_id",
+        "age_in_days",
+        "encounter_type",
+        "orig_enc_source_Epic_yn",
+        *(_VISIT_MEASUREMENT_FIELDS.values()),
+    }
+    missing_fields = required_visit_fields.difference(visit_fields)
+    if missing_fields:
+        raise ResourceProjectionUnavailable("base visits resource lacks required projection fields")
+
+    patient_values = {field_name: "" for field_name in shape.field_names("patients")}
+    patient_values.update(demographics.to_mapping())
+    visit_values: list[dict[str, object]] = []
+    visit_id_by_age: dict[int, str] = {}
+    diagnosis_slots = tuple(
+        field_name for field_name in visit_fields if field_name.startswith("enc_diag_")
+    )
+    next_diagnosis_slot: list[int] = []
+    for visit in frame.visits:
+        values: dict[str, object] = {field_name: "" for field_name in visit_fields}
+        values.update(
+            {
+                "patient_id": frame.patient_id,
+                "visit_id": visit.visit_id,
+                "age_in_days": visit.age_days,
+                "encounter_type": "Office Visit",
+                "orig_enc_source_Epic_yn": "N",
+            }
+        )
+        for measurement in visit.measurements:
+            field_name = _VISIT_MEASUREMENT_FIELDS.get(measurement.channel)
+            if field_name is None or measurement.availability is not MeasurementAvailability.OBSERVED:
+                continue
+            assert measurement.recorded_value is not None
+            values[field_name] = _project_measurement_value(
+                measurement.channel, measurement.recorded_value
+            )
+        visit_values.append(values)
+        visit_id_by_age[visit.age_days] = visit.visit_id
+        next_diagnosis_slot.append(0)
+
+    visit_index_by_id = {
+        visit_id: index for index, visit_id in enumerate(visit_id_by_age.values())
+    }
+    descendants: list[ClinicalDescendant] = []
+    for event in frame.events:
+        visit_id = visit_id_by_age.get(event.age_days)
+        if visit_id is None:
+            raise ResourceProjectionUnavailable("recorded event has no linked visible visit")
+        visit_index = visit_index_by_id[visit_id]
+        slot_index = next_diagnosis_slot[visit_index]
+        if slot_index >= len(diagnosis_slots):
+            raise ResourceProjectionUnavailable("recorded events exceed available enc_diag slots")
+        code = RECORDED_EVENT_CODES[event.event_kind]
+        visit_values[visit_index][diagnosis_slots[slot_index]] = code
+        next_diagnosis_slot[visit_index] += 1
+        descendants.append(
+            ClinicalDescendant(
+                frame.patient_id,
+                visit_id,
+                event.age_days,
+                event.event_kind,
+                code,
+            )
+        )
+
+    rows = {
+        "patients": (_resource_row("patients", patient_values, shape),),
+        "visits": tuple(_resource_row("visits", values, shape) for values in visit_values),
+        "labs": (),
+        "medications": (),
+        "problem_list": (),
+        "referrals": (),
+    }
+    return ObservedResourceBundle(
+        frame.patient_id,
+        shape,
+        rows,
+        tuple(descendants),
+        frame,
+    )
