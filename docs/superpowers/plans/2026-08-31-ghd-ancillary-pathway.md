@@ -71,27 +71,27 @@
 - Consumes: Task 1 models, `CohortMember`, `AgeRegimeDisorderTrajectory`, `ClinicalEvent`, `ObservationFrame`, `RecordedEvent`, `RecordedEventKind`, `ResourceShape`, `ResourceRow`, and the existing observation validator.
 - Produces: deterministic `project_ghd_ancillary_resources(member, shape, policy) -> AncillaryResourceProjection` with exact-schema rows and no random/I/O boundary.
 
-- [ ] **Step 1: Write failing projection tests**
+- [x] **Step 1: Write failing projection tests**
 
   Use the existing fictional cohort fixtures and checked-in descriptor. Assert that a diagnosed GHD member emits one referral at recognition, two lab components at workup, one unresolved problem row at diagnosis, and a medication only when a hidden `treatment_start` follows a visible diagnosis. Assert fixed fictional values, empty LOINC/optional fields, result-age delay, diagnosis-visit medication link, nullable problem `visit_id`, exact field order, deterministic synthetic IDs, no rows for healthy/non-GHD or unrecognized GHD, no mutation, and byte-equivalent mappings on replay. Cover no-treatment and treatment cases plus valid same-age causal events.
 
-- [ ] **Step 2: Run the focused projection tests to verify they fail**
+- [x] **Step 2: Run the focused projection tests to verify they fail**
 
   Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_ancillary_projection.py`
 
   Expected: failures because the Task 1 projection is still a fixed assembly stub.
 
-- [ ] **Step 3: Implement the pure event-to-row projection**
+- [x] **Step 3: Implement the pure event-to-row projection**
 
   Validate the member, shape, policy, and `validate_observation_frame(member.frame)` status; failures raise `AncillaryProjectionUnavailable("GHD ancillary projection failed")` without raw details. Require a single synthetic patient identity and a GHD disorder kind; otherwise return four empty tuples. Build a source-point-to-visible-visit lookup from realized `frame.truth.opportunities` exactly as the existing resource projection does, and select the first visible `RecordedEvent` of each fixed kind. Emit full descriptor-ordered rows using these mappings: recognition -> referral (`Synthetic Pediatric Endocrinology`, count `1`); workup -> two `labs` components sharing one deterministic synthetic order ID with components `SYN-GHD-IGF1`/`SYN-GHD-STIM`, no LOINC, `result_flag="Synthetic"`, and result age `event.age_days + policy.result_delay_days`; diagnosis -> unresolved `problem_list` row with `SYN-GHD`; diagnosis plus the first hidden `treatment_start` -> one `medications` row linked to the diagnosis visit with `Internal`, `Synthetic growth hormone`, order age at diagnosis, and start age at treatment. Use a fixed SHA-256-derived opaque synthetic ID helper keyed only by the synthetic patient ID and resource role. Never copy severity, latent kind, hidden event text, or truth objects into rows or mappings.
 
-- [ ] **Step 4: Run projection tests and lint**
+- [x] **Step 4: Run projection tests and lint**
 
   Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_ancillary_projection.py tests/synthetic/test_ancillary_models.py && UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run ruff check src/synthetic/native/ancillary.py tests/synthetic/test_ancillary_*.py && git diff --check`
 
   Expected: all model/projection tests pass and Ruff/whitespace checks are clean.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
   ```bash
   git add src/synthetic/native/ancillary.py tests/synthetic/test_ancillary_projection.py
