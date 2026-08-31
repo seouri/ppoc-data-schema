@@ -27,6 +27,7 @@ _FORBIDDEN_EVALUATOR_MODULES = {
     "synthetic.calibrate",
     "synthetic.calibration_disclosure",
     "synthetic.calibration_input",
+    "synthetic.calibration_targets",
     "synthetic.csv_package",
     "synthetic.heldout_validate",
     "synthetic.manifest",
@@ -274,6 +275,14 @@ def test_visible_import_scan_detects_temporal_evaluator(
         ("import duckdb", {"duckdb"}),
         ("from synthetic import privacy_audit", {"synthetic.privacy_audit"}),
         (
+            "import synthetic.calibration_targets",
+            {"synthetic.calibration_targets"},
+        ),
+        (
+            "from synthetic import calibration_targets",
+            {"synthetic.calibration_targets"},
+        ),
+        (
             "from synthetic.calibration import load_calibration_artifact",
             {"synthetic.calibration.load_calibration_artifact"},
         ),
@@ -334,6 +343,9 @@ def test_evaluator_public_argument_scan_detects_lifecycle_inputs(argument: str) 
 
 def test_temporal_drift_guide_documents_exact_evaluator_contract() -> None:
     guide = GUIDE.read_text(encoding="utf-8")
+    temporal_section = guide.split(
+        "## Evaluator-only temporal-drift validation\n", maxsplit=1
+    )[1].split("\n## ", maxsplit=1)[0]
 
     assert "## Evaluator-only temporal-drift validation" in guide
     assert "report = validate_temporal_drift(cohort, policy)" in guide
@@ -347,10 +359,22 @@ def test_temporal_drift_guide_documents_exact_evaluator_contract() -> None:
         assert status in guide
     for boundary in _NON_CLAIMS:
         assert boundary in guide
+    assert (
+        "Individual comparisons with missing or insufficient evidence remain `UNEVALUABLE`"
+        in temporal_section
+    )
+    assert "do not by themselves block an overall `PASS`" in temporal_section
+    assert "smaller than `minimum_cohort_size`" in temporal_section
+    assert "required window lacks minimum support" in temporal_section
+    assert "strictly exceeds `maximum_unevaluable_checks`" in temporal_section
 
 
 def test_readme_summarizes_temporal_drift_api_metrics_and_non_claims() -> None:
     readme = README.read_text(encoding="utf-8")
+    paragraph_start = readme.index(
+        "The evaluator-only [`validate_temporal_drift`]"
+    )
+    temporal_paragraph = readme[paragraph_start:].split("\n\n", maxsplit=1)[0]
 
     assert "docs/synthetic-generator.md#evaluator-only-temporal-drift-validation" in readme
     for name in ("TemporalDriftPolicy", "TemporalWindowPolicy", "validate_temporal_drift"):
@@ -361,3 +385,10 @@ def test_readme_summarizes_temporal_drift_api_metrics_and_non_claims() -> None:
         assert status in readme
     for boundary in _NON_CLAIMS:
         assert boundary in readme
+    assert (
+        "Individual `UNEVALUABLE` comparisons do not by themselves block an overall `PASS`"
+        in temporal_paragraph
+    )
+    assert "smaller than `minimum_cohort_size`" in temporal_paragraph
+    assert "required window lacks minimum support" in temporal_paragraph
+    assert "strictly exceeds `maximum_unevaluable_checks`" in temporal_paragraph
