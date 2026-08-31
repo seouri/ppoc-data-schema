@@ -812,6 +812,14 @@ def _check_local_clinical_descendants(bundle: ObservedResourceBundle) -> bool:
     codes_by_visit: dict[str, list[str]] = {visit_id: [] for visit_id in rows_by_visit}
     if not isinstance(bundle.clinical_descendants, tuple):
         return False
+    event_kind_order = (
+        RecordedEventKind.RECOGNITION,
+        RecordedEventKind.WORKUP,
+        RecordedEventKind.DIAGNOSIS,
+    )
+    seen_event_kinds: set[RecordedEventKind] = set()
+    previous_age = -1
+    previous_event_kind_index = -1
     for descendant in bundle.clinical_descendants:
         if (
             not isinstance(descendant, ClinicalDescendant)
@@ -827,6 +835,16 @@ def _check_local_clinical_descendants(bundle: ObservedResourceBundle) -> bool:
             or descendant.code != RECORDED_EVENT_CODES.get(descendant.event_kind)
         ):
             return False
+        event_kind_index = event_kind_order.index(descendant.event_kind)
+        if (
+            descendant.event_kind in seen_event_kinds
+            or descendant.age_days < previous_age
+            or event_kind_index < previous_event_kind_index
+        ):
+            return False
+        seen_event_kinds.add(descendant.event_kind)
+        previous_age = descendant.age_days
+        previous_event_kind_index = event_kind_index
         codes_by_visit[descendant.visit_id].append(descendant.code)
     for visit_id, codes in codes_by_visit.items():
         if len(codes) > len(diagnosis_slots):

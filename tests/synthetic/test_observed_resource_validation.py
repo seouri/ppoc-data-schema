@@ -134,6 +134,52 @@ def test_validate_observed_resources_rejects_bad_descendant_or_diagnosis_slot_wi
     )
 
 
+def test_validate_observed_resources_rejects_cross_visit_descendant_reordering_without_source_evidence() -> None:
+    bundle = _bundle()
+    recognition, workup, diagnosis = bundle.clinical_descendants
+    object.__setattr__(
+        bundle,
+        "clinical_descendants",
+        (workup, diagnosis, recognition),
+    )
+    object.__setattr__(bundle, "source_frame", None)
+
+    report = validate_observed_resources(bundle)
+
+    assert report.status is ResourceValidationStatus.FAIL
+    assert _check(report, "clinical_descendants") == (
+        "FAIL",
+        "CLINICAL_DESCENDANT_INVALID",
+    )
+
+
+def test_validate_observed_resources_rejects_duplicate_descendant_with_corrupt_private_evidence() -> None:
+    bundle = _bundle()
+    recognition = bundle.clinical_descendants[0]
+    recognition_row = next(
+        row
+        for row in bundle.rows["visits"]
+        if row.to_mapping()["visit_id"] == recognition.visit_id
+    )
+    values = recognition_row.to_mapping()
+    values["enc_diag_2"] = recognition.code
+    object.__setattr__(recognition_row, "values", tuple(values.items()))
+    object.__setattr__(
+        bundle,
+        "clinical_descendants",
+        (recognition, recognition, *bundle.clinical_descendants[1:]),
+    )
+    object.__setattr__(bundle.source_frame.truth, "truth_hash", "0" * 64)
+
+    report = validate_observed_resources(bundle)
+
+    assert report.status is ResourceValidationStatus.FAIL
+    assert _check(report, "clinical_descendants") == (
+        "FAIL",
+        "CLINICAL_DESCENDANT_INVALID",
+    )
+
+
 def test_validate_observed_resources_rejects_patient_field_order_and_visit_key_violations() -> None:
     patient_bundle = _bundle()
     patient_row = patient_bundle.rows["patients"][0]

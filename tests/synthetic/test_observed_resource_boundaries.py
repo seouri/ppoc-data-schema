@@ -112,11 +112,13 @@ def test_native_resource_contract_recursively_has_no_governed_or_file_boundaries
 
 def test_resource_projection_and_validation_have_exact_public_signatures() -> None:
     assert tuple(inspect.signature(validate_observed_resources).parameters) == ("bundle",)
-    assert tuple(inspect.signature(project_observed_resources).parameters) == (
+    projection_parameters = inspect.signature(project_observed_resources).parameters
+    assert tuple(projection_parameters) == (
         "frame",
         "descriptor",
         "demographics",
     )
+    assert projection_parameters["demographics"].default is None
 
 
 @pytest.mark.parametrize(

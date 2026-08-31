@@ -199,6 +199,8 @@ The first observation slice supports routine visit selection, explicit administr
 
 `project_observed_resources(frame, descriptor)` projects one passing fictional observation frame into an immutable, in-memory bundle containing descriptor-ordered `patients` and `visits` rows, empty `labs`, `medications`, `problem_list`, and `referrals` rows, and fixed fictional clinical descendants. The descriptor is supplied as an already-loaded mapping. No descriptor path, CSV reader, schema mutation, package writer, generator, CLI, calibration input, held-out input, or privacy input is accepted.
 
+In this example, `descriptor_mapping` is an already-loaded mapping supplied by the caller, not a path or a value loaded by the resource module.
+
 ```python
 from synthetic.native.resources import (
     ResourceValidationStatus,
@@ -206,11 +208,13 @@ from synthetic.native.resources import (
     validate_observed_resources,
 )
 
-bundle = project_observed_resources(frame, descriptor)  # both inputs remain in memory
-report = validate_observed_resources(bundle)
-assert report.status is ResourceValidationStatus.PASS
-print(bundle.to_mapping())
-print(report.to_mapping())
+
+def project_and_validate(frame, descriptor_mapping):
+    bundle = project_observed_resources(frame, descriptor_mapping)
+    report = validate_observed_resources(bundle)
+    assert report.status is ResourceValidationStatus.PASS
+    print(bundle.to_mapping())
+    print(report.to_mapping())
 ```
 
 The validator has seven fixed aggregate checks: patient identity, schema shape, visit references, measurements, clinical descendants, ancillary resources, and source-frame evidence. It returns only `PASS`, `FAIL`, or `UNEVALUABLE` statuses, fixed reason codes, and counts; it never returns identifiers, ages, row values, hidden truth, hashes, descriptor shape, paths, or private source references. Missing or malformed private source evidence is `UNEVALUABLE`; typed visible row, key, unit, event, or ancillary-resource violations are `FAIL`.
