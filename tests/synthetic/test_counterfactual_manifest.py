@@ -260,6 +260,51 @@ def test_truth_manifest_verification_does_not_read_or_remove_recreated_child(
     assert destination.read_bytes() == b"attacker replacement"
 
 
+def test_truth_manifest_cleanup_preserves_replacement_between_check_and_cleanup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    destination = tmp_path / "truth.json"
+    destination.write_bytes(b"created by this invocation")
+    _absolute_parent, parent_descriptor = counterfactual_module._open_regular_parent(tmp_path)
+    owner_descriptor = os.open(destination, os.O_RDONLY)
+    try:
+        metadata = os.stat(destination, follow_symlinks=False)
+        identity = counterfactual_module._truth_manifest_identity(metadata)
+        original_match = counterfactual_module._truth_manifest_entry_matches
+        swapped = False
+
+        def swap_after_ownership_check(
+            descriptor: int, name: str, expected_identity: tuple[int, int]
+        ) -> bool:
+            nonlocal swapped
+            matches = original_match(descriptor, name, expected_identity)
+            if matches and not swapped:
+                destination.unlink()
+                destination.write_bytes(b"replacement installed by attacker")
+                swapped = True
+            return matches
+
+        monkeypatch.setattr(
+            counterfactual_module,
+            "_truth_manifest_entry_matches",
+            swap_after_ownership_check,
+        )
+
+        counterfactual_module._remove_truth_manifest_entry_if_owned(
+            parent_descriptor,
+            destination.name,
+            identity,
+            owner_descriptor=owner_descriptor,
+        )
+    finally:
+        os.close(owner_descriptor)
+        os.close(parent_descriptor)
+
+    assert swapped
+    assert destination.read_bytes() == b"replacement installed by attacker"
+
+
 @pytest.mark.parametrize("destination", ["truth.json", Path("a") / ".." / "truth.json"])
 def test_truth_manifest_rejects_non_path_or_traversal_destination(
     tmp_path: Path, destination: object

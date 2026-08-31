@@ -320,6 +320,87 @@ def test_treatment_adherence_rejects_treatment_event_payload_tampering(
     assert any(check.reason_code == "TREATMENT_PAYLOAD_MISMATCH" for check in report.checks)
 
 
+def test_treatment_adherence_rejects_coordinated_treatment_outcome_deletion() -> None:
+    pair = generate_counterfactual_pair(
+        _treated_ghd_kernel(),
+        PATIENT,
+        (0, 365, 730, 900, 999, 1000, 1200, 1500, 2500, 4000),
+        SEED,
+        INDEX,
+        InterventionKind.TREATMENT_ADHERENCE,
+    )
+
+    def without_outcome(trajectory: object):
+        return dataclasses.replace(
+            trajectory,  # type: ignore[arg-type]
+            events=tuple(
+                event
+                for event in trajectory.events  # type: ignore[attr-defined]
+                if event.event_type not in {"treatment_response", "treatment_nonresponse"}
+            ),
+        )
+
+    malformed = dataclasses.replace(
+        pair,
+        baseline=without_outcome(pair.baseline),
+        intervention=without_outcome(pair.intervention),
+    )
+
+    report = validate_counterfactual_pair(malformed)
+    event_order = next(check for check in report.checks if check.name == "event_order")
+
+    assert report.status is CounterfactualValidationStatus.UNEVALUABLE
+    assert event_order.status is CounterfactualValidationStatus.UNEVALUABLE
+    assert event_order.reason_code == "MALFORMED_PAIR"
+
+
+def test_treatment_adherence_rejects_duplicate_treatment_outcome() -> None:
+    pair = generate_counterfactual_pair(
+        _treated_ghd_kernel(),
+        PATIENT,
+        (0, 365, 730, 900, 999, 1000, 1200, 1500, 2500, 4000),
+        SEED,
+        INDEX,
+        InterventionKind.TREATMENT_ADHERENCE,
+    )
+    outcome = next(
+        event
+        for event in pair.intervention.events
+        if event.event_type == "treatment_nonresponse"
+    )
+    malformed = dataclasses.replace(
+        pair,
+        intervention=dataclasses.replace(
+            pair.intervention,
+            events=pair.intervention.events + (outcome,),
+        ),
+    )
+
+    report = validate_counterfactual_pair(malformed)
+    event_order = next(check for check in report.checks if check.name == "event_order")
+
+    assert report.status is CounterfactualValidationStatus.FAIL
+    assert event_order.status is CounterfactualValidationStatus.FAIL
+    assert event_order.reason_code == "EVENT_ORDER_INVALID"
+
+
+def test_treatment_adherence_keeps_no_treatment_event_trace_evaluable() -> None:
+    pair = generate_counterfactual_pair(
+        _familial_kernel(),
+        PATIENT,
+        (0, 365, 730, 1460, 1825, 2190, 4000),
+        SEED,
+        INDEX,
+        InterventionKind.TREATMENT_ADHERENCE,
+    )
+
+    report = validate_counterfactual_pair(pair)
+    event_order = next(check for check in report.checks if check.name == "event_order")
+
+    assert event_order.status is CounterfactualValidationStatus.PASS
+    assert event_order.reason_code == "OK"
+
+
 def _strip_growth_z_scores(trajectory: object, *, stature: bool, mass: bool):
     points = []
     for point in trajectory.physiology.points:  # type: ignore[attr-defined]

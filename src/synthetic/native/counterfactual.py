@@ -13,6 +13,7 @@ import json
 import math
 import os
 import re
+import secrets
 import stat
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -47,6 +48,7 @@ _WORLDS = frozenset({"baseline", "intervention"})
 _STREAM_IDENTITY_VERSION = "counterfactual-stream-identity-v1"
 TRUTH_MANIFEST_VERSION = "counterfactual-truth-v1"
 MAX_TRUTH_MANIFEST_BYTES = 4 * 1024 * 1024
+_TRUTH_MANIFEST_CLEANUP_ATTEMPTS = 32
 
 
 class InterventionKind(str, Enum):
@@ -675,6 +677,9 @@ _EVENT_PHASE_ORDER = {
 _TREATMENT_EVENT_TYPES = frozenset(
     {"treatment_start", "treatment_response", "treatment_nonresponse"}
 )
+_TREATMENT_OUTCOME_EVENT_TYPES = frozenset(
+    {"treatment_response", "treatment_nonresponse"}
+)
 _PHYSIOLOGY_SEVERITY_SCALE = 0.5
 _EARLIER_RECOGNITION_SHIFT_DAYS = 90
 
@@ -999,6 +1004,26 @@ def _event_validation_status(
     try:
         validate_disorder_events(patient, trajectory.disorder, trajectory.events)
     except (TypeError, ValueError):
+        return CounterfactualValidationStatus.UNEVALUABLE
+
+    treatment_start_count = sum(
+        event.event_type == "treatment_start" for event in trajectory.events
+    )
+    treatment_outcome_count = sum(
+        event.event_type in _TREATMENT_OUTCOME_EVENT_TYPES
+        for event in trajectory.events
+    )
+    if trajectory.disorder.treatment_start_age_days is None:
+        # validate_disorder_events already rejects these events, but retain the
+        # cardinality guard here so the trajectory contract stays explicit if
+        # the shared validator is ever relaxed.
+        if treatment_start_count or treatment_outcome_count:
+            return CounterfactualValidationStatus.UNEVALUABLE
+    elif treatment_start_count != 1 or treatment_outcome_count != 1:
+        # A treatment-bearing latent state is only evaluable when its event
+        # trace records exactly one start and exactly one terminal outcome.
+        # Otherwise an adherence comparison could pass after coordinated
+        # deletion of both outcome events.
         return CounterfactualValidationStatus.UNEVALUABLE
     return CounterfactualValidationStatus.PASS
 
@@ -1737,27 +1762,185 @@ def _truth_manifest_entry_matches(
     return stat.S_ISREG(metadata.st_mode) and _truth_manifest_identity(metadata) == identity
 
 
+def _open_truth_manifest_cleanup_namespace(parent_descriptor: int) -> tuple[str, int]:
+    """Create a private directory used to detach one child without unlink races.
+
+    A random, mode-0700 directory is created directly below the already pinned
+    parent.  Moving the destination into this namespace is an atomic rename;
+    the moved inode can then be compared with the owner descriptor before any
+    unlink is attempted.  The random namespace also prevents a same-directory
+    actor from pre-populating the quarantine entry.
+    """
+
+    nofollow = getattr(os, "O_NOFOLLOW", None)
+    directory = getattr(os, "O_DIRECTORY", None)
+    supports_dir_fd = getattr(os, "supports_dir_fd", ())
+    if (
+        nofollow is None
+        or directory is None
+        or os.open not in supports_dir_fd
+        or os.mkdir not in supports_dir_fd
+        or os.rmdir not in supports_dir_fd
+        or os.rename not in supports_dir_fd
+        or os.link not in supports_dir_fd
+    ):
+        raise ValueError("truth manifest requires secure cleanup operations")
+
+    flags = os.O_RDONLY | directory | nofollow | getattr(os, "O_CLOEXEC", 0)
+    for _ in range(_TRUTH_MANIFEST_CLEANUP_ATTEMPTS):
+        name = f".counterfactual-truth-cleanup-{secrets.token_hex(16)}"
+        try:
+            os.mkdir(name, 0o700, dir_fd=parent_descriptor)
+        except FileExistsError:
+            continue
+        except OSError:
+            raise ValueError("truth manifest cleanup namespace could not be created") from None
+        try:
+            descriptor = os.open(name, flags, dir_fd=parent_descriptor)
+        except OSError:
+            try:
+                os.rmdir(name, dir_fd=parent_descriptor)
+            except OSError:
+                pass
+            raise ValueError("truth manifest cleanup namespace could not be opened") from None
+        return name, descriptor
+    raise ValueError("truth manifest cleanup namespace could not be created")
+
+
+def _close_truth_manifest_cleanup_namespace(
+    parent_descriptor: int,
+    name: str,
+    descriptor: int,
+) -> None:
+    """Close and remove an empty private cleanup namespace."""
+
+    cleanup_error: ValueError | None = None
+    try:
+        os.close(descriptor)
+    except OSError:
+        cleanup_error = ValueError("truth manifest cleanup namespace could not be closed")
+    try:
+        os.rmdir(name, dir_fd=parent_descriptor)
+    except FileNotFoundError:
+        pass
+    except OSError:
+        cleanup_error = ValueError("truth manifest cleanup namespace could not be removed")
+    if cleanup_error is not None:
+        raise cleanup_error
+
+
 def _remove_truth_manifest_entry_if_owned(
     parent_descriptor: int,
     name: str,
     identity: tuple[int, int],
+    *,
+    owner_descriptor: int | None = None,
 ) -> None:
     """Remove only the child inode created by this invocation.
 
-    A failed write or verification must not unlink a same-name file that an
-    attacker installed after unlinking the created child.  The descriptor-
-    pinned identity check is deliberately performed immediately before the
-    unlink; a replacement is left untouched when it no longer matches.
+    A name-based ``stat`` followed by ``unlink`` is not an ownership check:
+    another actor can replace the name in between.  This helper instead moves
+    the current child atomically into a private descriptor-pinned namespace,
+    compares the moved inode with the still-open owner descriptor (or the
+    recorded identity), and unlinks only the moved owner.  If the moved inode
+    is a replacement, it is restored with a no-overwrite hard link; a race at
+    the destination leaves that replacement untouched and reports cleanup
+    failure rather than deleting it.
     """
+
+    if owner_descriptor is not None:
+        try:
+            owner_metadata = os.fstat(owner_descriptor)
+        except OSError:
+            return
+        if (
+            not stat.S_ISREG(owner_metadata.st_mode)
+            or _truth_manifest_identity(owner_metadata) != identity
+        ):
+            return
 
     if not _truth_manifest_entry_matches(parent_descriptor, name, identity):
         return
+
+    namespace_name, namespace_descriptor = _open_truth_manifest_cleanup_namespace(
+        parent_descriptor
+    )
+    operation_error: ValueError | None = None
     try:
-        os.unlink(name, dir_fd=parent_descriptor)
-    except FileNotFoundError:
-        return
-    except OSError:
-        raise ValueError("truth manifest output could not be cleared") from None
+        try:
+            # The destination name is resolved against the pinned parent, and
+            # the same entry name is installed into the private namespace.
+            os.rename(
+                name,
+                name,
+                src_dir_fd=parent_descriptor,
+                dst_dir_fd=namespace_descriptor,
+            )
+        except FileNotFoundError:
+            pass
+        except OSError:
+            operation_error = ValueError("truth manifest output could not be cleared")
+        else:
+            try:
+                moved_metadata = os.stat(
+                    name,
+                    dir_fd=namespace_descriptor,
+                    follow_symlinks=False,
+                )
+            except OSError:
+                operation_error = ValueError("truth manifest output could not be cleared")
+            else:
+                moved_identity = _truth_manifest_identity(moved_metadata)
+                if moved_identity == identity:
+                    if not stat.S_ISREG(moved_metadata.st_mode):
+                        operation_error = ValueError(
+                            "truth manifest output could not be cleared"
+                        )
+                    else:
+                        try:
+                            os.unlink(name, dir_fd=namespace_descriptor)
+                        except OSError:
+                            operation_error = ValueError(
+                                "truth manifest output could not be cleared"
+                            )
+                else:
+                    # link(2) never overwrites an existing destination.  It
+                    # preserves the replacement even if another actor wins
+                    # the restoration race; the private copy is then retained
+                    # rather than unlinking an inode we do not own.
+                    try:
+                        os.link(
+                            name,
+                            name,
+                            src_dir_fd=namespace_descriptor,
+                            dst_dir_fd=parent_descriptor,
+                            follow_symlinks=False,
+                        )
+                    except FileExistsError:
+                        operation_error = ValueError(
+                            "truth manifest output could not be cleared"
+                        )
+                    except OSError:
+                        operation_error = ValueError(
+                            "truth manifest output could not be cleared"
+                        )
+                    else:
+                        try:
+                            os.unlink(name, dir_fd=namespace_descriptor)
+                        except OSError:
+                            operation_error = ValueError(
+                                "truth manifest output could not be cleared"
+                            )
+    finally:
+        try:
+            _close_truth_manifest_cleanup_namespace(
+                parent_descriptor, namespace_name, namespace_descriptor
+            )
+        except ValueError as cleanup_error:
+            if operation_error is None:
+                operation_error = cleanup_error
+    if operation_error is not None:
+        raise operation_error
 
 
 def _existing_truth_manifest_error(parent_descriptor: int, name: str) -> Exception:
@@ -1830,16 +2013,22 @@ def _write_truth_manifest_exclusive(
     except OSError:
         failure = ValueError("truth manifest could not be written")
     if failure is not None:
+        cleanup_error: ValueError | None = None
+        try:
+            _remove_truth_manifest_entry_if_owned(
+                parent_descriptor,
+                name,
+                identity,
+                owner_descriptor=descriptor,
+            )
+        except ValueError as error:
+            cleanup_error = error
         try:
             os.close(descriptor)
-        except OSError:
-            failure = ValueError("truth manifest could not be closed")
-
-    if failure is not None:
-        try:
-            _remove_truth_manifest_entry_if_owned(parent_descriptor, name, identity)
-        except ValueError:
-            failure = ValueError("truth manifest output could not be cleared")
+        except OSError as error:
+            cleanup_error = error
+        if cleanup_error is not None:
+            raise ValueError("truth manifest output could not be cleared") from None
         raise failure
 
     return descriptor, identity
@@ -1894,19 +2083,40 @@ def write_truth_manifest(
                 raise ValueError("truth manifest output changed during verification")
         except (OSError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
             verification_error = ValueError("truth manifest output could not be verified")
-        finally:
-            try:
-                os.close(child_descriptor)
-            except OSError:
-                if verification_error is None:
-                    verification_error = ValueError(
-                        "truth manifest output could not be verified"
-                    )
-            child_descriptor = None
+        cleanup_error: ValueError | None = None
+        cleanup_attempted = False
         if verification_error is not None:
-            _remove_truth_manifest_entry_if_owned(
-                parent_descriptor, output.name, child_identity
-            )
+            cleanup_attempted = True
+            try:
+                _remove_truth_manifest_entry_if_owned(
+                    parent_descriptor,
+                    output.name,
+                    child_identity,
+                    owner_descriptor=child_descriptor,
+                )
+            except ValueError as error:
+                cleanup_error = error
+        try:
+            os.close(child_descriptor)
+        except OSError:
+            if verification_error is None:
+                verification_error = ValueError(
+                    "truth manifest output could not be verified"
+                )
+            if not cleanup_attempted:
+                cleanup_attempted = True
+                try:
+                    _remove_truth_manifest_entry_if_owned(
+                        parent_descriptor,
+                        output.name,
+                        child_identity,
+                    )
+                except ValueError as error:
+                    cleanup_error = error
+        child_descriptor = None
+        if cleanup_error is not None:
+            raise cleanup_error
+        if verification_error is not None:
             raise verification_error
     finally:
         if child_descriptor is not None:
