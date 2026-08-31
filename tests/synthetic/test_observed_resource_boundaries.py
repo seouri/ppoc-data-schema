@@ -48,19 +48,32 @@ FORBIDDEN_CALLS = {
 
 
 def _imports_and_calls(path: Path) -> tuple[set[str], set[str]]:
-    return _imports_and_calls_source(path.read_text(encoding="utf-8"), str(path))
+    relative = path.relative_to(ROOT / "src").with_suffix("")
+    module = ".".join(relative.parts)
+    return _imports_and_calls_source(path.read_text(encoding="utf-8"), module)
 
 
-def _imports_and_calls_source(source: str, filename: str = "<test>") -> tuple[set[str], set[str]]:
-    tree = ast.parse(source, filename=filename)
+def _imports_and_calls_source(
+    source: str,
+    module: str = "synthetic.native.resources",
+) -> tuple[set[str], set[str]]:
+    tree = ast.parse(source, filename=f"<{module}>")
     imports: set[str] = set()
     calls: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             imports.update(alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module:
-            imports.add(node.module)
-            imports.update(f"{node.module}.{alias.name}" for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            if node.level:
+                package = module.split(".")[:-1]
+                package = package[: len(package) - node.level + 1]
+                parts = (*package, *(node.module.split(".") if node.module else ()))
+                imported_module = ".".join(parts)
+            else:
+                imported_module = node.module or ""
+            if imported_module:
+                imports.add(imported_module)
+                imports.update(f"{imported_module}.{alias.name}" for alias in node.names)
         elif isinstance(node, ast.Call):
             if isinstance(node.func, ast.Name):
                 calls.add(node.func.id)
@@ -123,6 +136,31 @@ def test_resource_projection_and_validation_have_exact_public_signatures() -> No
 )
 def test_import_scanner_qualifies_every_forbidden_import_form(source: str, forbidden: str) -> None:
     imports, _ = _imports_and_calls_source(source)
+
+    assert forbidden in _matches_forbidden(imports, RESOURCE_FORBIDDEN_IMPORTS)
+
+
+@pytest.mark.parametrize(
+    ("source", "module", "forbidden"),
+    [
+        (f"from . import {root.rsplit('.', maxsplit=1)[1]}", "synthetic.boundary", root)
+        for root in sorted(RESOURCE_FORBIDDEN_IMPORTS)
+    ]
+    + [
+        (f"from .. import {root.rsplit('.', maxsplit=1)[1]}", "synthetic.native.resources", root)
+        for root in sorted(RESOURCE_FORBIDDEN_IMPORTS)
+    ]
+    + [
+        (f"from .{root.rsplit('.', maxsplit=1)[1]} import boundary", "synthetic.boundary", root)
+        for root in sorted(RESOURCE_FORBIDDEN_IMPORTS)
+    ],
+)
+def test_import_scanner_qualifies_relative_forbidden_import_forms(
+    source: str,
+    module: str,
+    forbidden: str,
+) -> None:
+    imports, _ = _imports_and_calls_source(source, module)
 
     assert forbidden in _matches_forbidden(imports, RESOURCE_FORBIDDEN_IMPORTS)
 

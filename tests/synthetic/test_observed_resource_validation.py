@@ -215,6 +215,16 @@ def test_validate_observed_resources_keeps_private_truth_corruption_unevaluable(
     assert _check(report, "evidence") == ("UNEVALUABLE", "INSUFFICIENT_EVIDENCE")
 
 
+def test_validate_observed_resources_treats_private_truth_hash_failure_as_unevaluable() -> None:
+    bundle = _bundle()
+    object.__setattr__(bundle.source_frame.truth, "truth_hash", "0" * 64)
+
+    report = validate_observed_resources(bundle)
+
+    assert report.status is ResourceValidationStatus.UNEVALUABLE
+    assert _check(report, "evidence") == ("UNEVALUABLE", "INSUFFICIENT_EVIDENCE")
+
+
 def test_validate_observed_resources_rejects_measurement_unit_and_bmi_changes() -> None:
     bundle = _bundle()
     weight_row = next(row for row in bundle.rows["visits"] if row.to_mapping()["weight_oz"] != "")

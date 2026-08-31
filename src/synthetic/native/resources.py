@@ -684,7 +684,7 @@ def _check_resource_visit_references(
         return ResourceValidationStatus.FAIL, "VISIT_REFERENCE_INVALID"
     if source is None:
         return ResourceValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
-    if _source_validation_status(source) in (None, ObservationValidationStatus.UNEVALUABLE):
+    if _source_validation_status(source) is not ObservationValidationStatus.PASS:
         return ResourceValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
     if len(rows) != len(source.visits):
         return ResourceValidationStatus.FAIL, "VISIT_REFERENCE_INVALID"
@@ -724,7 +724,7 @@ def _check_resource_measurements(
         return ResourceValidationStatus.FAIL, "MEASUREMENT_INVALID"
     if source is None:
         return ResourceValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
-    if _source_validation_status(source) in (None, ObservationValidationStatus.UNEVALUABLE):
+    if _source_validation_status(source) is not ObservationValidationStatus.PASS:
         return ResourceValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
     if len(rows) != len(source.visits):
         return ResourceValidationStatus.FAIL, "MEASUREMENT_INVALID"
@@ -847,7 +847,7 @@ def _check_resource_clinical_descendants(
     source = _source_frame(bundle)
     if source is None:
         return ResourceValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
-    if _source_validation_status(source) in (None, ObservationValidationStatus.UNEVALUABLE):
+    if _source_validation_status(source) is not ObservationValidationStatus.PASS:
         return ResourceValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
     try:
         expected = _expected_descendants(source)
@@ -906,12 +906,8 @@ def _check_resource_evidence(
     if source is None:
         return ResourceValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
     status = _source_validation_status(source)
-    if status is None:
-        return ResourceValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
     if status is ObservationValidationStatus.PASS:
         return ResourceValidationStatus.PASS, "OK"
-    if status is ObservationValidationStatus.FAIL:
-        return ResourceValidationStatus.FAIL, "MEASUREMENT_INVALID"
     return ResourceValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
 
 
