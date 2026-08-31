@@ -30,6 +30,7 @@ from synthetic.schema_contract import (
 
 REPORT_VERSION = "privacy-audit-report-v1"
 MAX_PRIVACY_POLICY_BYTES = 1024 * 1024
+MAX_PRIVACY_SHADOW_MANIFEST_BYTES = 1024 * 1024
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 _TOKEN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
@@ -72,6 +73,8 @@ _METRIC_KEYS = frozenset({
     "heldout_unique_candidate_rate",
     "linkage_advantage", "membership_inference_advantage", "attribute_disclosure_advantage",
     "composition_reproduction_rate", "negative_control_advantage", "positive_control_advantage",
+    "shadow_run_count", "prior_release_count", "membership_match_rate",
+    "attribute_attack_accuracy", "reference_majority_accuracy", "heldout_majority_accuracy",
     "rate_ci_lower", "rate_ci_upper", "margin_zero_rate", "margin_positive_rate",
 })
 _FIXED_COMPONENT_ORDER = ("demographics", "timing", "utilization", "trajectory", "diagnosis")
@@ -447,6 +450,15 @@ class _PrivatePackage:
     _trajectory_signatures: frozenset[str] = field(repr=False)
     _profile_signatures: frozenset[str] = field(repr=False)
     _ineligible_profile_count: int = field(repr=False)
+
+
+@dataclass(frozen=True)
+class _PrivateShadowRun:
+    """One private labelled shadow package; labels never leave the audit process."""
+
+    run_id: str
+    _package: _PrivatePackage = field(repr=False)
+    _member_trajectory_signatures: frozenset[str] = field(repr=False)
 
 
 def _require_patient_links(connection: duckdb.DuckDBPyConnection, staged: Mapping[str, str]) -> None:
@@ -979,3 +991,307 @@ def _evaluate_linkage_control(
         return PrivacyControlResult("linkage", "FAIL", metrics, reason)
     reason = "linkage_within_threshold" if heldout is not None else "linkage_reference_permutation_only"
     return PrivacyControlResult("linkage", "PASS", metrics, reason)
+
+
+_SHADOW_MANIFEST_KEYS = frozenset({"version", "runs"})
+_SHADOW_RUN_KEYS = frozenset({"run_id", "package_root", "members"})
+
+
+def _load_private_shadow_runs(
+    manifest_path: Path, reference: _PrivatePackage, policy: PrivacyPolicy
+) -> tuple[_PrivateShadowRun, ...]:
+    """Load exact-versioned shadow inputs without retaining manifest labels or paths in results."""
+    try:
+        payload = _read_regular_bytes(
+            manifest_path, "privacy shadow manifest", MAX_PRIVACY_SHADOW_MANIFEST_BYTES
+        )
+        manifest = json.loads(
+            payload.decode("utf-8"),
+            object_pairs_hook=_reject_duplicate_json_keys,
+            parse_constant=_reject_nonfinite_json,
+        )
+        if not isinstance(manifest, Mapping):
+            raise TypeError
+        _require_exact_keys(manifest, _SHADOW_MANIFEST_KEYS, "privacy shadow manifest")
+        if manifest["version"] != "privacy-shadow-v1" or not isinstance(manifest["runs"], list):
+            raise ValueError
+        profiles_by_id = {profile._patient_id: profile for profile in reference._profiles}
+        runs: list[_PrivateShadowRun] = []
+        run_ids: set[str] = set()
+        for entry in manifest["runs"]:
+            if not isinstance(entry, Mapping):
+                raise TypeError
+            _require_exact_keys(entry, _SHADOW_RUN_KEYS, "privacy shadow run")
+            run_id = _require_token(entry["run_id"], "shadow run_id")
+            package_root = entry["package_root"]
+            members = entry["members"]
+            if run_id in run_ids or not isinstance(package_root, str) or not package_root:
+                raise ValueError
+            if not isinstance(members, list) or not members or not all(isinstance(item, str) for item in members):
+                raise ValueError
+            if len(set(members)) != len(members):
+                raise ValueError
+            try:
+                member_signatures = frozenset(profiles_by_id[item]._trajectory_signature for item in members)
+            except KeyError as exc:
+                raise ValueError from exc
+            if len(member_signatures) != len(members):
+                raise ValueError
+            runs.append(
+                _PrivateShadowRun(
+                    run_id,
+                    _load_private_package(
+                        Path(package_root), synthetic=True, longitudinal_minimum=policy.longitudinal_min_observations
+                    ),
+                    member_signatures,
+                )
+            )
+            run_ids.add(run_id)
+    except (OSError, RecursionError, TypeError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        raise ValueError("privacy shadow manifest is invalid") from exc
+    return tuple(runs)
+
+
+def _evaluate_membership_inference_control(
+    policy: PrivacyPolicy,
+    reference: _PrivatePackage,
+    shadow_runs: tuple[_PrivateShadowRun, ...],
+) -> PrivacyControlResult:
+    """Run the fixed exact-trajectory membership screen across every supplied shadow run."""
+    if not shadow_runs or len(shadow_runs) < policy.minimum_shadow_runs:
+        return _unevaluable_control("membership_inference", "insufficient_shadow_runs")
+    if len({run.run_id for run in shadow_runs}) != len(shadow_runs):
+        return _unevaluable_control("membership_inference", "invalid_shadow_runs")
+    if not _packages_have_profile_evidence(policy, reference):
+        return _unevaluable_control("membership_inference", "insufficient_evidence")
+    candidates: list[dict[str, int | float]] = []
+    for run in shadow_runs:
+        labels = tuple(
+            profile._trajectory_signature in run._member_trajectory_signatures for profile in reference._profiles
+        )
+        positives = sum(labels)
+        negatives = len(labels) - positives
+        if positives < policy.minimum_evaluable_patients or negatives < policy.minimum_evaluable_patients:
+            return _unevaluable_control("membership_inference", "inconsistent_shadow_labels")
+        scores = tuple(profile._trajectory_signature in run._package._trajectory_signatures for profile in reference._profiles)
+        true_positive = sum(label and score for label, score in zip(labels, scores, strict=True))
+        false_positive = sum(not label and score for label, score in zip(labels, scores, strict=True))
+        true_positive_rate = true_positive / positives
+        false_positive_rate = false_positive / negatives
+        match_count = sum(scores)
+        candidates.append(
+            {
+                "evaluated_count": len(labels),
+                "membership_match_rate": round(match_count / len(labels), 6),
+                "membership_inference_advantage": round(max(0.0, true_positive_rate - false_positive_rate), 6),
+                "_match_count": match_count,
+            }
+        )
+    metrics = max(
+        candidates,
+        key=lambda item: (item["membership_inference_advantage"], item["membership_match_rate"]),
+    )
+    match_count = int(metrics.pop("_match_count"))
+    metrics["shadow_run_count"] = len(shadow_runs)
+    reported = _with_interval(metrics, match_count, int(metrics["evaluated_count"]))
+    advantage = float(reported["membership_inference_advantage"])
+    if advantage > policy.thresholds["membership_inference_advantage"]:
+        return PrivacyControlResult(
+            "membership_inference", "FAIL", reported, "membership_inference_threshold_exceeded"
+        )
+    return PrivacyControlResult("membership_inference", "PASS", reported, "membership_inference_within_threshold")
+
+
+def _majority_accuracy(labels: tuple[str, ...], targets: tuple[str, ...]) -> float:
+    if not labels or not targets:
+        raise ValueError("sensitive labels are unavailable")
+    counts: dict[str, int] = {}
+    for label in labels:
+        counts[label] = counts.get(label, 0) + 1
+    majority = max(counts, key=lambda label: (counts[label], label))
+    return round(sum(target == majority for target in targets) / len(targets), 6)
+
+
+def _nonempty_sensitive_labels(package: _PrivatePackage) -> tuple[str, ...] | None:
+    labels = tuple(profile._growth_dx_flag for profile in package._profiles)
+    if any(label not in {"0", "1"} for label in labels):
+        return None
+    return tuple(label for label in labels if label is not None)
+
+
+def _evaluate_attribute_disclosure_control(
+    policy: PrivacyPolicy,
+    reference: _PrivatePackage,
+    generated: _PrivatePackage,
+    *,
+    heldout: _PrivatePackage | None,
+) -> PrivacyControlResult:
+    """Evaluate the allowlisted growth-flag attack against majority and held-out baselines."""
+    required = "attribute_disclosure" in policy.required_controls
+    if heldout is None and required:
+        return _unevaluable_control("attribute_disclosure", "heldout_required")
+    packages = (reference, generated) if heldout is None else (reference, generated, heldout)
+    if not _packages_have_profile_evidence(policy, *packages):
+        return _unevaluable_control("attribute_disclosure", "insufficient_evidence")
+    reference_labels = _nonempty_sensitive_labels(reference)
+    generated_labels = _nonempty_sensitive_labels(generated)
+    heldout_labels = _nonempty_sensitive_labels(heldout) if heldout is not None else ()
+    if reference_labels is None or generated_labels is None or heldout_labels is None:
+        return _unevaluable_control("attribute_disclosure", "inconsistent_sensitive_labels")
+    reference_index: dict[str, _PrivatePatientProfile] = {}
+    duplicate_reference_signatures: set[str] = set()
+    for profile in reference._profiles:
+        if profile._trajectory_signature in reference_index:
+            duplicate_reference_signatures.add(profile._trajectory_signature)
+        reference_index[profile._trajectory_signature] = profile
+    generated_counts: dict[str, int] = {}
+    for profile in generated._profiles:
+        generated_counts[profile._trajectory_signature] = generated_counts.get(profile._trajectory_signature, 0) + 1
+    pairs = tuple(
+        (profile, reference_index[profile._trajectory_signature])
+        for profile in generated._profiles
+        if profile._trajectory_signature in reference_index
+        and profile._trajectory_signature not in duplicate_reference_signatures
+        and generated_counts[profile._trajectory_signature] == 1
+    )
+    if len(pairs) < policy.minimum_evaluable_patients:
+        return _unevaluable_control("attribute_disclosure", "insufficient_evidence")
+    if any(generated_profile._growth_dx_flag is None or reference_profile._growth_dx_flag is None for generated_profile, reference_profile in pairs):
+        return _unevaluable_control("attribute_disclosure", "inconsistent_sensitive_labels")
+    targets = tuple(reference_profile._growth_dx_flag for _, reference_profile in pairs)
+    predictions = tuple(generated_profile._growth_dx_flag for generated_profile, _ in pairs)
+    if any(target not in {"0", "1"} or prediction not in {"0", "1"} for target, prediction in zip(targets, predictions, strict=True)):
+        return _unevaluable_control("attribute_disclosure", "inconsistent_sensitive_labels")
+    attack_count = sum(prediction == target for prediction, target in zip(predictions, targets, strict=True))
+    attack_accuracy = round(attack_count / len(pairs), 6)
+    reference_baseline = _majority_accuracy(reference_labels, targets)
+    baseline = reference_baseline
+    metrics: dict[str, int | float] = {
+        "evaluated_count": len(pairs),
+        "attribute_attack_accuracy": attack_accuracy,
+        "reference_majority_accuracy": reference_baseline,
+    }
+    if heldout is not None:
+        heldout_baseline = _majority_accuracy(heldout_labels, targets)
+        metrics["heldout_count"] = len(heldout._profiles)
+        metrics["heldout_majority_accuracy"] = heldout_baseline
+        baseline = max(baseline, heldout_baseline)
+    advantage = round(max(0.0, attack_accuracy - baseline), 6)
+    metrics["attribute_disclosure_advantage"] = advantage
+    reported = _with_interval(metrics, attack_count, len(pairs))
+    if advantage > policy.thresholds["attribute_disclosure_advantage"]:
+        return PrivacyControlResult(
+            "attribute_disclosure", "FAIL", reported, "attribute_disclosure_threshold_exceeded"
+        )
+    return PrivacyControlResult("attribute_disclosure", "PASS", reported, "attribute_disclosure_within_threshold")
+
+
+def _evaluate_composition_control(
+    policy: PrivacyPolicy,
+    generated: _PrivatePackage,
+    prior_releases: tuple[_PrivatePackage, ...],
+) -> PrivacyControlResult:
+    """Compare generated trajectories only with the explicitly supplied prior synthetic releases."""
+    if not prior_releases or len(prior_releases) < policy.minimum_prior_releases:
+        return _unevaluable_control("composition", "insufficient_prior_releases")
+    if not _packages_have_profile_evidence(policy, generated, *prior_releases):
+        return _unevaluable_control("composition", "insufficient_evidence")
+    prior_signatures = frozenset().union(*(package._trajectory_signatures for package in prior_releases))
+    reproduction_count = sum(
+        profile._trajectory_signature in prior_signatures for profile in generated._profiles
+    )
+    evaluated_count = len(generated._profiles)
+    reproduction_rate = round(reproduction_count / evaluated_count, 6)
+    metrics = _with_interval(
+        {
+            "evaluated_count": evaluated_count,
+            "prior_release_count": len(prior_releases),
+            "reproduction_count": reproduction_count,
+            "composition_reproduction_rate": reproduction_rate,
+        },
+        reproduction_count,
+        evaluated_count,
+    )
+    if reproduction_rate > policy.thresholds["composition_reproduction_rate"]:
+        return PrivacyControlResult("composition", "FAIL", metrics, "composition_threshold_exceeded")
+    return PrivacyControlResult("composition", "PASS", metrics, "composition_within_threshold")
+
+
+def _control_harness_advantage(
+    policy: PrivacyPolicy,
+    reference: _PrivatePackage,
+    control: _PrivatePackage,
+    heldout: _PrivatePackage | None,
+) -> tuple[int, int, float] | None:
+    packages = (reference, control) if heldout is None else (reference, control, heldout)
+    if not _packages_have_profile_evidence(policy, *packages):
+        return None
+    linkage = _linkage_candidate_metrics(
+        reference, control, heldout, control._profiles, _linkage_selections(policy)
+    )
+    reproduction_count = sum(
+        profile._trajectory_signature in reference._trajectory_signatures for profile in control._profiles
+    )
+    reproduction_rate = reproduction_count / len(control._profiles)
+    return len(control._profiles), reproduction_count, round(
+        max(float(linkage["linkage_advantage"]), reproduction_rate), 6
+    )
+
+
+def _evaluate_control_package(
+    control_id: Literal["negative_control", "positive_control"],
+    policy: PrivacyPolicy,
+    reference: _PrivatePackage,
+    package: _PrivatePackage | None,
+    *,
+    heldout: _PrivatePackage | None,
+) -> PrivacyControlResult:
+    if package is None:
+        return _unevaluable_control(control_id, "control_package_missing")
+    try:
+        harness = _control_harness_advantage(policy, reference, package, heldout)
+    except (ArithmeticError, TypeError, ValueError):
+        return _unevaluable_control(control_id, "control_harness_unavailable")
+    if harness is None:
+        return _unevaluable_control(control_id, "insufficient_evidence")
+    evaluated_count, reproduction_count, advantage = harness
+    metric_name = f"{control_id}_advantage"
+    metrics = _with_interval(
+        {
+            "evaluated_count": evaluated_count,
+            "reproduction_count": reproduction_count,
+            metric_name: advantage,
+        },
+        reproduction_count,
+        evaluated_count,
+    )
+    threshold = policy.thresholds[metric_name]
+    if control_id == "negative_control":
+        if advantage > threshold:
+            return PrivacyControlResult(control_id, "FAIL", metrics, "negative_control_threshold_exceeded")
+        return PrivacyControlResult(control_id, "PASS", metrics, "negative_control_within_threshold")
+    if advantage > threshold:
+        return PrivacyControlResult(control_id, "PASS", metrics, "positive_control_detected")
+    return PrivacyControlResult(control_id, "FAIL", metrics, "positive_control_not_detected")
+
+
+def _evaluate_negative_control(
+    policy: PrivacyPolicy,
+    reference: _PrivatePackage,
+    package: _PrivatePackage | None,
+    *,
+    heldout: _PrivatePackage | None,
+) -> PrivacyControlResult:
+    """Confirm the fixed harness stays below its false-alarm threshold on an independent package."""
+    return _evaluate_control_package("negative_control", policy, reference, package, heldout=heldout)
+
+
+def _evaluate_positive_control(
+    policy: PrivacyPolicy,
+    reference: _PrivatePackage,
+    package: _PrivatePackage | None,
+    *,
+    heldout: _PrivatePackage | None,
+) -> PrivacyControlResult:
+    """Confirm the fixed harness detects a supplied copied or overfit package."""
+    return _evaluate_control_package("positive_control", policy, reference, package, heldout=heldout)

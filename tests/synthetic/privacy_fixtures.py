@@ -64,3 +64,11 @@ def write_generated_package(root: Path, *, id_prefix: str = "GEN") -> Path:
     package = write_mock_snapshot(root, id_prefix=id_prefix)
     write_synthetic_descriptor(package)
     return package
+
+
+def write_shadow_manifest(path: Path, runs: list[dict[str, object]]) -> Path:
+    """Write a fictional test-only privacy-shadow-v1 manifest."""
+    path.write_text(
+        json.dumps({"version": "privacy-shadow-v1", "runs": runs}), encoding="utf-8"
+    )
+    return path
