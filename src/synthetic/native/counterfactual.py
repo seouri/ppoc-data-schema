@@ -49,6 +49,10 @@ _STREAM_IDENTITY_VERSION = "counterfactual-stream-identity-v1"
 TRUTH_MANIFEST_VERSION = "counterfactual-truth-v1"
 MAX_TRUTH_MANIFEST_BYTES = 4 * 1024 * 1024
 _TRUTH_MANIFEST_CLEANUP_ATTEMPTS = 32
+_TRUTH_MANIFEST_REPLACEMENT_CLEANUP_ERROR = (
+    "truth manifest output could not be cleared; "
+    "replacement retained in private cleanup quarantine"
+)
 
 
 class InterventionKind(str, Enum):
@@ -1906,8 +1910,10 @@ def _remove_truth_manifest_entry_if_owned(
                 else:
                     # link(2) never overwrites an existing destination.  It
                     # preserves the replacement even if another actor wins
-                    # the restoration race; the private copy is then retained
-                    # rather than unlinking an inode we do not own.
+                    # the restoration race.  The private copy is deliberately
+                    # retained after a successful link: unlinking it would
+                    # reopen a race in which an actor can replace that path
+                    # between the link and unlink operations.
                     try:
                         os.link(
                             name,
@@ -1918,19 +1924,16 @@ def _remove_truth_manifest_entry_if_owned(
                         )
                     except FileExistsError:
                         operation_error = ValueError(
-                            "truth manifest output could not be cleared"
+                            _TRUTH_MANIFEST_REPLACEMENT_CLEANUP_ERROR
                         )
                     except OSError:
                         operation_error = ValueError(
-                            "truth manifest output could not be cleared"
+                            _TRUTH_MANIFEST_REPLACEMENT_CLEANUP_ERROR
                         )
                     else:
-                        try:
-                            os.unlink(name, dir_fd=namespace_descriptor)
-                        except OSError:
-                            operation_error = ValueError(
-                                "truth manifest output could not be cleared"
-                            )
+                        operation_error = ValueError(
+                            _TRUTH_MANIFEST_REPLACEMENT_CLEANUP_ERROR
+                        )
     finally:
         try:
             _close_truth_manifest_cleanup_namespace(

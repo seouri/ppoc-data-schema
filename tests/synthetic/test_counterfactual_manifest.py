@@ -291,18 +291,159 @@ def test_truth_manifest_cleanup_preserves_replacement_between_check_and_cleanup(
             swap_after_ownership_check,
         )
 
-        counterfactual_module._remove_truth_manifest_entry_if_owned(
-            parent_descriptor,
-            destination.name,
-            identity,
-            owner_descriptor=owner_descriptor,
-        )
+        with pytest.raises(ValueError, match="replacement retained"):
+            counterfactual_module._remove_truth_manifest_entry_if_owned(
+                parent_descriptor,
+                destination.name,
+                identity,
+                owner_descriptor=owner_descriptor,
+            )
     finally:
         os.close(owner_descriptor)
         os.close(parent_descriptor)
 
     assert swapped
     assert destination.read_bytes() == b"replacement installed by attacker"
+    quarantine = next(tmp_path.glob(".counterfactual-truth-cleanup-*"))
+    assert (quarantine / destination.name).read_bytes() == (
+        b"replacement installed by attacker"
+    )
+
+
+def test_truth_manifest_cleanup_never_unlinks_post_restore_replacement(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    destination = tmp_path / "truth.json"
+    destination.write_bytes(b"created by this invocation")
+    _absolute_parent, parent_descriptor = counterfactual_module._open_regular_parent(tmp_path)
+    try:
+        metadata = os.stat(destination, follow_symlinks=False)
+        identity = counterfactual_module._truth_manifest_identity(metadata)
+        original_match = counterfactual_module._truth_manifest_entry_matches
+        original_link = counterfactual_module.os.link
+        original_unlink = counterfactual_module.os.unlink
+        original_open = counterfactual_module.os.open
+        ownership_swapped = False
+        post_restore_swapped = False
+
+        def swap_after_ownership_check(
+            descriptor: int, name: str, expected_identity: tuple[int, int]
+        ) -> bool:
+            nonlocal ownership_swapped
+            matches = original_match(descriptor, name, expected_identity)
+            if matches and not ownership_swapped:
+                destination.unlink()
+                destination.write_bytes(b"replacement before restoration")
+                ownership_swapped = True
+            return matches
+
+        def swapping_link(
+            source: object,
+            target: object,
+            *,
+            src_dir_fd: int | None = None,
+            dst_dir_fd: int | None = None,
+            follow_symlinks: bool = True,
+        ) -> None:
+            nonlocal post_restore_swapped
+            original_link(
+                source,
+                target,
+                src_dir_fd=src_dir_fd,
+                dst_dir_fd=dst_dir_fd,
+                follow_symlinks=follow_symlinks,
+            )
+            if dst_dir_fd == parent_descriptor and not post_restore_swapped:
+                # Simulate an actor replacing the private quarantine child
+                # immediately after restoration.  Cleanup must not unlink it.
+                original_unlink(source, dir_fd=src_dir_fd)
+                replacement_descriptor = original_open(
+                    source,
+                    os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                    0o600,
+                    dir_fd=src_dir_fd,
+                )
+                try:
+                    os.write(replacement_descriptor, b"replacement after restoration")
+                finally:
+                    os.close(replacement_descriptor)
+                post_restore_swapped = True
+
+        monkeypatch.setattr(
+            counterfactual_module,
+            "_truth_manifest_entry_matches",
+            swap_after_ownership_check,
+        )
+        monkeypatch.setattr(counterfactual_module.os, "link", swapping_link)
+        monkeypatch.setattr(
+            counterfactual_module.os,
+            "supports_dir_fd",
+            set(counterfactual_module.os.supports_dir_fd) | {swapping_link},
+        )
+
+        with pytest.raises(ValueError, match="replacement retained"):
+            counterfactual_module._remove_truth_manifest_entry_if_owned(
+                parent_descriptor, destination.name, identity
+            )
+    finally:
+        os.close(parent_descriptor)
+
+    assert ownership_swapped
+    assert post_restore_swapped
+    assert destination.read_bytes() == b"replacement before restoration"
+    quarantine = next(tmp_path.glob(".counterfactual-truth-cleanup-*"))
+    assert (quarantine / destination.name).read_bytes() == (
+        b"replacement after restoration"
+    )
+
+
+def test_truth_manifest_cleanup_quarantines_nonlinkable_directory_replacement(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    destination = tmp_path / "truth.json"
+    destination.write_bytes(b"created by this invocation")
+    _absolute_parent, parent_descriptor = counterfactual_module._open_regular_parent(tmp_path)
+    try:
+        metadata = os.stat(destination, follow_symlinks=False)
+        identity = counterfactual_module._truth_manifest_identity(metadata)
+        original_match = counterfactual_module._truth_manifest_entry_matches
+        swapped = False
+
+        def swap_after_ownership_check(
+            descriptor: int, name: str, expected_identity: tuple[int, int]
+        ) -> bool:
+            nonlocal swapped
+            matches = original_match(descriptor, name, expected_identity)
+            if matches and not swapped:
+                destination.unlink()
+                replacement = destination.with_name("replacement-directory")
+                replacement.mkdir()
+                (replacement / "sentinel").write_bytes(b"directory replacement")
+                replacement.rename(destination)
+                swapped = True
+            return matches
+
+        monkeypatch.setattr(
+            counterfactual_module,
+            "_truth_manifest_entry_matches",
+            swap_after_ownership_check,
+        )
+
+        with pytest.raises(ValueError, match="replacement retained"):
+            counterfactual_module._remove_truth_manifest_entry_if_owned(
+                parent_descriptor, destination.name, identity
+            )
+    finally:
+        os.close(parent_descriptor)
+
+    assert swapped
+    assert not destination.exists()
+    quarantine = next(tmp_path.glob(".counterfactual-truth-cleanup-*"))
+    assert (quarantine / destination.name / "sentinel").read_bytes() == (
+        b"directory replacement"
+    )
 
 
 @pytest.mark.parametrize("destination", ["truth.json", Path("a") / ".." / "truth.json"])
