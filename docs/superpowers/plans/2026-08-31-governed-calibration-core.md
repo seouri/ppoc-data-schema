@@ -10,6 +10,10 @@
 
 **Spec:** `docs/superpowers/specs/2026-08-31-governed-calibration-core-design.md`
 
+## Execution reconciliation
+
+The implementation for Tasks 1–5 was already present in the contiguous history `2acc0dd..78b6e7a` when this roadmap slice was opened. This execution reviewed those historical task boundaries and current cross-slice consumers rather than replaying duplicate implementation work. Fresh reviews identified and closed the following defects: `829ac78`/`ef0aa93` restricted calibration check details while preserving held-out helper compatibility; `e5db031` completed exact input-contract, physical-link, and encoding validation; `467b482`/`78b6e7a` repaired age-stratum and canonical registry/link semantics; `d4f0ed5` rejected abbreviated CLI flags; and `10696e1` enforced the fixed target registry at the result boundary. Reports, exact review packages, the conflict scan, and the final ledger are preserved in the ignored `.superpowers/sdd/2026-08-31-governed-calibration-core/` workspace. All evidence uses fictional fixtures or in-memory values only.
+
 ## Global Constraints
 
 - `datapackage.json` remains the sole schema authority; the supplied source descriptor must have the same schema fingerprint and exact eight resources.
@@ -39,7 +43,7 @@
 - Consumes: `CalibrationDisclosurePolicy` from `synthetic.calibration`, `schema_fingerprint` from `synthetic.schema_contract`.
 - Produces: immutable `PartitionPolicy`, `CalibrationAgeWindow`, `CalibrationRunConfig`, `CalibrationCheck`, `CalibrationReport`, `CalibrationResult`, `DEFAULT_AGE_WINDOWS`, and public `calibrate`/`write_calibration_result`/`main` names (the orchestration bodies may initially raise `NotImplementedError` until later tasks).
 
-- [ ] **Step 1: Add the DuckDB runtime dependency and create a failing model test**
+- [x] **Step 1: Add the DuckDB runtime dependency and create a failing model test**
 
 Add `duckdb>=1.3,<2` to `[project].dependencies` and refresh the lock with `uv lock`. Write tests that instantiate valid policies/windows/configuration and reject booleans, nonpositive counts, basis points outside `1..9999`, empty keys, overlapping windows, malformed tokens, empty key bytes, and invalid UTC timestamps. Use exact expected values:
 
@@ -57,13 +61,13 @@ def test_default_windows_are_ordered_observation_bins() -> None:
     assert DEFAULT_AGE_WINDOWS[-1].upper_age_days == 7_305
 ```
 
-- [ ] **Step 2: Run the focused test to verify the new API fails**
+- [x] **Step 2: Run the focused test to verify the new API fails**
 
 Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_calibrate_models.py`
 
 Expected: collection failure because `synthetic.calibrate` and its models do not exist. Fix test syntax or fixture imports before implementing the API.
 
-- [ ] **Step 3: Implement immutable models and validation**
+- [x] **Step 3: Implement immutable models and validation**
 
 In `src/synthetic/calibrate.py`, define:
 
@@ -99,11 +103,11 @@ Validate identifiers with the same ASCII token rules used by the artifact model,
 
 Define `CalibrationReport` as a frozen object whose mapping contains exactly `report_version`, `status`, `source_snapshot`, `schema_fingerprint`, `partition_policy`, `partition_counts`, `resource_row_counts`, `target_family_counts`, `suppression_counts`, `source_aggregate_sha256`, and `checks`. Its `canonical_json()` uses sorted keys, compact separators, ASCII JSON, and a trailing newline only in `to_json_bytes()`; reject patient/visit/path/key fields in report construction. Define `CalibrationResult(artifact, report)` and placeholders for `calibrate` and `write_calibration_result` that raise a clear “calibrator is not assembled” error until Task 5.
 
-- [ ] **Step 4: Build a reusable exact-schema synthetic snapshot fixture**
+- [x] **Step 4: Build a reusable exact-schema synthetic snapshot fixture**
 
 In `tests/synthetic/calibration_fixtures.py`, add `write_mock_snapshot(root: Path, *, patient_count: int = 12) -> Path`. Load the checked-in descriptor, write all eight resources with `csv.DictWriter`, exact descriptor field order/dialect/encoding, and no real data. Include enough varied rows to exercise F/M/U sex, ethnicity/race categories, empty race positions, visits in every default age window, nullable weights/heights/head circumferences/BMI, `patients_augmented` flags and `dx_age_years`, clean and outlier `visits_augmented` z/velocity values, encounter types from the approved registry, descriptor-permitted null logical visit IDs for labs/referrals, and resolving/non-resolving logical visit IDs for labs/medications/referrals. Keep all identifiers deterministic fictional tokens such as `SYN-P-001` and `SYN-V-001`.
 
-- [ ] **Step 5: Run model tests, lint, and commit**
+- [x] **Step 5: Run model tests, lint, and commit**
 
 Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_calibrate_models.py`; `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run ruff check src/synthetic/calibrate.py tests/synthetic/test_calibrate_models.py tests/synthetic/calibration_fixtures.py`; `git diff --check`.
 
@@ -125,7 +129,7 @@ git commit -m "build: add calibration run models"
 - Consumes: `CalibrationRunConfig`, `PartitionPolicy`, and `CalibrationAgeWindow` from `synthetic.calibrate`; existing `load_descriptor`, `field_names`, `resource_spec`, and `schema_fingerprint` helpers.
 - Produces: `PartitionLabel`, `PartitionSummary`, `CalibrationInput`, `assign_partition(patient_id, policy, key)`, and `prepare_input(connection, config) -> CalibrationInput`.
 
-- [ ] **Step 1: Write failing input/partition tests**
+- [x] **Step 1: Write failing input/partition tests**
 
 Using `write_mock_snapshot`, test that `assign_partition` is stable for repeated calls, changes when the key changes, returns only `calibration`/`held_out`, and never exposes the digest. Test `prepare_input` returns the repository schema fingerprint, counts both partitions, reports per-resource row counts, and leaves no patient IDs in `PartitionSummary` or `CalibrationInput` mappings. Add rejection cases for a missing resource, symlink resource, absolute/parent path, wrong header, duplicate patient, unknown patient in any resource, malformed required age, partition key too short, and a policy that leaves either partition below its minimum.
 
@@ -140,13 +144,13 @@ def test_prepare_input_proves_all_rows_use_one_patient_partition(tmp_path: Path)
     assert "SYN-P-001" not in json.dumps(prepared.partition_summary.to_mapping())
 ```
 
-- [ ] **Step 2: Run the focused tests to verify they fail**
+- [x] **Step 2: Run the focused tests to verify they fail**
 
 Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_calibration_input.py`
 
 Expected: collection failure because `synthetic.calibration_input` and `prepare_input` do not exist.
 
-- [ ] **Step 3: Implement safe descriptor and relation loading**
+- [x] **Step 3: Implement safe descriptor and relation loading**
 
 Create `calibration_input.py` with immutable summaries and private helpers. Require the descriptor's resource name set to equal the eight required names and compare its fingerprint to the checked-in repository descriptor fingerprint. Validate each declared relative path below `data_root` without following symlinks; open each file once with strict descriptor encoding/dialect and `csv.reader(strict=True)` to verify exact headers before registering it with DuckDB. Use all-varchar staging so empty strings remain distinguishable from nulls. Use quoted/parameterized DuckDB paths and no user-controlled SQL identifiers.
 
@@ -154,7 +158,7 @@ Read `patients` first, reject empty or duplicate `patient_id`, compute `assign_p
 
 Define `CalibrationInput` with `descriptor`, `schema_fingerprint`, `partition_summary`, and `resource_names`; do not include the connection, key, data root, or identifier collections. Ensure all raised `ValueError` messages name only the resource/field/policy, never a patient or visit value.
 
-- [ ] **Step 4: Wire the input API into calibrate imports and run tests**
+- [x] **Step 4: Wire the input API into calibrate imports and run tests**
 
 Export the input types/functions from `synthetic.calibrate` only as named imports needed by downstream tasks; do not import them into generation modules. Run focused tests and lint:
 
@@ -164,7 +168,7 @@ UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run ruff check src/synthetic/calibration_inpu
 git diff --check
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/synthetic/calibration_input.py src/synthetic/calibrate.py tests/synthetic/test_calibration_input.py
@@ -182,7 +186,7 @@ git commit -m "feat: enforce governed calibration partitions"
 - Consumes: `CalibrationInput`, the live DuckDB connection containing validated relations, `CalibrationRunConfig`, and `CalibrationAgeWindow`.
 - Produces: `RawTarget`, `TARGET_REGISTRY_VERSION`, approved category/encounter registries, and `compute_raw_targets(connection, prepared, config) -> tuple[RawTarget, ...]`.
 
-- [ ] **Step 1: Define target metadata and write failing semantic tests**
+- [x] **Step 1: Define target metadata and write failing semantic tests**
 
 Define:
 
@@ -203,13 +207,13 @@ class RawTarget:
 
 Tests should assert the mock snapshot produces deterministic targets for sex, ethnicity/race and multiselect demographics; all recorded flags; visit count/span and encounter/Epic proportions; weight/height/head-circumference/BMI availability and resolved logical visit links, including descriptor-permitted nulls and non-resolving links; and physiology mean/sd/quantiles by default age window and recorded sex. Assert that `target_name` values never contain record/hidden/attack indicators, every stratum ID is canonical, and only approved encounter categories are accepted.
 
-- [ ] **Step 2: Run target tests to verify they fail**
+- [x] **Step 2: Run target tests to verify they fail**
 
 Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_calibration_targets.py`
 
 Expected: collection failure because `synthetic.calibration_targets` does not exist.
 
-- [ ] **Step 3: Implement the versioned registry and SQL aggregations**
+- [x] **Step 3: Implement the versioned registry and SQL aggregations**
 
 In `calibration_targets.py`, define `TARGET_REGISTRY_VERSION = "calibration-targets-v1"`, explicit mappings for every descriptor ethnicity/race value (including blank/nonresponse labels), all descriptor encounter types, the seven recorded flag columns, the four measurement availability columns, three logical-link resources, and five physiology metrics. Map category slugs through constants; reject an observed category not in a registry rather than generating a target name from it.
 
@@ -223,7 +227,7 @@ Use DuckDB CTEs over the partitioned relations. Build:
 
 For proportions, `support_count` is the positive category/flag/link numerator and `denominator` is the eligible unit count; for means/sd/quantiles, `support_count` is the number of finite contributors and `denominator` is null. For visit-level targets, the eligible unit is a visit; for patient-level targets, it is a patient. Sort raw targets by canonical `stratum_id`, `target_name`, and statistic before returning. Do not return patient identifiers, SQL rows, or sequences.
 
-- [ ] **Step 4: Verify exact semantics and boundary behavior**
+- [x] **Step 4: Verify exact semantics and boundary behavior**
 
 Run:
 
@@ -235,7 +239,7 @@ git diff --check
 
 Add regressions for outlier exclusion, BIV-null exclusion, empty demographic values, age lower/upper boundaries, zero positive-category support, unknown encounter category, and no accidental target names containing `patient`, `visit`, `row`, `sequence`, `truth`, `candidate`, or privacy-attack indicators.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/synthetic/calibration_targets.py src/synthetic/calibrate.py tests/synthetic/test_calibration_targets.py
@@ -253,23 +257,23 @@ git commit -m "feat: compute governed calibration targets"
 - Consumes: `RawTarget`, `CalibrationRunConfig`, `CalibrationInput`, and existing `CalibrationArtifact`, `CalibrationStratum`, and `CalibrationTarget` models.
 - Produces: `disclose_targets(raw_targets, config) -> tuple[CalibrationStratum, ...]`, `build_result(strata, prepared, config) -> CalibrationResult`, and canonical aggregate hashing/report serialization.
 
-- [ ] **Step 1: Write failing suppression, rounding, and hash tests**
+- [x] **Step 1: Write failing suppression, rounding, and hash tests**
 
 Construct `RawTarget` values with support below and above `minimum_cell_count`, continuous values requiring rounding, counts, proportions, means, and quantiles. Assert suppressed artifact targets have null value/support/denominator and zero rounding precision; released continuous targets use policy precision; proportions remain in `[0, 1]`; and identical disclosed targets yield identical lowercase SHA-256 hashes regardless of input order. Assert report JSON contains no patient/visit IDs, source path, key ID material, or target-level supports.
 
-- [ ] **Step 2: Run focused tests to verify they fail**
+- [x] **Step 2: Run focused tests to verify they fail**
 
 Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_calibration_disclosure.py`
 
 Expected: collection failure because disclosure helpers do not exist.
 
-- [ ] **Step 3: Implement disclosure and artifact construction**
+- [x] **Step 3: Implement disclosure and artifact construction**
 
 Implement support suppression before rounding. For released count values require a nonnegative integer and zero rounding decimals; for continuous values use the existing policy precision and reject nonfinite values. Build canonical dimensions/targets through `CalibrationStratum` and `CalibrationTarget`, preserving sorted order and exact artifact-model constraints. For a suppressed raw target create a `CalibrationTarget(status="suppressed", value=None, support_count=None, denominator=None, rounding_decimals=0)`.
 
 Create a canonical aggregate payload from only disclosed stratum/target mappings with sorted keys and compact ASCII JSON, hash it with SHA-256, and pass the digest to `CalibrationArtifact` with `source_partition="calibration"`, the prepared schema fingerprint, configured snapshot/artifact ID/timestamp, and configured disclosure policy. Build `CalibrationReport` with `status="AGGREGATES_ONLY"`, aggregate partition/resource counts, target-family and suppression totals, the same hash, and checks for schema, partition, target registry, and disclosure pass. Report only family-level counts; never copy `RawTarget.support_count` or `.denominator` into report JSON.
 
-- [ ] **Step 4: Verify disclosure and artifact compatibility**
+- [x] **Step 4: Verify disclosure and artifact compatibility**
 
 Run focused tests, all existing calibration-artifact tests, Ruff, and whitespace:
 
@@ -279,7 +283,7 @@ UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run ruff check src/synthetic/calibration_disc
 git diff --check
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/synthetic/calibration_disclosure.py src/synthetic/calibrate.py tests/synthetic/test_calibration_disclosure.py
@@ -300,17 +304,17 @@ git commit -m "feat: disclose aggregate calibration artifacts"
 - Consumes: `prepare_input`, `compute_raw_targets`, `disclose_targets`, `build_result`, `CalibrationRunConfig`, and existing `RunDirectory`.
 - Produces: working `calibrate(config)`, `write_calibration_result(result, output)`, and `python -m synthetic.calibrate` behavior.
 
-- [ ] **Step 1: Write failing end-to-end and CLI tests**
+- [x] **Step 1: Write failing end-to-end and CLI tests**
 
 With `write_mock_snapshot`, call `calibrate(test_config(root))` and assert both partitions meet policy, the artifact validates through `CalibrationArtifact.from_mapping`, report status is `AGGREGATES_ONLY`, and repeated calls have identical artifact/report bytes. Add a CLI test that writes a key file, runs all required explicit flags, and checks only `calibration-artifact.json` and `calibration-report.json` appear under the new output. Test existing output collision, missing key/flag, malformed snapshot, and failure leaves no promoted output. Assert `generate.py`, `base_resources.py`, `csv_package.py`, and native trajectory modules do not import `synthetic.calibrate` or `synthetic.calibration_input`.
 
-- [ ] **Step 2: Run integration tests to verify assembly is incomplete**
+- [x] **Step 2: Run integration tests to verify assembly is incomplete**
 
 Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_calibrate_integration.py tests/synthetic/test_calibrate_cli.py`
 
 Expected: failures because `calibrate` still has the Task 1 placeholder and CLI parsing/output are not assembled.
 
-- [ ] **Step 3: Implement orchestration and fail-closed output**
+- [x] **Step 3: Implement orchestration and fail-closed output**
 
 In `calibrate`, validate the config, open a private in-memory DuckDB connection, call `prepare_input`, call `compute_raw_targets`, call `build_result`, and assert report/artifact aggregate hashes match before returning. Close the connection before returning. Do not import `load_calibration_artifact` and do not expose the connection or key.
 
@@ -318,11 +322,11 @@ Implement `write_calibration_result` with `RunDirectory.start(output, result.art
 
 Implement `argparse` flags exactly as specified by the design. Load partition/disclosure policy JSON with strict duplicate-key decoding, load the partition key as exact bytes from a regular non-symlink file, require explicit `--created-at` and `--snapshot`, and use `DEFAULT_AGE_WINDOWS` unless a future versioned age-window file is explicitly added. Do not accept `--real-data`, hidden truth, patient partition files, or generator output paths as alternate inputs.
 
-- [ ] **Step 4: Update docs and boundary tests**
+- [x] **Step 4: Update docs and boundary tests**
 
 Document the governed-only command, key-file handling, synthetic-only CI, target families, suppression semantics, report status, and the fact that this is not prevalence validation, clinical validation, privacy evidence, or release authorization. Keep the existing generator examples unchanged and state that no visible generator path consumes the artifact. Extend the AST boundary test to reject imports/calls to `synthetic.calibrate`, `synthetic.calibration_input`, and `prepare_input` from visible generation/export/trajectory modules while allowing the calibrator package itself.
 
-- [ ] **Step 5: Run task tests, full suite, lint, schema, and commit**
+- [x] **Step 5: Run task tests, full suite, lint, schema, and commit**
 
 Run:
 
@@ -351,15 +355,15 @@ git commit -m "feat: add governed aggregate calibrator"
 - Consumes: the complete feature branch and task review reports.
 - Produces: final review report, clean verification evidence, and a merge-ready branch.
 
-- [ ] **Step 1: Run the repository’s task-level and whole-branch review workflows**
+- [x] **Step 1: Run the repository’s task-level and whole-branch review workflows**
 
 For each task, inspect the diff against its brief, run the focused tests, and record findings in the SDD ledger. Then run a fresh final review covering: exact schema/header/encoding checks, keyed partition non-leakage, no identifier/path/key output, target registry completeness, clean physiology versus observation separation, disclosure behavior, hash determinism, CLI no-overwrite lifecycle, generator boundary, dependency lock, documentation claims, and all acceptance criteria in the spec.
 
-- [ ] **Step 2: Resolve findings through scoped implementer follow-ups**
+- [x] **Step 2: Resolve findings through scoped implementer follow-ups**
 
 If a reviewer reports a real defect, dispatch the responsible implementer with the exact file/line, failing test or reproduction, and requested regression. Re-run the scoped review after each fix. Do not broaden target families, add real data, or weaken suppression/path/partition controls to make a test pass.
 
-- [ ] **Step 3: Run final verification before integration**
+- [x] **Step 3: Run final verification before integration**
 
 Run the full pytest suite, Ruff, schema check, `git diff --check`, and a clean-tree check. Confirm the feature branch contains only the governed calibrator slice and its tests/docs. Check that no files under a real-data root, key material, patient partition, generated artifact, or temporary output are staged.
 
