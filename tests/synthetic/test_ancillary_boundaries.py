@@ -34,17 +34,27 @@ def _unsafe_dependency_names(source: str) -> set[str]:
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                names.add(alias.name.lower())
-                aliases[alias.asname or alias.name.split(".")[0]] = alias.name
+                origin = alias.name.lower()
+                names.add(origin)
+                aliases[alias.asname or alias.name.split(".")[0]] = origin
+                if origin.startswith("synthetic"):
+                    names.add(f"repository-module-import:{origin}")
         elif isinstance(node, ast.ImportFrom):
             if node.level:
                 names.add("relative-import")
             module = (node.module or "").lower()
-            names.add(module)
             for alias in node.names:
-                origin = f"{module}.{alias.name}".strip(".")
+                origin = f"{module}.{alias.name}".strip(".").lower()
                 names.add(origin)
                 aliases[alias.asname or alias.name] = origin
+        elif isinstance(node, ast.Assign):
+            origin = _dotted_name(node.value)
+            if origin:
+                root, *suffix = origin.split(".")
+                resolved = ".".join((aliases.get(root, root), *suffix)).lower()
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        aliases[target.id] = resolved
         elif isinstance(node, ast.Call):
             name = _dotted_name(node.func)
             if name:
@@ -52,13 +62,15 @@ def _unsafe_dependency_names(source: str) -> set[str]:
                 names.add(".".join((aliases.get(root, root), *suffix)).lower())
     forbidden = {
         "calibration", "csv", "duckdb", "export", "filesystem", "heldout", "manifest",
-        "glob", "open", "os", "package", "pathlib", "privacy",
-        "random", "shutil", "subprocess", "synthea", "sys", "tempfile",
+        "fileio", "glob", "multiprocessing", "open", "os", "package", "pathlib",
+        "privacy", "random", "secrets", "shutil", "sqlalchemy", "sqlite3", "subprocess",
+        "synthea", "sys", "tempfile", "uuid",
     }
     return {
         name for name in names
         if forbidden.intersection(name.replace("_", ".").split("."))
         or name == "relative-import"
+        or name.startswith("repository-module-import:")
         or name.startswith("synthetic") and not _allowed_repository_name(name)
     }
 
@@ -66,25 +78,10 @@ def _unsafe_dependency_names(source: str) -> set[str]:
 def _allowed_repository_name(name: str) -> bool:
     name = name.lower()
     for module, symbols in _ALLOWED_REPOSITORY_SYMBOLS.items():
-        if name == module:
-            return True
-        if name.startswith(f"{module}."):
-            return (
-                name.removeprefix(f"{module}.").split(".")[0]
-                in {symbol.lower() for symbol in symbols}
-            )
+        for symbol in symbols:
+            if name == f"{module}.{symbol}".lower():
+                return True
     return False
-
-
-def _repository_imports(source: str) -> set[str]:
-    tree = ast.parse(source)
-    imports = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            imports.update(alias.name for alias in node.names if alias.name.startswith("synthetic."))
-        elif isinstance(node, ast.ImportFrom) and node.module and node.module.startswith("synthetic"):
-            imports.add(node.module)
-    return imports
 
 
 def test_ancillary_module_has_only_native_safe_imports_and_no_lifecycle_calls() -> None:
@@ -95,7 +92,6 @@ def test_ancillary_module_has_only_native_safe_imports_and_no_lifecycle_calls() 
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
             calls.add(node.func.id.lower())
     assert not _unsafe_dependency_names(source)
-    assert _repository_imports(source) <= set(_ALLOWED_REPOSITORY_SYMBOLS)
     assert not calls.intersection({"open", "print", "exit", "quit", "seed", "randint", "write"})
 
 
@@ -129,6 +125,15 @@ def test_dependency_scanner_rejects_qualified_and_imported_forbidden_dependencie
         "from synthetic.cohort import generate_native_cohort; generate_native_cohort(None)",
         "from synthetic.native.resources import project_observed_resources as lifecycle; lifecycle(None, None)",
         "import synthetic.native.resources as lifecycle; lifecycle.project_observed_resources(None, None)",
+        "import synthetic.cohort as cohort",
+        "import synthetic.cohort as cohort; alias = cohort; alias.generate_native_cohort(None)",
+        "from synthetic.native.resources import ResourceShape as Shape; Shape.project_observed_resources(None, None)",
+        "from sqlite3 import connect; connect(':memory:')",
+        "import sqlalchemy; sqlalchemy.create_engine('sqlite://')",
+        "import multiprocessing; multiprocessing.Process()",
+        "from secrets import token_hex; token_hex()",
+        "import uuid; uuid.uuid4()",
+        "import io; io.FileIO('x')",
     ):
         assert _unsafe_dependency_names(source)
 
@@ -141,6 +146,12 @@ def test_dependency_scanner_allows_only_the_named_repository_symbols() -> None:
         "from synthetic.native.resources import ResourceRow, ResourceShape",
     )
     for source in safe:
+        assert not _unsafe_dependency_names(source)
+
+    for source in (
+        "from io import StringIO; StringIO()",
+        "import builtins; builtins.len([])",
+    ):
         assert not _unsafe_dependency_names(source)
 
 
