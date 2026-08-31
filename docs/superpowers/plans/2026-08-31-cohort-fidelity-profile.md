@@ -69,27 +69,27 @@
 - Consumes: Task 1 models, `NativeCohort`, `CohortMember`, calibration profile weights, `DisorderKind`, `ClinicalEvent`, and `RecordedEventKind`.
 - Produces: a working `validate_native_cohort(cohort, policy) -> CohortValidationReport` with cohort-size, visible-demographic, latent-module, observable-phenotype, and recorded-layer comparisons.
 
-- [ ] **Step 1: Write failing layer-evaluation tests**
+- [x] **Step 1: Write failing layer-evaluation tests**
 
   Build deterministic fictional cohorts from existing fixtures. Assert projected `Unknown` target merging, canonical sex/ethnicity/race checks, tolerance pass/fail, minimum support `UNEVALUABLE`, cohort-size `UNEVALUABLE`, latent module counts, observable phenotype event counts, recorded recognition/workup/diagnosis counts, and the explicit absence of real healthy/growth-diagnosis targets. Assert no mutation and deterministic mapping.
 
-- [ ] **Step 2: Run the focused tests to verify they fail**
+- [x] **Step 2: Run the focused tests to verify they fail**
 
   Run: `uv run pytest -q tests/synthetic/test_cohort_validation_layers.py`
 
   Expected: failures because the evaluator is still the Task 1 placeholder.
 
-- [ ] **Step 3: Implement the pure aggregate evaluators**
+- [x] **Step 3: Implement the pure aggregate evaluators**
 
   Validate the `NativeCohort`/policy types, materialize the immutable member tuple, and create fixed comparisons in canonical order. Count visible demographics from `member.demographics`, project aggregate source categories exactly as generation does, normalize category targets, and apply policy support/tolerance. Count trajectory disorder kinds and event-layer evidence without serializing member IDs. Treat layer diagnostics as status-only with null target/difference/tolerance and minimum evidence support. Wrap malformed evaluator object access into fixed aggregate comparisons or a fixed report status; never rethrow raw injected exception text.
 
-- [ ] **Step 4: Run focused tests and lint**
+- [x] **Step 4: Run focused tests and lint**
 
   Run: `uv run pytest -q tests/synthetic/test_cohort_validation_layers.py tests/synthetic/test_cohort_validation_models.py && uv run ruff check src/synthetic/cohort_validation.py tests/synthetic/test_cohort_validation_layers.py tests/synthetic/test_cohort_validation_models.py`
 
   Expected: all focused tests pass and Ruff reports no issues.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
   ```bash
   git add src/synthetic/cohort_validation.py tests/synthetic/test_cohort_validation_layers.py
