@@ -76,6 +76,64 @@ def test_validate_observed_resources_marks_nonbundle_or_missing_private_evidence
     assert _check(report, "evidence") == ("UNEVALUABLE", "INSUFFICIENT_EVIDENCE")
 
 
+def test_validate_observed_resources_rejects_bad_visible_visit_without_source_evidence() -> None:
+    bundle = _bundle()
+    row = bundle.rows["visits"][0]
+    values = row.to_mapping()
+    values["visit_id"] = "real-visit"
+    object.__setattr__(row, "values", tuple(values.items()))
+    object.__setattr__(bundle, "source_frame", None)
+
+    report = validate_observed_resources(bundle)
+
+    assert report.status is ResourceValidationStatus.FAIL
+    assert _check(report, "visit_references") == ("FAIL", "VISIT_REFERENCE_INVALID")
+
+
+def test_validate_observed_resources_rejects_bad_visible_measurement_without_source_evidence() -> None:
+    bundle = _bundle()
+    row = next(row for row in bundle.rows["visits"] if row.to_mapping()["weight_oz"] != "")
+    values = row.to_mapping()
+    values["weight_oz"] = -1.0
+    object.__setattr__(row, "values", tuple(values.items()))
+    object.__setattr__(bundle, "source_frame", None)
+
+    report = validate_observed_resources(bundle)
+
+    assert report.status is ResourceValidationStatus.FAIL
+    assert _check(report, "measurements") == ("FAIL", "MEASUREMENT_INVALID")
+
+
+def test_validate_observed_resources_rejects_bad_descendant_or_diagnosis_slot_without_source_evidence() -> None:
+    descendant_bundle = _bundle()
+    descendant = descendant_bundle.clinical_descendants[0]
+    object.__setattr__(descendant, "code", "not-a-fictional-code")
+    object.__setattr__(descendant_bundle, "source_frame", None)
+
+    descendant_report = validate_observed_resources(descendant_bundle)
+
+    assert descendant_report.status is ResourceValidationStatus.FAIL
+    assert _check(descendant_report, "clinical_descendants") == (
+        "FAIL",
+        "CLINICAL_DESCENDANT_INVALID",
+    )
+
+    slot_bundle = _bundle()
+    row = next(row for row in slot_bundle.rows["visits"] if row.to_mapping()["enc_diag_1"] != "")
+    values = row.to_mapping()
+    values["enc_diag_1"] = "not-a-fictional-code"
+    object.__setattr__(row, "values", tuple(values.items()))
+    object.__setattr__(slot_bundle, "source_frame", None)
+
+    slot_report = validate_observed_resources(slot_bundle)
+
+    assert slot_report.status is ResourceValidationStatus.FAIL
+    assert _check(slot_report, "clinical_descendants") == (
+        "FAIL",
+        "CLINICAL_DESCENDANT_INVALID",
+    )
+
+
 def test_validate_observed_resources_rejects_patient_field_order_and_visit_key_violations() -> None:
     patient_bundle = _bundle()
     patient_row = patient_bundle.rows["patients"][0]

@@ -647,24 +647,16 @@ def _resource_visits(
     bundle: ObservedResourceBundle,
 ) -> tuple[tuple[dict[str, object], ...], ObservationFrame | None]:
     source = _source_frame(bundle)
-    if source is None:
-        return (), None
     return tuple(_row_values(row) for row in _bundle_rows(bundle, "visits")), source
 
 
-def _check_resource_visit_references(
+def _check_local_visit_references(
     bundle: ObservedResourceBundle,
-) -> tuple[ResourceValidationStatus, str]:
-    rows, source = _resource_visits(bundle)
-    if source is None:
-        return ResourceValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
-    if _source_validation_status(source) in (None, ObservationValidationStatus.UNEVALUABLE):
-        return ResourceValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
-    if len(rows) != len(source.visits):
-        return ResourceValidationStatus.FAIL, "VISIT_REFERENCE_INVALID"
+    rows: tuple[dict[str, object], ...],
+) -> bool:
     seen: set[str] = set()
     previous_age = -1
-    for row, visit in zip(rows, source.visits, strict=True):
+    for row in rows:
         visit_id = row.get("visit_id")
         age_days = row.get("age_in_days")
         if (
@@ -675,21 +667,61 @@ def _check_resource_visit_references(
             or age_days < 0
             or age_days <= previous_age
             or row.get("patient_id") != bundle.patient_id
-            or visit_id != visit.visit_id
-            or age_days != visit.age_days
             or row.get("encounter_type") != "Office Visit"
             or row.get("orig_enc_source_Epic_yn") != "N"
         ):
-            return ResourceValidationStatus.FAIL, "VISIT_REFERENCE_INVALID"
+            return False
         seen.add(visit_id)
         previous_age = age_days
+    return True
+
+
+def _check_resource_visit_references(
+    bundle: ObservedResourceBundle,
+) -> tuple[ResourceValidationStatus, str]:
+    rows, source = _resource_visits(bundle)
+    if not _check_local_visit_references(bundle, rows):
+        return ResourceValidationStatus.FAIL, "VISIT_REFERENCE_INVALID"
+    if source is None:
+        return ResourceValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
+    if _source_validation_status(source) in (None, ObservationValidationStatus.UNEVALUABLE):
+        return ResourceValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
+    if len(rows) != len(source.visits):
+        return ResourceValidationStatus.FAIL, "VISIT_REFERENCE_INVALID"
+    for row, visit in zip(rows, source.visits, strict=True):
+        visit_id = row.get("visit_id")
+        age_days = row.get("age_in_days")
+        if visit_id != visit.visit_id or age_days != visit.age_days:
+            return ResourceValidationStatus.FAIL, "VISIT_REFERENCE_INVALID"
     return ResourceValidationStatus.PASS, "OK"
+
+
+def _check_local_measurements(rows: tuple[dict[str, object], ...]) -> bool:
+    for row in rows:
+        values = {field_name: row.get(field_name) for field_name in _VISIT_MEASUREMENT_FIELDS.values()}
+        if any(value != "" and not _is_positive_real(value) for value in values.values()):
+            return False
+        height = values["height_in"]
+        weight = values["weight_oz"]
+        bmi = values["BMI"]
+        if height == "" or weight == "":
+            if bmi != "":
+                return False
+            continue
+        if bmi == "":
+            return False
+        expected_bmi = (float(weight) / 35.274) / (float(height) * 2.54 / 100.0) ** 2
+        if not math.isclose(float(bmi), expected_bmi, rel_tol=1e-9, abs_tol=1e-9):
+            return False
+    return True
 
 
 def _check_resource_measurements(
     bundle: ObservedResourceBundle,
 ) -> tuple[ResourceValidationStatus, str]:
     rows, source = _resource_visits(bundle)
+    if not _check_local_measurements(rows):
+        return ResourceValidationStatus.FAIL, "MEASUREMENT_INVALID"
     if source is None:
         return ResourceValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
     if _source_validation_status(source) in (None, ObservationValidationStatus.UNEVALUABLE):
@@ -764,9 +796,54 @@ def _expected_descendants(
     return tuple(expected)
 
 
+def _check_local_clinical_descendants(bundle: ObservedResourceBundle) -> bool:
+    rows, _ = _resource_visits(bundle)
+    rows_by_visit: dict[str, dict[str, object]] = {}
+    for row in rows:
+        visit_id = row.get("visit_id")
+        if not _is_synthetic_visit_id(visit_id) or visit_id in rows_by_visit:
+            return False
+        rows_by_visit[visit_id] = row
+    diagnosis_slots = tuple(
+        field_name
+        for field_name in bundle.shape.field_names("visits")
+        if field_name.startswith("enc_diag_")
+    )
+    codes_by_visit: dict[str, list[str]] = {visit_id: [] for visit_id in rows_by_visit}
+    if not isinstance(bundle.clinical_descendants, tuple):
+        return False
+    for descendant in bundle.clinical_descendants:
+        if (
+            not isinstance(descendant, ClinicalDescendant)
+            or not _is_synthetic_patient_id(descendant.patient_id)
+            or descendant.patient_id != bundle.patient_id
+            or not _is_synthetic_visit_id(descendant.visit_id)
+            or descendant.visit_id not in rows_by_visit
+            or not isinstance(descendant.age_days, int)
+            or isinstance(descendant.age_days, bool)
+            or descendant.age_days < 0
+            or descendant.age_days != rows_by_visit[descendant.visit_id].get("age_in_days")
+            or not isinstance(descendant.event_kind, RecordedEventKind)
+            or descendant.code != RECORDED_EVENT_CODES.get(descendant.event_kind)
+        ):
+            return False
+        codes_by_visit[descendant.visit_id].append(descendant.code)
+    for visit_id, codes in codes_by_visit.items():
+        if len(codes) > len(diagnosis_slots):
+            return False
+        if tuple(rows_by_visit[visit_id].get(slot) for slot in diagnosis_slots) != (
+            *codes,
+            *("" for _ in range(len(diagnosis_slots) - len(codes))),
+        ):
+            return False
+    return True
+
+
 def _check_resource_clinical_descendants(
     bundle: ObservedResourceBundle,
 ) -> tuple[ResourceValidationStatus, str]:
+    if not _check_local_clinical_descendants(bundle):
+        return ResourceValidationStatus.FAIL, "CLINICAL_DESCENDANT_INVALID"
     source = _source_frame(bundle)
     if source is None:
         return ResourceValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
