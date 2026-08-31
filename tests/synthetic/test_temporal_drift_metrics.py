@@ -67,6 +67,8 @@ def test_half_open_windows_assign_bounds_once_and_follow_policy_order() -> None:
         ("mean_inter_visit_days", "a_late"),
         ("mean_visit_count_step", "a_late"),
         ("recorded_event_rate_step", "a_late"),
+        ("causal_event_order", None),
+        ("causal_event_timing", None),
     ]
     assert _comparison(report, "growth_window_coverage", "z_early").observed == 0.5
     assert _comparison(report, "growth_window_coverage", "a_late").observed == 1.0

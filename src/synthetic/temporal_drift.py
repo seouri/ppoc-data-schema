@@ -12,7 +12,20 @@ from itertools import pairwise
 from types import MappingProxyType
 
 from synthetic.calibration import require_aggregate_safe_token
-from synthetic.cohort import NativeCohort
+from synthetic.cohort import CohortMember, NativeCohort
+from synthetic.models import (
+    AgeRegimeDisorderTrajectory,
+    AgeRegimePoint,
+    AgeRegimeTrajectory,
+    ClinicalEvent,
+)
+from synthetic.native.observations import (
+    ObservationFrame,
+    ObservationTruth,
+    ObservationWindow,
+    ObservedVisit,
+    RecordedEvent,
+)
 
 TEMPORAL_DRIFT_REPORT_VERSION = "temporal-drift-report-v1"
 
@@ -57,6 +70,21 @@ _CHECK_ORDER = MappingProxyType(
     {name: index for index, name in enumerate(_TEMPORAL_CHECK_NAMES)}
 )
 _STATUS_ORDER = MappingProxyType({"PASS": 0, "FAIL": 1, "UNEVALUABLE": 2})
+_CAUSAL_PHASE_ORDER = MappingProxyType(
+    {
+        "latent_onset": 0,
+        "observable_phenotype": 1,
+        "recognition_opportunity": 2,
+        "workup": 3,
+        "recorded_diagnosis": 4,
+        "treatment_start": 5,
+        "treatment_response": 6,
+        "treatment_nonresponse": 6,
+    }
+)
+_TREATMENT_OUTCOMES = frozenset(
+    {"treatment_response", "treatment_nonresponse"}
+)
 
 
 class TemporalDriftStatus(str, Enum):
@@ -723,6 +751,13 @@ def _visible_check(
     name: str, comparisons: tuple[TemporalComparison, ...]
 ) -> TemporalCheck:
     if any(
+        comparison.reason_code == "STRUCTURAL_INVALID"
+        for comparison in comparisons
+    ):
+        return TemporalCheck(
+            name, TemporalDriftStatus.FAIL, "STRUCTURAL_INVALID"
+        )
+    if any(
         comparison.status is TemporalDriftStatus.FAIL for comparison in comparisons
     ):
         return TemporalCheck(name, TemporalDriftStatus.FAIL, "OUTSIDE_BOUND")
@@ -736,31 +771,267 @@ def _visible_check(
     return TemporalCheck(name, TemporalDriftStatus.PASS, "WITHIN_BOUND")
 
 
-def validate_temporal_drift(
-    cohort: NativeCohort, policy: TemporalDriftPolicy
+def _causal_comparison(
+    metric: str, status: TemporalDriftStatus
+) -> TemporalComparison:
+    reason_code = {
+        TemporalDriftStatus.PASS: "OK",
+        TemporalDriftStatus.FAIL: "STRUCTURAL_INVALID",
+        TemporalDriftStatus.UNEVALUABLE: "MISSING_EVIDENCE",
+    }[status]
+    return TemporalComparison(
+        metric=metric,
+        window_id=None,
+        status=status,
+        reason_code=reason_code,
+        observed=None,
+        target=None,
+        difference=None,
+        support_count=None,
+    )
+
+
+def _structural_comparison(
+    metric: str, window_id: str | None
+) -> TemporalComparison:
+    return TemporalComparison(
+        metric=metric,
+        window_id=window_id,
+        status=TemporalDriftStatus.FAIL,
+        reason_code="STRUCTURAL_INVALID",
+        observed=None,
+        target=None,
+        difference=None,
+        support_count=None,
+    )
+
+
+def _source_event_order_is_valid(
+    member: CohortMember, events: tuple[ClinicalEvent, ...]
+) -> bool:
+    trajectory = member.trajectory
+    frame = member.frame
+    points = trajectory.physiology.points
+    if not points:
+        return False
+    patient_id = member.demographics.patient_id
+    if frame.patient_id != patient_id or points[0].patient_id != patient_id:
+        return False
+
+    phases: list[int] = []
+    ages: list[int] = []
+    event_types: list[str] = []
+    for event in events:
+        if not isinstance(event, ClinicalEvent):
+            return False
+        phase = _CAUSAL_PHASE_ORDER.get(event.event_type)
+        if phase is None:
+            return False
+        if event.patient_id != patient_id or event.code is not None:
+            return False
+        if not isinstance(event.hidden, bool):
+            return False
+        if event.event_type == "latent_onset" and not event.hidden:
+            return False
+        if isinstance(event.age_days, bool) or not isinstance(event.age_days, int):
+            return False
+        phases.append(phase)
+        ages.append(event.age_days)
+        event_types.append(event.event_type)
+
+    if any(current <= previous for previous, current in pairwise(phases)):
+        return False
+    if any(current < previous for previous, current in pairwise(ages)):
+        return False
+
+    outcomes = [
+        index
+        for index, event_type in enumerate(event_types)
+        if event_type in _TREATMENT_OUTCOMES
+    ]
+    treatment_starts = [
+        index
+        for index, event_type in enumerate(event_types)
+        if event_type == "treatment_start"
+    ]
+    if outcomes and (
+        len(outcomes) != 1
+        or len(treatment_starts) != 1
+        or outcomes[0] != len(event_types) - 1
+        or outcomes[0] <= treatment_starts[0]
+    ):
+        return False
+    return not treatment_starts or len(outcomes) == 1
+
+
+def _source_event_timing_is_valid(
+    member: CohortMember,
+    truth: ObservationTruth,
+    events: tuple[ClinicalEvent, ...],
+) -> bool:
+    frame = member.frame
+    window = frame.window
+    if not isinstance(window, ObservationWindow) or truth.window != window:
+        return False
+    bounds = (
+        window.start_age_days,
+        window.effective_end_age_days,
+        window.administrative_end_age_days,
+    )
+    if any(isinstance(value, bool) or not isinstance(value, int) for value in bounds):
+        return False
+    if not 0 <= bounds[0] < bounds[1] <= bounds[2]:
+        return False
+    if any(
+        isinstance(event.age_days, bool)
+        or not isinstance(event.age_days, int)
+        or event.age_days < 0
+        for event in events
+    ):
+        return False
+    if not isinstance(frame.visits, tuple) or not isinstance(frame.events, tuple):
+        return False
+    if not all(isinstance(item, ObservedVisit) for item in frame.visits):
+        return False
+    if not all(isinstance(item, RecordedEvent) for item in frame.events):
+        return False
+    visible_records = (*frame.visits, *frame.events)
+    return all(
+        item.patient_id == frame.patient_id
+        and not isinstance(item.age_days, bool)
+        and isinstance(item.age_days, int)
+        and window.start_age_days
+        <= item.age_days
+        < window.effective_end_age_days
+        for item in visible_records
+    )
+
+
+def _member_causal_statuses(
+    member: CohortMember,
+) -> tuple[TemporalDriftStatus, TemporalDriftStatus]:
+    try:
+        if not isinstance(member, CohortMember):
+            return TemporalDriftStatus.FAIL, TemporalDriftStatus.FAIL
+        if not isinstance(member.trajectory, AgeRegimeDisorderTrajectory):
+            return TemporalDriftStatus.FAIL, TemporalDriftStatus.FAIL
+        if not isinstance(member.trajectory.physiology, AgeRegimeTrajectory):
+            return TemporalDriftStatus.FAIL, TemporalDriftStatus.FAIL
+        points = member.trajectory.physiology.points
+        if (
+            not isinstance(points, tuple)
+            or not points
+            or not all(isinstance(point, AgeRegimePoint) for point in points)
+        ):
+            return TemporalDriftStatus.FAIL, TemporalDriftStatus.FAIL
+        if not isinstance(member.frame, ObservationFrame):
+            return TemporalDriftStatus.FAIL, TemporalDriftStatus.FAIL
+        truth = member.frame.truth
+        if truth is None:
+            return (
+                TemporalDriftStatus.UNEVALUABLE,
+                TemporalDriftStatus.UNEVALUABLE,
+            )
+        if not isinstance(truth, ObservationTruth):
+            return TemporalDriftStatus.FAIL, TemporalDriftStatus.FAIL
+        source_events = truth.source_events
+        trajectory_events = member.trajectory.events
+        if not isinstance(source_events, tuple) or not isinstance(
+            trajectory_events, tuple
+        ):
+            return TemporalDriftStatus.FAIL, TemporalDriftStatus.FAIL
+        if not source_events or not trajectory_events:
+            return (
+                TemporalDriftStatus.UNEVALUABLE,
+                TemporalDriftStatus.UNEVALUABLE,
+            )
+        if source_events != trajectory_events:
+            return TemporalDriftStatus.FAIL, TemporalDriftStatus.FAIL
+        order_status = (
+            TemporalDriftStatus.PASS
+            if _source_event_order_is_valid(member, source_events)
+            else TemporalDriftStatus.FAIL
+        )
+        timing_status = (
+            TemporalDriftStatus.PASS
+            if _source_event_timing_is_valid(member, truth, source_events)
+            else TemporalDriftStatus.FAIL
+        )
+        return order_status, timing_status
+    except Exception:  # noqa: BLE001 - injected evidence must fail closed
+        return TemporalDriftStatus.FAIL, TemporalDriftStatus.FAIL
+
+
+def _aggregate_causal_status(
+    statuses: tuple[TemporalDriftStatus, ...]
+) -> TemporalDriftStatus:
+    if not statuses:
+        return TemporalDriftStatus.UNEVALUABLE
+    if any(status is TemporalDriftStatus.FAIL for status in statuses):
+        return TemporalDriftStatus.FAIL
+    if any(status is TemporalDriftStatus.UNEVALUABLE for status in statuses):
+        return TemporalDriftStatus.UNEVALUABLE
+    return TemporalDriftStatus.PASS
+
+
+def _causal_comparisons(
+    members: tuple[CohortMember, ...],
+) -> tuple[TemporalComparison, TemporalComparison]:
+    member_statuses = tuple(_member_causal_statuses(member) for member in members)
+    order_status = _aggregate_causal_status(
+        tuple(statuses[0] for statuses in member_statuses)
+    )
+    timing_status = _aggregate_causal_status(
+        tuple(statuses[1] for statuses in member_statuses)
+    )
+    return (
+        _causal_comparison("causal_event_order", order_status),
+        _causal_comparison("causal_event_timing", timing_status),
+    )
+
+
+def _structural_comparisons(
+    policy: TemporalDriftPolicy,
+) -> tuple[TemporalComparison, ...]:
+    comparisons = [
+        _structural_comparison(metric, window.window_id)
+        for window in policy.windows
+        for metric in (
+            "growth_window_coverage",
+            "visible_visit_coverage",
+            "visible_event_rate",
+            "mean_inter_visit_days",
+        )
+    ]
+    comparisons.extend(
+        _structural_comparison(metric, current.window_id)
+        for _previous, current in pairwise(policy.windows)
+        for metric in ("mean_visit_count_step", "recorded_event_rate_step")
+    )
+    comparisons.extend(
+        (
+            _structural_comparison("causal_event_order", None),
+            _structural_comparison("causal_event_timing", None),
+        )
+    )
+    return tuple(comparisons)
+
+
+def _causal_check(comparison: TemporalComparison) -> TemporalCheck:
+    return TemporalCheck(
+        comparison.metric,
+        comparison.status,
+        comparison.reason_code,
+    )
+
+
+def _assemble_report(
+    cohort: NativeCohort,
+    policy: TemporalDriftPolicy,
+    comparisons: tuple[TemporalComparison, ...],
+    *,
+    required_window_lacks_support: bool,
 ) -> TemporalDriftReport:
-    """Evaluate aggregate visible temporal metrics for a fictional native cohort."""
-
-    if not isinstance(cohort, NativeCohort):
-        raise TypeError("cohort must be a NativeCohort")
-    if not isinstance(policy, TemporalDriftPolicy):
-        raise TypeError("policy must be a TemporalDriftPolicy")
-
-    window_metrics = tuple(
-        _extract_visible_window_metrics(cohort, window) for window in policy.windows
-    )
-    window_comparisons = tuple(
-        comparison
-        for metrics in window_metrics
-        for comparison in _window_comparisons(metrics)
-    )
-    step_comparisons = tuple(
-        comparison
-        for previous, current in pairwise(window_metrics)
-        for comparison in _step_comparisons(previous, current)
-    )
-    comparisons = window_comparisons + step_comparisons
-
     coverage_comparisons = tuple(
         comparison
         for comparison in comparisons
@@ -769,11 +1040,17 @@ def validate_temporal_drift(
     sequence_comparisons = tuple(
         comparison
         for comparison in comparisons
-        if comparison.metric not in _LOWER_BOUND_METRICS
+        if comparison.metric not in _LOWER_BOUND_METRICS | _CAUSAL_METRICS
     )
+    causal_by_metric = {
+        comparison.metric: comparison
+        for comparison in comparisons
+        if comparison.metric in _CAUSAL_METRICS
+    }
+    cohort_is_too_small = len(cohort.members) < policy.minimum_cohort_size
     cohort_check = (
         TemporalCheck("cohort_size", TemporalDriftStatus.PASS, "OK")
-        if len(cohort.members) >= policy.minimum_cohort_size
+        if not cohort_is_too_small
         else TemporalCheck(
             "cohort_size", TemporalDriftStatus.UNEVALUABLE, "COHORT_TOO_SMALL"
         )
@@ -782,28 +1059,26 @@ def validate_temporal_drift(
         cohort_check,
         _visible_check("window_coverage", coverage_comparisons),
         _visible_check("sequence_metrics", sequence_comparisons),
-        TemporalCheck(
-            "causal_event_order",
-            TemporalDriftStatus.UNEVALUABLE,
-            "MISSING_EVIDENCE",
-        ),
-        TemporalCheck(
-            "causal_event_timing",
-            TemporalDriftStatus.UNEVALUABLE,
-            "MISSING_EVIDENCE",
-        ),
+        _causal_check(causal_by_metric["causal_event_order"]),
+        _causal_check(causal_by_metric["causal_event_timing"]),
     )
-    # Task 3 adds causal comparisons and final status aggregation. Until then,
-    # visible failures fail closed; an otherwise visible-valid report remains
-    # unevaluable because causal evidence has not yet been assessed.
-    report_status = (
-        TemporalDriftStatus.FAIL
-        if any(
-            comparison.status is TemporalDriftStatus.FAIL
-            for comparison in comparisons
-        )
-        else TemporalDriftStatus.UNEVALUABLE
+    unevaluable_count = sum(
+        comparison.status is TemporalDriftStatus.UNEVALUABLE
+        for comparison in comparisons
     )
+    if any(
+        comparison.status is TemporalDriftStatus.FAIL for comparison in comparisons
+    ):
+        report_status = TemporalDriftStatus.FAIL
+    elif (
+        cohort_is_too_small
+        or unevaluable_count > policy.maximum_unevaluable_checks
+        or required_window_lacks_support
+    ):
+        report_status = TemporalDriftStatus.UNEVALUABLE
+    else:
+        report_status = TemporalDriftStatus.PASS
+
     counted_statuses = Counter(
         comparison.status.value for comparison in comparisons
     )
@@ -824,6 +1099,59 @@ def validate_temporal_drift(
         checks=checks,
         comparisons=comparisons,
         _window_order=tuple(window.window_id for window in policy.windows),
+    )
+
+
+def validate_temporal_drift(
+    cohort: NativeCohort, policy: TemporalDriftPolicy
+) -> TemporalDriftReport:
+    """Evaluate visible and causal temporal drift for a fictional native cohort."""
+
+    if not isinstance(cohort, NativeCohort):
+        raise TypeError("cohort must be a NativeCohort")
+    if not isinstance(policy, TemporalDriftPolicy):
+        raise TypeError("policy must be a TemporalDriftPolicy")
+
+    try:
+        if not isinstance(cohort.members, tuple) or not all(
+            isinstance(member, CohortMember) for member in cohort.members
+        ):
+            raise TypeError("members must contain CohortMember values")
+        window_metrics = tuple(
+            _extract_visible_window_metrics(cohort, window)
+            for window in policy.windows
+        )
+    except Exception:  # noqa: BLE001 - injected evidence must fail closed
+        return _assemble_report(
+            cohort,
+            policy,
+            _structural_comparisons(policy),
+            required_window_lacks_support=False,
+        )
+
+    window_comparisons = tuple(
+        comparison
+        for metrics in window_metrics
+        for comparison in _window_comparisons(metrics)
+    )
+    step_comparisons = tuple(
+        comparison
+        for previous, current in pairwise(window_metrics)
+        for comparison in _step_comparisons(previous, current)
+    )
+    comparisons = (
+        window_comparisons
+        + step_comparisons
+        + _causal_comparisons(cohort.members)
+    )
+    return _assemble_report(
+        cohort,
+        policy,
+        comparisons,
+        required_window_lacks_support=any(
+            metrics.member_support < metrics.window.minimum_member_support
+            for metrics in window_metrics
+        ),
     )
 
 
