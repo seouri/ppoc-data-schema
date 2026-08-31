@@ -8,16 +8,16 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
-import duckdb
-
 from synthetic.calibration import (
     contains_indicator_components,
     contains_serialized_metadata_unsafe_material,
 )
-from synthetic.calibration_input import CalibrationInput
 
 if TYPE_CHECKING:
+    import duckdb
+
     from synthetic.calibrate import CalibrationAgeWindow, CalibrationRunConfig
+    from synthetic.calibration_input import CalibrationInput
 
 TARGET_REGISTRY_VERSION = "calibration-targets-v1"
 
@@ -950,7 +950,10 @@ def compute_raw_targets(
     partition_label: str = "calibration",
 ) -> tuple[RawTarget, ...]:
     """Compute fixed calibration-partition aggregates without returning identifiers."""
+    import duckdb
+
     from synthetic.calibrate import CalibrationRunConfig
+    from synthetic.calibration_input import CalibrationInput
 
     if not isinstance(connection, duckdb.DuckDBPyConnection):
         raise TypeError("connection must be a DuckDB connection")

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import ast
 import inspect
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -254,6 +256,29 @@ def test_cohort_module_has_no_governed_input_or_output_lifecycle_boundary() -> N
     assert _forbidden_arguments(
         set(inspect.signature(generate_native_cohort).parameters)
     ) == set()
+
+
+def test_importing_cohort_does_not_load_governed_target_runtime_dependencies() -> None:
+    """Catches ordinary cohort import transitively loading governed target machinery."""
+    probe = (
+        "import sys; import synthetic.cohort; "
+        "print('duckdb' in sys.modules); "
+        "print('synthetic.calibration_input' in sys.modules)"
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            probe,
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == ["False", "False"]
 
 
 def test_visible_native_generation_has_no_governed_or_package_lifecycle_dependency() -> None:
