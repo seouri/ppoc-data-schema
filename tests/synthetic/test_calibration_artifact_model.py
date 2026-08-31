@@ -375,6 +375,27 @@ def test_target_name_rejects_hidden_or_record_like_indicators(target_name: str) 
         CalibrationArtifact.from_mapping(valid_mapping_with_target(target_name=target_name))
 
 
+def test_target_name_accepts_approved_growth_dx_flag_without_weakening_component_guards() -> None:
+    artifact = CalibrationArtifact.from_mapping(
+        valid_mapping_with_target(target_name="growth_dx_flag")
+    )
+
+    assert artifact.strata[0].targets[0].target_name == "growth_dx_flag"
+    for unsafe in (
+        "row",
+        "height_row_mean",
+        "heightRowMean",
+        "ABCRowMetric",
+        "patient_count",
+        "APIKeyMetric",
+        "SYN-P-001",
+        "target.csv",
+        "privacyAuditScore",
+    ):
+        with pytest.raises(ValueError, match="target_name"):
+            CalibrationArtifact.from_mapping(valid_mapping_with_target(target_name=unsafe))
+
+
 @pytest.mark.parametrize(
     "target_name",
     [

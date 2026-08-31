@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -19,12 +20,12 @@ from tests.synthetic.calibration_fixtures import write_mock_snapshot
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def _test_config(root: Path) -> CalibrationRunConfig:
+def _test_config(root: Path, *, artifact_id: str = "calibration-v1") -> CalibrationRunConfig:
     return CalibrationRunConfig(
         data_root=root,
         source_descriptor=ROOT / "datapackage.json",
         source_snapshot="synthetic-v1",
-        artifact_id="calibration-v1",
+        artifact_id=artifact_id,
         created_at="2026-08-31T12:00:00Z",
         partition_policy=PartitionPolicy("partition-v1", "1", "key-2026", 5_000, 2),
         disclosure_policy=CalibrationDisclosurePolicy("disclosure-v1", "1", 2, 3),
@@ -66,6 +67,43 @@ def test_write_calibration_result_promotes_only_two_reparsed_files(tmp_path: Pat
     assert json.loads((output / "calibration-report.json").read_bytes()) == result.report.to_mapping()
 
 
+@pytest.mark.parametrize("artifact_id", ["calibration:v1", "a" + ":" * 127])
+def test_write_calibration_result_accepts_full_public_artifact_id_grammar(
+    tmp_path: Path, artifact_id: str
+) -> None:
+    result = calibrate(
+        _test_config(write_mock_snapshot(tmp_path / "snapshot"), artifact_id=artifact_id)
+    )
+    output = tmp_path / "calibration"
+
+    write_calibration_result(result, output)
+
+    artifact = json.loads((output / "calibration-artifact.json").read_text(encoding="ascii"))
+    assert artifact["artifact_id"] == artifact_id
+    assert sorted(path.name for path in output.iterdir()) == [
+        "calibration-artifact.json",
+        "calibration-report.json",
+    ]
+
+
+@pytest.mark.parametrize("suffix", ["partial", "failed"])
+def test_write_calibration_result_refuses_hashed_lifecycle_collision(
+    tmp_path: Path, suffix: str
+) -> None:
+    artifact_id = "calibration:v1"
+    result = calibrate(
+        _test_config(write_mock_snapshot(tmp_path / "snapshot"), artifact_id=artifact_id)
+    )
+    output = tmp_path / "calibration"
+    lifecycle_id = hashlib.sha256(artifact_id.encode("ascii")).hexdigest()
+    (tmp_path / f".calibration.{lifecycle_id}.{suffix}").mkdir()
+
+    with pytest.raises(FileExistsError, match="lifecycle"):
+        write_calibration_result(result, output)
+
+    assert not output.exists()
+
+
 @pytest.mark.parametrize("kind", ["directory", "file", "symlink"])
 def test_write_calibration_result_refuses_every_existing_output_kind(
     tmp_path: Path, kind: str
@@ -102,7 +140,8 @@ def test_write_failure_archives_only_aggregate_reason_without_promoting(
         write_calibration_result(result, output)
 
     assert not output.exists()
-    failed = tmp_path / ".calibration.calibration-v1.failed"
+    lifecycle_id = hashlib.sha256(b"calibration-v1").hexdigest()
+    failed = tmp_path / f".calibration.{lifecycle_id}.failed"
     failure = json.loads((failed / "failure.json").read_text(encoding="utf-8"))
     assert failure == {"status": "FAILED", "reason": "calibration output validation failed"}
     assert "raw detail" not in (failed / "failure.json").read_text(encoding="utf-8")

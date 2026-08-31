@@ -92,6 +92,7 @@ def write_mock_snapshot(root: Path, *, patient_count: int = 12) -> Path:
         patient_id = _patient_id(index)
         sex = sex_values[(index - 1) % len(sex_values)]
         ethnicity = ethnicities[(index - 1) % len(ethnicities)]
+        augmented_ethnicity = ethnicity if ethnicity != "Unknown" else ""
         race_1 = races[(index - 1) % len(races)]
         demographics = {
             "patient_id": patient_id,
@@ -104,7 +105,7 @@ def write_mock_snapshot(root: Path, *, patient_count: int = 12) -> Path:
         rows_by_name["patients_augmented"].append(
             _row(
                 fields_by_name["patients_augmented"],
-                **demographics,
+                **(demographics | {"ethnicity": augmented_ethnicity}),
                 healthy_flag="1" if index % 2 else "0",
                 chronic_dx_flag="1" if index % 3 == 0 else "0",
                 growth_dx_flag="1" if index % 4 == 0 else "0",
@@ -140,7 +141,7 @@ def write_mock_snapshot(root: Path, *, patient_count: int = 12) -> Path:
                     fields_by_name["visits_augmented"],
                     **values,
                     sex=sex,
-                    ethnicity=ethnicity,
+                    ethnicity=augmented_ethnicity,
                     race_1=race_1,
                     age_in_months=str(age / 30.4375),
                     age_in_years=str(age / 365.25),
@@ -157,10 +158,19 @@ def write_mock_snapshot(root: Path, *, patient_count: int = 12) -> Path:
                     bmi_z_score="" if nullable_measurement else "0.15",
                 )
             )
-        base_visit_id = _visit_id(index, 0) if index % 2 else ""
+        nullable_link_id = (
+            _visit_id(index, 0)
+            if index % 3 == 1
+            else f"SYN-ORPHAN-L-{index:03d}"
+            if index % 3 == 2
+            else ""
+        )
+        medication_link_id = (
+            _visit_id(index, 0) if index % 2 else f"SYN-ORPHAN-M-{index:03d}"
+        )
         rows_by_name["labs"].append(
             _row(
-                fields_by_name["labs"], patient_id=patient_id, visit_id=base_visit_id,
+                fields_by_name["labs"], patient_id=patient_id, visit_id=nullable_link_id,
                 lab_order_id=f"SYN-L-{index:03d}", result_line_num="1", lab_order_date_age_in_days="100",
                 lab_procedure_name="Synthetic panel", lab_procedure_description="Synthetic test",
                 lab_result_date_age_in_days="101", result_component_name="Synthetic component",
@@ -169,10 +179,10 @@ def write_mock_snapshot(root: Path, *, patient_count: int = 12) -> Path:
         )
         rows_by_name["medications"].append(
             _row(
-                fields_by_name["medications"], patient_id=patient_id, visit_id=base_visit_id,
+                fields_by_name["medications"], patient_id=patient_id, visit_id=medication_link_id,
                 med_record_id=f"SYN-M-{index:03d}", med_order_date_age_in_days="100",
                 med_start_date_age_in_days="100", med_end_date_age_in_days="101",
-                med_record_type="Synthetic", med_simple_generic_name="synthetic-medication",
+                med_record_type="Internal", med_simple_generic_name="synthetic-medication",
             )
         )
         rows_by_name["problem_list"].append(
@@ -183,7 +193,7 @@ def write_mock_snapshot(root: Path, *, patient_count: int = 12) -> Path:
         )
         rows_by_name["referrals"].append(
             _row(
-                fields_by_name["referrals"], patient_id=patient_id, visit_id=base_visit_id,
+                fields_by_name["referrals"], patient_id=patient_id, visit_id=nullable_link_id,
                 referral_id=f"SYN-R-{index:03d}", referral_date_age_in_days="100",
                 requested_specialty="Synthetic specialty", referral_number_of_visits="1",
             )

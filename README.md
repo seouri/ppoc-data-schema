@@ -34,7 +34,7 @@ The package expects these CSVs beside `datapackage.json`. To keep the descriptor
 
 - `patients.csv` and `patients_augmented.csv` contain one row per `patient_id`.
 - `visits.csv` and `visits_augmented-20251209150512.csv` contain `patient_id` and `visit_id`.
-- `labs.csv`, `medications.csv`, and `referrals.csv` link to patients through `patient_id`; their `visit_id` values are nullable and may not match a visit row.
+- `labs.csv`, `medications.csv`, and `referrals.csv` link to patients through `patient_id`; lab and referral `visit_id` values are nullable, medication `visit_id` is required, and nonnull values in all three resources may not match a visit row.
 - `problem_list.csv` links to patients through `patient_id` and has no direct visit key.
 
 Use the `foreignKeys` and `x-logicalForeignKeys` entries in `datapackage.json` for the declared join relationships and their row-level link statistics.

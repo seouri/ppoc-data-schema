@@ -38,6 +38,10 @@ _RESOURCE_NAMES = (
     "referrals",
 )
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+_DUCKDB_ENCODINGS = {
+    "utf-8": "utf-8",
+    "iso-8859-1": "latin-1",
+}
 
 
 @dataclass(frozen=True)
@@ -197,20 +201,35 @@ def _stage_relation(
     quote = dialect.get("quoteChar", '"')
     if not isinstance(quote, str) or len(quote) != 1:
         raise ValueError(f"{name} resource dialect is invalid")
+    declared_encoding = resource.get("encoding", "utf-8")
+    if not isinstance(declared_encoding, str) or declared_encoding not in _DUCKDB_ENCODINGS:
+        raise ValueError(f"{name} resource encoding is unsupported")
+    duckdb_encoding = _DUCKDB_ENCODINGS[declared_encoding]
     try:
         connection.execute(
             f'CREATE OR REPLACE TEMP TABLE "{relation}" AS '
             "SELECT * FROM read_csv(?, header = true, all_varchar = true, delim = ?, quote = ?, "
-            "escape = ?, nullstr = ?, strict_mode = true)",
-            [f"/dev/fd/{source.fd}", dialect.get("delimiter", ","), quote, quote, "\0"],
+            "escape = ?, nullstr = ?, encoding = ?, strict_mode = true)",
+            [
+                f"/dev/fd/{source.fd}",
+                dialect.get("delimiter", ","),
+                quote,
+                quote,
+                "\0",
+                duckdb_encoding,
+            ],
         )
     except duckdb.Error as exc:
         raise ValueError(f"{name} resource cannot be staged") from exc
     return relation
 
 
-def _has_rows(connection: duckdb.DuckDBPyConnection, query: str) -> bool:
-    return connection.execute(query).fetchone()[0] > 0
+def _has_rows(
+    connection: duckdb.DuckDBPyConnection,
+    query: str,
+    parameters: tuple[object, ...] = (),
+) -> bool:
+    return connection.execute(query, parameters).fetchone()[0] > 0
 
 
 def _validate_relation(
@@ -222,31 +241,75 @@ def _validate_relation(
     if _has_rows(connection, f'SELECT count(*) FROM "{relation}" WHERE patient_id IS NULL OR patient_id = \'\''):
         raise ValueError(f"{name}.patient_id must be nonempty")
     if primary_key:
-        if not isinstance(primary_key, str):
+        primary_fields = (primary_key,) if isinstance(primary_key, str) else tuple(primary_key)
+        if not primary_fields or not all(isinstance(field, str) for field in primary_fields):
             raise ValueError(f"{name} primary key is invalid")
+        for field_name in primary_fields:
+            if _has_rows(
+                connection,
+                f'SELECT count(*) FROM "{relation}" '
+                f'WHERE "{field_name}" IS NULL OR "{field_name}" = \'\'',
+            ):
+                raise ValueError(f"{name}.{field_name} must be nonempty")
+        selected_fields = ", ".join(f'"{field_name}"' for field_name in primary_fields)
         if _has_rows(
             connection,
-            f'SELECT count(*) FROM (SELECT "{primary_key}" FROM "{relation}" '
-            f'GROUP BY "{primary_key}" HAVING count(*) > 1)',
+            f'SELECT count(*) FROM (SELECT {selected_fields} FROM "{relation}" '
+            f'GROUP BY {selected_fields} HAVING count(*) > 1)',
         ):
-            raise ValueError(f"{name}.{primary_key} must be unique")
+            raise ValueError(f"{name} primary key must be unique")
     for field in fields:
         constraints = field.get("constraints") or {}
         field_name = field.get("name")
         field_type = field.get("type")
-        if (
-            not isinstance(field_name, str)
-            or field_type not in {"integer", "number"}
-            or not constraints.get("required")
-        ):
+        if not isinstance(field_name, str) or not isinstance(constraints, Mapping):
             continue
-        cast_type = "BIGINT" if field_type == "integer" else "DOUBLE"
-        if _has_rows(
+        quoted = f'"{field_name}"'
+        present = f"coalesce({quoted}, '') <> ''"
+        if constraints.get("required") and _has_rows(
             connection,
-            f'SELECT count(*) FROM "{relation}" WHERE "{field_name}" IS NULL OR "{field_name}" = \'\' '
-            f'OR try_cast("{field_name}" AS {cast_type}) IS NULL',
+            f'SELECT count(*) FROM "{relation}" WHERE {quoted} IS NULL OR {quoted} = \'\'',
         ):
-            raise ValueError(f"{name}.{field_name} must be a valid {field_type}")
+            raise ValueError(f"{name}.{field_name} must be nonempty")
+        cast_type: str | None = None
+        if field_type == "integer":
+            cast_type = "BIGINT"
+            if _has_rows(
+                connection,
+                f'SELECT count(*) FROM "{relation}" WHERE {present} AND '
+                f'(NOT regexp_full_match({quoted}, \'[+-]?[0-9]+\') '
+                f'OR try_cast({quoted} AS BIGINT) IS NULL)',
+            ):
+                raise ValueError(f"{name}.{field_name} must be a valid integer")
+        elif field_type == "number":
+            cast_type = "DOUBLE"
+            if _has_rows(
+                connection,
+                f'SELECT count(*) FROM "{relation}" WHERE {present} AND '
+                f'(try_cast({quoted} AS DOUBLE) IS NULL '
+                f'OR NOT isfinite(try_cast({quoted} AS DOUBLE)))',
+            ):
+                raise ValueError(f"{name}.{field_name} must be a valid finite number")
+        if "enum" in constraints:
+            enum_values = tuple(str(value) for value in constraints["enum"])
+            placeholders = ", ".join("?" for _ in enum_values)
+            if not enum_values or _has_rows(
+                connection,
+                f'SELECT count(*) FROM "{relation}" WHERE {present} '
+                f"AND {quoted} NOT IN ({placeholders})",
+                enum_values,
+            ):
+                raise ValueError(f"{name}.{field_name} must satisfy enum")
+        for constraint_name, operator in (("minimum", "<"), ("maximum", ">")):
+            if constraint_name not in constraints or cast_type is None:
+                continue
+            if _has_rows(
+                connection,
+                f'SELECT count(*) FROM "{relation}" WHERE {present} '
+                f'AND try_cast({quoted} AS {cast_type}) {operator} ?',
+                (constraints[constraint_name],),
+            ):
+                raise ValueError(f"{name}.{field_name} must satisfy {constraint_name}")
 
 
 def _partition_counts(connection: duckdb.DuckDBPyConnection, relation: str) -> dict[str, int]:

@@ -14,6 +14,7 @@ from synthetic.calibrate import DEFAULT_AGE_WINDOWS, CalibrationRunConfig, Parti
 from synthetic.calibration import CalibrationDisclosurePolicy
 from synthetic.calibration_input import assign_partition, prepare_input
 from synthetic.schema_contract import load_descriptor, resource_spec, schema_fingerprint
+from synthetic.validate import validate_structure
 from tests.synthetic.calibration_fixtures import write_mock_snapshot
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -41,6 +42,32 @@ def _rewrite_csv(path: Path, mutate: object) -> None:
     mutate(rows)  # type: ignore[operator]
     with path.open("w", newline="", encoding="utf-8") as handle:
         csv.writer(handle).writerows(rows)
+
+
+def _rewrite_resource_csv(root: Path, name: str, mutate: object) -> None:
+    descriptor = load_descriptor(ROOT / "datapackage.json")
+    resource = resource_spec(descriptor, name)
+    path = root / resource["path"]
+    encoding = resource.get("encoding", "utf-8")
+    dialect = resource.get("dialect", {})
+    with path.open(newline="", encoding=encoding) as handle:
+        rows = list(
+            csv.reader(
+                handle,
+                delimiter=dialect.get("delimiter", ","),
+                quotechar=dialect.get("quoteChar", '"'),
+                doublequote=dialect.get("doubleQuote", True),
+                strict=True,
+            )
+        )
+    mutate(rows)  # type: ignore[operator]
+    with path.open("w", newline="", encoding=encoding) as handle:
+        csv.writer(
+            handle,
+            delimiter=dialect.get("delimiter", ","),
+            quotechar=dialect.get("quoteChar", '"'),
+            doublequote=dialect.get("doubleQuote", True),
+        ).writerows(rows)
 
 
 def _resource_path(root: Path, name: str) -> Path:
@@ -118,6 +145,95 @@ def test_prepare_input_proves_all_rows_use_one_patient_partition(tmp_path: Path)
     assert set(prepared.partition_summary.resource_row_counts) == set(prepared.resource_names)
     assert "SYN-P-001" not in json.dumps(prepared.partition_summary.to_mapping())
     assert "SYN-P-001" not in json.dumps(prepared.to_mapping())
+
+
+def test_mock_snapshot_is_exact_descriptor_valid(tmp_path: Path) -> None:
+    root = write_mock_snapshot(tmp_path / "snapshot")
+    report = validate_structure(root, load_descriptor(ROOT / "datapackage.json"))
+
+    assert report.errors == ()
+
+
+def test_prepare_input_stages_non_ascii_latin1_using_descriptor_encoding(tmp_path: Path) -> None:
+    root = _valid_snapshot(tmp_path / "snapshot")
+
+    def add_latin1(rows: list[list[str]]) -> None:
+        rows[1][rows[0].index("lab_procedure_description")] = "Jos\u00e9 panel"
+
+    _rewrite_resource_csv(root, "labs", add_latin1)
+    with duckdb.connect(":memory:") as connection:
+        prepare_input(connection, config_for(root))
+        value = connection.execute(
+            "SELECT lab_procedure_description FROM calibration_stage_labs LIMIT 1"
+        ).fetchone()[0]
+
+    assert value == "Jos\u00e9 panel"
+
+
+@pytest.mark.parametrize("malformed", ["100.5", "1e2"])
+def test_prepare_input_rejects_nonlexical_required_integers(
+    tmp_path: Path, malformed: str
+) -> None:
+    root = _valid_snapshot(tmp_path / "snapshot")
+
+    def corrupt(rows: list[list[str]]) -> None:
+        rows[1][rows[0].index("age_in_days")] = malformed
+
+    _rewrite_resource_csv(root, "visits", corrupt)
+    with duckdb.connect(":memory:") as connection, pytest.raises(
+        ValueError, match=r"visits.*age_in_days"
+    ):
+        prepare_input(connection, config_for(root))
+
+
+def test_prepare_input_rejects_blank_required_string(tmp_path: Path) -> None:
+    root = _valid_snapshot(tmp_path / "snapshot")
+
+    def corrupt(rows: list[list[str]]) -> None:
+        rows[1][rows[0].index("encounter_type")] = ""
+
+    _rewrite_resource_csv(root, "visits", corrupt)
+    with duckdb.connect(":memory:") as connection, pytest.raises(
+        ValueError, match=r"visits.*encounter_type"
+    ):
+        prepare_input(connection, config_for(root))
+
+
+def test_prepare_input_rejects_blank_declared_primary_key(tmp_path: Path) -> None:
+    root = _valid_snapshot(tmp_path / "snapshot")
+
+    def corrupt(rows: list[list[str]]) -> None:
+        rows[1][rows[0].index("visit_id")] = ""
+
+    _rewrite_resource_csv(root, "visits", corrupt)
+    with duckdb.connect(":memory:") as connection, pytest.raises(
+        ValueError, match=r"visits.*visit_id"
+    ):
+        prepare_input(connection, config_for(root))
+
+
+@pytest.mark.parametrize(
+    ("resource", "field", "malformed"),
+    [
+        ("patients_augmented", "healthy_flag", "2"),
+        ("patients_augmented", "visits_count", "-1"),
+        ("visits", "bmi_percentile", "101"),
+        ("visits", "bmi_percentile", "NaN"),
+    ],
+)
+def test_prepare_input_enforces_descriptor_enum_range_and_finite_constraints(
+    tmp_path: Path, resource: str, field: str, malformed: str
+) -> None:
+    root = _valid_snapshot(tmp_path / "snapshot")
+
+    def corrupt(rows: list[list[str]]) -> None:
+        rows[1][rows[0].index(field)] = malformed
+
+    _rewrite_resource_csv(root, resource, corrupt)
+    with duckdb.connect(":memory:") as connection, pytest.raises(
+        ValueError, match=rf"{resource}.*{field}"
+    ):
+        prepare_input(connection, config_for(root))
 
 
 @pytest.mark.parametrize(

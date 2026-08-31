@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -566,12 +567,19 @@ def _refuse_existing_lifecycle_path(output: Path, artifact_id: str) -> None:
     if os.path.lexists(output):
         raise FileExistsError("calibration output already exists")
     resolved = output.resolve()
+    lifecycle_id = _lifecycle_run_id(artifact_id)
     lifecycle_paths = (
-        resolved.parent / f".{resolved.name}.{artifact_id}.partial",
-        resolved.parent / f".{resolved.name}.{artifact_id}.failed",
+        resolved.parent / f".{resolved.name}.{lifecycle_id}.partial",
+        resolved.parent / f".{resolved.name}.{lifecycle_id}.failed",
     )
     if any(os.path.lexists(path) for path in lifecycle_paths):
         raise FileExistsError("calibration output lifecycle path already exists")
+
+
+def _lifecycle_run_id(artifact_id: str) -> str:
+    """Derive a fixed filesystem-safe lifecycle token without exposing the public ID."""
+    validated = _require_token(artifact_id, "artifact_id")
+    return hashlib.sha256(validated.encode("ascii")).hexdigest()
 
 
 def write_calibration_result(result: CalibrationResult, output: Path) -> None:
@@ -581,7 +589,7 @@ def write_calibration_result(result: CalibrationResult, output: Path) -> None:
     if not isinstance(output, Path):
         raise TypeError("output must be a Path")
     _refuse_existing_lifecycle_path(output, result.artifact.artifact_id)
-    run = RunDirectory.start(output, result.artifact.artifact_id)
+    run = RunDirectory.start(output, _lifecycle_run_id(result.artifact.artifact_id))
     try:
         _write_exclusive_fsynced(
             run.partial_path / _ARTIFACT_FILENAME, _artifact_json_bytes(result.artifact)

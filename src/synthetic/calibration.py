@@ -7,7 +7,7 @@ import math
 import os
 import re
 import stat
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from errno import ELOOP
@@ -132,10 +132,29 @@ def _require_finite_number(value: object, field: str) -> float:
     return number
 
 
+def _metadata_components(value: str) -> tuple[str, ...]:
+    acronym_separated = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1 \2", value)
+    normalized = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", acronym_separated)
+    return tuple(re.findall(r"[a-z0-9]+", normalized.lower()))
+
+
 def contains_aggregate_unsafe_material(value: str) -> bool:
-    normalized = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", value)
-    words = frozenset(re.findall(r"[a-z0-9]+", normalized.lower()))
+    words = frozenset(_metadata_components(value))
     return bool(words & _AGGREGATE_UNSAFE_WORDS)
+
+
+def contains_indicator_components(value: str, indicators: Collection[str]) -> bool:
+    """Match whole delimiter/camel-case components, including multiword indicators."""
+    components = _metadata_components(value)
+    for indicator in indicators:
+        indicator_components = _metadata_components(indicator)
+        width = len(indicator_components)
+        if width and any(
+            components[index : index + width] == indicator_components
+            for index in range(len(components) - width + 1)
+        ):
+            return True
+    return False
 
 
 def contains_serialized_metadata_unsafe_material(value: str) -> bool:
@@ -156,7 +175,7 @@ def _validate_token(value: object, field: str, *, dimension_value: bool = False)
         raise ValueError(f"{field} must be an ASCII token without whitespace or path separators")
     if contains_serialized_metadata_unsafe_material(token):
         raise ValueError(f"{field} must be aggregate-safe")
-    if any(indicator in token.lower() for indicator in _RECORD_INDICATORS):
+    if contains_indicator_components(token, _RECORD_INDICATORS):
         raise ValueError(f"{field} must not contain record or hidden-state indicators")
     return token
 
@@ -172,7 +191,7 @@ def _validate_target_name(value: object) -> str:
         raise ValueError("target_name must be an ASCII token without whitespace or path separators")
     if contains_serialized_metadata_unsafe_material(target_name):
         raise ValueError("target_name must be aggregate-safe")
-    if any(indicator in target_name.lower() for indicator in _TARGET_NAME_INDICATORS):
+    if contains_indicator_components(target_name, _TARGET_NAME_INDICATORS):
         raise ValueError("target_name must not contain record, hidden-state, or attack-output indicators")
     return target_name
 

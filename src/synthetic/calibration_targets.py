@@ -10,6 +10,10 @@ from typing import TYPE_CHECKING
 
 import duckdb
 
+from synthetic.calibration import (
+    contains_indicator_components,
+    contains_serialized_metadata_unsafe_material,
+)
 from synthetic.calibration_input import CalibrationInput
 
 if TYPE_CHECKING:
@@ -91,7 +95,7 @@ ENCOUNTER_CATEGORY_SLUGS = {
 RECORDED_FLAGS = {
     "healthy_flag": "healthy_flag",
     "chronic_dx_flag": "chronic_dx_flag",
-    "growth_dx_flag": "stature_dx_flag",
+    "growth_dx_flag": "growth_dx_flag",
     "ever_stunting_flag": "ever_stunting_flag",
     "ever_wasting_flag": "ever_wasting_flag",
     "ever_underweight_flag": "ever_underweight_flag",
@@ -190,7 +194,9 @@ class RawTarget:
             raise ValueError("stratum_id must use canonical sorted dimensions")
         if not isinstance(self.target_name, str) or _TOKEN_RE.fullmatch(self.target_name) is None:
             raise ValueError("target_name must be an ASCII token")
-        if any(indicator in self.target_name.lower() for indicator in _TARGET_NAME_INDICATORS):
+        if contains_serialized_metadata_unsafe_material(
+            self.target_name
+        ) or contains_indicator_components(self.target_name, _TARGET_NAME_INDICATORS):
             raise ValueError("target_name must be aggregate-only")
         if self.family not in _FAMILIES:
             raise ValueError("family is not approved")
@@ -549,13 +555,16 @@ def _utilization_targets(connection: duckdb.DuckDBPyConnection) -> list[RawTarge
         link_row = connection.execute(
             f"""
             WITH calibration_links AS (
-                SELECT source.visit_id
+                SELECT source.patient_id, source.visit_id
                 FROM "calibration_stage_{relation}" AS source
                 JOIN patient_partitions AS partitions USING (patient_id)
                 WHERE partitions.partition_label = 'calibration'
             )
-            SELECT count(*), count(*) FILTER (WHERE coalesce(visit_id, '') <> '')
-            FROM calibration_links
+            SELECT count(*), count(*) FILTER (WHERE visits.visit_id IS NOT NULL)
+            FROM calibration_links AS source
+            LEFT JOIN calibration_stage_visits AS visits
+                ON source.patient_id = visits.patient_id
+               AND source.visit_id = visits.visit_id
             """
         ).fetchone()
         link_denominator, link_support = link_row

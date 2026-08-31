@@ -1,5 +1,6 @@
 import csv
 import json
+import re
 from collections.abc import Callable
 from pathlib import Path
 
@@ -216,7 +217,7 @@ def test_recorded_flag_targets_use_patient_level_positive_support(snapshot: Path
     expected = {
         "healthy_flag": 5,
         "chronic_dx_flag": 4,
-        "stature_dx_flag": 2,
+        "growth_dx_flag": 2,
         "ever_stunting_flag": 2,
         "ever_wasting_flag": 2,
         "ever_underweight_flag": 1,
@@ -335,7 +336,32 @@ def test_singleton_interval_is_emitted_for_minimum_one_policy(tmp_path: Path) ->
 
 
 def test_observation_targets_separate_availability_and_logical_associations(snapshot: Path) -> None:
-    targets = _computed(snapshot)
+    config = _config(snapshot)
+    with duckdb.connect(":memory:") as connection:
+        prepared = prepare_input(connection, config)
+        observed_link_counts: dict[str, tuple[int, int, int]] = {}
+        for resource in ("labs", "medications", "referrals"):
+            observed_link_counts[resource] = connection.execute(
+                f"""
+                WITH calibration_links AS (
+                    SELECT source.patient_id, source.visit_id
+                    FROM "calibration_stage_{resource}" AS source
+                    JOIN patient_partitions AS partitions USING (patient_id)
+                    WHERE partitions.partition_label = 'calibration'
+                )
+                SELECT
+                    count(*) FILTER (WHERE visits.visit_id IS NOT NULL) AS resolved,
+                    count(*) FILTER (
+                        WHERE coalesce(source.visit_id, '') <> '' AND visits.visit_id IS NULL
+                    ) AS orphan,
+                    count(*) FILTER (WHERE coalesce(source.visit_id, '') = '') AS null_link
+                FROM calibration_links AS source
+                LEFT JOIN calibration_stage_visits AS visits
+                    ON source.patient_id = visits.patient_id
+                   AND source.visit_id = visits.visit_id
+                """
+            ).fetchone()
+        targets = compute_raw_targets(connection, prepared, config)
     infancy = "age_regime=infancy"
     childhood = "age_regime=childhood"
 
@@ -350,14 +376,24 @@ def test_observation_targets_separate_availability_and_logical_associations(snap
             childhood_target.denominator,
         ) == (5 / 9, 5, 9)
 
-    for name in (
-        "lab_encounter_association",
-        "medication_encounter_association",
-        "referral_encounter_association",
-    ):
+    assert observed_link_counts == {
+        "labs": (2, 3, 4),
+        "medications": (5, 4, 0),
+        "referrals": (2, 3, 4),
+    }
+    expected_associations = {
+        "lab_encounter_association": 2,
+        "medication_encounter_association": 5,
+        "referral_encounter_association": 2,
+    }
+    for name, support in expected_associations.items():
         target = _find(targets, "visit_window=all", name)
         assert target.family == "observation"
-        assert (target.value, target.support_count, target.denominator) == (5 / 9, 5, 9)
+        assert (target.value, target.support_count, target.denominator) == (
+            support / 9,
+            support,
+            9,
+        )
 
 
 def test_clean_physiology_emits_mean_sample_sd_and_approved_quantiles(snapshot: Path) -> None:
@@ -525,7 +561,16 @@ def test_targets_are_canonical_sorted_aggregate_only_and_safe(snapshot: Path) ->
     )
     for target in targets:
         assert target.stratum_id == "|".join(f"{key}={value}" for key, value in target.dimensions)
-        assert not any(indicator in target.target_name.lower() for indicator in forbidden)
+        normalized = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", target.target_name)
+        components = set(re.findall(r"[a-z0-9]+", normalized.lower()))
+        assert not components & {
+            "patient", "visit", "row", "sequence", "truth", "candidate", "match", "resource"
+        }
+        assert not any(
+            indicator in target.target_name.lower()
+            for indicator in forbidden
+            if "_" in indicator
+        )
     payload = json.dumps([target.__dict__ for target in targets])
     assert "SYN-P-" not in payload
     assert "SYN-V-" not in payload
@@ -540,3 +585,43 @@ def test_raw_count_requires_a_nonnegative_integer_without_denominator() -> None:
         RawTarget("outcome_layer=observed", dimensions, "cohort_total", "demographics", "count", "person", 3.0, 3, None)
     with pytest.raises(ValueError, match="denominator"):
         RawTarget("outcome_layer=observed", dimensions, "cohort_total", "demographics", "count", "person", 3, 3, 3)
+
+
+def test_raw_target_accepts_approved_growth_dx_name_and_rejects_segmented_indicators() -> None:
+    dimensions = (("outcome_layer", "observed"),)
+    accepted = RawTarget(
+        "outcome_layer=observed",
+        dimensions,
+        "growth_dx_flag",
+        "recorded_outcome",
+        "proportion",
+        "proportion",
+        0.5,
+        2,
+        4,
+    )
+
+    assert accepted.target_name == "growth_dx_flag"
+    for unsafe in (
+        "row",
+        "height_row_mean",
+        "heightRowMean",
+        "ABCRowMetric",
+        "patient_count",
+        "APIKeyMetric",
+        "SYN-P-001",
+        "target.csv",
+        "privacyAuditScore",
+    ):
+        with pytest.raises(ValueError, match="aggregate-only"):
+            RawTarget(
+                "outcome_layer=observed",
+                dimensions,
+                unsafe,
+                "recorded_outcome",
+                "proportion",
+                "proportion",
+                0.5,
+                2,
+                4,
+            )

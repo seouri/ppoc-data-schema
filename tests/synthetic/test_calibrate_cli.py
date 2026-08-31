@@ -43,7 +43,9 @@ def _write_inputs(tmp_path: Path) -> tuple[Path, Path, Path]:
     return partition_policy, disclosure_policy, key_file
 
 
-def _command(tmp_path: Path, output: Path) -> list[str]:
+def _command(
+    tmp_path: Path, output: Path, *, artifact_id: str = "calibration-v1"
+) -> list[str]:
     partition_policy, disclosure_policy, key_file = _write_inputs(tmp_path)
     return [
         sys.executable,
@@ -56,7 +58,7 @@ def _command(tmp_path: Path, output: Path) -> list[str]:
         "--snapshot",
         "synthetic-v1",
         "--artifact-id",
-        "calibration-v1",
+        artifact_id,
         "--created-at",
         "2026-08-31T12:00:00Z",
         "--partition-policy",
@@ -80,6 +82,23 @@ def test_cli_requires_all_governed_inputs_and_writes_only_aggregate_outputs(tmp_
     completed = _run(_command(tmp_path, output))
 
     assert completed.returncode == 0, completed.stderr
+    assert sorted(path.name for path in output.iterdir()) == [
+        "calibration-artifact.json",
+        "calibration-report.json",
+    ]
+
+
+@pytest.mark.parametrize("artifact_id", ["calibration:v1", "a" + ":" * 127])
+def test_cli_accepts_full_public_artifact_id_grammar(
+    tmp_path: Path, artifact_id: str
+) -> None:
+    output = tmp_path / "output"
+
+    completed = _run(_command(tmp_path, output, artifact_id=artifact_id))
+
+    assert completed.returncode == 0, completed.stderr
+    artifact = json.loads((output / "calibration-artifact.json").read_text(encoding="ascii"))
+    assert artifact["artifact_id"] == artifact_id
     assert sorted(path.name for path in output.iterdir()) == [
         "calibration-artifact.json",
         "calibration-report.json",
