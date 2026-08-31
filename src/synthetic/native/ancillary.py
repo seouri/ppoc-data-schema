@@ -8,6 +8,7 @@ for keeping exact descriptor-shaped rows and aggregate reports immutable.
 
 from __future__ import annotations
 
+import hashlib
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -16,6 +17,13 @@ from types import MappingProxyType
 from typing import ClassVar
 
 from synthetic.cohort import CohortMember
+from synthetic.models import ClinicalEvent, DisorderKind
+from synthetic.native.observations import (
+    ObservationValidationStatus,
+    RecordedEvent,
+    RecordedEventKind,
+    validate_observation_frame,
+)
 from synthetic.native.resources import ResourceRow, ResourceShape
 
 GHD_ANCILLARY_RESOURCE_NAMES = (
@@ -333,10 +341,246 @@ def project_ghd_ancillary_resources(
     shape: ResourceShape,
     policy: GhdAncillaryPolicy,
 ) -> AncillaryResourceProjection:
-    """Reserve the pure GHD projection seam for the next implementation task."""
+    """Project visible fictional GHD descendants into exact-schema rows.
 
-    del member, shape, policy
-    raise AncillaryProjectionUnavailable("GHD ancillary projection unavailable")
+    The member contains evaluator-held trajectory and observation evidence,
+    but only the recorded descendants and their visible visit links are used
+    to assemble rows.  Any malformed or unevaluable input crosses the same
+    fixed error boundary so callers never receive private source details.
+    """
+
+    # Preserve Task 1's fixed assembly behavior for callers that have not
+    # entered the typed projection boundary at all.  Once typed arguments are
+    # present, downstream failures use the Task 2 pathway error below.
+    if not isinstance(member, CohortMember) or not isinstance(shape, ResourceShape) or not isinstance(
+        policy, GhdAncillaryPolicy
+    ):
+        raise AncillaryProjectionUnavailable("GHD ancillary projection unavailable")
+
+    try:
+        frame = member.frame
+        observation_report = validate_observation_frame(frame)
+        if observation_report.status is not ObservationValidationStatus.PASS:
+            raise ValueError("observation frame did not pass validation")
+
+        patient_id = member.demographics.patient_id
+        trajectory = member.trajectory
+        if (
+            patient_id != frame.patient_id
+            or trajectory.physiology.points[0].patient_id != patient_id
+        ):
+            raise ValueError("member objects must identify one synthetic patient")
+
+        rows: dict[str, tuple[ResourceRow, ...]] = {
+            resource_name: () for resource_name in GHD_ANCILLARY_RESOURCE_NAMES
+        }
+
+        if trajectory.disorder.kind is not DisorderKind.GROWTH_HORMONE_DEFICIENCY:
+            return AncillaryResourceProjection(patient_id, shape, rows)
+
+        # Check the complete descriptor columns before constructing any rows.
+        # This preserves the existing resource projection's fail-closed shape
+        # boundary while still allowing future descriptor columns to remain
+        # empty-string missing values.
+        required_fields = {
+            "labs": {
+                "patient_id",
+                "visit_id",
+                "lab_order_id",
+                "result_line_num",
+                "lab_order_date_age_in_days",
+                "lab_result_date_age_in_days",
+                "result_component_name",
+                "result_loinc_code",
+                "result_value",
+                "result_flag",
+            },
+            "medications": {
+                "patient_id",
+                "visit_id",
+                "med_record_id",
+                "med_order_date_age_in_days",
+                "med_start_date_age_in_days",
+                "med_end_date_age_in_days",
+                "med_record_type",
+                "med_simple_generic_name",
+            },
+            "problem_list": {
+                "patient_id",
+                "problem_list_id",
+                "noted_date_age_in_days",
+                "resolved_date_age_in_days",
+                "pl_diag",
+            },
+            "referrals": {
+                "patient_id",
+                "visit_id",
+                "referral_id",
+                "referral_date_age_in_days",
+                "requested_specialty",
+                "referral_number_of_visits",
+            },
+        }
+        if any(
+            not required_fields[name].issubset(shape.field_names(name))
+            for name in GHD_ANCILLARY_RESOURCE_NAMES
+        ):
+            raise ValueError("descriptor shape lacks required ancillary fields")
+
+        # A realized opportunity and its visible visit occupy the same stable
+        # order as in project_observed_resources.  No age-based re-matching is
+        # performed: source-point identity is the causal link.
+        realized_opportunities = tuple(
+            opportunity
+            for opportunity in frame.truth.opportunities
+            if opportunity.realized
+        )
+        if len(realized_opportunities) != len(frame.visits):
+            raise ValueError("realized opportunities do not match visible visits")
+        visit_by_source_point = {
+            opportunity.source_point_index: visit
+            for opportunity, visit in zip(
+                realized_opportunities,
+                frame.visits,
+                strict=True,
+            )
+        }
+
+        visible_events: dict[RecordedEventKind, RecordedEvent] = {}
+        for event in frame.events:
+            if not isinstance(event, RecordedEvent):
+                raise TypeError("visible events must be RecordedEvent values")
+            visible_events.setdefault(event.event_kind, event)
+
+        def visible_visit(event_kind: RecordedEventKind):
+            event = visible_events.get(event_kind)
+            if event is None or event.opportunity_index is None:
+                return None
+            visit = visit_by_source_point.get(event.opportunity_index)
+            if visit is None:
+                raise ValueError("recorded event has no linked visible visit")
+            return event, visit
+
+        recognition = visible_visit(RecordedEventKind.RECOGNITION)
+        if recognition is not None:
+            event, visit = recognition
+            rows["referrals"] = (
+                _resource_row(
+                    "referrals",
+                    {
+                        "patient_id": patient_id,
+                        "visit_id": visit.visit_id,
+                        "referral_id": _synthetic_ancillary_id(
+                            patient_id, "referral"
+                        ),
+                        "referral_date_age_in_days": event.age_days,
+                        "requested_specialty": GHD_REFERRAL_SPECIALTY,
+                        "referral_number_of_visits": 1,
+                    },
+                    shape,
+                ),
+            )
+
+        workup = visible_visit(RecordedEventKind.WORKUP)
+        if workup is not None:
+            event, visit = workup
+            lab_order_id = _synthetic_ancillary_id(patient_id, "lab-order")
+            rows["labs"] = tuple(
+                _resource_row(
+                    "labs",
+                    {
+                        "patient_id": patient_id,
+                        "visit_id": visit.visit_id,
+                        "lab_order_id": lab_order_id,
+                        "result_line_num": line_number,
+                        "lab_order_date_age_in_days": event.age_days,
+                        "lab_result_date_age_in_days": (
+                            event.age_days + policy.result_delay_days
+                        ),
+                        "result_component_name": component,
+                        "result_loinc_code": "",
+                        "result_value": "",
+                        "result_flag": GHD_LAB_RESULT_FLAG,
+                    },
+                    shape,
+                )
+                for line_number, component in enumerate(
+                    GHD_LAB_COMPONENT_NAMES, start=1
+                )
+            )
+
+        diagnosis = visible_visit(RecordedEventKind.DIAGNOSIS)
+        if diagnosis is not None:
+            diagnosis_event, diagnosis_visit = diagnosis
+            rows["problem_list"] = (
+                _resource_row(
+                    "problem_list",
+                    {
+                        "patient_id": patient_id,
+                        "problem_list_id": _synthetic_ancillary_id(
+                            patient_id, "problem-list"
+                        ),
+                        "noted_date_age_in_days": diagnosis_event.age_days,
+                        "resolved_date_age_in_days": "",
+                        "pl_diag": GHD_DIAGNOSIS_CODE,
+                    },
+                    shape,
+                ),
+            )
+
+            treatment = next(
+                (
+                    event
+                    for event in trajectory.events
+                    if isinstance(event, ClinicalEvent)
+                    and event.event_type == "treatment_start"
+                ),
+                None,
+            )
+            if treatment is not None:
+                if treatment.age_days < diagnosis_event.age_days:
+                    raise ValueError("treatment must follow diagnosis")
+                rows["medications"] = (
+                    _resource_row(
+                        "medications",
+                        {
+                            "patient_id": patient_id,
+                            "visit_id": diagnosis_visit.visit_id,
+                            "med_record_id": _synthetic_ancillary_id(
+                                patient_id, "medication"
+                            ),
+                            "med_order_date_age_in_days": diagnosis_event.age_days,
+                            "med_start_date_age_in_days": treatment.age_days,
+                            "med_end_date_age_in_days": "",
+                            "med_record_type": GHD_MEDICATION_RECORD_TYPE,
+                            "med_simple_generic_name": GHD_MEDICATION_NAME,
+                        },
+                        shape,
+                    ),
+                )
+
+        return AncillaryResourceProjection(patient_id, shape, rows)
+    except Exception:  # noqa: BLE001 - evaluator boundary is intentionally redacted
+        raise AncillaryProjectionUnavailable("GHD ancillary projection failed") from None
+
+
+def _synthetic_ancillary_id(patient_id: str, role: str) -> str:
+    """Return an opaque deterministic token for one fixed ancillary role."""
+
+    material = f"ghd-ancillary-id-v1\x1f{patient_id}\x1f{role}".encode()
+    return f"syn-{hashlib.sha256(material).hexdigest()}"
+
+
+def _resource_row(
+    resource_name: str,
+    values: Mapping[str, object],
+    shape: ResourceShape,
+) -> ResourceRow:
+    fields = shape.field_names(resource_name)
+    return ResourceRow(
+        resource_name,
+        tuple((field_name, values.get(field_name, "")) for field_name in fields),
+    )
 
 
 def validate_ghd_ancillary_resources(
