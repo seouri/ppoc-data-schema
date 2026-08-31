@@ -190,8 +190,8 @@ def test_attribute_and_composition_controls_use_private_labels_and_explicit_prio
     composition = _evaluate_composition_control(policy, generated, (generated,))
     missing_prior = _evaluate_composition_control(policy, generated, ())
 
-    assert attribute.status == "FAIL"
-    assert attribute.metrics["attribute_disclosure_advantage"] > 0
+    assert attribute.status == "UNEVALUABLE"
+    assert attribute.metrics == {}
     assert unchanged_attribute == attribute
     assert composition.status == "FAIL"
     assert composition.metrics["composition_reproduction_rate"] == 1.0
@@ -199,6 +199,27 @@ def test_attribute_and_composition_controls_use_private_labels_and_explicit_prio
     for result in (attribute, composition):
         assert "trajectory-one" not in repr(result)
         assert "diagnosis" not in repr(result).lower()
+
+
+def test_attribute_attack_uses_non_target_features_and_not_generated_diagnosis() -> None:
+    """Catches circularly predicting a linked reference label with that same reference label."""
+    policy = _policy(required_controls=["exact_reproduction", "identifier_overlap"])
+    reference = _package(
+        _profile("a", "0"), _profile("b", "1"), _profile("c", "1"),
+        _profile("d", "1"), _profile("e", "0"), _profile("f", "0"),
+    )
+    generated = _package(_profile("b", "0"), _profile("d", "0"), _profile("f", "1"))
+    changed_generated_labels = _package(_profile("b", "1"), _profile("d", "1"), _profile("f", "0"))
+
+    result = _evaluate_attribute_disclosure_control(policy, reference, generated, heldout=None)
+    changed = _evaluate_attribute_disclosure_control(
+        policy, reference, changed_generated_labels, heldout=None
+    )
+
+    assert result == changed
+    assert result.metrics["attribute_attack_accuracy"] == 0.333333
+    assert result.metrics["attribute_attack_accuracy"] < 1.0
+    assert "diagnosis" not in repr(result).lower()
 
 
 def test_negative_and_positive_controls_distinguish_independent_from_copied_packages() -> None:

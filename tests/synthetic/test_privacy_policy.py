@@ -65,6 +65,16 @@ def test_load_privacy_policy_accepts_only_the_complete_approved_contract(tmp_pat
         (lambda value: value.__setitem__("schema_fingerprint", "0" * 64), "fingerprint"),
         (lambda value: value.__setitem__("policy_id", "unsafe value"), "token"),
         (lambda value: value["thresholds"].__setitem__("linkage_advantage", 1.01), "threshold"),
+        (
+            lambda value: (
+                value.__setitem__(
+                    "required_controls",
+                    ["exact_reproduction", "identifier_overlap", "positive_control"],
+                ),
+                value["thresholds"].__setitem__("positive_control_advantage", 0),
+            ),
+            "positive_control_advantage",
+        ),
     ],
 )
 def test_privacy_policy_rejects_unapproved_or_unsafe_values(

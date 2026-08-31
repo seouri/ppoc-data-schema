@@ -3,17 +3,24 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from synthetic.privacy_audit import PrivacyRunConfig, audit_privacy, write_privacy_report
+from synthetic.privacy_audit import (
+    PrivacyAuditResult,
+    PrivacyRunConfig,
+    audit_privacy,
+    write_privacy_report,
+)
 from synthetic.schema_contract import load_descriptor, resource_spec
 from tests.synthetic.privacy_fixtures import (
     policy_mapping,
     write_generated_package,
     write_policy,
     write_real_package,
+    write_shadow_manifest,
 )
 
 
@@ -124,6 +131,83 @@ def test_malformed_heldout_evidence_suppresses_dependent_control_packages(tmp_pa
     controls = {control.control_id: control for control in result.report.controls}
     assert controls["negative_control"].status == "UNEVALUABLE"
     assert controls["positive_control"].status == "UNEVALUABLE"
+
+
+def test_overlapping_explicit_heldout_package_is_unevaluable_and_cannot_pass(tmp_path: Path) -> None:
+    """Catches accepting the reference package itself as a patient-disjoint held-out baseline."""
+    thresholds = policy_mapping()["thresholds"]
+    assert isinstance(thresholds, dict)
+    real_root = write_real_package(tmp_path / "real", id_prefix="REAL")
+    policy = write_policy(
+        tmp_path / "policy.json",
+        required_controls=["exact_reproduction", "identifier_overlap", "nearest_neighbor"],
+        thresholds=thresholds | {"nearest_neighbor_unique_rate": 1.0},
+    )
+    result = audit_privacy(
+        PrivacyRunConfig(
+            real_root=real_root,
+            heldout_root=real_root,
+            synthetic_root=_independent_generated(tmp_path / "generated"),
+            policy=policy,
+            output=tmp_path / "output",
+        )
+    )
+
+    control = {item.control_id: item for item in result.report.controls}["nearest_neighbor"]
+    assert result.report.status == "UNEVALUABLE"
+    assert control.status == "UNEVALUABLE"
+    assert control.reason_code == "heldout_not_patient_disjoint"
+
+
+@pytest.mark.parametrize("optional", ["negative", "shadow"])
+def test_malformed_optional_packages_never_abort_the_primary_audit(
+    tmp_path: Path, optional: str
+) -> None:
+    """Catches a KeyError from a malformed optional descriptor becoming a hard audit failure."""
+    package = write_generated_package(tmp_path / optional, id_prefix="OPT")
+    descriptor = package / "datapackage.json"
+    payload = json.loads(descriptor.read_text(encoding="utf-8"))
+    payload["resources"][0].pop("schema")
+    descriptor.write_text(json.dumps(payload), encoding="utf-8")
+    kwargs: dict[str, object]
+    if optional == "negative":
+        kwargs = {"negative_control_root": package}
+    else:
+        manifest = write_shadow_manifest(
+            tmp_path / "shadows.json",
+            [{"run_id": "bad-shadow", "package_root": str(package), "members": ["REAL-P-001"]}],
+        )
+        kwargs = {"shadow_manifest": manifest}
+
+    result = audit_privacy(_config(tmp_path / "audit", **kwargs))
+
+    control_id = f"{optional}_control" if optional == "negative" else "membership_inference"
+    assert {item.control_id: item for item in result.report.controls}[control_id].status == "UNEVALUABLE"
+
+
+def test_report_writer_rejects_forged_control_pass_metrics(tmp_path: Path) -> None:
+    """Catches promoting caller-supplied PASS statuses that conflict with policy thresholds."""
+    result = audit_privacy(_config(tmp_path))
+    controls = tuple(
+        replace(
+            item,
+            metrics={
+                **item.metrics,
+                "identifier_count": 1,
+                "overlap_count": 1,
+                "overlap_rate": 1.0,
+                "rate_ci_lower": 1.0,
+                "rate_ci_upper": 1.0,
+            },
+        )
+        if item.control_id == "identifier_overlap"
+        else item
+        for item in result.report.controls
+    )
+    forged = PrivacyAuditResult(replace(result.report, controls=controls))
+
+    with pytest.raises(ValueError, match="could not be promoted"):
+        write_privacy_report(forged, tmp_path / "forged")
 
 
 def test_audit_copied_package_fails_mandatory_controls_and_promotes_only_aggregate_files(tmp_path: Path) -> None:

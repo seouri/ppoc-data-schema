@@ -69,6 +69,19 @@ def _copy_identifier_from_reference(package: Path, resource_name: str, field_nam
         writer = csv.DictWriter(handle, fieldnames=fields)
         writer.writeheader()
         writer.writerows(rows)
+    if field_name == "visit_id":
+        for name in ("visits", "visits_augmented"):
+            path = package / resource_spec(descriptor, name)["path"]
+            with path.open(newline="", encoding="utf-8") as handle:
+                linked_rows = list(csv.DictReader(handle))
+                linked_fields = tuple(linked_rows[0])
+            for row in linked_rows:
+                if row["visit_id"] == generated_value:
+                    row["visit_id"] = copied_value
+            with path.open("w", newline="", encoding="utf-8") as handle:
+                writer = csv.DictWriter(handle, fieldnames=linked_fields)
+                writer.writeheader()
+                writer.writerows(linked_rows)
     if field_name != "patient_id":
         return
     for resource in descriptor["resources"]:
@@ -235,6 +248,60 @@ def test_nearest_neighbor_requires_heldout_and_returns_only_aggregate_metrics(
     assert "distance" not in repr(first).lower()
 
 
+def test_heldout_baselines_query_heldout_profiles_against_reference_only() -> None:
+    """Catches orienting a held-out baseline as generated queries against held-out candidates."""
+    policy = _policy(
+        required_controls=["exact_reproduction", "identifier_overlap", "linkage", "nearest_neighbor"],
+        subgroups=["overall"],
+        thresholds=policy_mapping()["thresholds"] | {
+            "linkage_advantage": 1.0,
+            "nearest_neighbor_unique_rate": 1.0,
+            "nearest_neighbor_zero_rate": 1.0,
+        },
+    )
+    reference = _private_package(
+        tuple(_private_profile(f"r{index}", tuple(f"ref-{component}-{index}" for component in "dturx")) for index in range(3))
+    )
+    generated = _private_package(
+        tuple(_private_profile(f"g{index}", tuple(f"shared-{component}-{index}" for component in "dturx")) for index in range(3))
+    )
+    heldout = _private_package(
+        tuple(_private_profile(f"h{index}", tuple(f"shared-{component}-{index}" for component in "dturx")) for index in range(3))
+    )
+
+    nearest = _evaluate_nearest_neighbor_control(policy, reference, generated, heldout=heldout)
+    linkage = _evaluate_linkage_control(policy, reference, generated, heldout=heldout)
+
+    assert nearest.metrics["heldout_zero_proximity_rate"] == 0.0
+    assert linkage.metrics["heldout_unique_candidate_rate"] == 0.0
+
+
+def test_heldout_nearest_baseline_changes_the_threshold_decision() -> None:
+    """Catches reporting a held-out rate without subtracting it from the nearest-neighbor signal."""
+    policy = _policy(
+        subgroups=["overall"],
+        thresholds=policy_mapping()["thresholds"]
+        | {"nearest_neighbor_zero_rate": 0.0, "nearest_neighbor_unique_rate": 1.0},
+    )
+    reference = _private_package(
+        tuple(_private_profile(f"r{index}", tuple(f"v-{component}-{index}" for component in "dturx")) for index in range(3))
+    )
+    generated = _private_package(
+        tuple(_private_profile(f"g{index}", tuple(f"v-{component}-{index}" for component in "dturx")) for index in range(3))
+    )
+    heldout = _private_package(
+        tuple(_private_profile(f"h{index}", tuple(f"v-{component}-{index}" for component in "dturx")) for index in range(3))
+    )
+
+    without_heldout = _evaluate_nearest_neighbor_control(policy, reference, generated, heldout=None)
+    with_heldout = _evaluate_nearest_neighbor_control(policy, reference, generated, heldout=heldout)
+
+    assert without_heldout.status == "FAIL"
+    assert with_heldout.status == "PASS"
+    assert with_heldout.metrics["zero_proximity_rate"] == 1.0
+    assert with_heldout.metrics["heldout_zero_proximity_rate"] == 1.0
+
+
 def test_linkage_uses_fixed_components_and_heldout_permutation_baselines(tmp_path: Path) -> None:
     """Catches omitting held-out/permutation baselines or leaking component values."""
     policy = _policy(required_controls=["exact_reproduction", "identifier_overlap", "linkage"])
@@ -313,7 +380,7 @@ def test_nearest_neighbor_reports_exact_near_unique_and_tied_buckets_without_ove
         )
     )
 
-    result = _evaluate_nearest_neighbor_control(policy, reference, generated, heldout=reference)
+    result = _evaluate_nearest_neighbor_control(policy, reference, generated, heldout=None)
 
     assert result.status == "FAIL"
     assert result.reason_code == "zero_proximity_threshold_exceeded"

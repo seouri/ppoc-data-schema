@@ -67,6 +67,26 @@ def test_private_package_loader_rejects_malformed_csv_and_duplicate_keys_without
     assert "GEN-V-001" not in str(error.value)
 
 
+def test_private_package_loader_rejects_declared_visit_foreign_key_orphans(tmp_path: Path) -> None:
+    """Catches validating only patient links while accepting orphaned augmented visit rows."""
+    root = write_generated_package(tmp_path / "package")
+    descriptor = load_descriptor(root / "datapackage.json")
+    path = root / resource_spec(descriptor, "visits_augmented")["path"]
+    with path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+        fields = tuple(rows[0])
+    rows[0]["visit_id"] = "ORPHAN-VISIT"
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    with pytest.raises(ValueError) as error:
+        _load_private_package(root, synthetic=True, longitudinal_minimum=3)
+
+    assert "ORPHAN-VISIT" not in str(error.value)
+
+
 def test_private_package_loader_rejects_symlinked_descriptor_and_resources(tmp_path: Path) -> None:
     root = write_generated_package(tmp_path / "package")
     descriptor = root / "datapackage.json"

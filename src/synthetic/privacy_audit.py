@@ -189,6 +189,8 @@ class PrivacyPolicy:
         frozen = {
             name: _require_threshold(self.thresholds[name], name) for name in sorted(_THRESHOLD_KEYS)
         }
+        if "positive_control" in self.required_controls and frozen["positive_control_advantage"] == 0:
+            raise ValueError("positive_control_advantage must be positive when required")
         object.__setattr__(self, "thresholds", MappingProxyType(frozen))
 
     @classmethod
@@ -456,6 +458,7 @@ class _PrivatePackage:
     _trajectory_signatures: frozenset[str] = field(repr=False)
     _profile_signatures: frozenset[str] = field(repr=False)
     _ineligible_profile_count: int = field(repr=False)
+    _patient_identifiers: frozenset[str] = field(default_factory=frozenset, repr=False)
 
 
 @dataclass(frozen=True)
@@ -467,7 +470,11 @@ class _PrivateShadowRun:
     _member_trajectory_signatures: frozenset[str] = field(repr=False)
 
 
-def _require_patient_links(connection: duckdb.DuckDBPyConnection, staged: Mapping[str, str]) -> None:
+def _require_patient_links(
+    connection: duckdb.DuckDBPyConnection,
+    descriptor: Mapping[str, Any],
+    staged: Mapping[str, str],
+) -> None:
     patients_relation = staged["patients"]
     for name in _RESOURCE_NAMES:
         if name == "patients":
@@ -479,6 +486,39 @@ def _require_patient_links(connection: duckdb.DuckDBPyConnection, staged: Mappin
         ).fetchone()[0]
         if missing:
             raise ValueError("package resource patient links are invalid")
+    descriptor_mapping = dict(descriptor)
+    for name in _RESOURCE_NAMES:
+        resource = resource_spec(descriptor_mapping, name)
+        schema = resource.get("schema")
+        if not isinstance(schema, Mapping):
+            raise TypeError("package resource links are invalid")
+        links = schema.get("foreignKeys", [])
+        if not isinstance(links, list):
+            raise TypeError("package resource links are invalid")
+        for link in links:
+            if not isinstance(link, Mapping):
+                raise TypeError("package resource links are invalid")
+            source_field = link.get("fields")
+            reference = link.get("reference")
+            if (
+                not isinstance(source_field, str)
+                or not isinstance(reference, Mapping)
+                or not isinstance(reference.get("resource"), str)
+                or not isinstance(reference.get("fields"), str)
+                or reference["resource"] not in staged
+            ):
+                raise ValueError("package resource links are invalid")
+            target_resource = reference["resource"]
+            target_field = reference["fields"]
+            missing = connection.execute(
+                f'SELECT count(*) FROM "{staged[name]}" AS source LEFT JOIN '
+                f'"{staged[target_resource]}" AS target '
+                f'ON source."{source_field}" = target."{target_field}" '
+                f'WHERE source."{source_field}" IS NOT NULL AND source."{source_field}" <> \'\' '
+                f'AND target."{target_field}" IS NULL'
+            ).fetchone()[0]
+            if missing:
+                raise ValueError("package resource foreign-key links are invalid")
 
 
 def _private_identifiers(
@@ -612,17 +652,25 @@ def _load_private_package(
         if (synthetic and descriptor.get("x-synthetic") is not True) or (not synthetic and marker_present):
             raise ValueError("package marker polarity is invalid")
         descriptor = _validate_descriptor_mapping(descriptor)
-    except (TypeError, ValueError) as exc:
+    except (KeyError, TypeError, ValueError) as exc:
         raise ValueError("package descriptor or marker is invalid") from exc
     connection = duckdb.connect(":memory:")
     try:
         staged = _stage_validated_resources(connection, descriptor, package_root)
-        _require_patient_links(connection, staged)
+        _require_patient_links(connection, descriptor, staged)
         identifiers = _private_identifiers(connection, descriptor, staged)
         profiles, ineligible = _private_profiles(connection, staged, longitudinal_minimum)
         patient_count = connection.execute(
             f'SELECT count(*) FROM "{staged["patients"]}"'
         ).fetchone()[0]
+        patient_identifiers = frozenset(
+            value
+            for (value,) in connection.execute(
+                f'SELECT patient_id FROM "{staged["patients"]}" '
+                "WHERE patient_id IS NOT NULL AND patient_id <> ''"
+            ).fetchall()
+            if isinstance(value, str)
+        )
     except (duckdb.Error, TypeError, ValueError) as exc:
         raise ValueError("package data is invalid") from exc
     finally:
@@ -634,6 +682,7 @@ def _load_private_package(
         _trajectory_signatures=frozenset(profile._trajectory_signature for profile in profiles),
         _profile_signatures=frozenset(profile._profile_signature for profile in profiles),
         _ineligible_profile_count=ineligible,
+        _patient_identifiers=patient_identifiers,
     )
 
 
@@ -808,12 +857,12 @@ def _nearest_metrics(
         "margin_positive_rate": round(unique_count / evaluated_count, 6),
     }
     if heldout is not None:
-        heldout_zero, heldout_unique, _ = _nearest_outcomes(generated._profiles, heldout._profiles)
+        heldout_zero, heldout_unique, _ = _nearest_outcomes(heldout._profiles, reference._profiles)
         metrics.update(
             {
                 "heldout_count": len(heldout._profiles),
-                "heldout_zero_proximity_rate": round(heldout_zero / evaluated_count, 6),
-                "heldout_unique_nearest_rate": round(heldout_unique / evaluated_count, 6),
+                "heldout_zero_proximity_rate": round(heldout_zero / len(heldout._profiles), 6),
+                "heldout_unique_nearest_rate": round(heldout_unique / len(heldout._profiles), 6),
             }
         )
     return _with_interval(
@@ -841,11 +890,16 @@ def _evaluate_nearest_neighbor_control(
     if not _packages_have_profile_evidence(policy, *packages):
         return _unevaluable_control("nearest_neighbor", "insufficient_evidence")
     metrics = _nearest_metrics(reference, generated, heldout)
-    if metrics["zero_proximity_rate"] > policy.thresholds["nearest_neighbor_zero_rate"]:
+    zero_signal = float(metrics["zero_proximity_rate"])
+    unique_signal = float(metrics["unique_nearest_rate"])
+    if heldout is not None:
+        zero_signal = max(0.0, zero_signal - float(metrics["heldout_zero_proximity_rate"]))
+        unique_signal = max(0.0, unique_signal - float(metrics["heldout_unique_nearest_rate"]))
+    if zero_signal > policy.thresholds["nearest_neighbor_zero_rate"]:
         return PrivacyControlResult(
             "nearest_neighbor", "FAIL", metrics, "zero_proximity_threshold_exceeded"
         )
-    if metrics["unique_nearest_rate"] > policy.thresholds["nearest_neighbor_unique_rate"]:
+    if unique_signal > policy.thresholds["nearest_neighbor_unique_rate"]:
         return PrivacyControlResult(
             "nearest_neighbor", "FAIL", metrics, "unique_nearest_threshold_exceeded"
         )
@@ -902,7 +956,9 @@ def _linkage_candidate_metrics(
             queries, _bucket_counts(reference._profiles, components), components
         )
         heldout_rate = (
-            _unique_candidate_rate(queries, _bucket_counts(heldout._profiles, components), components)
+            _unique_candidate_rate(
+                heldout._profiles, _bucket_counts(reference._profiles, components), components
+            )
             if heldout is not None
             else None
         )
@@ -1053,7 +1109,7 @@ def _load_private_shadow_runs(
                 )
             )
             run_ids.add(run_id)
-    except (OSError, RecursionError, TypeError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+    except (KeyError, OSError, RecursionError, TypeError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
         raise ValueError("privacy shadow manifest is invalid") from exc
     return tuple(runs)
 
@@ -1130,6 +1186,16 @@ def _majority_accuracy(labels: tuple[str, ...], targets: tuple[str, ...]) -> flo
     return round(sum(target == majority for target in targets) / len(targets), 6)
 
 
+def _majority_label(labels: tuple[str | None, ...]) -> str | None:
+    values = tuple(label for label in labels if label in {"0", "1"})
+    if len(values) != len(labels) or not values:
+        return None
+    counts: dict[str, int] = {}
+    for label in values:
+        counts[label] = counts.get(label, 0) + 1
+    return max(counts, key=lambda label: (counts[label], label))
+
+
 def _nonempty_sensitive_labels(package: _PrivatePackage) -> tuple[str, ...] | None:
     labels = tuple(profile._growth_dx_flag for profile in package._profiles)
     if any(label not in {"0", "1"} for label in labels):
@@ -1151,13 +1217,21 @@ def _evaluate_attribute_disclosure_control(
     packages = (reference, generated) if heldout is None else (reference, generated, heldout)
     if not _packages_have_profile_evidence(policy, *packages):
         return _unevaluable_control("attribute_disclosure", "insufficient_evidence")
-    reference_labels = _nonempty_sensitive_labels(reference)
+    ordered_reference = tuple(sorted(reference._profiles, key=lambda profile: profile._patient_id))
+    training_profiles = ordered_reference[::2]
+    evaluation_profiles = ordered_reference[1::2]
+    if (
+        len(training_profiles) < policy.minimum_evaluable_patients
+        or len(evaluation_profiles) < policy.minimum_evaluable_patients
+    ):
+        return _unevaluable_control("attribute_disclosure", "insufficient_evidence")
+    reference_labels = tuple(profile._growth_dx_flag for profile in training_profiles)
     heldout_labels = _nonempty_sensitive_labels(heldout) if heldout is not None else ()
-    if reference_labels is None or heldout_labels is None:
+    if _majority_label(reference_labels) is None or heldout_labels is None:
         return _unevaluable_control("attribute_disclosure", "inconsistent_sensitive_labels")
     reference_index: dict[str, _PrivatePatientProfile] = {}
     duplicate_reference_signatures: set[str] = set()
-    for profile in reference._profiles:
+    for profile in evaluation_profiles:
         if profile._trajectory_signature in reference_index:
             duplicate_reference_signatures.add(profile._trajectory_signature)
         reference_index[profile._trajectory_signature] = profile
@@ -1176,14 +1250,31 @@ def _evaluate_attribute_disclosure_control(
     if any(reference_profile._growth_dx_flag is None for _, reference_profile in pairs):
         return _unevaluable_control("attribute_disclosure", "inconsistent_sensitive_labels")
     targets = tuple(reference_profile._growth_dx_flag for _, reference_profile in pairs)
-    # The attack only uses a generated trajectory to select a unique reference candidate.
-    # The sensitive flag is read privately from that candidate, never from the generated package.
-    predictions = tuple(reference_index[generated_profile._trajectory_signature]._growth_dx_flag for generated_profile, _ in pairs)
+    # Generated diagnosis fields never enter the attack. Labels remain private while a fixed
+    # non-target nearest-component classifier trains on the complementary reference split.
+    def predict(generated_profile: _PrivatePatientProfile) -> str | None:
+        scored_labels = tuple(
+            (
+                sum(
+                    generated_profile._component_buckets[component]
+                    == candidate._component_buckets[component]
+                    for component in ("demographics", "timing", "utilization", "trajectory")
+                ),
+                candidate._growth_dx_flag,
+            )
+            for candidate in training_profiles
+        )
+        highest = max(score for score, _ in scored_labels)
+        return _majority_label(tuple(label for score, label in scored_labels if score == highest))
+
+    predictions = tuple(predict(generated_profile) for generated_profile, _ in pairs)
     if any(target not in {"0", "1"} or prediction not in {"0", "1"} for target, prediction in zip(targets, predictions, strict=True)):
         return _unevaluable_control("attribute_disclosure", "inconsistent_sensitive_labels")
     attack_count = sum(prediction == target for prediction, target in zip(predictions, targets, strict=True))
     attack_accuracy = round(attack_count / len(pairs), 6)
-    reference_baseline = _majority_accuracy(reference_labels, targets)
+    reference_baseline = _majority_accuracy(
+        tuple(label for label in reference_labels if label is not None), targets
+    )
     baseline = reference_baseline
     metrics: dict[str, int | float] = {
         "evaluated_count": len(pairs),
@@ -1345,7 +1436,7 @@ def _load_optional_package(
             ),
             False,
         )
-    except (OSError, TypeError, ValueError):
+    except (KeyError, OSError, TypeError, ValueError):
         return None, True
 
 
@@ -1364,11 +1455,11 @@ def _optional_control_result(
 
 
 def _heldout_control_result(
-    control_id: str, heldout_invalid: bool, evaluate: Any
+    control_id: str, heldout_invalid: bool, unavailable_reason: str, evaluate: Any
 ) -> PrivacyControlResult:
     """Confine a supplied invalid held-out package to each dependent aggregate control."""
     if heldout_invalid:
-        return _unevaluable_control(control_id, "optional_package_invalid")
+        return _unevaluable_control(control_id, unavailable_reason)
     return _optional_control_result(control_id, False, evaluate)
 
 
@@ -1406,6 +1497,10 @@ def _audit_privacy(config: PrivacyRunConfig) -> PrivacyAuditResult:
     heldout, heldout_invalid = _load_optional_package(
         config.heldout_root, synthetic=False, policy=policy
     )
+    heldout_reason = "optional_package_invalid"
+    if heldout is not None and reference._patient_identifiers & heldout._patient_identifiers:
+        heldout_invalid = True
+        heldout_reason = "heldout_not_patient_disjoint"
     prior_releases: list[_PrivatePackage] = []
     prior_invalid = False
     for root in config.prior_release_roots:
@@ -1424,7 +1519,7 @@ def _audit_privacy(config: PrivacyRunConfig) -> PrivacyAuditResult:
     if config.shadow_manifest is not None:
         try:
             shadow_runs = _load_private_shadow_runs(config.shadow_manifest, reference, policy)
-        except (OSError, TypeError, ValueError):
+        except (KeyError, OSError, TypeError, ValueError):
             shadow_invalid = True
 
     controls = (
@@ -1433,11 +1528,13 @@ def _audit_privacy(config: PrivacyRunConfig) -> PrivacyAuditResult:
         _heldout_control_result(
             "nearest_neighbor",
             heldout_invalid,
+            heldout_reason,
             lambda: _evaluate_nearest_neighbor_control(policy, reference, generated, heldout=heldout),
         ),
         _heldout_control_result(
             "linkage",
             heldout_invalid,
+            heldout_reason,
             lambda: _evaluate_linkage_control(policy, reference, generated, heldout=heldout),
         ),
         _optional_control_result(
@@ -1448,6 +1545,7 @@ def _audit_privacy(config: PrivacyRunConfig) -> PrivacyAuditResult:
         _heldout_control_result(
             "attribute_disclosure",
             heldout_invalid,
+            heldout_reason,
             lambda: _evaluate_attribute_disclosure_control(policy, reference, generated, heldout=heldout),
         ),
         _optional_control_result(
@@ -1521,6 +1619,87 @@ def _write_exclusive_fsynced(path: Path, payload: bytes) -> None:
         os.close(descriptor)
 
 
+def _validate_evaluated_metrics(control: PrivacyControlResult, policy: PrivacyPolicy) -> None:
+    required_by_control = {
+        "identifier_overlap": {"evaluated_count", "identifier_count", "overlap_count", "overlap_rate", "rate_ci_lower", "rate_ci_upper"},
+        "exact_reproduction": {"evaluated_count", "reproduction_count", "exact_reproduction_rate", "rate_ci_lower", "rate_ci_upper"},
+        "nearest_neighbor": {"evaluated_count", "zero_proximity_rate", "unique_nearest_rate", "margin_zero_rate", "margin_positive_rate", "rate_ci_lower", "rate_ci_upper"},
+        "linkage": {"evaluated_count", "unique_candidate_rate", "permutation_unique_rate", "linkage_advantage", "rate_ci_lower", "rate_ci_upper"},
+        "membership_inference": {"evaluated_count", "shadow_run_count", "membership_match_rate", "membership_inference_advantage", "advantage_ci_lower", "advantage_ci_upper", "rate_ci_lower", "rate_ci_upper"},
+        "attribute_disclosure": {"evaluated_count", "attribute_attack_accuracy", "reference_majority_accuracy", "attribute_disclosure_advantage", "rate_ci_lower", "rate_ci_upper"},
+        "composition": {"evaluated_count", "prior_release_count", "reproduction_count", "composition_reproduction_rate", "rate_ci_lower", "rate_ci_upper"},
+        "negative_control": {"evaluated_count", "reproduction_count", "negative_control_advantage", "rate_ci_lower", "rate_ci_upper"},
+        "positive_control": {"evaluated_count", "reproduction_count", "positive_control_advantage", "rate_ci_lower", "rate_ci_upper"},
+    }
+    metrics = control.metrics
+    if not required_by_control[control.control_id] <= set(metrics):
+        raise ValueError("privacy report metrics are incomplete")
+    for name, value in metrics.items():
+        if name.endswith("_count"):
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise ValueError("privacy report counts must be integers")
+        elif (
+            name.endswith(("_rate", "_advantage", "_accuracy"))
+            or name.startswith(("rate_ci_", "advantage_ci_"))
+        ) and not 0 <= float(value) <= 1:
+            raise ValueError("privacy report rates must be bounded")
+    if int(metrics["evaluated_count"]) < policy.minimum_evaluable_patients:
+        raise ValueError("privacy report evidence is underpowered")
+    for numerator, denominator in (
+        ("overlap_count", "identifier_count"),
+        ("reproduction_count", "evaluated_count"),
+    ):
+        if numerator in metrics and int(metrics[numerator]) > int(metrics[denominator]):
+            raise ValueError("privacy report count relationship is invalid")
+
+
+def _status_from_control_metrics(control: PrivacyControlResult, policy: PrivacyPolicy) -> str:
+    if control.status == "UNEVALUABLE":
+        return "UNEVALUABLE"
+    metrics = control.metrics
+    control_id = control.control_id
+    if control_id == "identifier_overlap":
+        failed = int(metrics["overlap_count"]) > 0 or metrics["overlap_rate"] > policy.thresholds["identifier_overlap_rate"]
+    elif control_id == "exact_reproduction":
+        failed = int(metrics["reproduction_count"]) > 0 or metrics["exact_reproduction_rate"] > policy.thresholds["exact_reproduction_rate"]
+    elif control_id == "nearest_neighbor":
+        zero_signal = float(metrics["zero_proximity_rate"]) - float(metrics.get("heldout_zero_proximity_rate", 0))
+        unique_signal = float(metrics["unique_nearest_rate"]) - float(metrics.get("heldout_unique_nearest_rate", 0))
+        failed = max(0.0, zero_signal) > policy.thresholds["nearest_neighbor_zero_rate"] or max(0.0, unique_signal) > policy.thresholds["nearest_neighbor_unique_rate"]
+    elif control_id == "linkage":
+        failed = metrics["linkage_advantage"] > policy.thresholds["linkage_advantage"]
+    elif control_id == "membership_inference":
+        failed = metrics["membership_inference_advantage"] > policy.thresholds["membership_inference_advantage"]
+    elif control_id == "attribute_disclosure":
+        failed = metrics["attribute_disclosure_advantage"] > policy.thresholds["attribute_disclosure_advantage"]
+    elif control_id == "composition":
+        failed = metrics["composition_reproduction_rate"] > policy.thresholds["composition_reproduction_rate"]
+    elif control_id == "negative_control":
+        failed = metrics["negative_control_advantage"] >= policy.thresholds["negative_control_advantage"]
+    else:
+        failed = metrics["positive_control_advantage"] < policy.thresholds["positive_control_advantage"]
+    return "FAIL" if failed else "PASS"
+
+
+def _validate_privacy_report_semantics(report: PrivacyAuditReport) -> None:
+    statuses: list[str] = []
+    for control in report.controls:
+        if control.status != "UNEVALUABLE":
+            _validate_evaluated_metrics(control, report.policy)
+        expected = _status_from_control_metrics(control, report.policy)
+        if control.status != expected:
+            raise ValueError("privacy report control status is incompatible with metrics")
+        statuses.append(expected)
+    expected_status = "FAIL" if "FAIL" in statuses else "PASS"
+    if expected_status == "PASS" and any(
+        control.control_id in report.policy.required_controls and control.status == "UNEVALUABLE"
+        for control in report.controls
+    ):
+        expected_status = "UNEVALUABLE"
+    if report.status != expected_status:
+        raise ValueError("privacy report status is incompatible with controls")
+
+
 def _reparse_written_privacy_report(run: RunDirectory, result: PrivacyAuditResult) -> None:
     report_bytes = _read_regular_bytes(
         run.partial_path / _PRIVACY_REPORT_FILENAME, "privacy report output", MAX_PRIVACY_POLICY_BYTES
@@ -1546,6 +1725,7 @@ def _reparse_written_privacy_report(run: RunDirectory, result: PrivacyAuditResul
         or summary_bytes != expected_summary
     ):
         raise ValueError("privacy output is not canonical")
+    _validate_privacy_report_semantics(result.report)
 
 
 def _privacy_lifecycle_token(report: PrivacyAuditReport) -> str:
