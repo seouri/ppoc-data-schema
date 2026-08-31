@@ -1211,6 +1211,11 @@ def _evaluate_attribute_disclosure_control(
     heldout: _PrivatePackage | None,
 ) -> PrivacyControlResult:
     """Evaluate the allowlisted growth-flag attack against majority and held-out baselines."""
+    attack_components = tuple(
+        component for component in policy.attacker_knowledge if component != "diagnosis"
+    )
+    if not attack_components:
+        return _unevaluable_control("attribute_disclosure", "no_non_target_attacker_knowledge")
     required = "attribute_disclosure" in policy.required_controls
     if heldout is None and required:
         return _unevaluable_control("attribute_disclosure", "heldout_required")
@@ -1229,12 +1234,13 @@ def _evaluate_attribute_disclosure_control(
     heldout_labels = _nonempty_sensitive_labels(heldout) if heldout is not None else ()
     if _majority_label(reference_labels) is None or heldout_labels is None:
         return _unevaluable_control("attribute_disclosure", "inconsistent_sensitive_labels")
-    reference_index: dict[str, _PrivatePatientProfile] = {}
-    duplicate_reference_signatures: set[str] = set()
-    for profile in evaluation_profiles:
-        if profile._trajectory_signature in reference_index:
-            duplicate_reference_signatures.add(profile._trajectory_signature)
-        reference_index[profile._trajectory_signature] = profile
+    reference_signature_counts: dict[str, int] = {}
+    for profile in reference._profiles:
+        signature = profile._trajectory_signature
+        reference_signature_counts[signature] = reference_signature_counts.get(signature, 0) + 1
+    reference_index = {
+        profile._trajectory_signature: profile for profile in evaluation_profiles
+    }
     generated_counts: dict[str, int] = {}
     for profile in generated._profiles:
         generated_counts[profile._trajectory_signature] = generated_counts.get(profile._trajectory_signature, 0) + 1
@@ -1242,7 +1248,7 @@ def _evaluate_attribute_disclosure_control(
         (profile, reference_index[profile._trajectory_signature])
         for profile in generated._profiles
         if profile._trajectory_signature in reference_index
-        and profile._trajectory_signature not in duplicate_reference_signatures
+        and reference_signature_counts[profile._trajectory_signature] == 1
         and generated_counts[profile._trajectory_signature] == 1
     )
     if len(pairs) < policy.minimum_evaluable_patients:
@@ -1258,7 +1264,7 @@ def _evaluate_attribute_disclosure_control(
                 sum(
                     generated_profile._component_buckets[component]
                     == candidate._component_buckets[component]
-                    for component in ("demographics", "timing", "utilization", "trajectory")
+                    for component in attack_components
                 ),
                 candidate._growth_dx_flag,
             )
@@ -1651,6 +1657,101 @@ def _validate_evaluated_metrics(control: PrivacyControlResult, policy: PrivacyPo
     ):
         if numerator in metrics and int(metrics[numerator]) > int(metrics[denominator]):
             raise ValueError("privacy report count relationship is invalid")
+    if control.control_id == "identifier_overlap":
+        _validate_report_rate(metrics, "overlap_rate", "identifier_count", "overlap_count")
+    elif control.control_id == "exact_reproduction":
+        _validate_report_rate(
+            metrics, "exact_reproduction_rate", "evaluated_count", "reproduction_count"
+        )
+    elif control.control_id == "nearest_neighbor":
+        zero_count = _validate_report_rate(metrics, "zero_proximity_rate", "evaluated_count")
+        unique_count = _validate_report_rate(metrics, "unique_nearest_rate", "evaluated_count")
+        if metrics["margin_positive_rate"] != metrics["unique_nearest_rate"]:
+            raise ValueError("privacy report nearest-neighbor metrics are incompatible")
+        expected_margin_zero = round(1 - unique_count / int(metrics["evaluated_count"]), 6)
+        if metrics["margin_zero_rate"] != expected_margin_zero:
+            raise ValueError("privacy report nearest-neighbor metrics are incompatible")
+        _validate_report_interval(metrics, zero_count, int(metrics["evaluated_count"]))
+        if ("heldout_count" in metrics) != ("heldout_zero_proximity_rate" in metrics):
+            raise ValueError("privacy report held-out metrics are incomplete")
+        if "heldout_count" in metrics:
+            _validate_report_rate(metrics, "heldout_zero_proximity_rate", "heldout_count")
+            _validate_report_rate(metrics, "heldout_unique_nearest_rate", "heldout_count")
+    elif control.control_id == "linkage":
+        unique_count = _validate_report_rate(metrics, "unique_candidate_rate", "evaluated_count")
+        _validate_report_rate(metrics, "permutation_unique_rate", "evaluated_count")
+        heldout_rate = 0.0
+        if ("heldout_count" in metrics) != ("heldout_unique_candidate_rate" in metrics):
+            raise ValueError("privacy report held-out metrics are incomplete")
+        if "heldout_count" in metrics:
+            _validate_report_rate(metrics, "heldout_unique_candidate_rate", "heldout_count")
+            heldout_rate = float(metrics["heldout_unique_candidate_rate"])
+        expected_advantage = round(
+            max(
+                0.0,
+                float(metrics["unique_candidate_rate"])
+                - max(float(metrics["permutation_unique_rate"]), heldout_rate),
+            ),
+            6,
+        )
+        if metrics["linkage_advantage"] != expected_advantage:
+            raise ValueError("privacy report linkage advantage is incompatible")
+        _validate_report_interval(metrics, unique_count, int(metrics["evaluated_count"]))
+    elif control.control_id == "membership_inference":
+        match_count = _validate_report_rate(metrics, "membership_match_rate", "evaluated_count")
+        _validate_report_interval(metrics, match_count, int(metrics["evaluated_count"]))
+    elif control.control_id == "attribute_disclosure":
+        attack_count = _validate_report_rate(metrics, "attribute_attack_accuracy", "evaluated_count")
+        baseline = float(metrics["reference_majority_accuracy"])
+        if ("heldout_count" in metrics) != ("heldout_majority_accuracy" in metrics):
+            raise ValueError("privacy report held-out metrics are incomplete")
+        if "heldout_majority_accuracy" in metrics:
+            baseline = max(baseline, float(metrics["heldout_majority_accuracy"]))
+        expected_advantage = round(
+            max(0.0, float(metrics["attribute_attack_accuracy"]) - baseline), 6
+        )
+        if metrics["attribute_disclosure_advantage"] != expected_advantage:
+            raise ValueError("privacy report attribute advantage is incompatible")
+        _validate_report_interval(metrics, attack_count, int(metrics["evaluated_count"]))
+    elif control.control_id == "composition":
+        _validate_report_rate(
+            metrics, "composition_reproduction_rate", "evaluated_count", "reproduction_count"
+        )
+        _validate_report_interval(
+            metrics, int(metrics["reproduction_count"]), int(metrics["evaluated_count"])
+        )
+    elif control.control_id in {"negative_control", "positive_control"}:
+        _validate_report_interval(
+            metrics, int(metrics["reproduction_count"]), int(metrics["evaluated_count"])
+        )
+
+
+def _validate_report_rate(
+    metrics: Mapping[str, int | float],
+    rate_name: str,
+    denominator_name: str,
+    numerator_name: str | None = None,
+) -> int:
+    denominator = metrics[denominator_name]
+    if isinstance(denominator, bool) or not isinstance(denominator, int) or denominator <= 0:
+        raise ValueError("privacy report rate denominator is invalid")
+    successes = round(float(metrics[rate_name]) * denominator)
+    if not 0 <= successes <= denominator or round(successes / denominator, 6) != metrics[rate_name]:
+        raise ValueError("privacy report rate is incompatible with counts")
+    if numerator_name is not None and metrics[numerator_name] != successes:
+        raise ValueError("privacy report rate is incompatible with counts")
+    return successes
+
+
+def _validate_report_interval(
+    metrics: Mapping[str, int | float], successes: int, total: int
+) -> None:
+    expected_lower, expected_upper = _wilson_95_interval(successes, total)
+    if (
+        metrics["rate_ci_lower"] != expected_lower
+        or metrics["rate_ci_upper"] != expected_upper
+    ):
+        raise ValueError("privacy report interval is incompatible with counts")
 
 
 def _status_from_control_metrics(control: PrivacyControlResult, policy: PrivacyPolicy) -> str:

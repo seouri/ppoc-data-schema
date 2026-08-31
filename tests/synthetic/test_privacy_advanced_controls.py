@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from types import MappingProxyType
 
@@ -203,13 +204,22 @@ def test_attribute_and_composition_controls_use_private_labels_and_explicit_prio
 
 def test_attribute_attack_uses_non_target_features_and_not_generated_diagnosis() -> None:
     """Catches circularly predicting a linked reference label with that same reference label."""
-    policy = _policy(required_controls=["exact_reproduction", "identifier_overlap"])
-    reference = _package(
-        _profile("a", "0"), _profile("b", "1"), _profile("c", "1"),
-        _profile("d", "1"), _profile("e", "0"), _profile("f", "0"),
+    policy = _policy(
+        required_controls=["exact_reproduction", "identifier_overlap"],
+        attacker_knowledge=["demographics"],
     )
-    generated = _package(_profile("b", "0"), _profile("d", "0"), _profile("f", "1"))
-    changed_generated_labels = _package(_profile("b", "1"), _profile("d", "1"), _profile("f", "0"))
+    reference = _package(
+        _profile("a", "0"), _profile("b", "1"),
+        replace(_profile("c", "1"), _trajectory_signature="trajectory-b"),
+        _profile("d", "1"), _profile("e", "0"), _profile("f", "0"),
+        _profile("g", "1"), _profile("h", "0"),
+    )
+    generated = _package(
+        _profile("b", "0"), _profile("d", "0"), _profile("f", "1"), _profile("h", "1")
+    )
+    changed_generated_labels = _package(
+        _profile("b", "1"), _profile("d", "1"), _profile("f", "0"), _profile("h", "0")
+    )
 
     result = _evaluate_attribute_disclosure_control(policy, reference, generated, heldout=None)
     changed = _evaluate_attribute_disclosure_control(
@@ -218,8 +228,28 @@ def test_attribute_attack_uses_non_target_features_and_not_generated_diagnosis()
 
     assert result == changed
     assert result.metrics["attribute_attack_accuracy"] == 0.333333
+    assert result.metrics["evaluated_count"] == 3
     assert result.metrics["attribute_attack_accuracy"] < 1.0
     assert "diagnosis" not in repr(result).lower()
+
+
+def test_attribute_attack_is_unevaluable_without_non_target_attacker_knowledge() -> None:
+    """Catches using diagnosis as an attribute-attack feature when policy selected no other knowledge."""
+    policy = _policy(
+        required_controls=["exact_reproduction", "identifier_overlap"],
+        attacker_knowledge=["diagnosis"],
+    )
+    reference = _package(
+        _profile("a", "0"), _profile("b", "1"), _profile("c", "1"),
+        _profile("d", "1"), _profile("e", "0"), _profile("f", "0"),
+    )
+    generated = _package(_profile("b", "0"), _profile("d", "0"), _profile("f", "1"))
+
+    result = _evaluate_attribute_disclosure_control(policy, reference, generated, heldout=None)
+
+    assert result.status == "UNEVALUABLE"
+    assert result.reason_code == "no_non_target_attacker_knowledge"
+    assert result.metrics == {}
 
 
 def test_negative_and_positive_controls_distinguish_independent_from_copied_packages() -> None:

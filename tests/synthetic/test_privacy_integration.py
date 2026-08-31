@@ -210,6 +210,29 @@ def test_report_writer_rejects_forged_control_pass_metrics(tmp_path: Path) -> No
         write_privacy_report(forged, tmp_path / "forged")
 
 
+def test_report_writer_rejects_forged_linkage_advantage(tmp_path: Path) -> None:
+    """Catches trusting a caller-supplied linkage advantage that conflicts with its rates."""
+    result = audit_privacy(_config(tmp_path))
+    controls = tuple(
+        replace(
+            item,
+            metrics={
+                **item.metrics,
+                "unique_candidate_rate": 1.0,
+                "permutation_unique_rate": 0.0,
+                "linkage_advantage": 0.0,
+            },
+        )
+        if item.control_id == "linkage"
+        else item
+        for item in result.report.controls
+    )
+    forged = PrivacyAuditResult(replace(result.report, controls=controls))
+
+    with pytest.raises(ValueError, match="could not be promoted"):
+        write_privacy_report(forged, tmp_path / "forged-linkage")
+
+
 def test_audit_copied_package_fails_mandatory_controls_and_promotes_only_aggregate_files(tmp_path: Path) -> None:
     """Catches a copied package escaping either mandatory global-fail gate."""
     real_root = write_real_package(tmp_path / "real", id_prefix="COPY")
