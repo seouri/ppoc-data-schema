@@ -868,12 +868,12 @@ def _nearest_outcomes(
 
 
 def _nearest_metrics(
-    reference: _PrivatePackage, generated: _PrivatePackage, heldout: _PrivatePackage | None
+    reference: tuple[_PrivatePatientProfile, ...],
+    generated: tuple[_PrivatePatientProfile, ...],
+    heldout: tuple[_PrivatePatientProfile, ...] | None,
 ) -> dict[str, int | float]:
-    evaluated_count = len(generated._profiles)
-    zero_count, unique_count, tied_count = _nearest_outcomes(
-        generated._profiles, reference._profiles
-    )
+    evaluated_count = len(generated)
+    zero_count, unique_count, tied_count = _nearest_outcomes(generated, reference)
     metrics: dict[str, int | float] = {
         "evaluated_count": evaluated_count,
         "zero_proximity_rate": round(zero_count / evaluated_count, 6),
@@ -882,12 +882,12 @@ def _nearest_metrics(
         "margin_positive_rate": round(unique_count / evaluated_count, 6),
     }
     if heldout is not None:
-        heldout_zero, heldout_unique, _ = _nearest_outcomes(heldout._profiles, reference._profiles)
+        heldout_zero, heldout_unique, _ = _nearest_outcomes(heldout, reference)
         metrics.update(
             {
-                "heldout_count": len(heldout._profiles),
-                "heldout_zero_proximity_rate": round(heldout_zero / len(heldout._profiles), 6),
-                "heldout_unique_nearest_rate": round(heldout_unique / len(heldout._profiles), 6),
+                "heldout_count": len(heldout),
+                "heldout_zero_proximity_rate": round(heldout_zero / len(heldout), 6),
+                "heldout_unique_nearest_rate": round(heldout_unique / len(heldout), 6),
             }
         )
     return _with_interval(
@@ -917,6 +917,51 @@ def _nearest_failure_reason(
     return None
 
 
+def _subgroup_query_cells(
+    policy: PrivacyPolicy,
+    generated: _PrivatePackage,
+    heldout: _PrivatePackage | None,
+) -> tuple[
+    tuple[
+        tuple[
+            tuple[_PrivatePatientProfile, ...],
+            tuple[_PrivatePatientProfile, ...] | None,
+        ],
+        ...,
+    ],
+    bool,
+]:
+    """Return private overall/sex query cells and whether a requested cell is underpowered."""
+    cells = [
+        (
+            generated._profiles,
+            heldout._profiles if heldout is not None else None,
+        )
+    ]
+    underpowered = False
+    if "sex" not in policy.subgroups:
+        return tuple(cells), underpowered
+    generated_by_sex: dict[str, list[_PrivatePatientProfile]] = {}
+    for profile in generated._profiles:
+        generated_by_sex.setdefault(profile._demographics[0], []).append(profile)
+    heldout_by_sex: dict[str, list[_PrivatePatientProfile]] = {}
+    if heldout is not None:
+        for profile in heldout._profiles:
+            heldout_by_sex.setdefault(profile._demographics[0], []).append(profile)
+    labels = sorted(set(generated_by_sex) | set(heldout_by_sex))
+    for label in labels:
+        generated_cell = tuple(generated_by_sex.get(label, ()))
+        heldout_cell = tuple(heldout_by_sex.get(label, ())) if heldout is not None else None
+        if len(generated_cell) < policy.minimum_evaluable_patients or (
+            heldout_cell is not None
+            and len(heldout_cell) < policy.minimum_evaluable_patients
+        ):
+            underpowered = True
+            continue
+        cells.append((generated_cell, heldout_cell))
+    return tuple(cells), underpowered
+
+
 def _evaluate_nearest_neighbor_control(
     policy: PrivacyPolicy,
     reference: _PrivatePackage,
@@ -934,9 +979,29 @@ def _evaluate_nearest_neighbor_control(
         packages = (reference, generated, heldout)
     if not _packages_have_profile_evidence(policy, *packages):
         return _unevaluable_control("nearest_neighbor", "insufficient_evidence")
-    metrics = _nearest_metrics(reference, generated, heldout)
-    if reason := _nearest_failure_reason(metrics, policy):
+    query_cells, underpowered = _subgroup_query_cells(policy, generated, heldout)
+    group_metrics = tuple(
+        _nearest_metrics(reference._profiles, generated_cell, heldout_cell)
+        for generated_cell, heldout_cell in query_cells
+    )
+    failures = tuple(
+        (metrics, reason)
+        for metrics in group_metrics
+        if (reason := _nearest_failure_reason(metrics, policy)) is not None
+    )
+    if failures:
+        metrics, reason = max(
+            failures,
+            key=lambda item: (
+                item[0]["zero_proximity_rate"],
+                item[0]["unique_nearest_rate"],
+                item[0]["evaluated_count"],
+            ),
+        )
         return PrivacyControlResult("nearest_neighbor", "FAIL", metrics, reason)
+    if underpowered:
+        return _unevaluable_control("nearest_neighbor", "insufficient_evidence")
+    metrics = group_metrics[0]
     reason = "nearest_neighbor_within_threshold" if heldout is not None else "nearest_neighbor_reference_only"
     return PrivacyControlResult("nearest_neighbor", "PASS", metrics, reason)
 
@@ -979,19 +1044,18 @@ def _linkage_selections(policy: PrivacyPolicy) -> tuple[tuple[str, ...], ...]:
 
 def _linkage_candidate_metrics(
     reference: _PrivatePackage,
-    generated: _PrivatePackage,
-    heldout: _PrivatePackage | None,
+    heldout: tuple[_PrivatePatientProfile, ...] | None,
     queries: tuple[_PrivatePatientProfile, ...],
     selections: tuple[tuple[str, ...], ...],
 ) -> dict[str, int | float]:
-    candidates: list[tuple[float, float, float, float | None, int]] = []
-    for components in selections:
+    candidates: list[tuple[float, float, float, float | None, int, int]] = []
+    for selection_index, components in enumerate(selections):
         generated_rate = _unique_candidate_rate(
             queries, _bucket_counts(reference._profiles, components), components
         )
         heldout_rate = (
             _unique_candidate_rate(
-                heldout._profiles, _bucket_counts(reference._profiles, components), components
+                heldout, _bucket_counts(reference._profiles, components), components
             )
             if heldout is not None
             else None
@@ -1006,13 +1070,19 @@ def _linkage_candidate_metrics(
                 permutation_rate,
                 heldout_rate,
                 len(queries),
+                selection_index,
             )
         )
-    # Select the attacker by its unadjusted disclosure signal.  Baselines
-    # contextualize that selected signal, but must not cause a high-risk key
-    # combination to be discarded in favor of a lower raw signal.
-    advantage, unique_rate, permutation_rate, heldout_rate, evaluated_count = max(
-        candidates, key=lambda item: item[1]
+    advantage, unique_rate, permutation_rate, heldout_rate, evaluated_count, _ = max(
+        candidates,
+        key=lambda item: (
+            item[0],
+            item[1],
+            item[4],
+            -item[2],
+            -(item[3] or 0.0),
+            -item[5],
+        ),
     )
     successes = round(unique_rate * evaluated_count)
     metrics: dict[str, int | float] = {
@@ -1024,7 +1094,7 @@ def _linkage_candidate_metrics(
     if heldout is not None and heldout_rate is not None:
         metrics.update(
             {
-                "heldout_count": len(heldout._profiles),
+                "heldout_count": len(heldout),
                 "heldout_unique_candidate_rate": heldout_rate,
             }
         )
@@ -1036,26 +1106,7 @@ def _linkage_candidate_metrics(
 
 
 def _linkage_failure(metrics: Mapping[str, int | float], policy: PrivacyPolicy) -> bool:
-    return (
-        float(metrics["unique_candidate_rate"]) > policy.thresholds["linkage_advantage"]
-        or float(metrics["linkage_advantage"]) > policy.thresholds["linkage_advantage"]
-    )
-
-
-def _linkage_query_groups(
-    policy: PrivacyPolicy, generated: _PrivatePackage
-) -> tuple[tuple[_PrivatePatientProfile, ...], ...]:
-    groups = [generated._profiles]
-    if "sex" in policy.subgroups:
-        by_sex: dict[str, list[_PrivatePatientProfile]] = {}
-        for profile in generated._profiles:
-            by_sex.setdefault(profile._demographics[0], []).append(profile)
-        groups.extend(
-            tuple(group)
-            for _, group in sorted(by_sex.items())
-            if len(group) >= policy.minimum_evaluable_patients
-        )
-    return tuple(groups)
+    return float(metrics["linkage_advantage"]) > policy.thresholds["linkage_advantage"]
 
 
 def _evaluate_linkage_control(
@@ -1075,18 +1126,27 @@ def _evaluate_linkage_control(
         packages = (reference, generated, heldout)
     if not _packages_have_profile_evidence(policy, *packages):
         return _unevaluable_control("linkage", "insufficient_evidence")
+    query_cells, underpowered = _subgroup_query_cells(policy, generated, heldout)
     group_metrics = tuple(
         _linkage_candidate_metrics(
-            reference, generated, heldout, group, _linkage_selections(policy)
+            reference, heldout_cell, generated_cell, _linkage_selections(policy)
         )
-        for group in _linkage_query_groups(policy, generated)
+        for generated_cell, heldout_cell in query_cells
     )
     metrics = max(
         group_metrics,
-        key=lambda item: (item["unique_candidate_rate"], item["linkage_advantage"]),
+        key=lambda item: (
+            item["linkage_advantage"],
+            item["unique_candidate_rate"],
+            item["evaluated_count"],
+            -item["permutation_unique_rate"],
+            -item.get("heldout_unique_candidate_rate", 0.0),
+        ),
     )
     if _linkage_failure(metrics, policy):
         return PrivacyControlResult("linkage", "FAIL", metrics, "linkage_threshold_exceeded")
+    if underpowered:
+        return _unevaluable_control("linkage", "insufficient_evidence")
     reason = "linkage_within_threshold" if heldout is not None else "linkage_reference_permutation_only"
     return PrivacyControlResult("linkage", "PASS", metrics, reason)
 
@@ -1388,11 +1448,14 @@ def _control_harness_advantage(
     # based.  Held-out rates remain reportable as a validity baseline, but a
     # caller-supplied held-out aggregate must not suppress harness detection.
     linkage = _linkage_candidate_metrics(
-        reference, control, None, control._profiles, _linkage_selections(policy)
+        reference, None, control._profiles, _linkage_selections(policy)
     )
     heldout_linkage = (
         _linkage_candidate_metrics(
-            reference, control, heldout, control._profiles, _linkage_selections(policy)
+            reference,
+            heldout._profiles,
+            control._profiles,
+            _linkage_selections(policy),
         )
         if heldout is not None
         else None
@@ -1720,6 +1783,11 @@ def _validate_evaluated_metrics(control: PrivacyControlResult, policy: PrivacyPo
             raise ValueError("privacy report rates must be bounded")
     if int(metrics["evaluated_count"]) < policy.minimum_evaluable_patients:
         raise ValueError("privacy report evidence is underpowered")
+    if any(
+        name in metrics and int(metrics[name]) < policy.minimum_evaluable_patients
+        for name in ("heldout_count", "harness_heldout_count")
+    ):
+        raise ValueError("privacy report held-out evidence is underpowered")
     for numerator, denominator in (
         ("overlap_count", "identifier_count"),
         ("reproduction_count", "evaluated_count"),

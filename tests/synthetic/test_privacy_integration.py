@@ -138,9 +138,10 @@ def test_audit_is_byte_deterministic_and_suppresses_undersized_subgroups(tmp_pat
 
     assert first.report.canonical_json_bytes() == second.report.canonical_json_bytes()
     linkage = {control.control_id: control for control in first.report.controls}["linkage"]
-    assert linkage.status == "PASS"
-    assert linkage.metrics["evaluated_count"] == 12
-    assert "sex" not in linkage.metrics
+    assert first.report.status == linkage.status == "UNEVALUABLE"
+    assert linkage.reason_code == "insufficient_evidence"
+    assert linkage.metrics == {}
+    assert "sex" not in repr(linkage).lower()
 
 
 def test_malformed_heldout_evidence_suppresses_dependent_control_packages(tmp_path: Path) -> None:
@@ -299,6 +300,42 @@ def test_report_validation_rejects_incomplete_heldout_nearest_metrics(tmp_path: 
 
     with pytest.raises(ValueError, match="held-out metrics are incomplete"):
         _validate_evaluated_metrics(forged, result.report.policy)
+
+
+@pytest.mark.parametrize(
+    ("control_id", "denominator"),
+    [
+        ("attribute_disclosure", "heldout_count"),
+        ("linkage", "heldout_count"),
+        ("nearest_neighbor", "heldout_count"),
+        ("positive_control", "harness_heldout_count"),
+    ],
+)
+def test_report_validation_rejects_underpowered_heldout_rate_cells(
+    tmp_path: Path, control_id: str, denominator: str
+) -> None:
+    """Catches an undersized held-out aggregate being promoted as evaluated evidence."""
+    result = audit_privacy(
+        _config(
+            tmp_path / "audit",
+            synthetic_root=write_generated_package(tmp_path / "copied", id_prefix="GEN"),
+            heldout_root=write_real_package(tmp_path / "heldout", id_prefix="HLD"),
+            positive_control_root=write_generated_package(
+                tmp_path / "positive", id_prefix="POS"
+            ),
+        )
+    )
+    control = next(item for item in result.report.controls if item.control_id == control_id)
+    assert control.status != "UNEVALUABLE"
+    forged = replace(
+        control,
+        metrics={**control.metrics, denominator: result.report.policy.minimum_evaluable_patients - 1},
+    )
+
+    with pytest.raises(ValueError, match="held-out evidence is underpowered") as error:
+        _validate_evaluated_metrics(forged, result.report.policy)
+
+    assert str(result.report.policy.minimum_evaluable_patients - 1) not in str(error.value)
 
 
 def test_report_writer_rejects_heldout_baseline_that_hides_raw_nearest_signal(tmp_path: Path) -> None:

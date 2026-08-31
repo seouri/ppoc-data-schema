@@ -392,8 +392,8 @@ def test_nearest_neighbor_reports_exact_near_unique_and_tied_buckets_without_ove
     assert result.metrics["margin_zero_rate"] == round(1 / 3, 6)
 
 
-def test_linkage_reports_baselines_for_the_selected_raw_signal(tmp_path: Path) -> None:
-    """Catches omitting a reported baseline after selecting the highest raw signal."""
+def test_linkage_reports_baselines_for_the_maximum_advantage(tmp_path: Path) -> None:
+    """Catches selecting raw uniqueness instead of the maximum adjusted advantage."""
     policy = _policy(
         required_controls=["exact_reproduction", "identifier_overlap", "linkage"],
         subgroups=["overall"],
@@ -422,9 +422,9 @@ def test_linkage_reports_baselines_for_the_selected_raw_signal(tmp_path: Path) -
     assert result.status == "FAIL"
     assert result.reason_code == "linkage_threshold_exceeded"
     assert result.metrics["unique_candidate_rate"] == 1.0
-    assert result.metrics["permutation_unique_rate"] == 1.0
+    assert result.metrics["permutation_unique_rate"] == 0.0
     assert result.metrics["heldout_unique_candidate_rate"] == 0.0
-    assert result.metrics["linkage_advantage"] == 0.0
+    assert result.metrics["linkage_advantage"] == 1.0
 
 
 def test_linkage_promotes_an_evaluable_subgroup_failure_without_reporting_subgroups() -> None:
@@ -463,11 +463,11 @@ def test_linkage_promotes_an_evaluable_subgroup_failure_without_reporting_subgro
     assert "sex" not in repr(result).lower()
 
 
-def test_linkage_selects_highest_raw_signal_before_baseline_adjustment() -> None:
-    """Catches a high-uniqueness attacker being discarded for a lower adjusted attacker."""
+def test_linkage_selects_highest_advantage_when_raw_and_adjusted_rankings_differ() -> None:
+    """Catches selecting or thresholding raw uniqueness instead of adjusted advantage."""
     policy = _policy(
         attacker_knowledge=["demographics", "timing"],
-        thresholds=policy_mapping()["thresholds"] | {"linkage_advantage": 1.0},
+        thresholds=policy_mapping()["thresholds"] | {"linkage_advantage": 0.5},
     )
     reference = _private_package(
         tuple(
@@ -486,9 +486,9 @@ def test_linkage_selects_highest_raw_signal_before_baseline_adjustment() -> None
     result = _evaluate_linkage_control(policy, reference, generated, heldout=None)
 
     assert result.status == "PASS"
-    assert result.metrics["unique_candidate_rate"] == 1.0
-    assert result.metrics["permutation_unique_rate"] == 1.0
-    assert result.metrics["linkage_advantage"] == 0.0
+    assert result.metrics["unique_candidate_rate"] == round(1 / 3, 6)
+    assert result.metrics["permutation_unique_rate"] == 0.0
+    assert result.metrics["linkage_advantage"] == round(1 / 3, 6)
 
 
 def test_linkage_suppresses_underpowered_sex_cells_without_turning_them_into_passes(
@@ -513,7 +513,77 @@ def test_linkage_suppresses_underpowered_sex_cells_without_turning_them_into_pas
     result = _evaluate_linkage_control(policy, reference, generated, heldout=heldout)
     overall_result = _evaluate_linkage_control(overall_only, reference, generated, heldout=heldout)
 
-    assert result.status == "PASS"
-    assert result.metrics["evaluated_count"] == 4
+    assert result.status == "UNEVALUABLE"
+    assert result.reason_code == "insufficient_evidence"
+    assert result.metrics == {}
     assert "sex" not in repr(result).lower()
-    assert result.metrics == overall_result.metrics
+    assert overall_result.status == "PASS"
+
+
+def test_nearest_neighbor_suppresses_underpowered_sex_cells_without_passing(
+    tmp_path: Path,
+) -> None:
+    """Catches omitting a requested rare nearest-neighbor subgroup from the decision."""
+    policy = _policy(
+        thresholds=policy_mapping()["thresholds"]
+        | {"nearest_neighbor_zero_rate": 1.0, "nearest_neighbor_unique_rate": 1.0}
+    )
+    overall_only = _policy(
+        subgroups=["overall"],
+        thresholds=policy_mapping()["thresholds"]
+        | {"nearest_neighbor_zero_rate": 1.0, "nearest_neighbor_unique_rate": 1.0},
+    )
+    reference = _package(tmp_path / "real", synthetic=False, prefix="REAL")
+    generated = _package(
+        tmp_path / "generated", synthetic=True, prefix="GEN", independent=True, patient_count=4
+    )
+
+    result = _evaluate_nearest_neighbor_control(policy, reference, generated, heldout=None)
+    overall_result = _evaluate_nearest_neighbor_control(
+        overall_only, reference, generated, heldout=None
+    )
+
+    assert result.status == "UNEVALUABLE"
+    assert result.reason_code == "insufficient_evidence"
+    assert result.metrics == {}
+    assert "sex" not in repr(result).lower()
+    assert overall_result.status == "PASS"
+
+
+def test_evaluable_subgroup_failures_precede_underpowered_subgroup_evidence() -> None:
+    """Catches rare-cell suppression downgrading an evaluated nearest or linkage failure."""
+    policy = _policy(
+        thresholds=policy_mapping()["thresholds"]
+        | {
+            "linkage_advantage": 0.8,
+            "nearest_neighbor_unique_rate": 1.0,
+            "nearest_neighbor_zero_rate": 0.8,
+        }
+    )
+    reference = _private_package(
+        tuple(
+            _private_profile(f"r{index}", tuple(f"{component}{index}" for component in "dturx"))
+            for index in range(4)
+        )
+    )
+    generated = _private_package(
+        tuple(
+            _private_profile(
+                f"g{index}",
+                tuple(f"{component}{index}" for component in "dturx")
+                if index < 3
+                else tuple(f"unmatched-{component}" for component in "dturx"),
+                sex="F" if index < 3 else "M",
+            )
+            for index in range(4)
+        )
+    )
+
+    nearest = _evaluate_nearest_neighbor_control(policy, reference, generated, heldout=None)
+    linkage = _evaluate_linkage_control(policy, reference, generated, heldout=None)
+
+    assert nearest.status == linkage.status == "FAIL"
+    assert nearest.metrics["evaluated_count"] == linkage.metrics["evaluated_count"] == 3
+    assert nearest.reason_code == "zero_proximity_threshold_exceeded"
+    assert linkage.reason_code == "linkage_threshold_exceeded"
+    assert "sex" not in repr((nearest, linkage)).lower()
