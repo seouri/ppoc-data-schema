@@ -138,7 +138,7 @@
 - [x] Dispatch a fresh reviewer for each implementation task; resolve Critical/Important findings with fresh implementer fix rounds and scoped re-reviews.
 - [x] Dispatch one broad final reviewer over the merge-base diff and resolve all Critical/Important findings.
 - [x] Run full tests, Ruff, schema validation, diff checks, leakage/boundary checks, and a generated frame/resource smoke example from the feature worktree.
-- [ ] Merge to `main`, rerun verification on merged `main`, push, verify `HEAD == origin/main`, and remove only this slice's worktree/branch/ignored SDD workspace.
+- [x] Merge to `main`, rerun verification on merged `main`, push, verify `HEAD == origin/main`, and remove only this slice's worktree/branch/ignored SDD workspace.
 
 ### Completion evidence
 
@@ -149,3 +149,10 @@
 - Implementation/fix commits: `d53d749`, `ddfd1b0`, `d869baf`, `f1935af`, `487a69f`, `b6643c6`, `0a5414f`, `894c475`, `121d14f`, `ddee7ba`.
 - Review outcome: task reviews and scoped re-reviews found and resolved all reported findings; broad re-review at `ddee7ba87177b76d956836e1e64232379f77aaeb` was `READY` with no Critical, Important, or Minor findings.
 - Fresh verification: focused observed-resource suite `117 passed`; full suite `923 passed`; Ruff clean; schema checker `validated 8 resources in datapackage.json`; `git diff --check 2d74641..HEAD` clean; deterministic in-memory smoke report `PASS` with seven passing checks.
+
+### Integration evidence
+
+- Main fast-forward merge: `2d74641` → `4566feb0ca81ff97f33b60d12ab45aba46918d8f`.
+- Merged-main verification at `4566feb`: full suite `923 passed`; focused suite `117 passed`; Ruff clean; schema checker `validated 8 resources in datapackage.json`; diff check clean; deterministic smoke report `PASS` with seven passing checks.
+- Push/parity: `HEAD == origin/main == 4566feb0ca81ff97f33b60d12ab45aba46918d8f`.
+- Cleanup: removed `.worktrees/observed-resource-contract`, deleted `codex/observed-resource-contract`, pruned worktree metadata; unrelated worktree `/private/tmp/ppoc-synthetic-growth-fixtures-foundation` preserved.
