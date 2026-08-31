@@ -109,27 +109,27 @@
 - Consumes: Task 2 projection output and fixed validation models.
 - Produces: `validate_ghd_ancillary_resources(member, projection, policy) -> AncillaryValidationReport` with fixed aggregate checks and redacted malformed-input behavior.
 
-- [ ] **Step 1: Write failing validator and boundary tests**
+- [x] **Step 1: Write failing validator and boundary tests**
 
   Assert clean GHD/healthy projections pass, non-GHD emptiness is accepted, and the validator returns fixed checks for pathway scope, row schema, causal timing, cross-resource links, and source evidence. Tamper IDs, field order, fixed fictional codes/values, event-kind order, duplicate rows, result delay, medication timing, visit links, source-frame status, and hidden-treatment/visible-diagnosis combinations; assert `FAIL` with fixed reason codes and no payload leakage. Add tests for absent/malformed private evidence returning `UNEVALUABLE`, status precedence, no mutation, no raw exception text, and mappings/reprs containing none of the synthetic row identifiers or event payloads. Add an AST/import/signature scanner that rejects governed/filesystem/package/Synthea dependencies, path-like/output arguments, and forbidden lifecycle calls in `synthetic.native.ancillary`.
 
-- [ ] **Step 2: Run validator/boundary tests to verify they fail**
+- [x] **Step 2: Run validator/boundary tests to verify they fail**
 
   Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_ancillary_validation.py tests/synthetic/test_ancillary_boundaries.py`
 
   Expected: validator and boundary assertions fail because the Task 1 validator remains a stub and Task 2 lacks defensive comparison logic.
 
-- [ ] **Step 3: Implement fixed aggregate validation**
+- [x] **Step 3: Implement fixed aggregate validation**
 
   Compare the supplied projection with the pathway expected from the member without serializing row payloads. Validate each row's exact resource/field order, synthetic IDs, patient and visit links, fixed fictional strings, result delay, duplicate/order constraints, and nullable problem-list semantics. Validate source-frame status and causal event ordering; treat absent/malformed private source evidence as `UNEVALUABLE` unless a visible row is independently invalid. Catch evaluator access failures and return fixed redacted checks rather than exception text. Keep report checks aggregate-only and make report status `FAIL` if any check fails, otherwise `UNEVALUABLE` if any check is unevaluable, otherwise `PASS`.
 
-- [ ] **Step 4: Run focused validator/lint checks**
+- [x] **Step 4: Run focused validator/lint checks**
 
   Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_ancillary_validation.py tests/synthetic/test_ancillary_boundaries.py tests/synthetic/test_ancillary_projection.py tests/synthetic/test_ancillary_models.py && UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run ruff check src/synthetic/native/ancillary.py tests/synthetic/test_ancillary_*.py && git diff --check`
 
   Expected: all focused tests pass and Ruff/whitespace checks are clean.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
   ```bash
   git add src/synthetic/native/ancillary.py tests/synthetic/test_ancillary_validation.py tests/synthetic/test_ancillary_boundaries.py
