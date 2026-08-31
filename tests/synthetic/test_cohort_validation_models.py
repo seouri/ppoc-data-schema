@@ -3,6 +3,8 @@ from __future__ import annotations
 import dataclasses
 import json
 import math
+from decimal import Decimal
+from fractions import Fraction
 from types import MappingProxyType
 
 import pytest
@@ -180,6 +182,16 @@ def test_policy_rejects_unknown_or_invalid_growth_tolerances(
         valid_policy(growth_tolerances=growth_tolerances)
 
 
+@pytest.mark.parametrize("number", [Fraction(1, 2), Decimal("0.5")])
+def test_policy_rejects_non_json_numeric_types(number: object) -> None:
+    with pytest.raises((TypeError, ValueError), match="proportion_tolerance"):
+        valid_policy(proportion_tolerance=number)
+    tolerances = dict(valid_policy().growth_tolerances)
+    tolerances["height_z_score"] = number  # type: ignore[assignment]
+    with pytest.raises((TypeError, ValueError), match="growth_tolerances"):
+        valid_policy(growth_tolerances=tolerances)
+
+
 @pytest.mark.parametrize(
     "windows",
     [
@@ -264,6 +276,31 @@ def test_comparison_rejects_unsafe_registry_or_numeric_values(changes: dict[str,
         targeted_comparison(**changes)
 
 
+@pytest.mark.parametrize("number", [Fraction(1, 2), Decimal("0.5")])
+def test_comparison_rejects_non_json_numeric_types(number: object) -> None:
+    with pytest.raises((TypeError, ValueError), match="observed_value"):
+        targeted_comparison(observed_value=number)
+    with pytest.raises((TypeError, ValueError), match="target_value"):
+        targeted_comparison(target_value=number)
+
+
+@pytest.mark.parametrize(
+    ("name", "layer"),
+    [
+        ("demographics.sex.X", "demographics"),
+        ("demographics.ethnicity.arbitrary", "demographics"),
+        ("coverage.unknown", "coverage"),
+        ("coverage.members_with_recorded_event", "coverage"),
+        ("cohort_size", "coverage"),
+    ],
+)
+def test_comparison_rejects_unknown_names_and_inconsistent_cohort_layer(
+    name: str, layer: str
+) -> None:
+    with pytest.raises((TypeError, ValueError), match="(name|layer)"):
+        targeted_comparison(name=name, layer=layer)
+
+
 def test_comparison_rejects_inconsistent_targeted_status_and_reason() -> None:
     with pytest.raises(ValueError, match="status"):
         targeted_comparison(
@@ -316,6 +353,18 @@ def test_report_canonicalizes_order_and_has_an_aggregate_only_mapping() -> None:
     assert "truth" not in repr(report)
     with pytest.raises(dataclasses.FrozenInstanceError):
         report.status = CohortValidationStatus.PASS  # type: ignore[misc]
+
+
+def test_report_rejects_empty_comparison_sets() -> None:
+    with pytest.raises(ValueError, match="nonempty"):
+        CohortValidationReport(
+            report_version=COHORT_VALIDATION_REPORT_VERSION,
+            policy_id="cohort-profile-v1",
+            cohort_profile="development-v1",
+            seed=7,
+            status=CohortValidationStatus.PASS,
+            comparisons=(),
+        )
 
 
 @pytest.mark.parametrize(

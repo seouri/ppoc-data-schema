@@ -11,10 +11,14 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
-from numbers import Real
 from types import MappingProxyType
 
 from synthetic.calibration import require_aggregate_safe_token
+from synthetic.calibration_targets import (
+    ETHNICITY_CATEGORY_SLUGS,
+    RACE_CATEGORY_SLUGS,
+    SEX_CATEGORY_SLUGS,
+)
 from synthetic.cohort import NativeCohort
 from synthetic.models import DisorderKind
 
@@ -44,6 +48,18 @@ _LAYER_ORDER = MappingProxyType(
     {name: index for index, name in enumerate(COHORT_COMPARISON_LAYERS)}
 )
 _DEMOGRAPHIC_DIMENSIONS = frozenset({"sex", "ethnicity", "race"})
+_DEMOGRAPHIC_VALUES = MappingProxyType(
+    {
+        "sex": frozenset({*SEX_CATEGORY_SLUGS, *SEX_CATEGORY_SLUGS.values()}),
+        "ethnicity": frozenset(
+            {
+                *ETHNICITY_CATEGORY_SLUGS,
+                *ETHNICITY_CATEGORY_SLUGS.values(),
+            }
+        ),
+        "race": frozenset({*RACE_CATEGORY_SLUGS, *RACE_CATEGORY_SLUGS.values()}),
+    }
+)
 _FIXED_COMPARISON_NAMES = frozenset(
     {
         "cohort_size",
@@ -51,10 +67,8 @@ _FIXED_COMPARISON_NAMES = frozenset(
         "recorded_recognition",
         "recorded_workup",
         "recorded_diagnosis",
-        "coverage.cohort_size",
         "coverage.members_with_visit",
         "coverage.members_with_event",
-        "coverage.members_with_recorded_event",
     }
 )
 
@@ -121,7 +135,7 @@ def _require_nonnegative_integer(value: object, field_name: str) -> int:
 
 
 def _require_finite_number(value: object, field_name: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, Real):
+    if type(value) not in (int, float):
         raise TypeError(f"{field_name} must be a finite number")
     try:
         number = float(value)
@@ -241,10 +255,15 @@ def _expected_layer(name: str) -> str | None:
         "recorded_diagnosis",
     }:
         return "recorded"
-    if name.startswith("coverage."):
+    if name in _FIXED_COMPARISON_NAMES and name.startswith("coverage."):
         return "coverage"
     parts = name.split(".", 2)
-    if len(parts) == 3 and parts[0] == "demographics" and parts[1] in _DEMOGRAPHIC_DIMENSIONS:
+    if (
+        len(parts) == 3
+        and parts[0] == "demographics"
+        and parts[1] in _DEMOGRAPHIC_DIMENSIONS
+        and parts[2] in _DEMOGRAPHIC_VALUES[parts[1]]
+    ):
         return "demographics"
     if len(parts) == 2 and parts[0] == "latent_module" and parts[1] in _DISORDER_ORDER:
         return "latent"
@@ -266,9 +285,7 @@ def _validate_comparison_layer(name: str, value: object) -> str:
     if not isinstance(value, str) or value not in COMPARISON_LAYERS:
         raise ValueError("layer must be a registered cohort comparison layer")
     expected = _expected_layer(name)
-    if expected is not None and value != expected and not (
-        name == "cohort_size" and value == "coverage"
-    ):
+    if expected is not None and value != expected:
         raise ValueError("layer does not match the registered comparison name")
     return value
 
@@ -411,6 +428,8 @@ class CohortValidationReport:
             raise TypeError("status must be a CohortValidationStatus")
         if not isinstance(self.comparisons, tuple):
             raise TypeError("comparisons must be a tuple")
+        if not self.comparisons:
+            raise ValueError("comparisons must be nonempty")
         if not all(isinstance(item, CohortComparison) for item in self.comparisons):
             raise TypeError("comparisons must contain CohortComparison values")
         if len({item.name for item in self.comparisons}) != len(self.comparisons):
