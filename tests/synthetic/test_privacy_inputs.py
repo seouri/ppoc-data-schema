@@ -9,7 +9,11 @@ import pytest
 
 from synthetic.privacy_audit import _load_private_package
 from synthetic.schema_contract import load_descriptor, resource_spec
-from tests.synthetic.privacy_fixtures import write_generated_package, write_real_package
+from tests.synthetic.privacy_fixtures import (
+    exception_graph,
+    write_generated_package,
+    write_real_package,
+)
 
 
 def test_private_package_loader_enforces_marker_schema_and_private_profiles(tmp_path: Path) -> None:
@@ -39,7 +43,9 @@ def test_private_package_loader_traceback_does_not_retain_source_path(tmp_path: 
     formatted = "".join(traceback.format_exception(error.value))
     assert str(root) not in formatted
     assert sentinel not in formatted
-    assert error.value.__cause__ is None
+    graph = exception_graph(error.value)
+    assert graph == (error.value,)
+    assert all(str(root) not in repr(item) and sentinel not in repr(item) for item in graph)
 
 
 @pytest.mark.parametrize("synthetic", [True, False])
@@ -128,7 +134,9 @@ def test_private_package_loader_rejects_symlinked_resource_without_identifier_ec
     assert "GEN-P-001" not in formatted
     assert "GEN-V-001" not in formatted
     assert str(visits_path) not in formatted
-    assert error.value.__cause__ is None
+    graph = exception_graph(error.value)
+    assert graph == (error.value,)
+    assert all(str(visits_path) not in repr(item) for item in graph)
 
 
 @pytest.mark.parametrize("malformed", ["not-an-age", '"unterminated'])

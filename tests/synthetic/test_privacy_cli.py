@@ -20,6 +20,9 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def _command(tmp_path: Path) -> list[str]:
+    thresholds = {key: 1.0 for key in policy_mapping()["thresholds"]}
+    thresholds["identifier_overlap_rate"] = 0
+    thresholds["exact_reproduction_rate"] = 0
     return [
         sys.executable,
         "-m",
@@ -29,7 +32,7 @@ def _command(tmp_path: Path) -> list[str]:
         "--synthetic-root",
         str(_independent_generated(tmp_path / "generated")),
         "--policy",
-        str(write_policy(tmp_path / "policy.json", thresholds={key: 1.0 for key in policy_mapping()["thresholds"]})),
+        str(write_policy(tmp_path / "policy.json", thresholds=thresholds)),
         "--output",
         str(tmp_path / "output"),
     ]

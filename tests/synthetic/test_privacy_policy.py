@@ -15,7 +15,7 @@ from synthetic.privacy_audit import (
     PrivacyRunConfig,
     load_privacy_policy,
 )
-from tests.synthetic.privacy_fixtures import policy_mapping, write_policy
+from tests.synthetic.privacy_fixtures import exception_graph, policy_mapping, write_policy
 
 
 def _passing_controls() -> tuple[PrivacyControlResult, ...]:
@@ -92,6 +92,24 @@ def test_load_privacy_policy_requires_mandatory_zero_thresholds(
     assert repr(invalid_value) not in str(error.value)
 
 
+@pytest.mark.parametrize("threshold_name", ["identifier_overlap_rate", "exact_reproduction_rate"])
+@pytest.mark.parametrize("literal", ["1e-9999", "-1e-9999", "5e-324", "-5e-324"])
+def test_load_privacy_policy_rejects_nonzero_underflow_threshold_literals(
+    tmp_path: Path, threshold_name: str, literal: str
+) -> None:
+    """Catches binary-float underflow converting a nonzero policy literal to zero."""
+    payload = json.dumps(policy_mapping())
+    zero_literal = f'"{threshold_name}": 0'
+    assert payload.count(zero_literal) == 1
+    path = tmp_path / "policy.json"
+    path.write_text(payload.replace(zero_literal, f'"{threshold_name}": {literal}'), encoding="utf-8")
+
+    with pytest.raises(ValueError) as error:
+        load_privacy_policy(path)
+
+    assert literal not in str(error.value)
+
+
 def test_load_privacy_policy_traceback_does_not_retain_source_path(tmp_path: Path) -> None:
     """Catches path-bearing open failures surviving in the public exception chain."""
     sentinel = "PRIVATE" + "-POLICY-PATH"
@@ -103,7 +121,9 @@ def test_load_privacy_policy_traceback_does_not_retain_source_path(tmp_path: Pat
     formatted = "".join(traceback.format_exception(error.value))
     assert str(path) not in formatted
     assert sentinel not in formatted
-    assert error.value.__cause__ is None
+    graph = exception_graph(error.value)
+    assert graph == (error.value,)
+    assert all(str(path) not in repr(item) and sentinel not in repr(item) for item in graph)
 
 
 @pytest.mark.parametrize(

@@ -12,6 +12,7 @@ import stat
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import date
+from decimal import Decimal
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Literal
@@ -109,8 +110,12 @@ def _require_integer(value: object, field_name: str, minimum: int) -> int:
 
 
 def _require_threshold(value: object, field_name: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
+    if isinstance(value, bool) or not isinstance(value, (int, float, Decimal)):
         raise ValueError(f"{field_name} threshold must be finite")  # noqa: TRY004
+    if isinstance(value, Decimal):
+        if not value.is_finite() or not Decimal(0) <= value <= Decimal(1):
+            raise ValueError(f"{field_name} threshold must be in [0, 1]")
+        return float(value)
     number = float(value)
     if not math.isfinite(number) or not 0 <= number <= 1:
         raise ValueError(f"{field_name} threshold must be in [0, 1]")
@@ -195,7 +200,7 @@ class PrivacyPolicy:
             name: _require_threshold(self.thresholds[name], name) for name in sorted(_THRESHOLD_KEYS)
         }
         if any(
-            frozen[name] != 0.0
+            self.thresholds[name] != 0
             for name in ("identifier_overlap_rate", "exact_reproduction_rate")
         ):
             raise ValueError("mandatory zero threshold is invalid")
@@ -279,14 +284,18 @@ def _read_regular_bytes(path: Path, label: str, maximum: int) -> bytes:
 
 
 def load_privacy_policy(path: Path) -> PrivacyPolicy:
+    read_failed = False
     try:
         mapping = json.loads(
             _read_regular_bytes(path, "privacy policy", MAX_PRIVACY_POLICY_BYTES).decode("utf-8"),
             object_pairs_hook=_reject_duplicate_json_keys,
             parse_constant=_reject_nonfinite_json,
+            parse_float=Decimal,
         )
     except (UnicodeError, json.JSONDecodeError, RecursionError, ValueError):
-        raise ValueError("privacy policy is invalid") from None
+        read_failed = True
+    if read_failed:
+        raise ValueError("privacy policy is invalid")
     return PrivacyPolicy.from_mapping(mapping)
 
 
@@ -656,6 +665,7 @@ def _load_private_package(
     if not isinstance(package_root, Path) or not isinstance(synthetic, bool):
         raise ValueError("package input is invalid")  # noqa: TRY004
     _require_integer(longitudinal_minimum, "longitudinal_minimum", 3)
+    descriptor_failed = False
     try:
         descriptor = _load_governed_descriptor(package_root / "datapackage.json")
         marker_present = "x-synthetic" in descriptor
@@ -663,8 +673,11 @@ def _load_private_package(
             raise ValueError("package marker polarity is invalid")
         descriptor = _validate_descriptor_mapping(descriptor)
     except (KeyError, TypeError, ValueError):
-        raise ValueError("package descriptor or marker is invalid") from None
+        descriptor_failed = True
+    if descriptor_failed:
+        raise ValueError("package descriptor or marker is invalid")
     connection = duckdb.connect(":memory:")
+    data_failed = False
     try:
         staged = _stage_validated_resources(connection, descriptor, package_root)
         _require_patient_links(connection, descriptor, staged)
@@ -682,9 +695,11 @@ def _load_private_package(
             if isinstance(value, str)
         )
     except (duckdb.Error, TypeError, ValueError):
-        raise ValueError("package data is invalid") from None
+        data_failed = True
     finally:
         connection.close()
+    if data_failed:
+        raise ValueError("package data is invalid")
     return _PrivatePackage(
         patient_count=patient_count,
         _identifier_values=identifiers,

@@ -12,6 +12,23 @@ from tests.synthetic.calibration_fixtures import write_mock_snapshot, write_synt
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
 
+def exception_graph(error: BaseException) -> tuple[BaseException, ...]:
+    """Return the recursively reachable cause and context graph for an error."""
+    found: list[BaseException] = []
+    pending = [error]
+    seen: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        found.append(current)
+        for linked in (current.__cause__, current.__context__):
+            if linked is not None:
+                pending.append(linked)
+    return tuple(found)
+
+
 def policy_mapping(**changes: object) -> dict[str, Any]:
     fingerprint = schema_fingerprint(load_descriptor(REPOSITORY_ROOT / "datapackage.json"))
     value: dict[str, Any] = {
