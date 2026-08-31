@@ -21,10 +21,10 @@ Files:
 - Create: `src/synthetic/native/observations.py`
 - Create: `tests/synthetic/test_observation_models.py`
 
-- [ ] Write failing tests for policy bounds/tokens, synthetic-only patient IDs, deterministic stream-name identity, visible mapping/repr leakage exclusion, strict visit/measurement/event records, and private truth construction.
-- [ ] Run focused model tests and confirm expected failures.
-- [ ] Implement immutable policy, visible observation records, private truth, and aggregate report models.
-- [ ] Run focused tests, Ruff, and diff checks; commit `feat: add observation frame models`.
+- [x] Write failing tests for policy bounds/tokens, synthetic-only patient IDs, deterministic stream-name identity, visible mapping/repr leakage exclusion, strict visit/measurement/event records, and private truth construction.
+- [x] Run focused model tests and confirm expected failures.
+- [x] Implement immutable policy, visible observation records, private truth, and aggregate report models.
+- [x] Run focused tests, Ruff, and diff checks; commit `feat: add observation frame models`.
 
 ### Task 2: Implement deterministic observation-frame generation
 
@@ -32,11 +32,11 @@ Files:
 - Modify: `src/synthetic/native/observations.py`
 - Create: `tests/synthetic/test_observation_generation.py`
 
-- [ ] Write failing tests for window/censoring, visit selection, independent availability, additive/rounding errors, BMI derivation, recognition/recorded-event delay, hidden event exclusion, and replay determinism.
-- [ ] Run focused generation tests and confirm failures before implementation.
-- [ ] Implement fixed stream orchestration and fail-closed source/event checks without changing the visible generator.
-- [ ] Ensure malformed/nonpositive post-error measurements raise rather than clip or silently substitute latent values.
-- [ ] Run focused tests, Ruff, and diff checks; commit `feat: generate evaluator observation frames`.
+- [x] Write failing tests for window/censoring, visit selection, independent availability, additive/rounding errors, BMI derivation, recognition/recorded-event delay, hidden event exclusion, and replay determinism.
+- [x] Run focused generation tests and confirm failures before implementation.
+- [x] Implement fixed stream orchestration and fail-closed source/event checks without changing the visible generator.
+- [x] Ensure malformed/nonpositive post-error measurements raise rather than clip or silently substitute latent values.
+- [x] Run focused tests, Ruff, and diff checks; commit `feat: generate evaluator observation frames`.
 
 ### Task 3: Implement aggregate validation and boundary tests
 
