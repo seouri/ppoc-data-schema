@@ -8,9 +8,11 @@ from collections import Counter
 from collections.abc import Mapping
 from dataclasses import InitVar, dataclass
 from enum import Enum
+from itertools import pairwise
 from types import MappingProxyType
 
 from synthetic.calibration import require_aggregate_safe_token
+from synthetic.cohort import NativeCohort
 
 TEMPORAL_DRIFT_REPORT_VERSION = "temporal-drift-report-v1"
 
@@ -509,6 +511,322 @@ class TemporalDriftReport:
         return "TemporalDriftReport(<aggregate-only>)"
 
 
+@dataclass(frozen=True)
+class _VisibleWindowMetrics:
+    window: TemporalWindowPolicy
+    member_support: int
+    growth_coverage: float
+    visit_coverage: float
+    event_rate: float
+    mean_visit_count: float
+    interval_member_support: int
+    mean_inter_visit_days: float | None
+
+
+def _is_in_window(age_days: int, window: TemporalWindowPolicy) -> bool:
+    return window.lower_age_days <= age_days < window.upper_age_days
+
+
+def _extract_visible_window_metrics(
+    cohort: NativeCohort, window: TemporalWindowPolicy
+) -> _VisibleWindowMetrics:
+    member_support = len(cohort.members)
+    growth_member_count = 0
+    visit_member_count = 0
+    event_member_count = 0
+    total_visit_count = 0
+    interval_member_support = 0
+    intervals: list[int] = []
+
+    for member in cohort.members:
+        growth_count = sum(
+            _is_in_window(point.age_days, window)
+            for point in member.trajectory.physiology.points
+        )
+        visit_ages = sorted(
+            visit.age_days
+            for visit in member.frame.visits
+            if _is_in_window(visit.age_days, window)
+        )
+        has_event = any(
+            _is_in_window(event.age_days, window) for event in member.frame.events
+        )
+
+        growth_member_count += growth_count >= window.minimum_growth_points
+        visit_member_count += len(visit_ages) >= window.minimum_visible_visits
+        event_member_count += has_event
+        total_visit_count += len(visit_ages)
+        if len(visit_ages) >= 2:
+            interval_member_support += 1
+            intervals.extend(
+                current - previous
+                for previous, current in pairwise(visit_ages)
+            )
+
+    denominator = member_support or 1
+    mean_inter_visit_days = (
+        math.fsum(intervals) / len(intervals) if intervals else None
+    )
+    values = (
+        growth_member_count / denominator,
+        visit_member_count / denominator,
+        event_member_count / denominator,
+        total_visit_count / denominator,
+    )
+    if not all(math.isfinite(value) for value in values) or (
+        mean_inter_visit_days is not None
+        and not math.isfinite(mean_inter_visit_days)
+    ):
+        raise ValueError("visible temporal aggregates must be finite")
+    return _VisibleWindowMetrics(
+        window=window,
+        member_support=member_support,
+        growth_coverage=values[0],
+        visit_coverage=values[1],
+        event_rate=values[2],
+        mean_visit_count=values[3],
+        interval_member_support=interval_member_support,
+        mean_inter_visit_days=mean_inter_visit_days,
+    )
+
+
+def _unevaluable_comparison(
+    metric: str, window_id: str
+) -> TemporalComparison:
+    return TemporalComparison(
+        metric=metric,
+        window_id=window_id,
+        status=TemporalDriftStatus.UNEVALUABLE,
+        reason_code="INSUFFICIENT_SUPPORT",
+        observed=None,
+        target=None,
+        difference=None,
+        support_count=None,
+    )
+
+
+def _visible_comparison(
+    metric: str,
+    window_id: str,
+    observed: float,
+    target: float | None,
+    support_count: int,
+) -> TemporalComparison:
+    difference = _comparison_difference(metric, observed, target)
+    status = (
+        TemporalDriftStatus.PASS
+        if difference == 0
+        else TemporalDriftStatus.FAIL
+    )
+    return TemporalComparison(
+        metric=metric,
+        window_id=window_id,
+        status=status,
+        reason_code="WITHIN_BOUND" if status is TemporalDriftStatus.PASS else "OUTSIDE_BOUND",
+        observed=observed,
+        target=target,
+        difference=difference,
+        support_count=support_count,
+    )
+
+
+def _window_comparisons(metrics: _VisibleWindowMetrics) -> tuple[TemporalComparison, ...]:
+    window = metrics.window
+    if metrics.member_support < window.minimum_member_support:
+        return tuple(
+            _unevaluable_comparison(metric, window.window_id)
+            for metric in (
+                "growth_window_coverage",
+                "visible_visit_coverage",
+                "visible_event_rate",
+                "mean_inter_visit_days",
+            )
+        )
+
+    comparisons = [
+        _visible_comparison(
+            "growth_window_coverage",
+            window.window_id,
+            metrics.growth_coverage,
+            window.minimum_growth_coverage,
+            metrics.member_support,
+        ),
+        _visible_comparison(
+            "visible_visit_coverage",
+            window.window_id,
+            metrics.visit_coverage,
+            window.minimum_visible_visit_coverage,
+            metrics.member_support,
+        ),
+        _visible_comparison(
+            "visible_event_rate",
+            window.window_id,
+            metrics.event_rate,
+            None,
+            metrics.member_support,
+        ),
+    ]
+    if (
+        metrics.mean_inter_visit_days is None
+        or metrics.interval_member_support < window.minimum_member_support
+    ):
+        comparisons.append(
+            _unevaluable_comparison("mean_inter_visit_days", window.window_id)
+        )
+    else:
+        comparisons.append(
+            _visible_comparison(
+                "mean_inter_visit_days",
+                window.window_id,
+                metrics.mean_inter_visit_days,
+                window.maximum_mean_inter_visit_days,
+                metrics.interval_member_support,
+            )
+        )
+    return tuple(comparisons)
+
+
+def _step_comparisons(
+    previous: _VisibleWindowMetrics, current: _VisibleWindowMetrics
+) -> tuple[TemporalComparison, TemporalComparison]:
+    if (
+        previous.member_support < previous.window.minimum_member_support
+        or current.member_support < current.window.minimum_member_support
+    ):
+        return (
+            _unevaluable_comparison(
+                "mean_visit_count_step", current.window.window_id
+            ),
+            _unevaluable_comparison(
+                "recorded_event_rate_step", current.window.window_id
+            ),
+        )
+    return (
+        _visible_comparison(
+            "mean_visit_count_step",
+            current.window.window_id,
+            current.mean_visit_count - previous.mean_visit_count,
+            current.window.maximum_visit_count_step,
+            current.member_support,
+        ),
+        _visible_comparison(
+            "recorded_event_rate_step",
+            current.window.window_id,
+            current.event_rate - previous.event_rate,
+            current.window.maximum_recorded_event_rate_step,
+            current.member_support,
+        ),
+    )
+
+
+def _visible_check(
+    name: str, comparisons: tuple[TemporalComparison, ...]
+) -> TemporalCheck:
+    if any(
+        comparison.status is TemporalDriftStatus.FAIL for comparison in comparisons
+    ):
+        return TemporalCheck(name, TemporalDriftStatus.FAIL, "OUTSIDE_BOUND")
+    if any(
+        comparison.status is TemporalDriftStatus.UNEVALUABLE
+        for comparison in comparisons
+    ):
+        return TemporalCheck(
+            name, TemporalDriftStatus.UNEVALUABLE, "INSUFFICIENT_SUPPORT"
+        )
+    return TemporalCheck(name, TemporalDriftStatus.PASS, "WITHIN_BOUND")
+
+
+def validate_temporal_drift(
+    cohort: NativeCohort, policy: TemporalDriftPolicy
+) -> TemporalDriftReport:
+    """Evaluate aggregate visible temporal metrics for a fictional native cohort."""
+
+    if not isinstance(cohort, NativeCohort):
+        raise TypeError("cohort must be a NativeCohort")
+    if not isinstance(policy, TemporalDriftPolicy):
+        raise TypeError("policy must be a TemporalDriftPolicy")
+
+    window_metrics = tuple(
+        _extract_visible_window_metrics(cohort, window) for window in policy.windows
+    )
+    window_comparisons = tuple(
+        comparison
+        for metrics in window_metrics
+        for comparison in _window_comparisons(metrics)
+    )
+    step_comparisons = tuple(
+        comparison
+        for previous, current in pairwise(window_metrics)
+        for comparison in _step_comparisons(previous, current)
+    )
+    comparisons = window_comparisons + step_comparisons
+
+    coverage_comparisons = tuple(
+        comparison
+        for comparison in comparisons
+        if comparison.metric in _LOWER_BOUND_METRICS
+    )
+    sequence_comparisons = tuple(
+        comparison
+        for comparison in comparisons
+        if comparison.metric not in _LOWER_BOUND_METRICS
+    )
+    cohort_check = (
+        TemporalCheck("cohort_size", TemporalDriftStatus.PASS, "OK")
+        if len(cohort.members) >= policy.minimum_cohort_size
+        else TemporalCheck(
+            "cohort_size", TemporalDriftStatus.UNEVALUABLE, "COHORT_TOO_SMALL"
+        )
+    )
+    checks = (
+        cohort_check,
+        _visible_check("window_coverage", coverage_comparisons),
+        _visible_check("sequence_metrics", sequence_comparisons),
+        TemporalCheck(
+            "causal_event_order",
+            TemporalDriftStatus.UNEVALUABLE,
+            "MISSING_EVIDENCE",
+        ),
+        TemporalCheck(
+            "causal_event_timing",
+            TemporalDriftStatus.UNEVALUABLE,
+            "MISSING_EVIDENCE",
+        ),
+    )
+    # Task 3 adds causal comparisons and final status aggregation. Until then,
+    # visible failures fail closed; an otherwise visible-valid report remains
+    # unevaluable because causal evidence has not yet been assessed.
+    report_status = (
+        TemporalDriftStatus.FAIL
+        if any(
+            comparison.status is TemporalDriftStatus.FAIL
+            for comparison in comparisons
+        )
+        else TemporalDriftStatus.UNEVALUABLE
+    )
+    counted_statuses = Counter(
+        comparison.status.value for comparison in comparisons
+    )
+    counted_metrics = Counter(comparison.metric for comparison in comparisons)
+    return TemporalDriftReport(
+        report_version=TEMPORAL_DRIFT_REPORT_VERSION,
+        policy_id=policy.policy_id,
+        policy_version=policy.policy_version,
+        cohort_profile=cohort.profile,
+        cohort_seed=cohort.seed,
+        cohort_size=len(cohort.members),
+        status=report_status,
+        status_counts={
+            status.value: counted_statuses[status.value]
+            for status in TemporalDriftStatus
+        },
+        metric_counts={metric: counted_metrics[metric] for metric in TEMPORAL_METRICS},
+        checks=checks,
+        comparisons=comparisons,
+        _window_order=tuple(window.window_id for window in policy.windows),
+    )
+
+
 __all__ = [
     "TEMPORAL_DRIFT_REPORT_VERSION",
     "TEMPORAL_METRICS",
@@ -519,4 +837,5 @@ __all__ = [
     "TemporalDriftReport",
     "TemporalDriftStatus",
     "TemporalWindowPolicy",
+    "validate_temporal_drift",
 ]
