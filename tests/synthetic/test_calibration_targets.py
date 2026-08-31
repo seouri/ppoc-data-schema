@@ -529,3 +529,14 @@ def test_targets_are_canonical_sorted_aggregate_only_and_safe(snapshot: Path) ->
     payload = json.dumps([target.__dict__ for target in targets])
     assert "SYN-P-" not in payload
     assert "SYN-V-" not in payload
+
+
+def test_raw_count_requires_a_nonnegative_integer_without_denominator() -> None:
+    dimensions = (("outcome_layer", "observed"),)
+    target = RawTarget("outcome_layer=observed", dimensions, "cohort_total", "demographics", "count", "person", 3, 3, None)
+    assert target.value == 3
+
+    with pytest.raises(ValueError, match="count"):
+        RawTarget("outcome_layer=observed", dimensions, "cohort_total", "demographics", "count", "person", 3.0, 3, None)
+    with pytest.raises(ValueError, match="denominator"):
+        RawTarget("outcome_layer=observed", dimensions, "cohort_total", "demographics", "count", "person", 3, 3, 3)

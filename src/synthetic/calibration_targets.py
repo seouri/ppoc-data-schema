@@ -161,7 +161,7 @@ _TARGET_NAME_INDICATORS = (
     "singling_out",
 )
 _FAMILIES = {"demographics", "observation", "physiology", "utilization", "recorded_outcome"}
-_STATISTICS = {"proportion", "mean", "sd", "quantile"}
+_STATISTICS = {"count", "proportion", "mean", "sd", "quantile"}
 _QUANTILES = (("q10", 0.1), ("q50", 0.5), ("q90", 0.9))
 
 
@@ -218,7 +218,12 @@ class RawTarget:
             or self.denominator < self.support_count
         ):
             raise ValueError("denominator must be at least support_count")
-        if self.statistic == "proportion":
+        if self.statistic == "count":
+            if isinstance(self.value, bool) or not isinstance(self.value, int) or self.value < 0:
+                raise ValueError("count values must be nonnegative integers")
+            if self.denominator is not None:
+                raise ValueError("count targets require a null denominator")
+        elif self.statistic == "proportion":
             if self.denominator is None or not 0 <= self.value <= 1:
                 raise ValueError("proportions require a denominator and value in 0..1")
         elif self.denominator is not None:

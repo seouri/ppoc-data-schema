@@ -81,6 +81,7 @@ _UTC_TIMESTAMP_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0
 _RECORD_INDICATORS = frozenset(
     {"patient", "visit", "identifier", "uuid", "sequence", "truth", "candidate", "match", "row", "resource"}
 )
+_AGGREGATE_UNSAFE_WORDS = frozenset({"patient", "visit", "path", "key", "identifier"})
 _ATTACK_OUTPUT_INDICATORS = frozenset(
     {
         "attribute_disclosure",
@@ -127,20 +128,35 @@ def _require_finite_number(value: object, field: str) -> float:
     return number
 
 
+def contains_aggregate_unsafe_material(value: str) -> bool:
+    normalized = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", value)
+    words = frozenset(re.findall(r"[a-z0-9]+", normalized.lower()))
+    return bool(words & _AGGREGATE_UNSAFE_WORDS)
+
+
 def _validate_token(value: object, field: str, *, dimension_value: bool = False) -> str:
     token = _require_string(value, field)
     pattern = _DIMENSION_VALUE_RE if dimension_value else _TOKEN_RE
     if pattern.fullmatch(token) is None:
         raise ValueError(f"{field} must be an ASCII token without whitespace or path separators")
+    if contains_aggregate_unsafe_material(token):
+        raise ValueError(f"{field} must be aggregate-safe")
     if any(indicator in token.lower() for indicator in _RECORD_INDICATORS):
         raise ValueError(f"{field} must not contain record or hidden-state indicators")
     return token
+
+
+def require_aggregate_safe_token(value: object, field: str) -> str:
+    """Validate a serialized artifact metadata token against the shared boundary."""
+    return _validate_token(value, field)
 
 
 def _validate_target_name(value: object) -> str:
     target_name = _require_string(value, "target_name")
     if _TOKEN_RE.fullmatch(target_name) is None:
         raise ValueError("target_name must be an ASCII token without whitespace or path separators")
+    if contains_aggregate_unsafe_material(target_name):
+        raise ValueError("target_name must be aggregate-safe")
     if any(indicator in target_name.lower() for indicator in _TARGET_NAME_INDICATORS):
         raise ValueError("target_name must not contain record, hidden-state, or attack-output indicators")
     return target_name

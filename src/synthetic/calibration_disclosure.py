@@ -94,6 +94,20 @@ def _aggregate_sha256(strata: tuple[CalibrationStratum, ...]) -> str:
     return hashlib.sha256(canonical.encode("ascii")).hexdigest()
 
 
+def _validate_direct_strata_precision(
+    strata: tuple[CalibrationStratum, ...], config: CalibrationRunConfig
+) -> None:
+    precision = config.disclosure_policy.continuous_rounding_decimals
+    for stratum in strata:
+        for target in stratum.targets:
+            if target.status != "released" or target.statistic == "count":
+                continue
+            if target.rounding_decimals != precision:
+                raise ValueError("released continuous targets must use policy precision")
+            if target.value != round(float(target.value), precision):
+                raise ValueError("released continuous targets must be already rounded")
+
+
 def build_result(
     strata: tuple[CalibrationStratum, ...], prepared: CalibrationInput, config: CalibrationRunConfig
 ) -> CalibrationResult:
@@ -110,6 +124,7 @@ def build_result(
     if not isinstance(strata, tuple) or not strata or not all(isinstance(item, CalibrationStratum) for item in strata):
         raise ValueError("strata must be a nonempty tuple of CalibrationStratum values")
 
+    _validate_direct_strata_precision(strata, config)
     source_aggregate_sha256 = _aggregate_sha256(strata)
     artifact = CalibrationArtifact(
         artifact_version=ARTIFACT_VERSION,

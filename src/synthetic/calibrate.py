@@ -16,7 +16,12 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import NoReturn
 
-from synthetic.calibration import CalibrationArtifact, CalibrationDisclosurePolicy
+from synthetic.calibration import (
+    CalibrationArtifact,
+    CalibrationDisclosurePolicy,
+    contains_aggregate_unsafe_material,
+    require_aggregate_safe_token,
+)
 from synthetic.calibration_disclosure import build_result, disclose_targets  # noqa: F401
 from synthetic.calibration_input import (  # noqa: F401
     CalibrationInput,
@@ -116,6 +121,8 @@ def _contains_sensitive_report_material(value: str) -> bool:
     camel_separated = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", value)
     words = frozenset(re.findall(r"[a-z0-9]+", camel_separated.lower()))
     return (
+        contains_aggregate_unsafe_material(value)
+        or
         bool(_IDENTIFIER_RE.search(value))
         or "/" in value
         or "\\" in value
@@ -148,8 +155,8 @@ class PartitionPolicy:
     minimum_partition_patients: int
 
     def __post_init__(self) -> None:
-        _require_token(self.policy_id, "policy_id")
-        _require_token(self.policy_version, "policy_version")
+        require_aggregate_safe_token(self.policy_id, "policy_id")
+        require_aggregate_safe_token(self.policy_version, "policy_version")
         _require_token(self.key_id, "key_id")
         basis_points = _require_integer(self.calibration_basis_points, "calibration_basis_points")
         if not 1 <= basis_points <= 9_999:
@@ -168,7 +175,7 @@ class CalibrationAgeWindow:
     upper_age_days: int
 
     def __post_init__(self) -> None:
-        _require_token(self.window_id, "window_id")
+        require_aggregate_safe_token(self.window_id, "window_id")
         lower = _require_integer(self.lower_age_days, "lower_age_days", minimum=0)
         upper = _require_integer(self.upper_age_days, "upper_age_days", minimum=1)
         if lower >= upper:
@@ -200,8 +207,8 @@ class CalibrationRunConfig:
             raise ValueError("data_root must be a Path")  # noqa: TRY004
         if not isinstance(self.source_descriptor, Path):
             raise ValueError("source_descriptor must be a Path")  # noqa: TRY004
-        _require_token(self.source_snapshot, "source_snapshot")
-        _require_token(self.artifact_id, "artifact_id")
+        require_aggregate_safe_token(self.source_snapshot, "source_snapshot")
+        require_aggregate_safe_token(self.artifact_id, "artifact_id")
         _require_utc_timestamp(self.created_at)
         if not isinstance(self.partition_policy, PartitionPolicy):
             raise ValueError("partition_policy must be a PartitionPolicy")  # noqa: TRY004
