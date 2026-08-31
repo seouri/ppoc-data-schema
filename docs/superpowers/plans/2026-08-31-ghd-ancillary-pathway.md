@@ -180,18 +180,18 @@
 - Modify: `docs/superpowers/plans/2026-08-31-ghd-ancillary-pathway.md`
 - Create: `.superpowers/sdd/2026-08-31-ghd-ancillary-pathway/ledger.md`
 
-- [ ] **Step 1: Run full synthetic and repository checks**
+- [x] **Step 1: Run full synthetic and repository checks**
 
   Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic && UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run ruff check src tests && python3 schema/build.py --check && git diff --check`.
 
-- [ ] **Step 2: Dispatch a fresh broad reviewer**
+- [x] **Step 2: Dispatch a fresh broad reviewer**
 
   Review the merge-base-to-HEAD package against every spec/plan acceptance criterion, especially exact field order, visible/hidden event separation, optional treatment semantics, deterministic IDs, causal timing, nullable links, redaction, unchanged bundle/export behavior, and governed/filesystem/package/Synthea boundaries. Record findings under `.superpowers/sdd/2026-08-31-ghd-ancillary-pathway/broad-review.md`.
 
-- [ ] **Step 3: Resolve findings through one implementer-only fix wave and scoped re-review**
+- [x] **Step 3: Resolve findings through implementer-only fix waves and scoped re-reviews**
 
-  If the broad reviewer identifies any Critical/Important/Minor defect, send complete findings to the relevant original implementer for one scoped fix wave, rerun focused tests, and dispatch one fresh scoped re-review. The controller must not edit implementation files.
+  The broad review found two Important and three Minor findings. Complete findings were sent to the original implementers; the resulting scoped fixes were `44bc5e8`, `08d3c6a`, `212f4fb`, `186f4dc`, and `059b2ce`. Fresh scoped re-reviews recorded the remaining scanner findings until `scanner-final-review.md` passed with no Critical, Important, or Minor findings. The controller did not edit implementation files.
 
-- [ ] **Step 4: Finalize plan/ledger metadata and commit**
+- [x] **Step 4: Finalize plan/ledger metadata and commit**
 
   Mark completed checkboxes, record all review/fix/re-review and verification evidence in the ignored ledger, run `git diff --check`, and commit only plan metadata.
