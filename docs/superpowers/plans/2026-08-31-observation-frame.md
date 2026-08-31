@@ -62,7 +62,7 @@ Files:
 
 ### Completion evidence
 
-- Main tip: `865940e` (`docs: correct observation handoff tip`), pushed to `origin/main`.
+- Observation-frame merge and handoff evidence are pushed to `origin/main`; parity was verified after the final documentation commit.
 - Observation-focused suite: `74 passed`; post-merge full suite: `806 passed`.
 - Ruff: clean; schema check: `validated 8 resources`; merge-base and working-tree diff checks: clean.
 - Scoped final re-review: PASS; broad final review: PASS with no Critical/Important findings.
