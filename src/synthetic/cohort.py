@@ -24,11 +24,20 @@ from synthetic.calibration_targets import (
     TARGET_REGISTRY_VERSION,
     is_registered_target_key,
 )
-from synthetic.models import AgeRegimeDisorderTrajectory, DisorderKind
-from synthetic.native.age_regimes import AgeRegimeConfig
+from synthetic.models import AgeRegimeDisorderTrajectory, DisorderKind, PatientState
+from synthetic.native.age_regime_disorder import AgeRegimeDisorderKernel
+from synthetic.native.age_regimes import AgeRegimeConfig, AgeRegimeTrajectoryKernel
 from synthetic.native.clinical_modules import GrowthDisorderModule
-from synthetic.native.observations import ObservationFrame, ObservationPolicy
+from synthetic.native.observations import (
+    ObservationFrame,
+    ObservationPolicy,
+    ObservationValidationStatus,
+    generate_observation_frame,
+    validate_observation_frame,
+)
 from synthetic.native.resources import ObservedResourceBundle, SyntheticDemographics
+from synthetic.native.trajectories import validate_growth_disorder_module
+from synthetic.randomness import NamedRandomStreams, synthetic_id
 from synthetic.references import GrowthReference
 from synthetic.schema_contract import EXPECTED_SCHEMA_FINGERPRINT
 
@@ -562,10 +571,126 @@ def generate_native_cohort(
     modules: Mapping[DisorderKind, GrowthDisorderModule],
     descriptor: Mapping[str, object] | None = None,
 ) -> NativeCohort:
-    """Reserve the reviewed API until trajectory assembly is implemented."""
+    """Generate a deterministic evaluator-only cohort from aggregate weights."""
 
-    del config, reference, calibration, modules, descriptor
-    raise CohortGenerationUnavailable("native cohort assembly is not available")
+    if not isinstance(config, CohortConfig):
+        raise TypeError("config must be a CohortConfig")
+    if not isinstance(calibration, CalibrationSamplingProfile):
+        raise TypeError("calibration must be a CalibrationSamplingProfile")
+    if not callable(getattr(reference, "value", None)):
+        raise TypeError("reference must provide a callable value method")
+    if not isinstance(modules, Mapping):
+        raise TypeError("modules must be a mapping")
+    if descriptor is not None:
+        raise CohortGenerationUnavailable("native cohort generation failed")
+
+    positive_weights = tuple(
+        sorted(
+            (
+                (weight.kind, weight.probability)
+                for weight in config.module_weights
+                if weight.probability > 0
+            ),
+            key=lambda item: item[0].value,
+        )
+    )
+    required_kinds = tuple(kind for kind, _ in positive_weights)
+    copied_modules = dict(modules)
+    if set(copied_modules) != set(required_kinds):
+        raise ValueError("modules must exactly match positive module-weight kinds")
+
+    physiology = AgeRegimeTrajectoryKernel(reference, config.age_regime_config)
+    kernels: dict[DisorderKind, AgeRegimeDisorderKernel] = {}
+    for kind in required_kinds:
+        module = copied_modules[kind]
+        try:
+            validate_growth_disorder_module(module)
+        except (TypeError, ValueError) as exc:
+            raise type(exc)("modules must contain valid growth-disorder modules") from None
+        if module.kind is not kind:
+            raise ValueError("modules keys must match module kinds")
+        kernels[kind] = AgeRegimeDisorderKernel(physiology, module)
+
+    reference_sex_by_recorded = dict(config.reference_sex_mapping)
+    members: list[CohortMember] = []
+    patient_ids: set[str] = set()
+    for patient_index in range(config.patient_count):
+        try:
+            patient_id = synthetic_id(config.seed, "patient", patient_index)
+            if patient_id in patient_ids:
+                raise ValueError("duplicate synthetic patient identifier")
+            patient_ids.add(patient_id)
+
+            streams = NamedRandomStreams(config.seed, patient_index)
+            demographics_stream = streams.generator("cohort.demographics")
+            recorded_sex = _select_weighted_category(
+                calibration.sex_weights,
+                float(demographics_stream.random()),
+            )
+            ethnicity = _select_weighted_category(
+                calibration.ethnicity_weights,
+                float(demographics_stream.random()),
+            )
+            primary_race = _select_weighted_category(
+                calibration.race_weights,
+                float(demographics_stream.random()),
+            )
+            multiselect = (
+                float(demographics_stream.random())
+                < calibration.race_multiselect_probability
+            )
+            secondary_race = (
+                _select_weighted_category(
+                    calibration.race_weights,
+                    float(demographics_stream.random()),
+                )
+                if multiselect
+                else None
+            )
+            demographics = SyntheticDemographics(
+                patient_id=patient_id,
+                sex=recorded_sex,
+                ethnicity=_project_visible_category(ethnicity),
+                races=_project_race_slots(primary_race, secondary_race),
+            )
+
+            module_stream = streams.generator("cohort.module")
+            module_kind = DisorderKind(
+                _select_weighted_category(
+                    tuple((kind.value, probability) for kind, probability in positive_weights),
+                    float(module_stream.random()),
+                )
+            )
+            patient = PatientState(
+                patient_id=patient_id,
+                recorded_sex=recorded_sex,
+                reference_sex=reference_sex_by_recorded[recorded_sex],
+            )
+            trajectory = kernels[module_kind].generate(
+                patient,
+                config.ages_days,
+                streams,
+            )
+            frame = generate_observation_frame(
+                trajectory,
+                config.observation_policy,
+                streams,
+            )
+            if (
+                validate_observation_frame(frame).status
+                is not ObservationValidationStatus.PASS
+            ):
+                raise ValueError("observation frame did not pass validation")
+            members.append(CohortMember(demographics, trajectory, frame, None))
+        except Exception:  # noqa: BLE001 - injected runtime errors must be redacted
+            raise CohortGenerationUnavailable("native cohort generation failed") from None
+
+    return NativeCohort(
+        profile=config.profile,
+        seed=config.seed,
+        members=tuple(members),
+        calibration=calibration,
+    )
 
 
 __all__ = [

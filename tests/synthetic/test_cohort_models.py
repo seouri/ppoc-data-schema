@@ -13,7 +13,6 @@ from synthetic.cohort import (
     CohortMember,
     CohortModuleWeight,
     NativeCohort,
-    generate_native_cohort,
 )
 from synthetic.models import (
     AgeRegimeDisorderTrajectory,
@@ -311,12 +310,5 @@ def test_native_cohort_validates_container_types() -> None:
         NativeCohort("development-v1", 7, (), object())  # type: ignore[arg-type]
 
 
-def test_generation_placeholder_fails_without_exposing_partial_results() -> None:
+def test_generation_unavailable_is_a_value_error() -> None:
     assert issubclass(CohortGenerationUnavailable, ValueError)
-    with pytest.raises(CohortGenerationUnavailable, match="assembly is not available"):
-        generate_native_cohort(
-            _config(),
-            object(),
-            _calibration(),
-            modules={},
-        )
