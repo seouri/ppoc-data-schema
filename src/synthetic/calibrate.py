@@ -124,7 +124,7 @@ DEFAULT_AGE_WINDOWS = (
     CalibrationAgeWindow("infancy", 0, 730),
     CalibrationAgeWindow("childhood", 730, 3287),
     CalibrationAgeWindow("puberty_window", 3287, 5479),
-    CalibrationAgeWindow("adolescence", 5479, 7305),
+    CalibrationAgeWindow("adolescence", 5479, 7306),
 )
 
 

@@ -44,7 +44,7 @@ def test_default_windows_are_ordered_observation_bins() -> None:
         "infancy", "childhood", "puberty_window", "adolescence"
     ]
     assert DEFAULT_AGE_WINDOWS[0].lower_age_days == 0
-    assert DEFAULT_AGE_WINDOWS[-1].upper_age_days == 7_305
+    assert DEFAULT_AGE_WINDOWS[-1].upper_age_days == 7_306
 
 
 @pytest.mark.parametrize(
