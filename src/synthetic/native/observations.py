@@ -40,6 +40,22 @@ OBSERVATION_STREAM_NAMES = (
 )
 _OBSERVATION_STREAM_NAME_SET = frozenset(OBSERVATION_STREAM_NAMES)
 
+# Native trajectory modules currently emit only these event types.  Their
+# events retain ``code=None`` until a reviewed terminology/resource contract
+# exists; the observation truth boundary must not admit arbitrary codes.
+_SOURCE_EVENT_TYPES = frozenset(
+    {
+        "latent_onset",
+        "observable_phenotype",
+        "recognition_opportunity",
+        "workup",
+        "recorded_diagnosis",
+        "treatment_start",
+        "treatment_response",
+        "treatment_nonresponse",
+    }
+)
+
 
 class CensoringMode(str, Enum):
     """Closed vocabulary for how a policy ends its observation window."""
@@ -548,12 +564,28 @@ class ObservationTruth:
         source_events = _require_tuple(self.source_events, "source_events")
         if not all(isinstance(item, ClinicalEvent) for item in source_events):
             raise TypeError("source_events must contain ClinicalEvent values")
-        if any(event.patient_id != self.patient_id for event in source_events):
-            raise ValueError("source events must identify the same synthetic patient")
+        for event in source_events:
+            _require_synthetic_patient_id(event.patient_id, "source event patient_id")
+            if event.patient_id != self.patient_id:
+                raise ValueError("source events must identify the same synthetic patient")
+            _require_nonnegative_int(event.age_days, "source event age_days")
+            if event.event_type not in _SOURCE_EVENT_TYPES:
+                raise ValueError("source event type must be a native trajectory event")
+            if event.code is not None:
+                raise ValueError("source event code must be None until terminology is reviewed")
+            if not isinstance(event.hidden, bool):
+                raise TypeError("source event hidden must be a boolean")
+
+        decision_indices = tuple(item.source_event_index for item in event_decisions)
+        if decision_indices != tuple(range(len(source_events))):
+            raise ValueError("event decisions must contain exactly one decision per source event")
+        opportunity_indices = {item.source_point_index for item in opportunities}
         if any(
-            decision.source_event_index >= len(source_events) for decision in event_decisions
+            decision.recorded
+            and decision.opportunity_index not in opportunity_indices
+            for decision in event_decisions
         ):
-            raise ValueError("event decision must reference a source event")
+            raise ValueError("recorded event decision must reference an existing opportunity")
         if len({(item.source_point_index, item.channel) for item in measurement_truth}) != len(
             measurement_truth
         ):

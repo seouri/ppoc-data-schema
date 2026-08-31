@@ -337,6 +337,63 @@ def test_truth_rejects_nonfictional_source_events_and_bad_hashes() -> None:
         )
 
 
+def test_truth_requires_one_decision_per_source_event_and_valid_opportunity_links() -> None:
+    source_events = (
+        ClinicalEvent("syn-patient-a", 600, "observable_phenotype", None, False),
+        ClinicalEvent("syn-patient-a", 700, "recognition_opportunity", None, False),
+    )
+    opportunities = (VisitOpportunity(0, 730, EncounterType.ROUTINE, True),)
+
+    def build(
+        decisions: tuple[EventRecordingDecision, ...],
+    ) -> ObservationTruth:
+        return ObservationTruth(
+            patient_id="syn-patient-a",
+            window=_window(),
+            opportunities=opportunities,
+            measurement_truth=(),
+            event_decisions=decisions,
+            source_events=source_events,
+        )
+
+    with pytest.raises(ValueError, match="one decision"):
+        build((EventRecordingDecision(0, True, 1), EventRecordingDecision(0, False, None)))
+    with pytest.raises(ValueError, match="one decision"):
+        build((EventRecordingDecision(0, True, 0),))
+    with pytest.raises(ValueError, match="one decision"):
+        build(
+            (
+                EventRecordingDecision(0, True, 0),
+                EventRecordingDecision(1, False, None),
+                EventRecordingDecision(1, False, None),
+            )
+        )
+    with pytest.raises(ValueError, match="opportunity"):
+        build((EventRecordingDecision(0, True, 1), EventRecordingDecision(1, False, None)))
+
+
+@pytest.mark.parametrize(
+    "event",
+    [
+        ClinicalEvent("syn-patient-a", -1, "observable_phenotype", None, False),
+        ClinicalEvent("syn-patient-a", True, "observable_phenotype", None, False),  # type: ignore[arg-type]
+        ClinicalEvent("syn-patient-a", 600, "not-a-native-event", None, False),
+        ClinicalEvent("syn-patient-a", 600, "observable_phenotype", "SYN-CODE", False),
+        ClinicalEvent("syn-patient-a", 600, "observable_phenotype", None, "no"),  # type: ignore[arg-type]
+    ],
+)
+def test_truth_rejects_malformed_source_event_fields(event: ClinicalEvent) -> None:
+    with pytest.raises((TypeError, ValueError)):
+        ObservationTruth(
+            patient_id="syn-patient-a",
+            window=_window(),
+            opportunities=(),
+            measurement_truth=(),
+            event_decisions=(EventRecordingDecision(0, False, None),),
+            source_events=(event,),
+        )
+
+
 def test_frame_mapping_and_repr_exclude_private_truth() -> None:
     visit = ObservedVisit(
         patient_id="syn-patient-a",
