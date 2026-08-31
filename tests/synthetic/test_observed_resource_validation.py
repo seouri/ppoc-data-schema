@@ -104,6 +104,59 @@ def test_validate_observed_resources_rejects_patient_field_order_and_visit_key_v
     assert _check(visit_report, "visit_references") == ("FAIL", "VISIT_REFERENCE_INVALID")
 
 
+def test_validate_observed_resources_requires_exactly_one_patient_row() -> None:
+    missing_patient = _bundle()
+    missing_rows = dict(missing_patient.rows)
+    missing_rows["patients"] = ()
+    object.__setattr__(missing_patient, "rows", missing_rows)
+
+    missing_report = validate_observed_resources(missing_patient)
+
+    assert _check(missing_report, "schema_shape") == ("FAIL", "SCHEMA_SHAPE_INVALID")
+
+    duplicate_patient = _bundle()
+    duplicate_rows = dict(duplicate_patient.rows)
+    duplicate_rows["patients"] = duplicate_rows["patients"] * 2
+    object.__setattr__(duplicate_patient, "rows", duplicate_rows)
+
+    duplicate_report = validate_observed_resources(duplicate_patient)
+
+    assert _check(duplicate_report, "schema_shape") == ("FAIL", "SCHEMA_SHAPE_INVALID")
+
+
+def test_validate_observed_resources_rejects_invalid_patient_demographic_tokens() -> None:
+    bundle = _bundle()
+    patient = bundle.rows["patients"][0]
+    values = patient.to_mapping()
+    values["sex"] = "X"
+    object.__setattr__(patient, "values", tuple(values.items()))
+
+    report = validate_observed_resources(bundle)
+
+    assert _check(report, "patient_identity") == ("FAIL", "PATIENT_MISMATCH")
+
+
+def test_validate_observed_resources_treats_malformed_visible_rows_as_failures() -> None:
+    bundle = _bundle()
+    row = bundle.rows["visits"][0]
+    object.__setattr__(row, "values", (("patient_id", bundle.patient_id), "malformed-pair"))
+
+    report = validate_observed_resources(bundle)
+
+    assert report.status is ResourceValidationStatus.FAIL
+    assert _check(report, "schema_shape") == ("FAIL", "SCHEMA_SHAPE_INVALID")
+
+
+def test_validate_observed_resources_keeps_private_truth_corruption_unevaluable() -> None:
+    bundle = _bundle()
+    object.__setattr__(bundle.source_frame.truth, "opportunities", None)
+
+    report = validate_observed_resources(bundle)
+
+    assert report.status is ResourceValidationStatus.UNEVALUABLE
+    assert _check(report, "evidence") == ("UNEVALUABLE", "INSUFFICIENT_EVIDENCE")
+
+
 def test_validate_observed_resources_rejects_measurement_unit_and_bmi_changes() -> None:
     bundle = _bundle()
     weight_row = next(row for row in bundle.rows["visits"] if row.to_mapping()["weight_oz"] != "")
@@ -131,6 +184,18 @@ def test_validate_observed_resources_rejects_measurement_unit_and_bmi_changes() 
     report = validate_observed_resources(bundle)
 
     assert _check(report, "measurements") == ("FAIL", "MEASUREMENT_INVALID")
+
+
+def test_validate_observed_resources_rejects_unprojected_visit_field_values() -> None:
+    bundle = _bundle()
+    row = bundle.rows["visits"][0]
+    values = row.to_mapping()
+    values["bmi_percentile"] = 50.0
+    object.__setattr__(row, "values", tuple(values.items()))
+
+    report = validate_observed_resources(bundle)
+
+    assert _check(report, "schema_shape") == ("FAIL", "SCHEMA_SHAPE_INVALID")
 
 
 def test_validate_observed_resources_requires_exact_event_correspondence_and_empty_ancillary_resources() -> None:

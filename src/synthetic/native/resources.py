@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import math
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from enum import Enum
 from numbers import Real
@@ -496,12 +496,25 @@ def _resource_row(resource_name: str, values: Mapping[str, object], shape: Resou
 
 def _resource_check(
     name: str,
-    evaluator: object,
+    evaluator: Callable[[], tuple[ResourceValidationStatus, str]],
 ) -> ResourceCheck:
     try:
-        status, reason_code = evaluator()  # type: ignore[operator]
+        status, reason_code = evaluator()
     except (ArithmeticError, AttributeError, IndexError, KeyError, TypeError, ValueError):
-        status, reason_code = ResourceValidationStatus.UNEVALUABLE, "MALFORMED_BUNDLE"
+        if name == "evidence":
+            status, reason_code = ResourceValidationStatus.UNEVALUABLE, "MALFORMED_BUNDLE"
+        else:
+            status, reason_code = (
+                ResourceValidationStatus.FAIL,
+                {
+                    "patient_identity": "PATIENT_MISMATCH",
+                    "schema_shape": "SCHEMA_SHAPE_INVALID",
+                    "visit_references": "VISIT_REFERENCE_INVALID",
+                    "measurements": "MEASUREMENT_INVALID",
+                    "clinical_descendants": "CLINICAL_DESCENDANT_INVALID",
+                    "ancillary_resources": "ANCILLARY_ROWS_PRESENT",
+                }[name],
+            )
     return ResourceCheck(name, status, reason_code)
 
 
@@ -549,10 +562,28 @@ def _source_frame(bundle: ObservedResourceBundle) -> ObservationFrame | None:
     return bundle.source_frame if isinstance(bundle.source_frame, ObservationFrame) else None
 
 
+def _source_validation_status(source: ObservationFrame) -> ObservationValidationStatus | None:
+    try:
+        return validate_observation_frame(source).status
+    except (ArithmeticError, AttributeError, IndexError, KeyError, TypeError, ValueError):
+        return None
+
+
 def _check_resource_patient_identity(
     bundle: ObservedResourceBundle,
 ) -> tuple[ResourceValidationStatus, str]:
     if not _is_synthetic_patient_id(bundle.patient_id):
+        return ResourceValidationStatus.FAIL, "PATIENT_MISMATCH"
+    patient_rows = _bundle_rows(bundle, "patients")
+    if len(patient_rows) != 1:
+        return ResourceValidationStatus.FAIL, "PATIENT_MISMATCH"
+    patient_values = _row_values(patient_rows[0])
+    if (
+        patient_values.get("patient_id") != bundle.patient_id
+        or patient_values.get("sex") not in _SEX_VALUES
+        or patient_values.get("ethnicity") not in _ETHNICITY_VALUES
+        or any(patient_values.get(f"race_{index}") not in _RACE_VALUES for index in range(1, 9))
+    ):
         return ResourceValidationStatus.FAIL, "PATIENT_MISMATCH"
     for resource_name in BASE_RESOURCE_NAMES:
         for row in _bundle_rows(bundle, resource_name):
@@ -582,6 +613,8 @@ def _check_resource_schema_shape(
         return ResourceValidationStatus.FAIL, "SCHEMA_SHAPE_INVALID"
     if tuple(bundle.rows) != BASE_RESOURCE_NAMES:
         return ResourceValidationStatus.FAIL, "SCHEMA_SHAPE_INVALID"
+    if len(_bundle_rows(bundle, "patients")) != 1:
+        return ResourceValidationStatus.FAIL, "SCHEMA_SHAPE_INVALID"
     for resource_name in BASE_RESOURCE_NAMES:
         rows = _bundle_rows(bundle, resource_name)
         expected_fields = bundle.shape.field_names(resource_name)
@@ -589,6 +622,23 @@ def _check_resource_schema_shape(
             if not isinstance(row, ResourceRow) or row.resource_name != resource_name:
                 return ResourceValidationStatus.FAIL, "SCHEMA_SHAPE_INVALID"
             if tuple(field_name for field_name, _ in row.values) != expected_fields:
+                return ResourceValidationStatus.FAIL, "SCHEMA_SHAPE_INVALID"
+            values = _row_values(row)
+            if resource_name == "patients":
+                allowed_fields = {"patient_id", "sex", "ethnicity", *(f"race_{index}" for index in range(1, 9))}
+            elif resource_name == "visits":
+                allowed_fields = {
+                    "patient_id",
+                    "visit_id",
+                    "age_in_days",
+                    "encounter_type",
+                    "orig_enc_source_Epic_yn",
+                    *_VISIT_MEASUREMENT_FIELDS.values(),
+                    *(field_name for field_name in expected_fields if field_name.startswith("enc_diag_")),
+                }
+            else:
+                allowed_fields = set()
+            if any(value != "" for field_name, value in values.items() if field_name not in allowed_fields):
                 return ResourceValidationStatus.FAIL, "SCHEMA_SHAPE_INVALID"
     return ResourceValidationStatus.PASS, "OK"
 
@@ -607,6 +657,8 @@ def _check_resource_visit_references(
 ) -> tuple[ResourceValidationStatus, str]:
     rows, source = _resource_visits(bundle)
     if source is None:
+        return ResourceValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
+    if _source_validation_status(source) in (None, ObservationValidationStatus.UNEVALUABLE):
         return ResourceValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
     if len(rows) != len(source.visits):
         return ResourceValidationStatus.FAIL, "VISIT_REFERENCE_INVALID"
@@ -639,6 +691,8 @@ def _check_resource_measurements(
 ) -> tuple[ResourceValidationStatus, str]:
     rows, source = _resource_visits(bundle)
     if source is None:
+        return ResourceValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
+    if _source_validation_status(source) in (None, ObservationValidationStatus.UNEVALUABLE):
         return ResourceValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
     if len(rows) != len(source.visits):
         return ResourceValidationStatus.FAIL, "MEASUREMENT_INVALID"
@@ -716,7 +770,12 @@ def _check_resource_clinical_descendants(
     source = _source_frame(bundle)
     if source is None:
         return ResourceValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
-    expected = _expected_descendants(source)
+    if _source_validation_status(source) in (None, ObservationValidationStatus.UNEVALUABLE):
+        return ResourceValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
+    try:
+        expected = _expected_descendants(source)
+    except (AttributeError, IndexError, KeyError, TypeError, ValueError):
+        return ResourceValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
     if expected is None:
         return ResourceValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
     if not isinstance(bundle.clinical_descendants, tuple) or len(bundle.clinical_descendants) != len(expected):
@@ -769,7 +828,9 @@ def _check_resource_evidence(
     source = _source_frame(bundle)
     if source is None:
         return ResourceValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
-    status = validate_observation_frame(source).status
+    status = _source_validation_status(source)
+    if status is None:
+        return ResourceValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
     if status is ObservationValidationStatus.PASS:
         return ResourceValidationStatus.PASS, "OK"
     if status is ObservationValidationStatus.FAIL:

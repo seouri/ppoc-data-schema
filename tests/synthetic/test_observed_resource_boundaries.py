@@ -4,7 +4,7 @@ import ast
 import inspect
 from pathlib import Path
 
-from synthetic.native.resources import validate_observed_resources
+from synthetic.native.resources import project_observed_resources, validate_observed_resources
 
 ROOT = Path(__file__).resolve().parents[2]
 NATIVE = ROOT / "src" / "synthetic" / "native"
@@ -15,8 +15,34 @@ FORBIDDEN_IMPORT_ROOTS = {
     "synthetic.heldout_validate",
     "synthetic.privacy_audit",
     "synthetic.generate",
+    "synthetic.csv_package",
+    "synthetic.export",
+    "synthetic.exporters",
+    "synthetic.manifest",
+    "synthetic.schema_contract",
 }
-FORBIDDEN_CALLS = {"open", "Path", "read_csv"}
+RESOURCE_IMPORT_ALLOWLIST = {
+    "__future__",
+    "math",
+    "re",
+    "collections.abc",
+    "dataclasses",
+    "enum",
+    "numbers",
+    "types",
+    "typing",
+    "synthetic.native.observations",
+}
+RESOURCE_FORBIDDEN_IMPORTS = FORBIDDEN_IMPORT_ROOTS | {"synthetic.randomness"}
+FORBIDDEN_CALLS = {
+    "open",
+    "read_bytes",
+    "read_csv",
+    "read_text",
+    "to_csv",
+    "write_bytes",
+    "write_text",
+}
 
 
 def _imports_and_calls(path: Path) -> tuple[set[str], set[str]]:
@@ -28,8 +54,11 @@ def _imports_and_calls(path: Path) -> tuple[set[str], set[str]]:
             imports.update(alias.name for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module:
             imports.add(node.module)
-        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
-            calls.add(node.func.id)
+        elif isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Name):
+                calls.add(node.func.id)
+            elif isinstance(node.func, ast.Attribute):
+                calls.add(node.func.attr)
     return imports, calls
 
 
@@ -40,11 +69,13 @@ def test_native_resource_contract_recursively_has_no_governed_or_file_boundaries
         imports.update(source_imports)
 
     assert not imports & FORBIDDEN_IMPORT_ROOTS
-    _, resource_calls = _imports_and_calls(NATIVE / "resources.py")
+    resource_imports, resource_calls = _imports_and_calls(NATIVE / "resources.py")
+    assert resource_imports <= RESOURCE_IMPORT_ALLOWLIST
+    assert not resource_imports & RESOURCE_FORBIDDEN_IMPORTS
     assert not resource_calls & FORBIDDEN_CALLS
 
 
-def test_resource_validation_has_no_governed_or_export_api_arguments() -> None:
+def test_resource_projection_and_validation_have_no_governed_or_export_api_arguments() -> None:
     forbidden_arguments = {
         "data_root",
         "descriptor_path",
@@ -54,7 +85,8 @@ def test_resource_validation_has_no_governed_or_export_api_arguments() -> None:
         "output_path",
     }
 
-    assert not forbidden_arguments & set(inspect.signature(validate_observed_resources).parameters)
+    for function in (validate_observed_resources, project_observed_resources):
+        assert not forbidden_arguments & set(inspect.signature(function).parameters)
 
 
 def test_documentation_defers_augmented_package_export_prevalence_privacy_and_synthea_gates() -> None:
