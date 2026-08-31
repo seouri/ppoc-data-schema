@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from synthetic import calibration_disclosure
 from synthetic.calibrate import (
     DEFAULT_AGE_WINDOWS,
     CalibrationInput,
@@ -48,9 +49,9 @@ def prepared() -> CalibrationInput:
 
 def raw_targets() -> tuple[RawTarget, ...]:
     return (
-        RawTarget("outcome_layer=observed", (("outcome_layer", "observed"),), "height_z_mean", "physiology", "mean", "zscore", 1.2349, 2, None),
-        RawTarget("outcome_layer=observed", (("outcome_layer", "observed"),), "sex_f", "demographics", "proportion", "fraction", 0.33339, 3, 9),
-        RawTarget("outcome_layer=observed", (("outcome_layer", "observed"),), "weight_z_q90", "physiology", "quantile", "zscore", 2.9876, 5, None, 0.9),
+        RawTarget("outcome_layer=observed", (("outcome_layer", "observed"),), "diagnosis_age_years_mean", "recorded_outcome", "mean", "year", 1.2349, 2, None),
+        RawTarget("outcome_layer=observed", (("outcome_layer", "observed"),), "sex_f", "demographics", "proportion", "proportion", 0.33339, 3, 9),
+        RawTarget("outcome_layer=observed", (("outcome_layer", "observed"),), "diagnosis_age_years_q90", "recorded_outcome", "quantile", "year", 2.9876, 5, None, 0.9),
     )
 
 
@@ -58,15 +59,15 @@ def test_disclosure_suppresses_before_rounding_and_rounds_released_continuous_va
     strata = disclose_targets(raw_targets(), config())
     targets = {target.target_name: target for target in strata[0].targets}
 
-    assert targets["height_z_mean"].status == "suppressed"
-    assert targets["height_z_mean"].value is None
-    assert targets["height_z_mean"].support_count is None
-    assert targets["height_z_mean"].denominator is None
-    assert targets["height_z_mean"].rounding_decimals == 0
+    assert targets["diagnosis_age_years_mean"].status == "suppressed"
+    assert targets["diagnosis_age_years_mean"].value is None
+    assert targets["diagnosis_age_years_mean"].support_count is None
+    assert targets["diagnosis_age_years_mean"].denominator is None
+    assert targets["diagnosis_age_years_mean"].rounding_decimals == 0
     assert targets["sex_f"].value == 0.33
     assert targets["sex_f"].rounding_decimals == 2
     assert 0 <= targets["sex_f"].value <= 1
-    assert targets["weight_z_q90"].value == 2.99
+    assert targets["diagnosis_age_years_q90"].value == 2.99
 
 
 def test_disclosed_targets_have_order_independent_canonical_aggregate_hash() -> None:
@@ -80,9 +81,9 @@ def test_disclosed_targets_have_order_independent_canonical_aggregate_hash() -> 
                 "stratum_id": "outcome_layer=observed",
                 "dimensions": {"outcome_layer": "observed"},
                 "targets": [
-                    {"target_name": "height_z_mean", "family": "physiology", "statistic": "mean", "unit": "zscore", "status": "suppressed", "value": None, "support_count": None, "denominator": None, "rounding_decimals": 0},
-                    {"target_name": "sex_f", "family": "demographics", "statistic": "proportion", "unit": "fraction", "status": "released", "value": 0.33, "support_count": 3, "denominator": 9, "rounding_decimals": 2},
-                    {"target_name": "weight_z_q90", "family": "physiology", "statistic": "quantile", "unit": "zscore", "status": "released", "value": 2.99, "support_count": 5, "denominator": None, "rounding_decimals": 2, "quantile_level": 0.9},
+                    {"target_name": "diagnosis_age_years_mean", "family": "recorded_outcome", "statistic": "mean", "unit": "year", "status": "suppressed", "value": None, "support_count": None, "denominator": None, "rounding_decimals": 0},
+                    {"target_name": "diagnosis_age_years_q90", "family": "recorded_outcome", "statistic": "quantile", "unit": "year", "status": "released", "value": 2.99, "support_count": 5, "denominator": None, "rounding_decimals": 2, "quantile_level": 0.9},
+                    {"target_name": "sex_f", "family": "demographics", "statistic": "proportion", "unit": "proportion", "status": "released", "value": 0.33, "support_count": 3, "denominator": 9, "rounding_decimals": 2},
                 ],
             }],
             sort_keys=True,
@@ -191,3 +192,34 @@ def test_result_rejects_direct_continuous_targets_with_wrong_precision_or_unroun
         build_result(direct_target(1.23, 0), prepared(), config())
     with pytest.raises(ValueError, match="already rounded"):
         build_result(direct_target(1.234, 2), prepared(), config())
+
+
+@pytest.mark.parametrize(
+    ("support_count", "expected_status"), [(2, "suppressed"), (4, "released")]
+)
+def test_result_rejects_unregistered_target_before_hashing(
+    monkeypatch: pytest.MonkeyPatch, support_count: int, expected_status: str
+) -> None:
+    raw = RawTarget(
+        "outcome_layer=observed",
+        (("outcome_layer", "observed"),),
+        "invented_metric",
+        "demographics",
+        "proportion",
+        "proportion",
+        0.5,
+        support_count,
+        8,
+    )
+    strata = disclose_targets((raw,), config())
+    assert strata[0].targets[0].status == expected_status
+
+    def reject_hashing(_strata: object) -> str:
+        pytest.fail("unregistered target reached aggregate hashing")
+
+    monkeypatch.setattr(calibration_disclosure, "_aggregate_sha256", reject_hashing)
+
+    with pytest.raises(ValueError) as exc_info:
+        build_result(strata, prepared(), config())
+
+    assert str(exc_info.value) == "calibration target is outside the fixed registry"

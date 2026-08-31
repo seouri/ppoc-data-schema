@@ -15,7 +15,7 @@ from synthetic.calibration import (
     CalibrationStratum,
     CalibrationTarget,
 )
-from synthetic.calibration_targets import RawTarget
+from synthetic.calibration_targets import RawTarget, is_registered_target_key
 
 if TYPE_CHECKING:
     from synthetic.calibrate import CalibrationInput, CalibrationResult, CalibrationRunConfig
@@ -108,6 +108,20 @@ def _validate_direct_strata_precision(
                 raise ValueError("released continuous targets must be already rounded")
 
 
+def _validate_target_registry(strata: tuple[CalibrationStratum, ...]) -> None:
+    for stratum in strata:
+        for target in stratum.targets:
+            if not is_registered_target_key(
+                stratum.stratum_id,
+                target.target_name,
+                target.family,
+                target.statistic,
+                target.unit,
+                target.quantile_level,
+            ):
+                raise ValueError("calibration target is outside the fixed registry")
+
+
 def build_result(
     strata: tuple[CalibrationStratum, ...], prepared: CalibrationInput, config: CalibrationRunConfig
 ) -> CalibrationResult:
@@ -125,6 +139,7 @@ def build_result(
         raise ValueError("strata must be a nonempty tuple of CalibrationStratum values")
 
     _validate_direct_strata_precision(strata, config)
+    _validate_target_registry(strata)
     source_aggregate_sha256 = _aggregate_sha256(strata)
     artifact = CalibrationArtifact(
         artifact_version=ARTIFACT_VERSION,
