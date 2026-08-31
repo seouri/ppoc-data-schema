@@ -170,6 +170,156 @@ _QUANTILES = (("q10", 0.1), ("q50", 0.5), ("q90", 0.9))
 _PARTITION_LABELS = frozenset({"calibration", "held_out"})
 
 
+def _matches_quantile_level(value: object, expected: float | None) -> bool:
+    if expected is None:
+        return value is None
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, (int, float))
+        and math.isfinite(value)
+        and float(value) == expected
+    )
+
+
+def _is_safe_age_regime(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and _TOKEN_RE.fullmatch(value) is not None
+        and not contains_serialized_metadata_unsafe_material(value)
+        and not contains_indicator_components(value, {"candidate", "latent", "sequence", "truth"})
+    )
+
+
+def is_registered_target_key(
+    stratum_id: object,
+    target_name: object,
+    family: object,
+    statistic: object,
+    unit: object,
+    quantile_level: object,
+) -> bool:
+    """Return whether an aggregate target key belongs to the fixed target registry."""
+    if not all(isinstance(value, str) for value in (stratum_id, target_name, family, statistic, unit)):
+        return False
+    if stratum_id == "outcome_layer=observed":
+        demographic_names = {
+            *(f"sex_{slug}" for slug in SEX_CATEGORY_SLUGS.values()),
+            "race_multiselect",
+            *(f"ethnicity_{slug}" for slug in ETHNICITY_CATEGORY_SLUGS.values()),
+            *(f"race_{slug}" for slug in RACE_CATEGORY_SLUGS.values()),
+        }
+        if target_name in demographic_names:
+            return (
+                family == "demographics"
+                and statistic == "proportion"
+                and unit == "proportion"
+                and _matches_quantile_level(quantile_level, None)
+            )
+        if target_name in RECORDED_FLAGS.values():
+            return (
+                family == "recorded_outcome"
+                and statistic == "proportion"
+                and unit == "proportion"
+                and _matches_quantile_level(quantile_level, None)
+            )
+        if target_name in DIAGNOSIS_AGE_SUMMARIES:
+            expected_statistic, expected_level = DIAGNOSIS_AGE_SUMMARIES[target_name]
+            return (
+                family == "recorded_outcome"
+                and statistic == expected_statistic
+                and unit == "year"
+                and _matches_quantile_level(quantile_level, expected_level)
+            )
+        return False
+    if stratum_id == "visit_window=all":
+        summary_targets = {
+            "encounters_per_person_mean": ("mean", "count", None),
+            "encounters_per_person_q50": ("quantile", "count", 0.5),
+            "encounters_per_person_q90": ("quantile", "count", 0.9),
+            "observation_span_days_mean": ("mean", "day", None),
+            "observation_span_days_q50": ("quantile", "day", 0.5),
+            "observation_span_days_q90": ("quantile", "day", 0.9),
+        }
+        if target_name in summary_targets:
+            expected_statistic, expected_unit, expected_level = summary_targets[target_name]
+            return (
+                family == "utilization"
+                and statistic == expected_statistic
+                and unit == expected_unit
+                and _matches_quantile_level(quantile_level, expected_level)
+            )
+        encounter_names = {f"encounter_{slug}" for slug in ENCOUNTER_CATEGORY_SLUGS.values()} | {
+            "epic_origin"
+        }
+        if target_name in encounter_names:
+            return (
+                family == "utilization"
+                and statistic == "proportion"
+                and unit == "proportion"
+                and _matches_quantile_level(quantile_level, None)
+            )
+        if target_name in LOGICAL_LINK_RESOURCES.values():
+            return (
+                family == "observation"
+                and statistic == "proportion"
+                and unit == "proportion"
+                and _matches_quantile_level(quantile_level, None)
+            )
+        return False
+    age_prefix = "age_regime="
+    if stratum_id.startswith(age_prefix):
+        age_regime = stratum_id.removeprefix(age_prefix)
+        if "|" not in age_regime and _is_safe_age_regime(age_regime):
+            if target_name in MEASUREMENT_AVAILABILITY.values():
+                return (
+                    family == "observation"
+                    and statistic == "proportion"
+                    and unit == "proportion"
+                    and _matches_quantile_level(quantile_level, None)
+                )
+            interval_targets = {
+                "encounter_interval_days_mean": ("mean", None),
+                "encounter_interval_days_q50": ("quantile", 0.5),
+                "encounter_interval_days_q90": ("quantile", 0.9),
+            }
+            if target_name in interval_targets:
+                expected_statistic, expected_level = interval_targets[target_name]
+                return (
+                    family == "utilization"
+                    and statistic == expected_statistic
+                    and unit == "day"
+                    and _matches_quantile_level(quantile_level, expected_level)
+                )
+    sex_marker = "|recorded_sex="
+    if stratum_id.startswith(age_prefix) and sex_marker in stratum_id:
+        age_regime, recorded_sex = stratum_id.removeprefix(age_prefix).split(sex_marker, maxsplit=1)
+        if _is_safe_age_regime(age_regime) and recorded_sex in SEX_CATEGORY_SLUGS:
+            for prefix, expected_unit, _flags in PHYSIOLOGY_METRICS.values():
+                if target_name == f"{prefix}_mean":
+                    return (
+                        family == "physiology"
+                        and statistic == "mean"
+                        and unit == expected_unit
+                        and _matches_quantile_level(quantile_level, None)
+                    )
+                if target_name == f"{prefix}_sd":
+                    return (
+                        family == "physiology"
+                        and statistic == "sd"
+                        and unit == expected_unit
+                        and _matches_quantile_level(quantile_level, None)
+                    )
+                for suffix, level in _QUANTILES:
+                    if target_name == f"{prefix}_{suffix}":
+                        return (
+                            family == "physiology"
+                            and statistic == "quantile"
+                            and unit == expected_unit
+                            and _matches_quantile_level(quantile_level, level)
+                        )
+    return False
+
+
 @dataclass(frozen=True)
 class RawTarget:
     """A finite aggregate awaiting disclosure control."""
@@ -833,4 +983,5 @@ __all__ = [
     "TARGET_REGISTRY_VERSION",
     "RawTarget",
     "compute_raw_targets",
+    "is_registered_target_key",
 ]

@@ -22,10 +22,9 @@ from synthetic.calibration import (
     CalibrationStratum,
     CalibrationTarget,
     contains_indicator_components,
-    contains_serialized_metadata_unsafe_material,
     require_aggregate_safe_token,
 )
-from synthetic.calibration_targets import TARGET_REGISTRY_VERSION
+from synthetic.calibration_targets import TARGET_REGISTRY_VERSION, is_registered_target_key
 
 MAX_FIDELITY_POLICY_BYTES = 1024 * 1024
 HELDOUT_REPORT_VERSION = "heldout-validation-report-v1"
@@ -250,8 +249,6 @@ def load_fidelity_policy(path: Path) -> FidelityPolicy:
 def _require_stratum_id(value: object) -> str:
     if not isinstance(value, str) or not value:
         raise ValueError("stratum_id must be a nonempty canonical aggregate stratum")
-    if contains_serialized_metadata_unsafe_material(value):
-        raise ValueError("stratum_id must be aggregate-safe")
     dimensions: list[tuple[str, str]] = []
     for component in value.split("|"):
         key, separator, dimension_value = component.partition("=")
@@ -386,6 +383,8 @@ class HeldoutCheck:
         if not isinstance(self.passed, bool):
             raise ValueError("check passed must be a boolean")  # noqa: TRY004
         _require_aggregate_detail(self.detail, "check detail")
+        if "\n" in self.detail or "\r" in self.detail:
+            raise ValueError("check detail must be one line")
 
     def to_mapping(self) -> dict[str, object]:
         return {"name": self.name, "passed": self.passed, "detail": self.detail}
@@ -412,6 +411,8 @@ def _index_targets(strata: tuple[CalibrationStratum, ...], label: str) -> dict[_
     for stratum in strata:
         for target in stratum.targets:
             key = _target_key(stratum.stratum_id, target)
+            if not is_registered_target_key(*key):
+                raise ValueError("target is outside the fixed target registry")
             if key in indexed:
                 raise ValueError("duplicate canonical target key")
             indexed[key] = target
@@ -559,7 +560,7 @@ class HeldoutValidationReport:
     schema_fingerprint: str
     partition_policy: Mapping[str, object]
     disclosure_policy: Mapping[str, object]
-    fidelity_policy: Mapping[str, object]
+    fidelity_policy: FidelityPolicy
     heldout_aggregate_sha256: str
     synthetic_aggregate_sha256: str
     comparison_counts: Mapping[str, object]
@@ -591,15 +592,8 @@ class HeldoutValidationReport:
                 self.disclosure_policy, frozenset({"policy_id", "policy_version"}), "disclosure_policy"
             ),
         )
-        object.__setattr__(
-            self,
-            "fidelity_policy",
-            _validate_policy_identity(
-                self.fidelity_policy,
-                frozenset({"policy_id", "policy_version", "target_registry_version"}),
-                "fidelity_policy",
-            ),
-        )
+        if not isinstance(self.fidelity_policy, FidelityPolicy):
+            raise ValueError("fidelity_policy must be a FidelityPolicy")  # noqa: TRY004
         counts = _validate_counts(self.comparison_counts, "comparison_counts")
         families = _validate_family_counts(self.family_counts)
         object.__setattr__(self, "comparison_counts", counts)
@@ -608,6 +602,8 @@ class HeldoutValidationReport:
             isinstance(check, HeldoutCheck) for check in self.checks
         ):
             raise ValueError("checks must be a nonempty tuple of HeldoutCheck values")
+        if len({check.name for check in self.checks}) != len(self.checks):
+            raise ValueError("checks must not contain duplicate names")
         if not isinstance(self.comparisons, tuple) or not all(
             isinstance(comparison, HeldoutComparison) for comparison in self.comparisons
         ):
@@ -619,6 +615,9 @@ class HeldoutValidationReport:
             raise ValueError("comparison_counts must match comparisons")
         if _copy_mapping(families) != family_counts(sorted_comparisons):
             raise ValueError("family_counts must match comparisons")
+        if self.status != validation_status(sorted_comparisons, self.fidelity_policy):
+            raise ValueError("status must match the frozen policy and comparisons")
+        object.__setattr__(self, "checks", tuple(sorted(self.checks, key=lambda check: check.name)))
         object.__setattr__(self, "comparisons", sorted_comparisons)
 
     def to_mapping(self) -> dict[str, object]:
@@ -630,7 +629,7 @@ class HeldoutValidationReport:
             "schema_fingerprint": self.schema_fingerprint,
             "partition_policy": _copy_mapping(self.partition_policy),
             "disclosure_policy": _copy_mapping(self.disclosure_policy),
-            "fidelity_policy": _copy_mapping(self.fidelity_policy),
+            "fidelity_policy": self.fidelity_policy.to_report_mapping(),
             "heldout_aggregate_sha256": self.heldout_aggregate_sha256,
             "synthetic_aggregate_sha256": self.synthetic_aggregate_sha256,
             "comparison_counts": _copy_mapping(self.comparison_counts),
@@ -660,8 +659,8 @@ class HeldoutValidationReport:
             ),
             (
                 "fidelity policy: "
-                f"{self.fidelity_policy['policy_id']} {self.fidelity_policy['policy_version']} "
-                f"{self.fidelity_policy['target_registry_version']}"
+                f"{self.fidelity_policy.policy_id} {self.fidelity_policy.policy_version} "
+                f"{self.fidelity_policy.target_registry_version}"
             ),
             f"heldout aggregate sha256: {self.heldout_aggregate_sha256}",
             f"synthetic aggregate sha256: {self.synthetic_aggregate_sha256}",

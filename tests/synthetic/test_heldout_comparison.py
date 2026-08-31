@@ -21,6 +21,7 @@ def target(
     statistic: str,
     value: float | None,
     *,
+    unit: str,
     support: int | None = 20,
     denominator: int | None = None,
     quantile_level: float | None = None,
@@ -30,7 +31,7 @@ def target(
         target_name=name,
         family=family,
         statistic=statistic,
-        unit="unit",
+        unit=unit,
         status=status,
         value=value,
         support_count=support,
@@ -40,10 +41,14 @@ def target(
     )
 
 
-def stratum(*targets: CalibrationTarget, sex: str = "F") -> CalibrationStratum:
-    dimensions = (("recorded_sex", sex),)
+def stratum(
+    *targets: CalibrationTarget,
+    dimensions: tuple[tuple[str, str], ...] = (("age_regime", "infancy"), ("recorded_sex", "F")),
+) -> CalibrationStratum:
     return CalibrationStratum(
-        stratum_id=f"recorded_sex={sex}", dimensions=dimensions, targets=targets
+        stratum_id="|".join(f"{key}={value}" for key, value in dimensions),
+        dimensions=dimensions,
+        targets=targets,
     )
 
 
@@ -54,52 +59,73 @@ def policy(**changes: object) -> FidelityPolicy:
 def test_compare_targets_uses_canonical_matching_and_frozen_tolerances() -> None:
     heldout = (
         stratum(
-            target("sex_f", "demographics", "proportion", 0.50, denominator=20),
-            target("encounters", "utilization", "count", 10),
-            target("height_mean", "physiology", "mean", 2.0),
-            target("height_sd", "physiology", "sd", 1.5),
-            target("height_q50", "physiology", "quantile", 2.0, quantile_level=0.5),
+            target("sex_f", "demographics", "proportion", 0.50, unit="proportion", denominator=20),
+            dimensions=(("outcome_layer", "observed"),),
+        ),
+        stratum(
+            target("encounters_per_person_mean", "utilization", "mean", 10, unit="count"),
+            dimensions=(("visit_window", "all"),),
+        ),
+        stratum(
+            target("height_z_mean", "physiology", "mean", 2.0, unit="z_score"),
+            target("height_z_sd", "physiology", "sd", 1.5, unit="z_score"),
+            target("height_z_q50", "physiology", "quantile", 2.0, unit="z_score", quantile_level=0.5),
         ),
     )
     synthetic = (
         stratum(
-            target("height_q50", "physiology", "quantile", 2.8, quantile_level=0.5),
-            target("height_sd", "physiology", "sd", 2.4),
-            target("height_mean", "physiology", "mean", 2.9),
-            target("encounters", "utilization", "count", 11),
-            target("sex_f", "demographics", "proportion", 0.70, denominator=100),
+            target("sex_f", "demographics", "proportion", 0.70, unit="proportion", denominator=100),
+            dimensions=(("outcome_layer", "observed"),),
+        ),
+        stratum(
+            target("encounters_per_person_mean", "utilization", "mean", 11, unit="count"),
+            dimensions=(("visit_window", "all"),),
+        ),
+        stratum(
+            target("height_z_q50", "physiology", "quantile", 2.8, unit="z_score", quantile_level=0.5),
+            target("height_z_sd", "physiology", "sd", 2.4, unit="z_score"),
+            target("height_z_mean", "physiology", "mean", 2.9, unit="z_score"),
         ),
     )
 
     comparisons = compare_targets(heldout, synthetic, policy(required_families=["demographics"]))
 
     assert [comparison.target_name for comparison in comparisons] == [
-        "encounters", "height_mean", "height_q50", "height_sd", "sex_f"
+        "height_z_mean", "height_z_q50", "height_z_sd", "sex_f", "encounters_per_person_mean"
     ]
     indexed = {comparison.target_name: comparison for comparison in comparisons}
     assert indexed["sex_f"].difference == pytest.approx(0.2)
     assert indexed["sex_f"].tolerance == pytest.approx(2 * (0.5 * 0.5 / 20) ** 0.5)
     assert indexed["sex_f"].status == "PASS"
-    assert indexed["encounters"].tolerance == 1
-    assert indexed["encounters"].status == "PASS"
-    assert indexed["height_mean"].tolerance == 1.0
-    assert indexed["height_mean"].status == "PASS"
-    assert indexed["height_sd"].status == "PASS"
-    assert indexed["height_q50"].status == "PASS"
+    assert indexed["encounters_per_person_mean"].tolerance == 10.0
+    assert indexed["encounters_per_person_mean"].status == "PASS"
+    assert indexed["height_z_mean"].tolerance == 1.0
+    assert indexed["height_z_mean"].status == "PASS"
+    assert indexed["height_z_sd"].status == "PASS"
+    assert indexed["height_z_q50"].status == "PASS"
 
 
 def test_compare_targets_marks_missing_suppressed_and_under_support_unevaluable() -> None:
     heldout = (
         stratum(
-            target("missing", "demographics", "count", 2),
-            target("suppressed", "observation", "count", None, support=None, status="suppressed"),
-            target("small", "physiology", "mean", 1.0, support=1),
+            target("sex_f", "demographics", "proportion", 0.5, unit="proportion", denominator=20),
+            dimensions=(("outcome_layer", "observed"),),
+        ),
+        stratum(
+            target("weight_available", "observation", "proportion", None, unit="proportion", support=None, status="suppressed"),
+            dimensions=(("age_regime", "infancy"),),
+        ),
+        stratum(
+            target("height_z_mean", "physiology", "mean", 1.0, unit="z_score", support=1),
         ),
     )
     synthetic = (
         stratum(
-            target("suppressed", "observation", "count", 2),
-            target("small", "physiology", "mean", 1.1),
+            target("weight_available", "observation", "proportion", 1.0, unit="proportion", denominator=20),
+            dimensions=(("age_regime", "infancy"),),
+        ),
+        stratum(
+            target("height_z_mean", "physiology", "mean", 1.1, unit="z_score"),
         ),
     )
 
@@ -117,8 +143,8 @@ def test_compare_targets_marks_missing_suppressed_and_under_support_unevaluable(
 
 def test_compare_targets_marks_evaluable_out_of_tolerance_target_failed() -> None:
     comparisons = compare_targets(
-        (stratum(target("height_mean", "physiology", "mean", 2.0)),),
-        (stratum(target("height_mean", "physiology", "mean", 3.1)),),
+        (stratum(target("height_z_mean", "physiology", "mean", 2.0, unit="z_score")),),
+        (stratum(target("height_z_mean", "physiology", "mean", 3.1, unit="z_score")),),
         policy(required_families=["physiology"]),
     )
 
@@ -129,8 +155,8 @@ def test_compare_targets_marks_evaluable_out_of_tolerance_target_failed() -> Non
 
 def test_report_is_canonical_redacted_and_unevaluable_for_missing_required_family() -> None:
     comparisons = compare_targets(
-        (stratum(target("height_mean", "physiology", "mean", 2.0)),),
-        (stratum(target("height_mean", "physiology", "mean", 2.1)),),
+        (stratum(target("height_z_mean", "physiology", "mean", 2.0, unit="z_score")),),
+        (stratum(target("height_z_mean", "physiology", "mean", 2.1, unit="z_score")),),
         policy(required_families=["demographics", "physiology"], max_unevaluable_targets=1),
     )
     report = HeldoutValidationReport(
@@ -141,7 +167,7 @@ def test_report_is_canonical_redacted_and_unevaluable_for_missing_required_famil
         schema_fingerprint="a" * 64,
         partition_policy={"policy_id": "partition-v1", "policy_version": "1"},
         disclosure_policy={"policy_id": "disclosure-v1", "policy_version": "1"},
-        fidelity_policy=policy(required_families=["demographics", "physiology"]).to_report_mapping(),
+        fidelity_policy=policy(required_families=["demographics", "physiology"]),
         heldout_aggregate_sha256="b" * 64,
         synthetic_aggregate_sha256="c" * 64,
         comparison_counts={"PASS": 1, "FAIL": 0, "UNEVALUABLE": 0},
@@ -175,3 +201,78 @@ def test_report_is_canonical_redacted_and_unevaluable_for_missing_required_famil
 def test_report_and_check_reject_sensitive_metadata() -> None:
     with pytest.raises(ValueError, match="aggregate"):
         HeldoutCheck("patient_check", True, "matched contract")
+
+
+def test_report_rejects_pass_status_when_an_evaluable_comparison_failed() -> None:
+    comparisons = compare_targets(
+        (stratum(target("height_z_mean", "physiology", "mean", 2.0, unit="z_score")),),
+        (stratum(target("height_z_mean", "physiology", "mean", 3.1, unit="z_score")),),
+        policy(required_families=["physiology"]),
+    )
+
+    with pytest.raises(ValueError, match="status"):
+        HeldoutValidationReport(
+            report_version="heldout-validation-report-v1",
+            status="PASS",
+            source_snapshot="snapshot-v1",
+            synthetic_artifact_id="synthetic-v1",
+            schema_fingerprint="a" * 64,
+            partition_policy={"policy_id": "partition-v1", "policy_version": "1"},
+            disclosure_policy={"policy_id": "disclosure-v1", "policy_version": "1"},
+            fidelity_policy=policy(required_families=["physiology"]),
+            heldout_aggregate_sha256="b" * 64,
+            synthetic_aggregate_sha256="c" * 64,
+            comparison_counts={"PASS": 0, "FAIL": 1, "UNEVALUABLE": 0},
+            family_counts={"physiology": {"PASS": 0, "FAIL": 1, "UNEVALUABLE": 0}},
+            checks=(HeldoutCheck("fidelity", False, "frozen tolerance exceeded"),),
+            comparisons=comparisons,
+        )
+
+
+def test_compare_targets_rejects_a_target_outside_the_fixed_registry() -> None:
+    heldout = (stratum(target("unregistered_target", "physiology", "mean", 2.0, unit="z_score")),)
+    synthetic = (stratum(target("unregistered_target", "physiology", "mean", 2.1, unit="z_score")),)
+
+    with pytest.raises(ValueError, match="fixed target registry"):
+        compare_targets(heldout, synthetic, policy(required_families=["physiology"]))
+
+
+def test_check_rejects_multiline_detail() -> None:
+    with pytest.raises(ValueError, match="one line"):
+        HeldoutCheck("fidelity", True, "frozen policy\nmatched")
+
+
+def test_report_sorts_checks_and_rejects_duplicate_check_names() -> None:
+    fidelity = policy(required_families=["physiology"])
+    comparisons = compare_targets(
+        (stratum(target("height_z_mean", "physiology", "mean", 2.0, unit="z_score")),),
+        (stratum(target("height_z_mean", "physiology", "mean", 2.1, unit="z_score")),),
+        fidelity,
+    )
+    values = {
+        "report_version": "heldout-validation-report-v1",
+        "status": "PASS",
+        "source_snapshot": "snapshot-v1",
+        "synthetic_artifact_id": "synthetic-v1",
+        "schema_fingerprint": "a" * 64,
+        "partition_policy": {"policy_id": "partition-v1", "policy_version": "1"},
+        "disclosure_policy": {"policy_id": "disclosure-v1", "policy_version": "1"},
+        "fidelity_policy": fidelity,
+        "heldout_aggregate_sha256": "b" * 64,
+        "synthetic_aggregate_sha256": "c" * 64,
+        "comparison_counts": {"PASS": 1, "FAIL": 0, "UNEVALUABLE": 0},
+        "family_counts": {"physiology": {"PASS": 1, "FAIL": 0, "UNEVALUABLE": 0}},
+        "checks": (
+            HeldoutCheck("target_registry", True, "fixed target registry matched"),
+            HeldoutCheck("fidelity", True, "frozen policy matched"),
+        ),
+        "comparisons": comparisons,
+    }
+
+    report = HeldoutValidationReport(**values)
+
+    assert [check.name for check in report.checks] == ["fidelity", "target_registry"]
+    with pytest.raises(ValueError, match="duplicate"):
+        HeldoutValidationReport(
+            **(values | {"checks": (values["checks"][0], values["checks"][0])})  # type: ignore[index]
+        )
