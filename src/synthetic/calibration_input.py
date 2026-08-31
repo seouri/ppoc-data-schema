@@ -40,6 +40,12 @@ _RESOURCE_NAMES = (
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
 
+@dataclass(frozen=True)
+class _OpenedSource:
+    name: str
+    fd: int
+
+
 def _freeze_counts(value: Mapping[str, Mapping[str, int]]) -> Mapping[str, Mapping[str, int]]:
     return MappingProxyType({key: MappingProxyType(dict(item)) for key, item in value.items()})
 
@@ -123,38 +129,46 @@ def _validate_descriptor(config: CalibrationRunConfig) -> dict[str, Any]:
     return descriptor
 
 
-def _safe_resource_path(data_root: Path, resource: Mapping[str, Any]) -> Path:
+def _open_validated_source(data_root: Path, resource: Mapping[str, Any]) -> _OpenedSource:
     name = resource.get("name")
     raw_path = resource.get("path")
     if not isinstance(name, str) or not isinstance(raw_path, str) or not raw_path:
         raise ValueError("resource descriptor is invalid")
     if os.path.isabs(raw_path) or ".." in Path(raw_path).parts:
         raise ValueError(f"{name} resource path is invalid")
-    root = data_root.resolve()
-    target = root / raw_path
-    if not target.is_relative_to(root):
-        raise ValueError(f"{name} resource path is invalid")
-    current = root
-    for component in Path(raw_path).parts:
-        current /= component
-        if current.is_symlink():
-            raise ValueError(f"{name} resource is a symlink")
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
     try:
-        mode = target.stat(follow_symlinks=False).st_mode
+        directory_fd = os.open(data_root, directory_flags)
     except OSError as exc:
         raise ValueError(f"{name} resource is unavailable") from exc
-    if not stat.S_ISREG(mode):
-        raise ValueError(f"{name} resource is unavailable")
-    return target
+    try:
+        parts = Path(raw_path).parts
+        for component in parts[:-1]:
+            next_directory_fd = os.open(component, directory_flags, dir_fd=directory_fd)
+            os.close(directory_fd)
+            directory_fd = next_directory_fd
+        source_fd = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW, dir_fd=directory_fd)
+    except OSError as exc:
+        raise ValueError(f"{name} resource is unavailable") from exc
+    finally:
+        os.close(directory_fd)
+    try:
+        if not stat.S_ISREG(os.fstat(source_fd).st_mode):
+            raise ValueError(f"{name} resource is unavailable")
+    except OSError as exc:
+        os.close(source_fd)
+        raise ValueError(f"{name} resource is unavailable") from exc
+    return _OpenedSource(name, source_fd)
 
 
-def _validate_csv_header(path: Path, descriptor: dict[str, Any], name: str) -> None:
+def _validate_csv_header(source: _OpenedSource, descriptor: dict[str, Any]) -> None:
+    name = source.name
     resource = resource_spec(descriptor, name)
     dialect = resource.get("dialect", {})
     try:
-        with path.open("r", encoding=resource.get("encoding", "utf-8"), newline="") as source:
+        with os.fdopen(os.dup(source.fd), "r", encoding=resource.get("encoding", "utf-8"), newline="") as handle:
             reader = csv.reader(
-                source,
+                handle,
                 delimiter=dialect.get("delimiter", ","),
                 quotechar=dialect.get("quoteChar", '"'),
                 doublequote=dialect.get("doubleQuote", True),
@@ -168,22 +182,27 @@ def _validate_csv_header(path: Path, descriptor: dict[str, Any], name: str) -> N
         raise ValueError(f"{name} resource cannot be read") from exc
     if header != list(field_names(descriptor, name)):
         raise ValueError(f"{name} resource header does not match descriptor")
+    os.lseek(source.fd, 0, os.SEEK_SET)
 
 
 def _stage_relation(
-    connection: duckdb.DuckDBPyConnection, name: str, resource: Mapping[str, Any], path: Path
+    connection: duckdb.DuckDBPyConnection, source: _OpenedSource, resource: Mapping[str, Any]
 ) -> str:
+    name = source.name
     relation = f"calibration_stage_{name}"
     dialect = resource.get("dialect", {})
     quote = dialect.get("quoteChar", '"')
     if not isinstance(quote, str) or len(quote) != 1:
         raise ValueError(f"{name} resource dialect is invalid")
-    connection.execute(
-        f'CREATE OR REPLACE TEMP TABLE "{relation}" AS '
-        "SELECT * FROM read_csv(?, header = true, all_varchar = true, delim = ?, quote = ?, "
-        "escape = ?, nullstr = ?, strict_mode = true)",
-        [str(path), dialect.get("delimiter", ","), quote, quote, "\0"],
-    )
+    try:
+        connection.execute(
+            f'CREATE OR REPLACE TEMP TABLE "{relation}" AS '
+            "SELECT * FROM read_csv(?, header = true, all_varchar = true, delim = ?, quote = ?, "
+            "escape = ?, nullstr = ?, strict_mode = true)",
+            [f"/dev/fd/{source.fd}", dialect.get("delimiter", ","), quote, quote, "\0"],
+        )
+    except duckdb.Error as exc:
+        raise ValueError(f"{name} resource cannot be staged") from exc
     return relation
 
 
@@ -210,14 +229,21 @@ def _validate_relation(
             raise ValueError(f"{name}.{primary_key} must be unique")
     for field in fields:
         constraints = field.get("constraints") or {}
-        if field.get("name") != "age_in_days" or not constraints.get("required"):
+        field_name = field.get("name")
+        field_type = field.get("type")
+        if (
+            not isinstance(field_name, str)
+            or field_type not in {"integer", "number"}
+            or not constraints.get("required")
+        ):
             continue
+        cast_type = "BIGINT" if field_type == "integer" else "DOUBLE"
         if _has_rows(
             connection,
-            f'SELECT count(*) FROM "{relation}" WHERE age_in_days IS NULL OR age_in_days = \'\' '
-            "OR try_cast(age_in_days AS BIGINT) IS NULL",
+            f'SELECT count(*) FROM "{relation}" WHERE "{field_name}" IS NULL OR "{field_name}" = \'\' '
+            f'OR try_cast("{field_name}" AS {cast_type}) IS NULL',
         ):
-            raise ValueError(f"{name}.age_in_days must be a valid integer")
+            raise ValueError(f"{name}.{field_name} must be a valid {field_type}")
 
 
 def _partition_counts(connection: duckdb.DuckDBPyConnection, relation: str) -> dict[str, int]:
@@ -237,10 +263,13 @@ def prepare_input(connection: duckdb.DuckDBPyConnection, config: CalibrationRunC
     staged: dict[str, str] = {}
     for name in _RESOURCE_NAMES:
         resource = resource_spec(descriptor, name)
-        path = _safe_resource_path(config.data_root, resource)
-        _validate_csv_header(path, descriptor, name)
-        staged[name] = _stage_relation(connection, name, resource, path)
-        _validate_relation(connection, name, descriptor, staged[name])
+        source = _open_validated_source(config.data_root, resource)
+        try:
+            _validate_csv_header(source, descriptor)
+            staged[name] = _stage_relation(connection, source, resource)
+            _validate_relation(connection, name, descriptor, staged[name])
+        finally:
+            os.close(source.fd)
 
     patient_rows = connection.execute('SELECT patient_id FROM "calibration_stage_patients"').fetchall()
     partitions = [(patient_id, assign_partition(patient_id, config.partition_policy, config.partition_key)) for patient_id, in patient_rows]
