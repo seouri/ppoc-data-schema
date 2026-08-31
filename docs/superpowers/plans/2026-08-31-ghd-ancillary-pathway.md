@@ -34,27 +34,27 @@
 - Consumes: `ResourceShape`, `ResourceRow`, fixed base-resource names, and aggregate-safe token validation.
 - Produces: `GhdAncillaryPolicy`, `AncillaryResourceProjection`, `AncillaryValidationStatus`, `AncillaryCheck`, `AncillaryValidationReport`, fixed constants, and placeholder projection/validator signatures.
 
-- [ ] **Step 1: Write failing model tests**
+- [x] **Step 1: Write failing model tests**
 
   Build tests for frozen dataclasses, exact status values, safe policy IDs/versions, nonnegative result delay, fixed pathway constants, four-resource row-key order, immutable mappings, exact descriptor field order, empty-string normalization, synthetic patient-ID validation, duplicate field/resource rejection, fixed check/reason registries, report ordering/status precedence, exact mapping keys, and evaluator-safe `repr`. Include inputs with paths, truth terms, booleans, negative ages, non-finite values, arbitrary resource names, and mutable mappings.
 
-- [ ] **Step 2: Run the focused tests to verify they fail**
+- [x] **Step 2: Run the focused tests to verify they fail**
 
   Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_ancillary_models.py`
 
   Expected: import or collection failure because `synthetic.native.ancillary` is not present.
 
-- [ ] **Step 3: Implement the immutable model layer**
+- [x] **Step 3: Implement the immutable model layer**
 
   Define `GHD_ANCILLARY_RESOURCE_NAMES = ("labs", "medications", "problem_list", "referrals")` and fixed fictional strings. Validate `GhdAncillaryPolicy` with `require_aggregate_safe_token` and strict integer rules. Define `AncillaryResourceProjection(patient_id, shape, rows)` so `rows` is a `MappingProxyType` containing exactly those four tuple-valued resource keys; every `ResourceRow` must match `shape.field_names(resource_name)`. Define `AncillaryValidationStatus`, fixed check/reason registries, `AncillaryCheck`, and `AncillaryValidationReport` with checks in `("pathway_scope", "row_schema", "causal_timing", "cross_resource_links", "source_evidence")`, immutable tuples, status precedence, aggregate-only `to_mapping`, and safe `repr`. Add `project_ghd_ancillary_resources(member, shape, policy)` and `validate_ghd_ancillary_resources(member, projection, policy)` stubs that raise only a fixed `AncillaryProjectionUnavailable` assembly error until later tasks.
 
-- [ ] **Step 4: Run focused tests and lint**
+- [x] **Step 4: Run focused tests and lint**
 
   Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_ancillary_models.py && UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run ruff check src/synthetic/native/ancillary.py tests/synthetic/test_ancillary_models.py && git diff --check`
 
   Expected: all model tests pass and Ruff/whitespace checks are clean.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
   ```bash
   git add src/synthetic/native/ancillary.py tests/synthetic/test_ancillary_models.py
