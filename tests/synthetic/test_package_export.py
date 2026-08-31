@@ -344,6 +344,24 @@ def test_dynamic_oracle_callable_and_identity_are_pinned_during_preflight(
     assert not (tmp_path / "package").exists()
 
 
+def test_oracle_identity_is_reread_after_derive(tmp_path: Path) -> None:
+    class MutatingOracle(IdentityPreservingTestDerivationOracle):
+        def derive(self, package_root: Path, descriptor: dict) -> DerivationResult:
+            result = super().derive(package_root, descriptor)
+            self.oracle_id = "changed-after-derive"
+            return result
+
+    with pytest.raises(PackageExportUnavailable, match="observed package export failed"):
+        _export(tmp_path, derivation_oracle=MutatingOracle())
+
+    assert not (tmp_path / "package").exists()
+    failed = next(tmp_path.glob(".package.*.failed"))
+    assert json.loads((failed / "failure.json").read_text(encoding="utf-8")) == {
+        "status": "FAILED",
+        "reason": "observed package export failed",
+    }
+
+
 def test_oracle_cannot_replace_staging_root_with_symlink_to_existing_sibling(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -407,6 +425,18 @@ def test_export_refuses_existing_output_without_overwriting(tmp_path: Path) -> N
     with pytest.raises(FileExistsError):
         _export(tmp_path)
     assert (output / "keep.txt").read_text(encoding="utf-8") == "keep"
+
+
+def test_run_start_noncollision_failure_is_redacted(tmp_path: Path) -> None:
+    sensitive_parent = tmp_path / "sensitive-output-parent-token"
+    sensitive_parent.write_text("not a directory", encoding="utf-8")
+
+    with pytest.raises(PackageExportUnavailable, match="observed package export failed") as error:
+        _export(tmp_path, output_name=f"{sensitive_parent.name}/package")
+
+    assert str(sensitive_parent) not in str(error.value)
+    assert list(tmp_path.iterdir()) == [sensitive_parent]
+    assert not list(tmp_path.glob(".package.*"))
 
 
 def test_post_creation_exception_and_failure_artifact_are_redacted(tmp_path: Path) -> None:

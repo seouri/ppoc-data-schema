@@ -1,6 +1,6 @@
 # Synthetic generator
 
-This guide describes the exact-schema synthetic smoke generator in this repository. It is a development and integration harness for completely generated records; it is not a clinically validated simulator, a prevalence-calibrated cohort, a privacy audit, or a release-approved fixture.
+This guide describes the exact-schema synthetic smoke generator and development-only observed-resource package export in this repository. They are development and integration harnesses for completely generated records; they are not a clinically validated simulator, a prevalence-calibrated cohort, a privacy audit, or a release-approved fixture.
 
 ## Current scope
 
@@ -193,7 +193,7 @@ The fixed named streams are `observation.window`, `observation.censoring`, `obse
 
 `validate_observation_frame` uses seven fixed aggregate checks: patient identity, effective window, visit references, measurements and derived BMI identity, hidden events, causal event order, and minimum evidence. Reports contain only check names, `PASS`/`FAIL`/`UNEVALUABLE` statuses, fixed reason codes, and status counts. Malformed or missing private evidence is `UNEVALUABLE`, while a typed visible invariant violation is `FAIL`. The report never includes patient IDs, ages tied to a patient, measurement values, source-event payloads, latent values, error deltas, hashes, seeds, paths, or stream identities.
 
-The first observation slice supports routine visit selection, explicit administrative/lost-to-follow-up windows, independent anthropometric availability, additive/rounding error, derived BMI, and recognition/recorded-event projection. Utilization-intensity and measurement-error-removal counterfactuals remain explicitly deferred until observation/resource descendants and their reviewed causal matrices exist. Labs, medications, referrals, exact-schema export, prevalence/demographic calibration, held-out validation, privacy auditing, and an optional Synthea adapter remain separate roadmap gates.
+The first observation slice supports routine visit selection, explicit administrative/lost-to-follow-up windows, independent anthropometric availability, additive/rounding error, derived BMI, and recognition/recorded-event projection. Utilization-intensity and measurement-error-removal counterfactuals remain explicitly deferred until observation/resource descendants and their reviewed causal matrices exist. Labs, medications, referrals, prevalence/demographic calibration, held-out validation, privacy auditing, and an optional Synthea adapter remain separate roadmap gates.
 
 ## Evaluator-only observed resource bundles
 

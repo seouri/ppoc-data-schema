@@ -58,6 +58,31 @@ def _require_output_available(output: Path) -> None:
         raise FileExistsError("run directory target already exists")
 
 
+def _is_run_lifecycle_collision(output: Path, run_id: str) -> bool:
+    """Identify only the collision paths whose FileExistsError is public contract."""
+    absolute = Path(os.path.abspath(output))
+    return any(
+        os.path.lexists(path)
+        for path in (
+            absolute,
+            absolute.parent / f".{absolute.name}.{run_id}.partial",
+            absolute.parent / f".{absolute.name}.{run_id}.failed",
+        )
+    )
+
+
+def _start_run(output: Path, run_id: str) -> RunDirectory:
+    """Start a run while redacting non-collision filesystem errors."""
+    try:
+        return RunDirectory.start(output, run_id)
+    except FileExistsError:
+        if _is_run_lifecycle_collision(output, run_id):
+            raise
+        raise PackageExportUnavailable(_FAILURE_REASON) from None
+    except Exception:  # noqa: BLE001 - startup errors are deliberately redacted.
+        raise PackageExportUnavailable(_FAILURE_REASON) from None
+
+
 @dataclass(frozen=True)
 class PackageExportMetadata:
     profile: str
@@ -345,7 +370,7 @@ def export_exact_schema_package(
     run_id = hashlib.sha256(
         f"{metadata.seed}:{len(normalized_rows['patients'])}:{metadata.reference_time}".encode()
     ).hexdigest()[:12]
-    run = RunDirectory.start(output, run_id)
+    run = _start_run(output, run_id)
     try:
         row_counts: dict[str, int] = {}
         for name in BASE_RESOURCES:
@@ -394,6 +419,11 @@ def export_exact_schema_package(
                         derivation = derive(staging, stage_descriptor)
                         _require_directory_identity(outer, outer_identity)
                         _require_directory_identity(staging, staging_identity)
+                        current_oracle_id = getattr(derivation_oracle, "oracle_id", None)
+                        if not isinstance(current_oracle_id, str) or not current_oracle_id.strip():
+                            raise DerivationUnavailable("derivation oracle returned no identity")
+                        if current_oracle_id != oracle_id:
+                            raise DerivationUnavailable("derivation oracle identity changed")
                         returned_oracle_id = getattr(derivation, "oracle_id", None)
                         if not isinstance(returned_oracle_id, str) or not returned_oracle_id.strip():
                             raise DerivationUnavailable("derivation oracle returned no identity")

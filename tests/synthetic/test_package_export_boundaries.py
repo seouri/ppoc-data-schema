@@ -335,6 +335,9 @@ def test_package_export_documentation_states_the_exact_api_and_boundaries() -> N
     guide = GUIDE.read_text(encoding="utf-8")
     readme = README.read_text(encoding="utf-8")
 
+    opening = guide.split("\n\n", maxsplit=2)[1]
+    assert "exact-schema synthetic smoke generator" in opening
+    assert "development-only observed-resource package export" in opening
     assert "## Exact-schema observed-resource package export" in guide
     for required in (
         "PackageExportMetadata",
@@ -360,5 +363,6 @@ def test_package_export_documentation_states_the_exact_api_and_boundaries() -> N
     ):
         assert deferred_gate in guide
     assert "structural success is not privacy/non-matchability or prevalence evidence" in guide
+    assert "Labs, medications, referrals, exact-schema export," not in guide
     assert "exact-schema observed-resource package export" in readme
     assert "does not enable package or file export" not in readme
