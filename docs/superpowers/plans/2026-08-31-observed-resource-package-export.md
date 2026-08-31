@@ -37,19 +37,19 @@
 - Consumes: `Mapping` descriptors, six-resource `base_rows`, `DerivationOracle`, `RunDirectory`, `write_resource`, `write_synthetic_descriptor`, and `validate_structure`.
 - Produces: `PackageExportMetadata`, `PackageExportUnavailable`, `export_exact_schema_package(...) -> Path`, and `EXPECTED_SCHEMA_FINGERPRINT`.
 
-- [ ] **Step 1: Write failing metadata, schema, and lifecycle tests**
+- [x] **Step 1: Write failing metadata, schema, and lifecycle tests**
 
   Add tests for the exact metadata fields and digest/token validation, the exported repository fingerprint, JSON-compatible descriptor copying, exact eight-resource rejection, six-resource row-key/order validation, and no augmented-row caller input. Build a fictional six-resource `base_rows` mapping from the existing checked-in descriptor and use `IdentityPreservingTestDerivationOracle` to assert that `export_exact_schema_package` produces exactly the eight descriptor CSVs plus `datapackage.json`, `validation-report.json`, and `manifest.json`. Assert generated descriptor `x-synthetic` is true, schema fingerprint is unchanged, the manifest uses the supplied profile/metadata and test-only status, structural validation has no errors, and all files are deterministic across two fresh destinations.
 
   Add negative tests for missing/unknown resources, changed field order/fingerprint, unsafe descriptor paths, malformed/non-finite row values, missing oracle, invalid trusted fingerprints, mismatched oracle fingerprint/classification, oracle base mutation, oracle extra artifact, missing augmented output, output collision, and failure-artifact redaction. Assert no patient/visit token, source frame, truth, or raw temporary path occurs in public exception text or `failure.json`.
 
-- [ ] **Step 2: Run the new tests to verify they fail**
+- [x] **Step 2: Run the new tests to verify they fail**
 
   Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_package_export.py`
 
   Expected: collection or assertion failures because `synthetic.package_export` and `EXPECTED_SCHEMA_FINGERPRINT` do not yet exist.
 
-- [ ] **Step 3: Implement strict metadata, descriptor normalization, and export lifecycle**
+- [x] **Step 3: Implement strict metadata, descriptor normalization, and export lifecycle**
 
   Add the following public shape and preserve the exact argument order:
 
@@ -80,7 +80,7 @@
 
   Move or share the existing `_allowed_tree`/`_scan_tree` logic in `package_export.py` without weakening its regular-file, symlink, or unexpected-entry checks. Use `RunDirectory.start` with the existing stable seed/patient-count/reference-time token shape, write six base files with `write_resource`, run the oracle once against staged copies, hash/check immutable bases, require exactly the two descriptor-named augmented outputs, copy only those outputs, call `validate_structure`, write the generated descriptor/report/manifest, and promote. Wrap post-creation failures in `PackageExportUnavailable` and call `run.fail` only with the fixed redacted reason.
 
-- [ ] **Step 4: Run lifecycle tests, existing smoke tests, Ruff, and diff checks**
+- [x] **Step 4: Run lifecycle tests, existing smoke tests, Ruff, and diff checks**
 
   Run:
 
@@ -90,7 +90,7 @@
   git diff --check
   ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
   ```sh
   git add src/synthetic/package_export.py src/synthetic/schema_contract.py src/synthetic/manifest.py tests/synthetic/test_package_export.py
@@ -109,25 +109,25 @@
 - Consumes: `ObservedResourceBundle`, `ResourceShape`, `validate_observed_resources`, Task 1's `PackageExportMetadata`, and `export_exact_schema_package`.
 - Produces: `export_observed_resource_package(bundles, descriptor, output, *, metadata, derivation_oracle, trusted_derivation_fingerprint, trusted_derivation_test_only) -> Path` and a smoke generator that delegates to the shared lifecycle.
 
-- [ ] **Step 1: Write failing observed-bundle and smoke-delegation tests**
+- [x] **Step 1: Write failing observed-bundle and smoke-delegation tests**
 
   Create two or more compatible fictional bundles from the existing observation fixture, project them, and assert that a package contains one patient row per bundle, all visits in deterministic synthetic-patient order, empty ancillary CSVs, fixed fictional diagnosis slots, and valid augmented rows from the test oracle. Export the same bundles in reversed iterable order and compare every non-manifest file plus manifest contents. Assert package files and reports contain no `ObservationFrame`, truth hashes, stream identities, private opportunity values, or source-frame tokens.
 
   Add tests that a non-PASS bundle, empty iterable, shape mismatch, duplicate patient ID, duplicate visit ID, and malformed row are rejected before any target/partial/failed path is created. Assert `generate_smoke` still emits the existing smoke profile, row counts, run-token behavior, manifest fields, and fail-closed CLI message while using the shared lifecycle; keep the existing `_scan_tree` import compatibility test.
 
-- [ ] **Step 2: Run the observed-bundle tests to verify they fail**
+- [x] **Step 2: Run the observed-bundle tests to verify they fail**
 
   Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_observed_resource_package_export.py tests/synthetic/test_generate_smoke.py`
 
   Expected: collection failure for the missing bundle exporter, followed by the expected delegation assertions once the test imports are fixed.
 
-- [ ] **Step 3: Implement deterministic bundle merging and smoke delegation**
+- [x] **Step 3: Implement deterministic bundle merging and smoke delegation**
 
   Implement `export_observed_resource_package` with the exact signature above. Materialize a nonempty iterable, require `validate_observed_resources(bundle).status is PASS` for every item, require `bundle.shape == ResourceShape.from_descriptor(descriptor)`, reject duplicate synthetic patient/visit identifiers without echoing them, sort by patient ID, and pass only `row.to_mapping()` values for the six base resources into `export_exact_schema_package`. Do not pass bundle objects, source frames, descendants, hidden truth, or evaluator reports to the oracle.
 
   Refactor `generate_smoke` only enough to construct `PackageExportMetadata(profile="smoke", ...)` and call `export_exact_schema_package`; preserve its public signature, configuration hash, reference digest behavior, run token, `_scan_tree` compatibility, and explicit unavailable-oracle CLI. No random stream, trajectory, or clinical behavior changes are allowed in this task.
 
-- [ ] **Step 4: Run focused integration tests, full synthetic regression, Ruff, and diff checks**
+- [x] **Step 4: Run focused integration tests, full synthetic regression, Ruff, and diff checks**
 
   Run:
 
@@ -138,7 +138,7 @@
   git diff --check
   ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
   ```sh
   git add src/synthetic/package_export.py src/synthetic/generate.py tests/synthetic/test_observed_resource_package_export.py tests/synthetic/test_generate_smoke.py
@@ -156,25 +156,25 @@
 - Consumes: Task 1/2 package and bundle APIs, existing smoke/derivation contracts, and the parent synthetic-fixture claims boundary.
 - Produces: a user-facing exact-schema package-export example, explicit test-only/oracle limitations, and structural regression tests.
 
-- [ ] **Step 1: Write failing documentation and boundary tests**
+- [x] **Step 1: Write failing documentation and boundary tests**
 
   Add AST/import tests over `src/synthetic/package_export.py`, `src/synthetic/generate.py`, `src/synthetic/manifest.py`, `src/synthetic/native/`, and `src/synthetic/derivation.py` that reject imports or calls into calibration, calibration-input, held-out, privacy, real-data, Synthea, package-path readers, or random generation beyond existing smoke behavior. Assert no exporter API parameter is named `real_root`, `data_root`, `partition_key`, `heldout_report`, or `privacy_policy` and that the CLI still fails closed.
 
   Add documentation assertions for the exact API, already-loaded descriptor mapping, explicit injected test oracle, all eleven output files, redacted failure behavior, deterministic bundle sorting, and explicit deferrals to prevalence/demographic calibration, ancillary clinical pathways, held-out validation, privacy/non-matchability, task utility, clinical validity, release, and Synthea conformance.
 
-- [ ] **Step 2: Run the boundary tests to verify they fail**
+- [x] **Step 2: Run the boundary tests to verify they fail**
 
   Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_package_export_boundaries.py`
 
   Expected: failure because the package-export documentation and boundary test do not yet exist.
 
-- [ ] **Step 3: Update documentation and implement boundary guards**
+- [x] **Step 3: Update documentation and implement boundary guards**
 
   Add an “Exact-schema observed-resource package export” section to `docs/synthetic-generator.md` with a complete Python example using `PackageExportMetadata`, `export_observed_resource_package`, and the existing test-only oracle. Explain that descriptor mappings are caller-loaded, bundles must already validate, augmented rows are oracle-owned, outputs are synthetic-only development artifacts, and package structural success is not privacy/non-matchability or prevalence evidence. Update the README observed-resource paragraph to point to this section and remove the stale statement that no package export exists while retaining all deferred-gate claims.
 
   Implement the boundary test with recursive AST parsing and attribute-call checks. Keep the production CLI unavailable and ensure package exporter imports remain limited to standard-library helpers plus existing schema, manifest, lifecycle, derivation, validation, CSV writer, and observed-resource contracts.
 
-- [ ] **Step 4: Run documentation/boundary tests, full suite, Ruff, schema, and diff checks**
+- [x] **Step 4: Run documentation/boundary tests, full suite, Ruff, schema, and diff checks**
 
   Run:
 
@@ -186,7 +186,7 @@
   git diff --check
   ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
   ```sh
   git add docs/synthetic-generator.md README.md tests/synthetic/test_package_export_boundaries.py
@@ -195,12 +195,16 @@
 
 ### Task 4: Independent reviews and handoff
 
-- [ ] Create `.superpowers/sdd/2026-08-31-observed-resource-package-export/progress.md` with this plan identity, a pre-flight conflict table, and implementation/review/fix entries for each task.
-- [ ] Dispatch a fresh implementer and task reviewer for each task; resolve every Critical/Important finding through implementer-only fix rounds and one scoped re-review per round, recording any deferred Minor only in the ledger.
-- [ ] Dispatch the most capable broad reviewer over the merge-base diff, resolve all Critical/Important findings with one complete fix wave and one scoped re-review, and record rulings before integration.
-- [ ] From the feature worktree run the focused package/bundle suites, complete `pytest`, Ruff, schema validation, `git diff --check`, deterministic two-destination smoke, output-file inventory, and a leakage/boundary scan.
+- [x] Create `.superpowers/sdd/2026-08-31-observed-resource-package-export/progress.md` with this plan identity, a pre-flight conflict table, and implementation/review/fix entries for each task.
+- [x] Dispatch a fresh implementer and task reviewer for each task; resolve every Critical/Important finding through implementer-only fix rounds and one scoped re-review per round, recording any deferred Minor only in the ledger.
+- [x] Dispatch the most capable broad reviewer over the merge-base diff, resolve all Critical/Important findings with one complete fix wave and one scoped re-review, and record rulings before integration.
+- [x] From the feature worktree run the focused package/bundle suites, complete `pytest`, Ruff, schema validation, `git diff --check`, deterministic two-destination smoke, output-file inventory, and a leakage/boundary scan.
 - [ ] Merge to `main`, rerun verification on merged `main`, push, verify `HEAD == origin/main`, and remove only this slice's worktree/branch/ignored SDD workspace.
 
 ## Completion evidence
 
-- Implementation and fix commit IDs, task-review verdicts, broad-review verdict, focused/full test counts, schema/lint/diff output, deterministic package smoke result, exact output inventory, merge/push parity, and cleanup evidence are recorded before handoff.
+- Implementation and fix commits: `ac27567`, `5e48382`, `d06ef14`, `7cf509c`, `d6948f3`, `23da2df`, `36e739b`.
+- Task 1, Task 2, and Task 3 task reviews passed after their implementer-only fix rounds; the final broad review found three Important and three Minor findings, all addressed by `36e739b`, and its scoped re-review was approved.
+- Feature-branch verification: 210 focused tests and 980 full tests passed; Ruff passed; `schema/build.py --check` validated 8 resources; range `git diff --check` passed.
+- Deterministic two-destination observed-package smoke passed with exact 11-file inventory and no private truth/source/evaluator tokens.
+- Merge/push parity and exact worktree/branch/ledger cleanup are recorded after integration.
