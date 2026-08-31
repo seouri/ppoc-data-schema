@@ -146,27 +146,27 @@
 - Consumes: Task 3 public API and fixed semantics.
 - Produces: concise user documentation, explicit non-claim/deferred-gate language, and regression assertions that the existing generator/held-out/privacy/package boundaries remain unchanged.
 
-- [ ] **Step 1: Write failing documentation/boundary tests**
+- [x] **Step 1: Write failing documentation/boundary tests**
 
   Assert the guide and README name `validate_native_cohort`, policy/report statuses, separate latent/observable/recorded layers, blank-to-`Unknown` projection, growth summaries, and explicit non-claims for held-out, prevalence, clinical, privacy, non-matchability, package, and Synthea evidence. Assert the new module remains absent from governed runtime imports and the existing production CLI remains fail closed.
 
-- [ ] **Step 2: Run focused tests to verify they fail**
+- [x] **Step 2: Run focused tests to verify they fail**
 
   Run: `uv run pytest -q tests/synthetic/test_cohort_validation_docs.py tests/synthetic/test_cohort_boundaries.py`
 
   Expected: documentation assertions fail before the section is written.
 
-- [ ] **Step 3: Add the guide section and boundary regression assertions**
+- [x] **Step 3: Add the guide section and boundary regression assertions**
 
   Document the exact Python API, canonical metrics, status semantics, evaluator-only nature, and example usage with a previously generated in-memory cohort. Add a short README roadmap paragraph linking to the guide. Extend boundary tests to scan/import the new module and assert no forbidden governed/filesystem/package coupling. Keep paragraphs on one physical Markdown line where repository conventions require it.
 
-- [ ] **Step 4: Run focused tests, lint, and schema/whitespace checks**
+- [x] **Step 4: Run focused tests, lint, and schema/whitespace checks**
 
   Run: `uv run pytest -q tests/synthetic/test_cohort_validation_docs.py tests/synthetic/test_cohort_boundaries.py && uv run ruff check src/synthetic/cohort_validation.py tests/synthetic/test_cohort_validation_*.py && python3 schema/build.py --check && git diff --check`
 
   Expected: all focused tests pass, Ruff passes, schema validation reports the checked-in resources, and whitespace check is clean.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
   ```bash
   git add README.md docs/synthetic-generator.md tests/synthetic/test_cohort_boundaries.py tests/synthetic/test_cohort_validation_docs.py
