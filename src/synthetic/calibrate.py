@@ -17,6 +17,7 @@ from types import MappingProxyType
 from typing import NoReturn
 
 from synthetic.calibration import CalibrationArtifact, CalibrationDisclosurePolicy
+from synthetic.calibration_disclosure import build_result, disclose_targets  # noqa: F401
 from synthetic.calibration_input import (  # noqa: F401
     CalibrationInput,
     PartitionLabel,
