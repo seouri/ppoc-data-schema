@@ -23,7 +23,7 @@ if __name__ == "__main__":
 from synthetic.calibration import (
     CalibrationArtifact,
     CalibrationDisclosurePolicy,
-    contains_aggregate_unsafe_material,
+    contains_serialized_metadata_unsafe_material,
     require_aggregate_safe_token,
 )
 from synthetic.calibration_disclosure import build_result, disclose_targets
@@ -86,8 +86,6 @@ _RESOURCE_NAMES = frozenset(
 _TARGET_FAMILIES = frozenset(
     {"demographics", "observation", "physiology", "utilization", "recorded_outcome"}
 )
-_IDENTIFIER_RE = re.compile(r"\b[A-Za-z][A-Za-z0-9]*-[PV]-[0-9]{3,}\b", re.IGNORECASE)
-_PATH_EXTENSION_RE = re.compile(r"\b[A-Za-z0-9_-]+\.(?:csv|tsv|json|parquet|txt|zip|gz)\b", re.IGNORECASE)
 _SENSITIVE_DETAIL_WORDS = frozenset({"patient", "visit", "path", "key", "identifier"})
 _ARTIFACT_FILENAME = "calibration-artifact.json"
 _REPORT_FILENAME = "calibration-report.json"
@@ -145,12 +143,7 @@ def _contains_sensitive_report_material(value: str) -> bool:
     camel_separated = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", value)
     words = frozenset(re.findall(r"[a-z0-9]+", camel_separated.lower()))
     return (
-        contains_aggregate_unsafe_material(value)
-        or
-        bool(_IDENTIFIER_RE.search(value))
-        or "/" in value
-        or "\\" in value
-        or bool(_PATH_EXTENSION_RE.search(value))
+        contains_serialized_metadata_unsafe_material(value)
         or bool(words & _SENSITIVE_DETAIL_WORDS)
     )
 
@@ -258,7 +251,7 @@ class CalibrationCheck:
     detail: str
 
     def __post_init__(self) -> None:
-        _require_token(self.name, "check name")
+        _require_safe_report_token(self.name, "check name")
         if not isinstance(self.passed, bool):
             raise ValueError("check passed must be a boolean")  # noqa: TRY004
         _require_aggregate_detail(self.detail, "check detail")
@@ -606,8 +599,14 @@ def write_calibration_result(result: CalibrationResult, output: Path) -> None:
         raise ValueError("calibration output could not be promoted") from None
 
 
+class _RedactedArgumentParser(argparse.ArgumentParser):
+    def error(self, message: str) -> None:
+        del message
+        self.exit(2, "calibration arguments invalid\n")
+
+
 def _argument_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run governed aggregate calibration")
+    parser = _RedactedArgumentParser(description="Run governed aggregate calibration")
     parser.add_argument("--data-root", required=True, type=Path)
     parser.add_argument("--descriptor", required=True, type=Path)
     parser.add_argument("--snapshot", required=True)

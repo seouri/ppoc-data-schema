@@ -5,17 +5,36 @@ import pytest
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 VISIBLE_RUNTIME_PATHS = (
+    Path("src/synthetic/__init__.py"),
     Path("src/synthetic/generate.py"),
     Path("src/synthetic/base_resources.py"),
     Path("src/synthetic/csv_package.py"),
+    Path("src/synthetic/derivation.py"),
     Path("src/synthetic/manifest.py"),
+    Path("src/synthetic/models.py"),
+    Path("src/synthetic/randomness.py"),
+    Path("src/synthetic/references.py"),
+    Path("src/synthetic/run_directory.py"),
     Path("src/synthetic/schema_contract.py"),
+    Path("src/synthetic/validate.py"),
 )
 
 
 def visible_paths() -> tuple[Path, ...]:
     native_paths = sorted((REPOSITORY_ROOT / "src/synthetic/native").glob("*.py"))
     return tuple(REPOSITORY_ROOT / path for path in VISIBLE_RUNTIME_PATHS) + tuple(native_paths)
+
+
+def test_visible_paths_include_transitive_generator_support_modules() -> None:
+    relative_paths = {path.relative_to(REPOSITORY_ROOT) for path in visible_paths()}
+    assert {
+        Path("src/synthetic/derivation.py"),
+        Path("src/synthetic/models.py"),
+        Path("src/synthetic/randomness.py"),
+        Path("src/synthetic/references.py"),
+        Path("src/synthetic/run_directory.py"),
+        Path("src/synthetic/validate.py"),
+    } <= relative_paths
 
 
 def is_calibration_module(module: str | None) -> bool:
@@ -75,6 +94,13 @@ def forbidden_calibration_call(tree: ast.AST) -> bool:
     return False
 
 
+def assert_paths_do_not_use_calibration(paths: tuple[Path, ...]) -> None:
+    for path in paths:
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        assert not forbidden_calibration_import(tree), path
+        assert not forbidden_calibration_call(tree), path
+
+
 @pytest.mark.parametrize(
     "source",
     [
@@ -109,10 +135,21 @@ def test_forbidden_calibration_call_rejects_governed_input_calls(source: str) ->
 
 
 def test_visible_paths_do_not_import_or_call_calibration_loader() -> None:
-    for path in visible_paths():
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        assert not forbidden_calibration_import(tree), path
-        assert not forbidden_calibration_call(tree), path
+    assert_paths_do_not_use_calibration(visible_paths())
+
+
+def test_boundary_scan_rejects_calibrator_usage_in_transitive_support_module(
+    tmp_path: Path,
+) -> None:
+    support_module = tmp_path / "derivation.py"
+    support_module.write_text(
+        "from synthetic.calibration_input import prepare_input\n"
+        "prepared = prepare_input(connection, config)\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(AssertionError, match="derivation.py"):
+        assert_paths_do_not_use_calibration((support_module,))
 
 
 def test_docs_name_the_aggregate_only_boundary() -> None:

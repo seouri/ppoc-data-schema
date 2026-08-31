@@ -78,6 +78,10 @@ _TOKEN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
 _DIMENSION_VALUE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,63}\Z")
 _SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
 _UTC_TIMESTAMP_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z\Z")
+_IDENTIFIER_RE = re.compile(r"\b[A-Za-z][A-Za-z0-9]*-[PV]-[0-9]{3,}\b", re.IGNORECASE)
+_PATH_EXTENSION_RE = re.compile(
+    r"\b[A-Za-z0-9_-]+\.(?:csv|tsv|json|parquet|txt|zip|gz)\b", re.IGNORECASE
+)
 _RECORD_INDICATORS = frozenset(
     {"patient", "visit", "identifier", "uuid", "sequence", "truth", "candidate", "match", "row", "resource"}
 )
@@ -134,12 +138,23 @@ def contains_aggregate_unsafe_material(value: str) -> bool:
     return bool(words & _AGGREGATE_UNSAFE_WORDS)
 
 
+def contains_serialized_metadata_unsafe_material(value: str) -> bool:
+    """Detect governed identifiers and paths in serialized aggregate metadata."""
+    return (
+        contains_aggregate_unsafe_material(value)
+        or bool(_IDENTIFIER_RE.search(value))
+        or "/" in value
+        or "\\" in value
+        or bool(_PATH_EXTENSION_RE.search(value))
+    )
+
+
 def _validate_token(value: object, field: str, *, dimension_value: bool = False) -> str:
     token = _require_string(value, field)
     pattern = _DIMENSION_VALUE_RE if dimension_value else _TOKEN_RE
     if pattern.fullmatch(token) is None:
         raise ValueError(f"{field} must be an ASCII token without whitespace or path separators")
-    if contains_aggregate_unsafe_material(token):
+    if contains_serialized_metadata_unsafe_material(token):
         raise ValueError(f"{field} must be aggregate-safe")
     if any(indicator in token.lower() for indicator in _RECORD_INDICATORS):
         raise ValueError(f"{field} must not contain record or hidden-state indicators")
@@ -155,7 +170,7 @@ def _validate_target_name(value: object) -> str:
     target_name = _require_string(value, "target_name")
     if _TOKEN_RE.fullmatch(target_name) is None:
         raise ValueError("target_name must be an ASCII token without whitespace or path separators")
-    if contains_aggregate_unsafe_material(target_name):
+    if contains_serialized_metadata_unsafe_material(target_name):
         raise ValueError("target_name must be aggregate-safe")
     if any(indicator in target_name.lower() for indicator in _TARGET_NAME_INDICATORS):
         raise ValueError("target_name must not contain record, hidden-state, or attack-output indicators")

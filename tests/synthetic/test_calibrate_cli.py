@@ -153,9 +153,16 @@ def test_cli_malformed_snapshot_leaves_no_promoted_output_and_reports_no_source_
 
 def test_cli_rejects_undeclared_real_data_alias(tmp_path: Path) -> None:
     command = _command(tmp_path, tmp_path / "output")
-    command.extend(["--real-data", str(tmp_path / "snapshot")])
+    governed_value = "/governed/secret/SYN-P-001.csv"
+    command.extend(["--real-data", governed_value])
 
     completed = _run(command)
 
     assert completed.returncode == 2
+    assert completed.stdout == ""
+    assert completed.stderr == "calibration arguments invalid\n"
+    assert governed_value not in completed.stdout
+    assert governed_value not in completed.stderr
+    assert "SYN-P-001" not in completed.stdout
+    assert "SYN-P-001" not in completed.stderr
     assert not (tmp_path / "output").exists()

@@ -171,6 +171,12 @@ def test_check_rejects_identifier_path_and_key_alias_details(detail: str) -> Non
         CalibrationCheck("schema", True, detail)
 
 
+@pytest.mark.parametrize("identifier", ["SYN-P-001", "SYN-V-001"])
+def test_check_rejects_fixture_identifier_as_serialized_name(identifier: str) -> None:
+    with pytest.raises(ValueError, match="aggregate"):
+        CalibrationCheck(identifier, True, "matched contract")
+
+
 @pytest.mark.parametrize(
     "changes",
     [
