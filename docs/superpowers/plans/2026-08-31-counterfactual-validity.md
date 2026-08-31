@@ -29,11 +29,11 @@ Interfaces:
 - Consumes: existing `AgeRegimeDisorderKernel`, `NamedRandomStreams`, fictional `PatientState`, and age tuples.
 - Produces: intervention enum, fixed/default matrices, immutable `CounterfactualContext`, `CounterfactualPair`, and canonical-safe trajectory/hash helpers.
 
-- [ ] Write failing tests for fixed interventions, strict tokens/nodes/sets, duplicate/unknown keys, supported/unsupported intervention rejection, hidden-field repr/mapping exclusion, and deterministic replay stream identities.
-- [ ] Run focused model tests and confirm the expected import/implementation failures.
-- [ ] Implement strict immutable models and default matrices; keep descriptor and visible package code out of this evaluator-only module.
-- [ ] Ensure contexts expose only named stream generators/identities and reject path-like or real-data inputs.
-- [ ] Run focused tests, Ruff, and diff checks; commit `feat: add counterfactual contract models`.
+- [x] Write failing tests for fixed interventions, strict tokens/nodes/sets, duplicate/unknown keys, supported/unsupported intervention rejection, hidden-field repr/mapping exclusion, and deterministic replay stream identities.
+- [x] Run focused model tests and confirm the expected import/implementation failures.
+- [x] Implement strict immutable models and default matrices; keep descriptor and visible package code out of this evaluator-only module.
+- [x] Ensure contexts expose only named stream generators/identities and reject path-like or real-data inputs.
+- [x] Run focused tests, Ruff, and diff checks; commit `feat: add counterfactual contract models`.
 
 ### Task 2: Implement paired builder orchestration and causal validation
 
@@ -45,11 +45,11 @@ Interfaces:
 - Consumes: existing `AgeRegimeDisorderKernel`, patient, ages, pair/matrix models.
 - Produces: `generate_counterfactual_pair`, `validate_counterfactual_pair`, aggregate check/report models, and fixed layer/event comparisons.
 
-- [ ] Write failing tests for shared patient/state replay, baseline/intervention contexts, supported severity/recognition/adherence interventions, explicit utilization/measurement-error rejection, invariant-layer equality, permitted changes, forbidden changes, event ordering, stream reuse, age/treatment coverage, and `PASS`/`FAIL`/`UNEVALUABLE` semantics.
-- [ ] Run focused validation tests and confirm failures before implementation.
-- [ ] Implement builder invocation with deterministic contexts and fail-closed structural checks; do not catch errors into misleading passes.
-- [ ] Compare canonical hidden layer values and normalized event traces privately, trajectory z-score direction and invariants, and aggregate check counts/reason codes only.
-- [ ] Run focused tests, Ruff, and diff checks; commit `feat: validate counterfactual worlds`.
+- [x] Write failing tests for shared patient/state replay, baseline/intervention contexts, supported severity/recognition/adherence interventions, explicit utilization/measurement-error rejection, invariant-layer equality, permitted changes, forbidden changes, event ordering, stream reuse, age/treatment coverage, and `PASS`/`FAIL`/`UNEVALUABLE` semantics.
+- [x] Run focused validation tests and confirm failures before implementation.
+- [x] Implement builder invocation with deterministic contexts and fail-closed structural checks; do not catch errors into misleading passes.
+- [x] Compare canonical hidden layer values and normalized event traces privately, trajectory z-score direction and invariants, and aggregate check counts/reason codes only.
+- [x] Run focused tests, Ruff, and diff checks; commit `feat: validate counterfactual worlds`.
 
 ### Task 3: Add external truth-manifest lifecycle, docs, and boundaries
 
@@ -64,15 +64,21 @@ Interfaces:
 - Consumes: validated trajectory pairs and aggregate reports.
 - Produces: canonical external truth manifest writer, evaluator/visible boundary tests, usage guide, roadmap status.
 
-- [ ] Write failing manifest/lifecycle/boundary tests for duplicate destination, symlink/path rejection, canonical bytes, no hidden keys in ordinary package/manifest paths, no imports from governed modules, and no real-data path flags.
-- [ ] Implement bounded regular-file lifecycle and explicit external manifest serialization; preserve hidden values only in the external evaluator artifact.
-- [ ] Document the builder API, matrices, validation statuses, truth-manifest boundary, and limitation that this slice is not prevalence, task-utility, privacy, or release evidence.
-- [ ] Run focused tests, full suite, Ruff, schema check, and diff check; commit `feat: document counterfactual fixture validation`.
+- [x] Write failing manifest/lifecycle/boundary tests for duplicate destination, symlink/path rejection, canonical bytes, no hidden keys in ordinary package/manifest paths, no imports from governed modules, and no real-data path flags.
+- [x] Implement bounded regular-file lifecycle and explicit external manifest serialization; preserve hidden values only in the external evaluator artifact.
+- [x] Document the builder API, matrices, validation statuses, truth-manifest boundary, and limitation that this slice is not prevalence, task-utility, privacy, or release evidence.
+- [x] Run focused tests, full suite, Ruff, schema check, and diff check; commit `feat: document counterfactual fixture validation`.
 
 ### Task 4: Independent reviews and handoff
 
-- [ ] Create an ignored SDD ledger and record each task's implementation/review/fix status.
-- [ ] Dispatch a fresh reviewer for every task; implement fixes through fresh implementer agents and run one scoped re-review after each fix round.
-- [ ] Run one broad final review from merge base through branch tip and resolve all Critical/Important findings with fresh fix/re-review passes.
-- [ ] From the feature worktree run full pytest, Ruff, schema check, staged diff checks, and targeted leakage checks.
-- [ ] Merge to `main`, rerun all verification on merged `main`, push, verify `HEAD == origin/main`, and remove only this slice's worktree/branch/ignored SDD workspace.
+- [x] Create an ignored SDD ledger and record each task's implementation/review/fix status.
+- [x] Dispatch a fresh reviewer for every task; implement fixes through fresh implementer agents and run one scoped re-review after each fix round.
+- [x] Run one broad final review from merge base through branch tip and resolve all Critical/Important findings with fresh fix/re-review passes.
+- [x] From the feature worktree run full pytest, Ruff, schema check, staged diff checks, and targeted leakage checks.
+- [x] Merge to `main`, rerun all verification on merged `main`, push, verify `HEAD == origin/main`, and remove only this slice's worktree/branch/ignored SDD workspace.
+
+## Completion evidence
+
+- Branch tip reviewed: `c6545a4c6d79dc1c885db013e65070c5e2541f97`.
+- Broad review: PASS; no Critical or Important findings.
+- Feature-branch verification: 732 tests passed, Ruff clean, schema validation reported 8 resources, and diff checks were clean.
