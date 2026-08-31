@@ -145,13 +145,49 @@ def test_report_rejects_record_or_key_material(changes: dict[str, object]) -> No
         "source_aggregate_sha256": "b" * 64, "checks": (CalibrationCheck("schema", True, "matched contract"),),
     }
     values.update(changes)
-    with pytest.raises(ValueError, match="aggregate"):
+    with pytest.raises(ValueError, match="aggregate|integer"):
         CalibrationReport(**values)  # type: ignore[arg-type]
 
 
 def test_check_rejects_key_material_in_detail() -> None:
     with pytest.raises(ValueError, match="aggregate"):
         CalibrationCheck("schema", True, "key material accepted")
+
+
+@pytest.mark.parametrize(
+    "detail",
+    [
+        "unknown SYN-P-001",
+        "opened /restricted/patients.csv",
+        "opened ../snapshot/patients.csv",
+        "partitionKey was provided",
+    ],
+)
+def test_check_rejects_identifier_path_and_key_alias_details(detail: str) -> None:
+    with pytest.raises(ValueError, match="aggregate"):
+        CalibrationCheck("schema", True, detail)
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"partition_counts": {"calibration": "SYN-P-001", "held_out": 4}},
+        {"partition_counts": {"partitionKey": 8, "held_out": 4}},
+        {"resource_row_counts": {"patients": {"sourcePath": 1}}},
+        {"target_family_counts": {"patientCount": 1}},
+    ],
+)
+def test_report_rejects_identifier_values_and_field_aliases(changes: dict[str, object]) -> None:
+    values = {
+        "report_version": "calibration-report-v1", "status": "AGGREGATES_ONLY", "source_snapshot": "snapshot-v1",
+        "schema_fingerprint": "a" * 64, "partition_policy": {"policy_id": "partition-v1", "policy_version": "1"},
+        "partition_counts": {"calibration": 8, "held_out": 4}, "resource_row_counts": {"patients": {"calibration": 8, "held_out": 4}},
+        "target_family_counts": {"demographics": 3}, "suppression_counts": {"demographics": 1},
+        "source_aggregate_sha256": "b" * 64, "checks": (CalibrationCheck("schema", True, "matched contract"),),
+    }
+    values.update(changes)
+    with pytest.raises(ValueError, match="aggregate|integer"):
+        CalibrationReport(**values)  # type: ignore[arg-type]
 
 
 def test_orchestration_placeholders_remain_unassembled() -> None:

@@ -36,21 +36,27 @@ _REPORT_KEYS = frozenset(
         "checks",
     }
 )
-_UNSAFE_REPORT_KEY_NAMES = frozenset(
+_PARTITION_LABELS = frozenset({"calibration", "held_out"})
+_RESOURCE_NAMES = frozenset(
     {
-        "patient",
-        "patient_id",
-        "visit",
-        "visit_id",
-        "path",
-        "source_path",
-        "key",
-        "key_id",
-        "partition_key",
+        "patients",
+        "patients_augmented",
+        "visits",
+        "visits_augmented",
+        "labs",
+        "medications",
+        "problem_list",
+        "referrals",
     }
 )
-_UNSAFE_DETAIL_RE = re.compile(
-    r"\b(?:patient[_ ]?id|visit[_ ]?id|source path|partition key|key material)\b", re.IGNORECASE
+_TARGET_FAMILIES = frozenset(
+    {"demographics", "observation", "physiology", "utilization", "recorded_outcome"}
+)
+_IDENTIFIER_RE = re.compile(r"\b[A-Za-z][A-Za-z0-9]*-[PV]-[0-9]{3,}\b")
+_PATH_RE = re.compile(r"(?:^|\s)(?:/|\.\.?/|[A-Za-z]:\\)")
+_SENSITIVE_ALIAS_RE = re.compile(
+    r"(?:\b(?:patient|visit|identifier|path)\b|\b(?:partition[_ -]?)?key(?:[_ -]?(?:id|material))?\b|partitionKey)",
+    re.IGNORECASE,
 )
 
 
@@ -81,6 +87,14 @@ def _require_utc_timestamp(value: object) -> str:
         datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
     except ValueError as exc:
         raise ValueError("created_at must be a valid Gregorian UTC timestamp") from exc
+    return value
+
+
+def _require_aggregate_detail(value: object, field: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{field} must be a nonempty aggregate detail")
+    if _IDENTIFIER_RE.search(value) or _PATH_RE.search(value) or _SENSITIVE_ALIAS_RE.search(value):
+        raise ValueError(f"{field} must be aggregate-only")
     return value
 
 
@@ -173,28 +187,56 @@ class CalibrationCheck:
         _require_token(self.name, "check name")
         if not isinstance(self.passed, bool):
             raise ValueError("check passed must be a boolean")  # noqa: TRY004
-        if not isinstance(self.detail, str) or not self.detail:
-            raise ValueError("check detail must be a nonempty aggregate detail")
-        if _UNSAFE_DETAIL_RE.search(self.detail):
-            raise ValueError("check detail must be aggregate-only")
+        _require_aggregate_detail(self.detail, "check detail")
 
     def to_mapping(self) -> dict[str, object]:
         return {"name": self.name, "passed": self.passed, "detail": self.detail}
 
 
-def _validate_aggregate_mapping(value: object, field: str) -> Mapping[str, object]:
+def _require_aggregate_mapping(value: object, field: str) -> Mapping[str, object]:
     if not isinstance(value, Mapping) or not all(isinstance(key, str) for key in value):
         raise ValueError(f"{field} must be an aggregate mapping")
-    for key, item in value.items():
-        if key.lower() in _UNSAFE_REPORT_KEY_NAMES:
-            raise ValueError(f"{field} must be aggregate-only")
-        if isinstance(item, Mapping):
-            _validate_aggregate_mapping(item, field)
-        elif isinstance(item, (list, tuple, set)):
-            raise ValueError(f"{field} must contain aggregate values only")  # noqa: TRY004
-        elif isinstance(item, bool) or not isinstance(item, (str, int, float, type(None))):
-            raise ValueError(f"{field} must contain JSON aggregate values")  # noqa: TRY004
     return value
+
+
+def _require_count(value: object, field: str) -> int:
+    return _require_integer(value, field, minimum=0)
+
+
+def _validate_partition_counts(value: object, field: str) -> Mapping[str, object]:
+    mapping = _require_aggregate_mapping(value, field)
+    if set(mapping) != _PARTITION_LABELS:
+        raise ValueError(f"{field} must contain only aggregate partition counts")
+    for label, count in mapping.items():
+        _require_count(count, f"{field}.{label}")
+    return mapping
+
+
+def _validate_resource_row_counts(value: object) -> Mapping[str, object]:
+    mapping = _require_aggregate_mapping(value, "resource_row_counts")
+    if not set(mapping).issubset(_RESOURCE_NAMES):
+        raise ValueError("resource_row_counts must contain only aggregate resource counts")
+    for resource, counts in mapping.items():
+        _validate_partition_counts(counts, f"resource_row_counts.{resource}")
+    return mapping
+
+
+def _validate_family_counts(value: object, field: str) -> Mapping[str, object]:
+    mapping = _require_aggregate_mapping(value, field)
+    if not set(mapping).issubset(_TARGET_FAMILIES):
+        raise ValueError(f"{field} must contain only aggregate target-family counts")
+    for family, count in mapping.items():
+        _require_count(count, f"{field}.{family}")
+    return mapping
+
+
+def _validate_partition_policy(value: object) -> Mapping[str, object]:
+    mapping = _require_aggregate_mapping(value, "partition_policy")
+    if set(mapping) != {"policy_id", "policy_version"}:
+        raise ValueError("partition_policy must contain only aggregate policy identity")
+    _require_token(mapping["policy_id"], "partition_policy.policy_id")
+    _require_token(mapping["policy_version"], "partition_policy.policy_version")
+    return mapping
 
 
 def _freeze_aggregate_mapping(value: Mapping[str, object]) -> Mapping[str, object]:
@@ -234,14 +276,15 @@ class CalibrationReport:
         _require_token(self.source_snapshot, "source_snapshot")
         _require_sha256(self.schema_fingerprint, "schema_fingerprint")
         _require_sha256(self.source_aggregate_sha256, "source_aggregate_sha256")
-        for field in (
-            "partition_policy",
-            "partition_counts",
-            "resource_row_counts",
-            "target_family_counts",
-            "suppression_counts",
-        ):
-            validated = _validate_aggregate_mapping(getattr(self, field), field)
+        validators = {
+            "partition_policy": _validate_partition_policy,
+            "partition_counts": lambda value: _validate_partition_counts(value, "partition_counts"),
+            "resource_row_counts": _validate_resource_row_counts,
+            "target_family_counts": lambda value: _validate_family_counts(value, "target_family_counts"),
+            "suppression_counts": lambda value: _validate_family_counts(value, "suppression_counts"),
+        }
+        for field, validator in validators.items():
+            validated = validator(getattr(self, field))
             object.__setattr__(self, field, _freeze_aggregate_mapping(validated))
         if not isinstance(self.checks, tuple) or not self.checks:
             raise ValueError("checks must be a nonempty immutable tuple")
