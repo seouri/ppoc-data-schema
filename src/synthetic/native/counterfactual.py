@@ -30,6 +30,7 @@ from synthetic.models import (
     PatientState,
 )
 from synthetic.native.age_regime_disorder import AgeRegimeDisorderKernel
+from synthetic.native.trajectories import validate_disorder_events
 from synthetic.randomness import (
     PRNG_FAMILY,
     SEED_DERIVATION_VERSION,
@@ -939,20 +940,21 @@ def _check_stream_reuse(pair: CounterfactualPair):
     return CounterfactualValidationStatus.PASS, "OK"
 
 
-def _event_order_valid(trajectory: AgeRegimeDisorderTrajectory) -> bool:
-    previous_age = -1
-    previous_phase = -1
-    for event in trajectory.events:
-        phase = _EVENT_PHASE_ORDER.get(event.event_type)
-        if phase is None or event.age_days < previous_age or phase <= previous_phase:
-            return False
-        previous_age = event.age_days
-        previous_phase = phase
+def _event_order_valid(
+    trajectory: AgeRegimeDisorderTrajectory,
+    patient: PatientState,
+) -> bool:
+    try:
+        validate_disorder_events(patient, trajectory.disorder, trajectory.events)
+    except (TypeError, ValueError):
+        return False
     return True
 
 
 def _check_event_order(pair: CounterfactualPair):
-    if not _event_order_valid(pair.baseline) or not _event_order_valid(pair.intervention):
+    if not _event_order_valid(
+        pair.baseline, pair.baseline_context.patient
+    ) or not _event_order_valid(pair.intervention, pair.intervention_context.patient):
         return CounterfactualValidationStatus.FAIL, "EVENT_ORDER_INVALID"
     return CounterfactualValidationStatus.PASS, "OK"
 
@@ -1003,7 +1005,25 @@ def _check_permitted_changes(pair: CounterfactualPair):
     allowed = pair.matrix.manipulated_nodes | pair.matrix.permitted_descendants
     if changed - allowed:
         return CounterfactualValidationStatus.FAIL, "FORBIDDEN_LAYER_CHANGED"
+    if (
+        pair.matrix.intervention is InterventionKind.EARLIER_RECOGNITION
+        and not _changes_only_recognition_timing(pair)
+    ):
+        return CounterfactualValidationStatus.FAIL, "FORBIDDEN_LAYER_CHANGED"
+    if not pair.matrix.manipulated_nodes.issubset(changed):
+        return CounterfactualValidationStatus.UNEVALUABLE, "MANIPULATED_LAYER_UNCHANGED"
     return CounterfactualValidationStatus.PASS, "OK"
+
+
+def _changes_only_recognition_timing(pair: CounterfactualPair) -> bool:
+    def timing_scoped_event(event: ClinicalEvent) -> object:
+        if event.event_type != "recognition_opportunity":
+            return event
+        return (event.patient_id, event.event_type, event.code, event.hidden)
+
+    baseline = tuple(timing_scoped_event(event) for event in pair.baseline.events)
+    intervention = tuple(timing_scoped_event(event) for event in pair.intervention.events)
+    return baseline == intervention
 
 
 def _recognition_ages(trajectory: AgeRegimeDisorderTrajectory) -> tuple[int, ...]:

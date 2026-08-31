@@ -267,3 +267,139 @@ def test_event_order_is_checked_as_causal_phase_order() -> None:
     report = validate_counterfactual_pair(tampered)
     assert report.status is CounterfactualValidationStatus.FAIL
     assert any(check.reason_code == "EVENT_ORDER_INVALID" for check in report.checks)
+
+
+def test_treatment_validation_is_unevaluable_when_the_manipulated_layer_is_unchanged() -> None:
+    pair = generate_counterfactual_pair(
+        _treated_ghd_kernel(),
+        PATIENT,
+        (0, 365, 730, 900, 999, 1000, 1200, 1500, 2500, 4000),
+        SEED,
+        INDEX,
+        InterventionKind.TREATMENT_ADHERENCE,
+    )
+    unchanged = dataclasses.replace(pair, intervention=pair.baseline)
+
+    report = validate_counterfactual_pair(unchanged)
+    permitted_changes = next(check for check in report.checks if check.name == "permitted_changes")
+
+    assert report.status is CounterfactualValidationStatus.UNEVALUABLE
+    assert permitted_changes.status is CounterfactualValidationStatus.UNEVALUABLE
+    assert permitted_changes.reason_code == "MANIPULATED_LAYER_UNCHANGED"
+
+
+@pytest.mark.parametrize("invalid_age", [False, 0.5, -1])
+def test_validation_rejects_non_integer_or_negative_event_ages(invalid_age: object) -> None:
+    pair = generate_counterfactual_pair(
+        _treated_ghd_kernel(),
+        PATIENT,
+        (0, 365, 730, 900, 999, 1000, 1200, 1500, 2500, 4000),
+        SEED,
+        INDEX,
+        InterventionKind.TREATMENT_ADHERENCE,
+    )
+
+    def with_invalid_first_event_age(trajectory: object):
+        events = list(trajectory.events)  # type: ignore[attr-defined]
+        events[0] = dataclasses.replace(events[0], age_days=invalid_age)
+        return dataclasses.replace(trajectory, events=tuple(events))
+
+    malformed = dataclasses.replace(
+        pair,
+        baseline=with_invalid_first_event_age(pair.baseline),
+        intervention=with_invalid_first_event_age(pair.intervention),
+    )
+
+    report = validate_counterfactual_pair(malformed)
+    event_order = next(check for check in report.checks if check.name == "event_order")
+
+    assert report.status is CounterfactualValidationStatus.FAIL
+    assert event_order.reason_code == "EVENT_ORDER_INVALID"
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("code", "tampered-recognition"), ("hidden", True)],
+)
+def test_earlier_recognition_rejects_recognition_payload_tampering(
+    field: str, value: object
+) -> None:
+    pair = generate_counterfactual_pair(
+        _familial_kernel(),
+        PATIENT,
+        (0, 365, 730, 1460, 1825, 2190, 4000),
+        SEED,
+        INDEX,
+        InterventionKind.EARLIER_RECOGNITION,
+    )
+    events = list(pair.intervention.events)
+    index = next(
+        index for index, event in enumerate(events) if event.event_type == "recognition_opportunity"
+    )
+    events[index] = dataclasses.replace(events[index], **{field: value})
+    tampered = dataclasses.replace(
+        pair,
+        intervention=dataclasses.replace(pair.intervention, events=tuple(events)),
+    )
+
+    report = validate_counterfactual_pair(tampered)
+
+    assert report.status is CounterfactualValidationStatus.FAIL
+    assert any(check.reason_code == "FORBIDDEN_LAYER_CHANGED" for check in report.checks)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("age_days", 2191), ("code", "tampered-diagnosis"), ("hidden", True)],
+)
+def test_earlier_recognition_rejects_downstream_event_tampering(
+    field: str, value: object
+) -> None:
+    pair = generate_counterfactual_pair(
+        _familial_kernel(),
+        PATIENT,
+        (0, 365, 730, 1460, 1825, 2190, 4000),
+        SEED,
+        INDEX,
+        InterventionKind.EARLIER_RECOGNITION,
+    )
+    events = list(pair.intervention.events)
+    index = next(
+        index for index, event in enumerate(events) if event.event_type == "recorded_diagnosis"
+    )
+    events[index] = dataclasses.replace(events[index], **{field: value})
+    tampered = dataclasses.replace(
+        pair,
+        intervention=dataclasses.replace(pair.intervention, events=tuple(events)),
+    )
+
+    report = validate_counterfactual_pair(tampered)
+
+    assert report.status is CounterfactualValidationStatus.FAIL
+    assert any(check.reason_code == "FORBIDDEN_LAYER_CHANGED" for check in report.checks)
+
+
+def test_validation_rejects_treatment_outcome_that_disagrees_with_state() -> None:
+    pair = generate_counterfactual_pair(
+        _treated_ghd_kernel(),
+        PATIENT,
+        (0, 365, 730, 900, 999, 1000, 1200, 1500, 2500, 4000),
+        SEED,
+        INDEX,
+        InterventionKind.TREATMENT_ADHERENCE,
+    )
+    events = list(pair.intervention.events)
+    index = next(
+        index for index, event in enumerate(events) if event.event_type == "treatment_nonresponse"
+    )
+    events[index] = dataclasses.replace(events[index], event_type="treatment_response")
+    malformed = dataclasses.replace(
+        pair,
+        intervention=dataclasses.replace(pair.intervention, events=tuple(events)),
+    )
+
+    report = validate_counterfactual_pair(malformed)
+    event_order = next(check for check in report.checks if check.name == "event_order")
+
+    assert report.status is CounterfactualValidationStatus.FAIL
+    assert event_order.reason_code == "EVENT_ORDER_INVALID"
