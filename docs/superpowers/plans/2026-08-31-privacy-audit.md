@@ -10,6 +10,10 @@ Tech Stack: Python 3.12+, DuckDB, standard-library csv/json/hashlib/math/os/stat
 
 Spec: docs/superpowers/specs/2026-08-31-privacy-audit-design.md
 
+## Execution reconciliation
+
+The implementation tasks in this plan were already present on `main` in the contiguous privacy range `a301d9c..869158d`. This execution reconciled that range with the approved design through fresh task-scoped reviews, fixed findings in `8cfa86b`, `fa97950`, `96fbb22`, `58c2963`, `6b5ce10`, `36f0352`, and `cd23126`, and retained review evidence in the ignored SDD workspace `.superpowers/sdd/2026-08-31-privacy-audit/`. Only fictional exact-schema fixtures were used.
+
 ## Global constraints
 
 - `datapackage.json` remains the sole schema authority; every package has exactly the eight repository resources and the repository schema fingerprint.
@@ -39,25 +43,25 @@ Interfaces:
 - Consumes: repository `datapackage.json`, secure descriptor/resource helpers, fictional exact-schema packages.
 - Produces: immutable `PrivacyPolicy`, `PrivacyRunConfig`, internal profile/index helpers, strict `load_privacy_policy`, and aggregate-safe `PrivacyControlResult`, `PrivacyAuditReport`, and `PrivacyAuditResult` models. No attacks or CLI yet.
 
-- [ ] Step 1: Write failing policy/input/model tests
+- [x] Step 1: Write failing policy/input/model tests
 
 Create a valid policy with the exact spec keys, all fixed attacker components, mandatory controls, subgroup configuration, thresholds, and review metadata. Assert duplicate/unknown/missing keys, nonfinite numbers, booleans, unsafe tokens, duplicate lists, unsupported components/controls, invalid dates, wrong fingerprint, and range errors fail without echoing values. Create fictional real/generated/held-out packages and assert real/synthetic marker rules, exact resource set/fingerprint, regular non-symlink descriptor/resources, path traversal rejection, malformed CSV/value rejection, duplicate keys, and no row/identifier leakage in errors. Assert `PrivacyAuditReport` rejects unsafe metrics and serializes canonical sorted ASCII bytes with exact keys.
 
-- [ ] Step 2: Run the focused tests to verify they fail
+- [x] Step 2: Run the focused tests to verify they fail
 
 Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_privacy_policy.py tests/synthetic/test_privacy_inputs.py`
 
 Expected: collection failure because `synthetic.privacy_audit` and privacy fixtures do not exist. Fix only test setup/import errors before implementation.
 
-- [ ] Step 3: Implement strict policy and immutable aggregate models
+- [x] Step 3: Implement strict policy and immutable aggregate models
 
 Implement bounded secure JSON reading with duplicate-key and nonfinite rejection. Parse the exact policy contract from the spec, enforce fixed tokens/components/control IDs/subgroups, the SHA-256 schema fingerprint, date, minimums, and finite thresholds. Define report/control models that allow only aggregate metric keys and values, enforce status and sorted control IDs, and null/omit metrics for underpowered cells. Keep policy thresholds and paths out of report mappings except approved identity/review metadata.
 
-- [ ] Step 4: Implement secure package staging and process-local profile extraction
+- [x] Step 4: Implement secure package staging and process-local profile extraction
 
 Load descriptors only from `<root>/datapackage.json` through regular non-symlink bounded reads, require exact eight resources/fingerprint, and enforce marker polarity. Stage each package through the existing `_stage_validated_resources` and relation/link checks on its own DuckDB connection. Extract fixed per-patient demographics, visit ages/count, normalized anthropometric trajectory observations, and `growth_dx_flag` into private profile objects; derive trajectory/profile SHA-256 signatures and component buckets without returning them. Collect all declared primary-key/`*_id` values into private sets for overlap comparison. Ensure package connections and row maps are released from public result objects.
 
-- [ ] Step 5: Run policy/input tests, lint, and commit
+- [x] Step 5: Run policy/input tests, lint, and commit
 
 Run:
 
@@ -79,25 +83,25 @@ Interfaces:
 - Consumes: Task 1 policy/profile indexes and optional held-out profiles.
 - Produces: private fixed controls for identifier overlap, exact longitudinal reproduction, nearest-neighbor proximity, and linkage; each returns only `PrivacyControlResult` aggregates.
 
-- [ ] Step 1: Write failing control tests
+- [x] Step 1: Write failing control tests
 
 Test independent synthetic identifiers with copied IDs, copied eligible trajectories, empty/underpowered trajectories, exact/near/unique/tied component buckets, rare sex strata, held-out controls, permutation baselines, and mismatched package sizes. Assert mandatory overlap/reproduction failures, underpowered statuses, aggregate rates/intervals only, no IDs/hashes/pairs/distances/raw values, and deterministic results.
 
-- [ ] Step 2: Run focused controls to verify failure
+- [x] Step 2: Run focused controls to verify failure
 
 Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_privacy_controls.py`
 
 Expected: import or missing-control failures. Fix only fixture/import setup before implementation.
 
-- [ ] Step 3: Implement identifier and exact trajectory controls
+- [x] Step 3: Implement identifier and exact trajectory controls
 
 Compare private identifier sets across every primary-key and `*_id` field and calculate aggregate overlap rate with the policy threshold. Compare eligible trajectory signature sets, treating every generated signature present in the reference as a complete reproduction and keeping ineligible counts private. Mandatory zero rules fail closed before optional metrics; no identifier or hash enters a result.
 
-- [ ] Step 4: Implement bucketed nearest-neighbor and linkage controls
+- [x] Step 4: Implement bucketed nearest-neighbor and linkage controls
 
 Use fixed component buckets to calculate aggregate zero-proximity/unique-nearest/margin-bin rates without quadratic all-pairs scans or patient-level outputs. Require held-out controls when the policy requires them. For each selected attacker component and fixed full combination, calculate unique exact candidate rates, deterministic permutation controls, held-out-real controls, Wilson intervals, and maximum aggregate advantage. Suppress subgroup cells below minimum size and promote subgroup failures to the control status.
 
-- [ ] Step 5: Run controls, lint, and commit
+- [x] Step 5: Run controls, lint, and commit
 
 Run:
 
@@ -120,25 +124,25 @@ Interfaces:
 - Consumes: Task 1/2 profile indexes, shadow manifest, optional prior/negative/positive package roots, and policy thresholds.
 - Produces: strict shadow-manifest loader and aggregate membership, attribute, composition, negative-control, and positive-control results.
 
-- [ ] Step 1: Write failing advanced-control tests
+- [x] Step 1: Write failing advanced-control tests
 
 Create multiple shadow packages and private manifests with known member labels, copied/overfit and independent profiles, prior releases with repeated trajectories, and inconsistent/underpowered labels. Assert fewer than the policy minimum shadow runs, missing prior releases, unknown members, duplicate runs, and undersized groups are `UNEVALUABLE`. Assert overfit membership and copied composition fail, attribute accuracy is compared with majority/held-out baselines, independent negative controls pass, positive controls are detected, and output remains aggregate-only.
 
-- [ ] Step 2: Run advanced tests to verify failure
+- [x] Step 2: Run advanced tests to verify failure
 
 Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_privacy_advanced_controls.py`
 
 Expected: missing loader/control implementation. Fix only fixture/import setup before implementation.
 
-- [ ] Step 3: Implement strict shadow-manifest loading and membership inference
+- [x] Step 3: Implement strict shadow-manifest loading and membership inference
 
 Read a bounded regular manifest with exact `privacy-shadow-v1` keys. Keep member identifiers process-local, validate against reference patients without echoing unknown values, load each synthetic shadow package separately, and map labels through internal trajectory signatures. Evaluate the fixed exact-match score attack across the required number of shadows, report only maximum advantage/intervals/counts, and return `UNEVALUABLE` when evidence is absent or underpowered.
 
-- [ ] Step 4: Implement attribute disclosure and composition
+- [x] Step 4: Implement attribute disclosure and composition
 
 For uniquely linked eligible trajectories, infer only the recorded growth-diagnosis flag internally and compare accuracy with reference majority and held-out baselines. Compare eligible generated signatures with every explicit prior synthetic release; report aggregate reproduction rates and fail above the policy threshold. Never serialize diagnosis values, prior paths, signatures, or candidate details.
 
-- [ ] Step 5: Implement negative/positive controls and commit
+- [x] Step 5: Implement negative/positive controls and commit
 
 Run the fixed linkage/reproduction harness against supplied independent negative and intentionally copied/overfit positive roots. A negative result passes only below its threshold; a positive result passes only when the harness detects the configured minimum signal. Missing required roots are `UNEVALUABLE`. Run tests/lint/diff checks and commit:
 
@@ -158,25 +162,25 @@ Interfaces:
 - Consumes: all controls and policy/config models.
 - Produces: `audit_privacy`, `write_privacy_report`, CLI parser/exit behavior, aggregate summary, documentation, and visible-generator import regression.
 
-- [ ] Step 1: Write failing integration/CLI/boundary tests
+- [x] Step 1: Write failing integration/CLI/boundary tests
 
 Test a clean independent package yielding `PASS` when optional controls are not required, copied package yielding `FAIL`, missing required evidence yielding `UNEVALUABLE`, subgroup suppression, deterministic bytes, report collision/refusal, redacted failure artifacts, and parser statuses. Assert CLI required flags and optional repeated roots, exit 0/1/2, no path/ID/key/raw exception leakage, and that visible generation/export/trajectory/manifest modules do not import privacy-audit or governed input code.
 
-- [ ] Step 2: Run integration tests to verify failure
+- [x] Step 2: Run integration tests to verify failure
 
 Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_privacy_integration.py tests/synthetic/test_privacy_cli.py tests/synthetic/test_privacy_boundaries.py`
 
 Expected: missing orchestration/CLI/docs implementation. Fix only import/fixture setup before implementation.
 
-- [ ] Step 3: Implement orchestration and global decision
+- [x] Step 3: Implement orchestration and global decision
 
 Validate `PrivacyRunConfig`, load the frozen policy before staging, open independent package connections, run all applicable controls, promote any evaluated fail, mark required missing/underpowered controls unevaluable, and compute global `FAIL`/`UNEVALUABLE`/`PASS` exactly as the spec. Release no row data or connections through `PrivacyAuditResult`.
 
-- [ ] Step 4: Implement canonical lifecycle output and CLI
+- [x] Step 4: Implement canonical lifecycle output and CLI
 
 Derive a safe lifecycle token from synthetic descriptor identity and policy identity, refuse target/partial/failed collisions, write only report and summary with exclusive fsynced files, reparse/byte-compare, and atomically promote. On failure leave only the fixed redacted failure reason. Add explicit required/optional flags and redacted parser/exit handling.
 
-- [ ] Step 5: Update docs and boundary assertions; run focused checks and commit
+- [x] Step 5: Update docs and boundary assertions; run focused checks and commit
 
 Document the qualified privacy claim, required evidence, command, statuses, aggregate-only report, and distinction from non-matchability/release approval. Assert privacy, temporal drift, task utility, prevalence, and Synthea remain separate roadmap gates where appropriate. Run focused tests, Ruff, schema, and whitespace checks; commit:
 
@@ -184,8 +188,8 @@ Document the qualified privacy claim, required evidence, command, statuses, aggr
 
 ### Task 5: Independent reviews, follow-up fixes, and handoff
 
-- [ ] Create the SDD ledger under an ignored workspace and record each task's implementation/review/fix status.
-- [ ] Dispatch a fresh reviewer for each task and implementer-only fix rounds for every finding; run exactly one scoped re-review after the fix round.
-- [ ] Run a broad final review from the merge base through the branch tip. Resolve all Critical/Important findings with fresh fix/re-review passes; record residual Minor findings explicitly.
-- [ ] From the feature worktree run the full suite, Ruff, schema check, and staged diff checks. Verify the report contains no identifiers, paths, keys, profile hashes, distances, attack examples, or undersized cells.
+- [x] Create the SDD ledger under an ignored workspace and record each task's implementation/review/fix status.
+- [x] Dispatch a fresh reviewer for each task and implementer-only fix rounds for every finding; run exactly one scoped re-review after the fix round.
+- [x] Run a broad final review from the merge base through the branch tip. Resolve all Critical/Important findings with fresh fix/re-review passes; record residual Minor findings explicitly.
+- [x] From the feature worktree run the full suite, Ruff, schema check, and staged diff checks. Verify the report contains no identifiers, paths, keys, profile hashes, distances, attack examples, or undersized cells.
 - [ ] Merge to `main`, rerun the full verification suite on merged `main`, push, and verify `HEAD == origin/main`. Remove only this slice's worktree/branch/ignored SDD workspace after handoff.
