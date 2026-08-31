@@ -17,6 +17,12 @@ from synthetic.base_resources import BASE_RESOURCES
 from synthetic.csv_package import write_resource, write_synthetic_descriptor
 from synthetic.derivation import DerivationOracle, DerivationUnavailable, require_augmented_outputs
 from synthetic.manifest import RunManifest
+from synthetic.native.resources import (
+    ObservedResourceBundle,
+    ResourceShape,
+    ResourceValidationStatus,
+    validate_observed_resources,
+)
 from synthetic.run_directory import RunDirectory
 from synthetic.schema_contract import (
     EXPECTED_SCHEMA_FINGERPRINT,
@@ -247,6 +253,7 @@ def export_exact_schema_package(
     except Exception:  # noqa: BLE001 - public package errors are deliberately redacted.
         raise PackageExportUnavailable(_FAILURE_REASON) from None
 
+
     run_id = hashlib.sha256(
         f"{metadata.seed}:{len(normalized_rows['patients'])}:{metadata.reference_time}".encode()
     ).hexdigest()[:12]
@@ -359,3 +366,53 @@ def export_exact_schema_package(
         except Exception:  # noqa: BLE001 - retain the redacted public failure if archival fails.
             raise PackageExportUnavailable(_FAILURE_REASON) from None
         raise PackageExportUnavailable(_FAILURE_REASON) from None
+
+
+def export_observed_resource_package(
+    bundles: Iterable[ObservedResourceBundle],
+    descriptor: Mapping[str, object],
+    output: Path,
+    *,
+    metadata: PackageExportMetadata,
+    derivation_oracle: DerivationOracle,
+    trusted_derivation_fingerprint: str,
+    trusted_derivation_test_only: bool,
+) -> Path:
+    """Export validated observed-resource bundles through the exact-schema lifecycle."""
+    try:
+        materialized = tuple(bundles)
+        if not materialized:
+            raise ValueError("at least one observed resource bundle is required")
+        expected_shape = ResourceShape.from_descriptor(descriptor)
+        patient_ids: set[str] = set()
+        visit_ids: set[str] = set()
+        for bundle in materialized:
+            if validate_observed_resources(bundle).status is not ResourceValidationStatus.PASS:
+                raise ValueError("observed resource validation did not pass")
+            if bundle.shape != expected_shape:
+                raise ValueError("observed resource shape does not match descriptor")
+            if bundle.patient_id in patient_ids:
+                raise ValueError("duplicate observed synthetic patient")
+            patient_ids.add(bundle.patient_id)
+            for row in bundle.rows["visits"]:
+                visit_id = row.to_mapping()["visit_id"]
+                if visit_id in visit_ids:
+                    raise ValueError("duplicate observed synthetic visit")
+                visit_ids.add(visit_id)
+    except Exception:  # noqa: BLE001 - bundle-boundary failures are deliberately redacted.
+        raise PackageExportUnavailable(_FAILURE_REASON) from None
+
+    ordered = tuple(sorted(materialized, key=lambda bundle: bundle.patient_id))
+    base_rows = {
+        name: [row.to_mapping() for bundle in ordered for row in bundle.rows[name]]
+        for name in BASE_RESOURCES
+    }
+    return export_exact_schema_package(
+        descriptor,
+        base_rows,
+        output,
+        metadata=metadata,
+        derivation_oracle=derivation_oracle,
+        trusted_derivation_fingerprint=trusted_derivation_fingerprint,
+        trusted_derivation_test_only=trusted_derivation_test_only,
+    )

@@ -7,6 +7,7 @@ import pytest
 
 from synthetic.derivation import DerivationUnavailable
 from synthetic.generate import _scan_tree, generate_smoke
+from synthetic.package_export import PackageExportMetadata
 from tests.synthetic.fakes import (
     IdentityPreservingTestDerivationOracle,
     LinearTestReference,
@@ -77,6 +78,60 @@ def test_smoke_manifest_records_injected_reference_digest(tmp_path: Path) -> Non
 
     manifest = json.loads((output / "manifest.json").read_text())
     assert manifest["reference_sha256"] == "a" * 64
+
+
+def test_smoke_generation_delegates_exact_rows_and_metadata_to_shared_package_lifecycle(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    captured: dict[str, object] = {}
+    expected = tmp_path / "shared-result"
+
+    def export(descriptor, base_rows, output, **kwargs):
+        captured.update(
+            descriptor=descriptor,
+            base_rows=base_rows,
+            output=output,
+            metadata=kwargs["metadata"],
+            oracle=kwargs["derivation_oracle"],
+            fingerprint=kwargs["trusted_derivation_fingerprint"],
+            test_only=kwargs["trusted_derivation_test_only"],
+        )
+        return expected
+
+    monkeypatch.setattr("synthetic.generate.export_exact_schema_package", export)
+    oracle = IdentityPreservingTestDerivationOracle()
+
+    result = generate_smoke(
+        descriptor_path=ROOT / "datapackage.json",
+        output=tmp_path / "run",
+        patient_count=2,
+        seed=20260830,
+        reference_time="2026-08-30T00:00:00Z",
+        software_revision="test-revision",
+        reference=LinearTestReference(),
+        derivation_oracle=oracle,
+        trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
+        trusted_derivation_test_only=True,
+    )
+
+    assert result == expected
+    assert captured["output"] == tmp_path / "run"
+    assert captured["oracle"] is oracle
+    assert captured["fingerprint"] == TRUSTED_FINGERPRINT
+    assert captured["test_only"] is True
+    assert isinstance(captured["metadata"], PackageExportMetadata)
+    metadata = captured["metadata"]
+    assert metadata.profile == "smoke"
+    assert metadata.seed == 20260830
+    assert metadata.reference_sha256 is None
+    assert {name: len(rows) for name, rows in captured["base_rows"].items()} == {
+        "patients": 2,
+        "visits": 6,
+        "labs": 0,
+        "medications": 0,
+        "problem_list": 0,
+        "referrals": 0,
+    }
 
 
 def test_no_derivation_oracle_cannot_promote_output(tmp_path: Path) -> None:
