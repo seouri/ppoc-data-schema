@@ -15,6 +15,17 @@ from synthetic.native.clinical_modules import GrowthDisorderModule
 from synthetic.native.healthy import HealthyKernel
 from synthetic.randomness import NamedRandomStreams
 
+_EVENT_PHASE_ORDER = {
+    "latent_onset": 0,
+    "observable_phenotype": 1,
+    "recognition_opportunity": 2,
+    "workup": 3,
+    "recorded_diagnosis": 4,
+    "treatment_start": 5,
+    "treatment_response": 6,
+    "treatment_nonresponse": 6,
+}
+
 
 def _finite_real(value: object, message: str) -> float:
     if isinstance(value, bool) or not isinstance(value, Real) or not math.isfinite(value):
@@ -53,6 +64,7 @@ def validate_disorder_events(
     events: tuple[ClinicalEvent, ...],
 ) -> None:
     previous_age = -1
+    previous_phase = -1
     treatment_start_seen = False
     treatment_outcome_seen: str | None = None
     for event in events:
@@ -64,8 +76,13 @@ def validate_disorder_events(
             raise ValueError("module event age must be nonnegative")
         if event.age_days < previous_age:
             raise ValueError("module event ages must be nondecreasing")
+        phase = _EVENT_PHASE_ORDER.get(event.event_type)
+        if phase is None:
+            raise ValueError(f"unknown clinical event type: {event.event_type}")
         if treatment_outcome_seen is not None:
             raise ValueError("treatment outcome events are terminal")
+        if phase <= previous_phase:
+            raise ValueError("module event schedule must follow causal phase order")
 
         if event.event_type == "treatment_start":
             if (
@@ -94,6 +111,7 @@ def validate_disorder_events(
             treatment_outcome_seen = event.event_type
 
         previous_age = event.age_days
+        previous_phase = phase
 
 
 class DisorderTrajectoryKernel:

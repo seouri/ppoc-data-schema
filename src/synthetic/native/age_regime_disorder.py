@@ -84,14 +84,85 @@ class AgeRegimeDisorderKernel:
         patient: PatientState,
         ages_days: tuple[int, ...],
         streams: NamedRandomStreams,
+        *,
+        state: tuple[AgeRegimeState, LatentDisorderState] | None = None,
+        physiology_state: AgeRegimeState | None = None,
+        disorder_state: LatentDisorderState | None = None,
     ) -> AgeRegimeDisorderTrajectory:
         validate_growth_disorder_module(self.module)
+        physiology_state, disorder_state = self._resolve_states(
+            patient,
+            streams,
+            state=state,
+            physiology_state=physiology_state,
+            disorder_state=disorder_state,
+        )
+        return self._generate_from_states(
+            patient, ages_days, streams, physiology_state, disorder_state
+        )
+
+    def sample_state(
+        self,
+        patient: PatientState,
+        streams: NamedRandomStreams,
+    ) -> tuple[AgeRegimeState, LatentDisorderState]:
+        """Sample the two hidden states once for deterministic world replay."""
+
         physiology_state = self.physiology.sample_state(streams)
         disorder_state = self.module.sample_state(patient, streams)
+        return self._validated_states(physiology_state, disorder_state)
+
+    def sample_states(
+        self,
+        patient: PatientState,
+        streams: NamedRandomStreams,
+    ) -> tuple[AgeRegimeState, LatentDisorderState]:
+        """Plural alias for callers that make the paired-state contract explicit."""
+
+        return self.sample_state(patient, streams)
+
+    def _resolve_states(
+        self,
+        patient: PatientState,
+        streams: NamedRandomStreams,
+        *,
+        state: tuple[AgeRegimeState, LatentDisorderState] | None,
+        physiology_state: AgeRegimeState | None,
+        disorder_state: LatentDisorderState | None,
+    ) -> tuple[AgeRegimeState, LatentDisorderState]:
+        if state is not None and (physiology_state is not None or disorder_state is not None):
+            raise ValueError("state cannot be combined with explicit hidden states")
+        if state is not None:
+            if not isinstance(state, tuple) or len(state) != 2:
+                raise TypeError("state must be a tuple of age-regime and disorder states")
+            physiology_state, disorder_state = state
+        elif physiology_state is None and disorder_state is None:
+            return self.sample_state(patient, streams)
+        elif physiology_state is None or disorder_state is None:
+            raise ValueError("physiology_state and disorder_state must be supplied together")
+        return self._validated_states(physiology_state, disorder_state)
+
+    def _validated_states(
+        self,
+        physiology_state: object,
+        disorder_state: object,
+    ) -> tuple[AgeRegimeState, LatentDisorderState]:
+        if not isinstance(physiology_state, AgeRegimeState):
+            raise TypeError("physiology state must be an AgeRegimeState")
         if not isinstance(disorder_state, LatentDisorderState):
             raise TypeError("module must return a LatentDisorderState")
         if disorder_state.kind is not self.module.kind:
             raise ValueError("module state kind must match module kind")
+        return physiology_state, disorder_state
+
+    def _generate_from_states(
+        self,
+        patient: PatientState,
+        ages_days: tuple[int, ...],
+        streams: NamedRandomStreams,
+        physiology_state: AgeRegimeState,
+        disorder_state: LatentDisorderState,
+    ) -> AgeRegimeDisorderTrajectory:
 
         adjusted_state = self._adjusted_state(physiology_state, disorder_state)
         baseline = self.physiology.generate(
