@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import math
 import re
+import stat
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 
 ARTIFACT_VERSION = "calibration-artifact-v1"
 MAX_CALIBRATION_ARTIFACT_BYTES = 4 * 1024 * 1024
@@ -143,6 +146,19 @@ def _require_list(value: object, field: str) -> list[object]:
     if not isinstance(value, list):
         raise ValueError(f"{field} must be a list")  # noqa: TRY004
     return value
+
+
+def _reject_duplicate_json_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    value: dict[str, object] = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError(f"duplicate key in JSON object: {key}")
+        value[key] = item
+    return value
+
+
+def _reject_nonfinite_json_constant(value: str) -> object:
+    raise ValueError(f"nonfinite JSON constant is not allowed: {value}")
 
 
 def _validate_sha256(value: object, field: str) -> str:
@@ -419,6 +435,11 @@ class CalibrationArtifact:
             "strata": [self._stratum_to_mapping(stratum) for stratum in self.strata],
         }
 
+    def canonical_json(self) -> str:
+        return json.dumps(
+            self.to_mapping(), sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False
+        )
+
     @staticmethod
     def _stratum_to_mapping(stratum: CalibrationStratum) -> dict[str, object]:
         return {
@@ -443,3 +464,44 @@ class CalibrationArtifact:
         if target.statistic == "quantile":
             value["quantile_level"] = target.quantile_level
         return value
+
+
+def load_calibration_artifact(path: Path) -> CalibrationArtifact:
+    try:
+        file_status = path.lstat()
+    except FileNotFoundError:
+        raise ValueError("calibration artifact path was not found") from None
+    except OSError:
+        raise ValueError("calibration artifact path could not be inspected") from None
+
+    if not stat.S_ISREG(file_status.st_mode):
+        raise ValueError("calibration artifact path must be a regular file")
+    if file_status.st_size > MAX_CALIBRATION_ARTIFACT_BYTES:
+        raise ValueError("calibration artifact exceeds the maximum size")
+
+    try:
+        with path.open("rb") as file:
+            payload = file.read(MAX_CALIBRATION_ARTIFACT_BYTES + 1)
+    except OSError:
+        raise ValueError("calibration artifact could not be read") from None
+
+    if len(payload) > MAX_CALIBRATION_ARTIFACT_BYTES:
+        raise ValueError("calibration artifact exceeds the maximum size")
+    if payload.startswith(b"\xef\xbb\xbf"):
+        raise ValueError("calibration artifact must not include a UTF-8 BOM")
+    try:
+        decoded = payload.decode("utf-8", errors="strict")
+    except UnicodeError:
+        raise ValueError("calibration artifact must be strict UTF-8") from None
+    try:
+        value = json.loads(
+            decoded,
+            object_pairs_hook=_reject_duplicate_json_keys,
+            parse_constant=_reject_nonfinite_json_constant,
+        )
+    except json.JSONDecodeError:
+        raise ValueError("calibration artifact must be valid JSON") from None
+
+    if not isinstance(value, Mapping):
+        raise ValueError("calibration artifact JSON root must be an object")  # noqa: TRY004
+    return CalibrationArtifact.from_mapping(value)
