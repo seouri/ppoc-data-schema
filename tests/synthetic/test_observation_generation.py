@@ -230,6 +230,25 @@ def test_generation_keeps_regime_channel_applicability_and_derives_bmi() -> None
     assert all(item.channel is not MeasurementChannel.BMI for item in frame.truth.measurement_truth)
 
 
+def test_generation_keeps_bmi_not_applicable_for_infancy_extra_standing_height() -> None:
+    points = list(_trajectory().physiology.points)
+    points[0] = dataclasses.replace(points[0], height_cm=45.0)
+    trajectory = dataclasses.replace(
+        _trajectory(),
+        physiology=dataclasses.replace(_trajectory().physiology, points=tuple(points)),
+    )
+
+    frame = generate_observation_frame(
+        trajectory, _policy(), NamedRandomStreams(13, 0)
+    )
+    infancy = next(visit for visit in frame.visits if visit.age_days == 100)
+    by_channel = {item.channel: item for item in infancy.measurements}
+    assert by_channel[MeasurementChannel.HEIGHT].availability is MeasurementAvailability.NOT_APPLICABLE
+    assert by_channel[MeasurementChannel.BMI].availability is MeasurementAvailability.NOT_APPLICABLE
+    assert by_channel[MeasurementChannel.BMI].recorded_value is None
+    assert validate_observation_frame(frame).status is ObservationValidationStatus.PASS
+
+
 def test_generation_derives_transition_bmi_without_latent_bmi_and_handles_missing_inputs() -> None:
     points = list(_trajectory().physiology.points)
     points[1] = dataclasses.replace(points[1], bmi=None)

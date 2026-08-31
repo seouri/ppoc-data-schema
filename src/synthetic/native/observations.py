@@ -991,7 +991,7 @@ def _measurement_records(
         truth.append(truth_item)
         by_channel[channel] = observation
 
-    if point.height_cm is None:
+    if _point_channel_value(point, MeasurementChannel.HEIGHT) is None:
         bmi_observation = MeasurementObservation(
             MeasurementChannel.BMI,
             MeasurementAvailability.NOT_APPLICABLE,
