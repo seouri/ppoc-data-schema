@@ -69,6 +69,7 @@ _METRIC_KEYS = frozenset({
     "identifier_count", "reproduction_count", "overlap_rate", "exact_reproduction_rate",
     "zero_proximity_rate", "unique_nearest_rate", "heldout_zero_proximity_rate",
     "heldout_unique_nearest_rate", "unique_candidate_rate", "permutation_unique_rate",
+    "heldout_unique_candidate_rate",
     "linkage_advantage", "membership_inference_advantage", "attribute_disclosure_advantage",
     "composition_reproduction_rate", "negative_control_advantage", "positive_control_advantage",
     "rate_ci_lower", "rate_ci_upper", "margin_zero_rate", "margin_positive_rate",
@@ -739,16 +740,16 @@ def _nearest_outcomes(
     queries: tuple[_PrivatePatientProfile, ...], reference: tuple[_PrivatePatientProfile, ...]
 ) -> tuple[int, int, int]:
     """Return exact, unique-nearest, and tied-nearest counts through fixed bucket indexes."""
-    bucket_indexes: dict[tuple[int, ...], dict[tuple[object, ...], int]] = {}
+    bucket_indexes: dict[tuple[int, ...], dict[tuple[object, ...], set[int]]] = {}
     for bitmask in range(1, 1 << len(_FIXED_COMPONENT_ORDER)):
         positions = tuple(
             index for index in range(len(_FIXED_COMPONENT_ORDER)) if bitmask & (1 << index)
         )
-        index: dict[tuple[object, ...], int] = {}
-        for profile in reference:
+        index: dict[tuple[object, ...], set[int]] = {}
+        for reference_index, profile in enumerate(reference):
             vector = _component_tuple(profile, _FIXED_COMPONENT_ORDER)
             key = tuple(vector[position] for position in positions)
-            index[key] = index.get(key, 0) + 1
+            index.setdefault(key, set()).add(reference_index)
         bucket_indexes[positions] = index
     exact_count = unique_count = tied_count = 0
     for profile in queries:
@@ -756,13 +757,13 @@ def _nearest_outcomes(
         nearest_count = len(reference)
         matched_components = 0
         for match_count in range(len(_FIXED_COMPONENT_ORDER), 0, -1):
-            candidate_count = 0
+            candidate_indexes: set[int] = set()
             for positions, index in bucket_indexes.items():
                 if len(positions) != match_count:
                     continue
-                candidate_count += index.get(tuple(vector[position] for position in positions), 0)
-            if candidate_count:
-                nearest_count = candidate_count
+                candidate_indexes.update(index.get(tuple(vector[position] for position in positions), set()))
+            if candidate_indexes:
+                nearest_count = len(candidate_indexes)
                 matched_components = match_count
                 break
         if matched_components == len(_FIXED_COMPONENT_ORDER):
@@ -775,24 +776,30 @@ def _nearest_outcomes(
 
 
 def _nearest_metrics(
-    reference: _PrivatePackage, generated: _PrivatePackage, heldout: _PrivatePackage
+    reference: _PrivatePackage, generated: _PrivatePackage, heldout: _PrivatePackage | None
 ) -> dict[str, int | float]:
     evaluated_count = len(generated._profiles)
     zero_count, unique_count, tied_count = _nearest_outcomes(
         generated._profiles, reference._profiles
     )
-    heldout_zero, heldout_unique, _ = _nearest_outcomes(generated._profiles, heldout._profiles)
+    metrics: dict[str, int | float] = {
+        "evaluated_count": evaluated_count,
+        "zero_proximity_rate": round(zero_count / evaluated_count, 6),
+        "unique_nearest_rate": round(unique_count / evaluated_count, 6),
+        "margin_zero_rate": round(tied_count / evaluated_count, 6),
+        "margin_positive_rate": round(unique_count / evaluated_count, 6),
+    }
+    if heldout is not None:
+        heldout_zero, heldout_unique, _ = _nearest_outcomes(generated._profiles, heldout._profiles)
+        metrics.update(
+            {
+                "heldout_count": len(heldout._profiles),
+                "heldout_zero_proximity_rate": round(heldout_zero / evaluated_count, 6),
+                "heldout_unique_nearest_rate": round(heldout_unique / evaluated_count, 6),
+            }
+        )
     return _with_interval(
-        {
-            "evaluated_count": evaluated_count,
-            "heldout_count": len(heldout._profiles),
-            "zero_proximity_rate": round(zero_count / evaluated_count, 6),
-            "unique_nearest_rate": round(unique_count / evaluated_count, 6),
-            "margin_zero_rate": round(tied_count / evaluated_count, 6),
-            "margin_positive_rate": round(unique_count / evaluated_count, 6),
-            "heldout_zero_proximity_rate": round(heldout_zero / evaluated_count, 6),
-            "heldout_unique_nearest_rate": round(heldout_unique / evaluated_count, 6),
-        },
+        metrics,
         zero_count,
         evaluated_count,
     )
@@ -808,10 +815,12 @@ def _evaluate_nearest_neighbor_control(
     """Evaluate fixed private component-bucket nearest-neighbor aggregate screens."""
     required = "nearest_neighbor" in policy.required_controls
     if heldout is None:
-        return _unevaluable_control(
-            "nearest_neighbor", "heldout_required" if required else "heldout_not_supplied"
-        )
-    if not _packages_have_profile_evidence(policy, reference, generated, heldout):
+        if required:
+            return _unevaluable_control("nearest_neighbor", "heldout_required")
+        packages = (reference, generated)
+    else:
+        packages = (reference, generated, heldout)
+    if not _packages_have_profile_evidence(policy, *packages):
         return _unevaluable_control("nearest_neighbor", "insufficient_evidence")
     metrics = _nearest_metrics(reference, generated, heldout)
     if metrics["zero_proximity_rate"] > policy.thresholds["nearest_neighbor_zero_rate"]:
@@ -822,9 +831,8 @@ def _evaluate_nearest_neighbor_control(
         return PrivacyControlResult(
             "nearest_neighbor", "FAIL", metrics, "unique_nearest_threshold_exceeded"
         )
-    return PrivacyControlResult(
-        "nearest_neighbor", "PASS", metrics, "nearest_neighbor_within_threshold"
-    )
+    reason = "nearest_neighbor_within_threshold" if heldout is not None else "nearest_neighbor_reference_only"
+    return PrivacyControlResult("nearest_neighbor", "PASS", metrics, reason)
 
 
 def _permuted_bucket_counts(
@@ -866,39 +874,51 @@ def _linkage_selections(policy: PrivacyPolicy) -> tuple[tuple[str, ...], ...]:
 def _linkage_candidate_metrics(
     reference: _PrivatePackage,
     generated: _PrivatePackage,
-    heldout: _PrivatePackage,
+    heldout: _PrivatePackage | None,
     queries: tuple[_PrivatePatientProfile, ...],
     selections: tuple[tuple[str, ...], ...],
 ) -> dict[str, int | float]:
-    candidates: list[tuple[float, float, float, int]] = []
+    candidates: list[tuple[float, float, float, float | None, int]] = []
     for components in selections:
         generated_rate = _unique_candidate_rate(
             queries, _bucket_counts(reference._profiles, components), components
         )
-        heldout_rate = _unique_candidate_rate(
-            queries, _bucket_counts(heldout._profiles, components), components
+        heldout_rate = (
+            _unique_candidate_rate(queries, _bucket_counts(heldout._profiles, components), components)
+            if heldout is not None
+            else None
         )
         permutation_rate = _unique_candidate_rate(
             queries, _permuted_bucket_counts(reference._profiles, components), components
         )
         candidates.append(
             (
-                max(0.0, generated_rate - max(heldout_rate, permutation_rate)),
+                max(0.0, generated_rate - max(permutation_rate, heldout_rate or 0.0)),
                 generated_rate,
                 permutation_rate,
+                heldout_rate,
                 len(queries),
             )
         )
-    advantage, unique_rate, permutation_rate, evaluated_count = max(candidates)
+    advantage, unique_rate, permutation_rate, heldout_rate, evaluated_count = max(
+        candidates, key=lambda item: (item[0], item[1], item[2])
+    )
     successes = round(unique_rate * evaluated_count)
+    metrics: dict[str, int | float] = {
+        "evaluated_count": evaluated_count,
+        "unique_candidate_rate": unique_rate,
+        "permutation_unique_rate": permutation_rate,
+        "linkage_advantage": round(advantage, 6),
+    }
+    if heldout is not None and heldout_rate is not None:
+        metrics.update(
+            {
+                "heldout_count": len(heldout._profiles),
+                "heldout_unique_candidate_rate": heldout_rate,
+            }
+        )
     return _with_interval(
-        {
-            "evaluated_count": evaluated_count,
-            "heldout_count": len(heldout._profiles),
-            "unique_candidate_rate": unique_rate,
-            "permutation_unique_rate": permutation_rate,
-            "linkage_advantage": round(advantage, 6),
-        },
+        metrics,
         successes,
         evaluated_count,
     )
@@ -930,10 +950,12 @@ def _evaluate_linkage_control(
     """Evaluate fixed exact-key linkage rates against private held-out and permutation baselines."""
     required = "linkage" in policy.required_controls
     if heldout is None:
-        return _unevaluable_control(
-            "linkage", "heldout_required" if required else "heldout_not_supplied"
-        )
-    if not _packages_have_profile_evidence(policy, reference, generated, heldout):
+        if required:
+            return _unevaluable_control("linkage", "heldout_required")
+        packages = (reference, generated)
+    else:
+        packages = (reference, generated, heldout)
+    if not _packages_have_profile_evidence(policy, *packages):
         return _unevaluable_control("linkage", "insufficient_evidence")
     group_metrics = tuple(
         _linkage_candidate_metrics(
@@ -955,4 +977,5 @@ def _evaluate_linkage_control(
             else "linkage_threshold_exceeded"
         )
         return PrivacyControlResult("linkage", "FAIL", metrics, reason)
-    return PrivacyControlResult("linkage", "PASS", metrics, "linkage_within_threshold")
+    reason = "linkage_within_threshold" if heldout is not None else "linkage_reference_permutation_only"
+    return PrivacyControlResult("linkage", "PASS", metrics, reason)
