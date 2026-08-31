@@ -14,6 +14,16 @@ def test_refuses_existing_target(tmp_path: Path) -> None:
         RunDirectory.start(target, "abc")
 
 
+def test_refuses_dangling_target_symlink_without_resolving_it(tmp_path: Path) -> None:
+    target = tmp_path / "run"
+    target.symlink_to("not-created")
+
+    with pytest.raises(FileExistsError) as error:
+        RunDirectory.start(target, "abc")
+
+    assert "not-created" not in str(error.value)
+
+
 def test_promotes_partial_directory_atomically(tmp_path: Path) -> None:
     run = RunDirectory.start(tmp_path / "run", "abc")
     (run.partial_path / "patients.csv").write_text("patient_id\n", encoding="utf-8")

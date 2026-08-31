@@ -1364,17 +1364,11 @@ def _optional_control_result(
 
 
 def _heldout_control_result(
-    control_id: str,
-    policy: PrivacyPolicy,
-    heldout: _PrivatePackage | None,
-    heldout_invalid: bool,
-    evaluate: Any,
+    control_id: str, heldout_invalid: bool, evaluate: Any
 ) -> PrivacyControlResult:
-    """Require an explicit held-out package before an otherwise optional screen is evaluated."""
+    """Confine a supplied invalid held-out package to each dependent aggregate control."""
     if heldout_invalid:
         return _unevaluable_control(control_id, "optional_package_invalid")
-    if heldout is None and control_id not in policy.required_controls:
-        return _unevaluable_control(control_id, "optional_control_not_supplied")
     return _optional_control_result(control_id, False, evaluate)
 
 
@@ -1393,6 +1387,14 @@ def audit_privacy(config: PrivacyRunConfig) -> PrivacyAuditResult:
     """Evaluate explicit packages privately and return only canonical aggregate evidence."""
     if not isinstance(config, PrivacyRunConfig):
         raise TypeError("config must be a PrivacyRunConfig")
+    try:
+        return _audit_privacy(config)
+    except (duckdb.Error, OSError, RecursionError, TypeError, UnicodeError, ValueError):
+        raise ValueError("privacy audit inputs invalid") from None
+
+
+def _audit_privacy(config: PrivacyRunConfig) -> PrivacyAuditResult:
+    """Perform one private evaluation after the public boundary has validated the call."""
     policy = load_privacy_policy(config.policy)
     synthetic_artifact_id = _synthetic_artifact_id(config.synthetic_root)
     reference = _load_private_package(
@@ -1430,15 +1432,11 @@ def audit_privacy(config: PrivacyRunConfig) -> PrivacyAuditResult:
         _evaluate_exact_reproduction_control(policy, reference, generated),
         _heldout_control_result(
             "nearest_neighbor",
-            policy,
-            heldout,
             heldout_invalid,
             lambda: _evaluate_nearest_neighbor_control(policy, reference, generated, heldout=heldout),
         ),
         _heldout_control_result(
             "linkage",
-            policy,
-            heldout,
             heldout_invalid,
             lambda: _evaluate_linkage_control(policy, reference, generated, heldout=heldout),
         ),
@@ -1449,8 +1447,6 @@ def audit_privacy(config: PrivacyRunConfig) -> PrivacyAuditResult:
         ),
         _heldout_control_result(
             "attribute_disclosure",
-            policy,
-            heldout,
             heldout_invalid,
             lambda: _evaluate_attribute_disclosure_control(policy, reference, generated, heldout=heldout),
         ),
@@ -1461,12 +1457,12 @@ def audit_privacy(config: PrivacyRunConfig) -> PrivacyAuditResult:
         ),
         _optional_control_result(
             "negative_control",
-            negative_invalid,
+            heldout_invalid or negative_invalid,
             lambda: _evaluate_negative_control(policy, reference, negative, heldout=heldout),
         ),
         _optional_control_result(
             "positive_control",
-            positive_invalid,
+            heldout_invalid or positive_invalid,
             lambda: _evaluate_positive_control(policy, reference, positive, heldout=heldout),
         ),
     )
@@ -1560,11 +1556,11 @@ def _privacy_lifecycle_token(report: PrivacyAuditReport) -> str:
 def _refuse_privacy_lifecycle_collision(output: Path, report: PrivacyAuditReport) -> None:
     if os.path.lexists(output):
         raise FileExistsError("privacy output already exists")
-    resolved = output.resolve()
+    absolute = Path(os.path.abspath(output))
     token = _privacy_lifecycle_token(report)
     lifecycle_paths = (
-        resolved.parent / f".{resolved.name}.{token}.partial",
-        resolved.parent / f".{resolved.name}.{token}.failed",
+        absolute.parent / f".{absolute.name}.{token}.partial",
+        absolute.parent / f".{absolute.name}.{token}.failed",
     )
     if any(os.path.lexists(path) for path in lifecycle_paths):
         raise FileExistsError("privacy output lifecycle path already exists")
@@ -1587,8 +1583,13 @@ def write_privacy_report(result: PrivacyAuditResult, output: Path) -> None:
         raise TypeError("result must be a PrivacyAuditResult")
     if not isinstance(output, Path):
         raise TypeError("output must be a Path")
-    _refuse_privacy_lifecycle_collision(output, result.report)
-    run = RunDirectory.start(output, _privacy_lifecycle_token(result.report))
+    try:
+        _refuse_privacy_lifecycle_collision(output, result.report)
+        run = RunDirectory.start(output, _privacy_lifecycle_token(result.report))
+    except FileExistsError:
+        raise FileExistsError("privacy output lifecycle collision") from None
+    except (OSError, TypeError, ValueError):
+        raise ValueError("privacy output initialization failed") from None
     try:
         _write_exclusive_fsynced(
             run.partial_path / _PRIVACY_REPORT_FILENAME, result.report.canonical_json_bytes()

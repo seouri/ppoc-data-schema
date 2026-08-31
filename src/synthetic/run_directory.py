@@ -47,14 +47,18 @@ class RunDirectory:
 
     @classmethod
     def start(cls, target: Path, run_id: str) -> RunDirectory:
+        if not isinstance(target, Path):
+            raise TypeError("target must be a Path")
         if not isinstance(run_id, str) or _RUN_ID.fullmatch(run_id) is None:
             raise ValueError("run_id must be a non-empty filesystem-safe token")
-        target = target.resolve()
+        if os.path.lexists(target):
+            raise FileExistsError("run directory target already exists")
+        target = Path(os.path.abspath(target))
         partial = target.parent / f".{target.name}.{run_id}.partial"
         failed = target.parent / f".{target.name}.{run_id}.failed"
-        for path in (target, partial, failed):
-            if path.exists():
-                raise FileExistsError(path)
+        for path in (partial, failed):
+            if os.path.lexists(path):
+                raise FileExistsError("run directory lifecycle path already exists")
         target.parent.mkdir(parents=True, exist_ok=True)
         partial.mkdir()
         return cls(target=target, partial_path=partial, failed_path=failed)
