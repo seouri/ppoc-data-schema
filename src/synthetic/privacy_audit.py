@@ -357,6 +357,26 @@ class PrivacyAuditReport:
         ids = tuple(control.control_id for control in self.controls)
         if ids != tuple(sorted(ids)) or len(set(ids)) != len(ids):
             raise ValueError("privacy report controls must have sorted unique IDs")
+        if not set(self.policy.required_controls) <= set(ids):
+            raise ValueError("privacy report required control coverage is incomplete")
+        for control in self.controls:
+            if control.status == "UNEVALUABLE":
+                continue
+            evaluated_count = control.metrics.get("evaluated_count")
+            if (
+                isinstance(evaluated_count, bool)
+                or not isinstance(evaluated_count, int)
+                or evaluated_count < self.policy.minimum_evaluable_patients
+            ):
+                raise ValueError("evaluated controls require policy-minimum evaluated_count")
+        expected_status = "FAIL" if any(control.status == "FAIL" for control in self.controls) else "PASS"
+        if expected_status == "PASS" and any(
+            control.control_id in self.policy.required_controls and control.status == "UNEVALUABLE"
+            for control in self.controls
+        ):
+            expected_status = "UNEVALUABLE"
+        if self.status != expected_status:
+            raise ValueError("privacy report status does not match control results")
         if set(self.control_counts) != _STATUSES or any(
             isinstance(value, bool) or not isinstance(value, int) or value < 0
             for value in self.control_counts.values()
@@ -370,6 +390,7 @@ class PrivacyAuditReport:
         for reason in self.decision_reasons:
             _require_token(reason, "decision_reason")
         object.__setattr__(self, "control_counts", MappingProxyType(dict(self.control_counts)))
+        object.__setattr__(self, "decision_reasons", tuple(sorted(set(self.decision_reasons))))
 
     def to_mapping(self) -> dict[str, object]:
         return {
@@ -410,6 +431,7 @@ class _PrivatePatientProfile:
     _trajectory: tuple[tuple[int, float | None, float | None, float | None], ...] = field(repr=False)
     _growth_dx_flag: str | None = field(repr=False)
     _trajectory_signature: str = field(repr=False)
+    _profile_signature: str = field(repr=False)
     _component_buckets: Mapping[str, object] = field(repr=False)
 
 
@@ -419,6 +441,7 @@ class _PrivatePackage:
     _identifier_values: frozenset[str] = field(repr=False)
     _profiles: tuple[_PrivatePatientProfile, ...] = field(repr=False)
     _trajectory_signatures: frozenset[str] = field(repr=False)
+    _profile_signatures: frozenset[str] = field(repr=False)
     _ineligible_profile_count: int = field(repr=False)
 
 
@@ -466,6 +489,29 @@ def _profile_signature(
     return hashlib.sha256(payload.encode("ascii")).hexdigest()
 
 
+def _full_profile_signature(
+    demographics: tuple[str, ...],
+    ages: tuple[int, ...],
+    visit_count: int,
+    trajectory: tuple[tuple[int, float | None, float | None, float | None], ...],
+    diagnosis: str | None,
+) -> str:
+    payload = json.dumps(
+        {
+            "demographics": demographics,
+            "diagnosis": diagnosis,
+            "timing": ages,
+            "trajectory": trajectory,
+            "utilization": visit_count,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+        allow_nan=False,
+    )
+    return hashlib.sha256(payload.encode("ascii")).hexdigest()
+
+
 def _private_profiles(
     connection: duckdb.DuckDBPyConnection, staged: Mapping[str, str], minimum: int
 ) -> tuple[tuple[_PrivatePatientProfile, ...], int]:
@@ -504,20 +550,24 @@ def _private_profiles(
         demographic_values = tuple("" if value is None else str(value) for value in demographics)
         ages = tuple(observation[0] for observation in trajectory)
         diagnosis = None if growth_dx_flag in (None, "") else str(growth_dx_flag)
+        visit_count = int(visit_counts.get(patient_id, 0))
         profiles.append(
             _PrivatePatientProfile(
                 _patient_id=patient_id,
                 _demographics=demographic_values,
                 _ages=ages,
-                _visit_count=int(visit_counts.get(patient_id, 0)),
+                _visit_count=visit_count,
                 _trajectory=trajectory,
                 _growth_dx_flag=diagnosis,
                 _trajectory_signature=_profile_signature(trajectory),
+                _profile_signature=_full_profile_signature(
+                    demographic_values, ages, visit_count, trajectory, diagnosis
+                ),
                 _component_buckets=MappingProxyType(
                     {
                         "demographics": demographic_values,
                         "timing": ages,
-                        "utilization": int(visit_counts.get(patient_id, 0)),
+                        "utilization": visit_count,
                         "trajectory": trajectory,
                         "diagnosis": diagnosis,
                     }
@@ -560,5 +610,6 @@ def _load_private_package(
         _identifier_values=identifiers,
         _profiles=profiles,
         _trajectory_signatures=frozenset(profile._trajectory_signature for profile in profiles),
+        _profile_signatures=frozenset(profile._profile_signature for profile in profiles),
         _ineligible_profile_count=ineligible,
     )

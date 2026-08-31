@@ -23,6 +23,8 @@ def test_private_package_loader_enforces_marker_schema_and_private_profiles(tmp_
     assert "REAL-P-001" not in repr(real)
     assert len(real._identifier_values) > 0
     assert len(real._trajectory_signatures) > 0
+    assert len(real._profile_signatures) > 0
+    assert real._profiles[0]._profile_signature != real._profiles[0]._trajectory_signature
 
 
 @pytest.mark.parametrize("synthetic", [True, False])
@@ -74,3 +76,41 @@ def test_private_package_loader_rejects_symlinked_descriptor_and_resources(tmp_p
 
     with pytest.raises(ValueError, match="descriptor"):
         _load_private_package(root, synthetic=True, longitudinal_minimum=3)
+
+
+def test_private_package_loader_rejects_symlinked_resource_without_identifier_echo(tmp_path: Path) -> None:
+    root = write_generated_package(tmp_path / "package")
+    descriptor = load_descriptor(root / "datapackage.json")
+    visits_path = root / resource_spec(descriptor, "visits")["path"]
+    moved = root / "visits-real.csv"
+    visits_path.rename(moved)
+    visits_path.symlink_to(moved.name)
+
+    with pytest.raises(ValueError) as error:
+        _load_private_package(root, synthetic=True, longitudinal_minimum=3)
+
+    assert "GEN-P-001" not in str(error.value)
+    assert "GEN-V-001" not in str(error.value)
+
+
+@pytest.mark.parametrize("malformed", ["not-an-age", '"unterminated'])
+def test_private_package_loader_rejects_malformed_csv_or_values_without_identifier_echo(
+    tmp_path: Path, malformed: str
+) -> None:
+    root = write_generated_package(tmp_path / "package")
+    descriptor = load_descriptor(root / "datapackage.json")
+    visits_path = root / resource_spec(descriptor, "visits")["path"]
+    if malformed == "not-an-age":
+        with visits_path.open(newline="", encoding="utf-8") as handle:
+            rows = list(csv.reader(handle))
+        rows[1][rows[0].index("age_in_days")] = malformed
+        with visits_path.open("w", newline="", encoding="utf-8") as handle:
+            csv.writer(handle).writerows(rows)
+    else:
+        visits_path.write_text(malformed, encoding="utf-8")
+
+    with pytest.raises(ValueError) as error:
+        _load_private_package(root, synthetic=True, longitudinal_minimum=3)
+
+    assert "GEN-P-001" not in str(error.value)
+    assert "GEN-V-001" not in str(error.value)
