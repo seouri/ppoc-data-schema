@@ -160,12 +160,19 @@ def _contains_sensitive_report_material(value: str) -> bool:
     )
 
 
-def _require_aggregate_detail(name: str, value: object, field: str) -> str:
+def _require_aggregate_detail(value: object, field: str) -> str:
     if not isinstance(value, str) or not value:
         raise ValueError(f"{field} must be a nonempty aggregate detail")
-    if (name, value) not in _AGGREGATE_CHECK_DETAILS:
+    if _contains_sensitive_report_material(value):
         raise ValueError(f"{field} must be aggregate-only")
     return value
+
+
+def _require_calibration_check_detail(name: str, value: object, field: str) -> str:
+    detail = _require_aggregate_detail(value, field)
+    if (name, detail) not in _AGGREGATE_CHECK_DETAILS:
+        raise ValueError(f"{field} must be aggregate-only")
+    return detail
 
 
 def _require_safe_report_token(value: object, field: str) -> str:
@@ -266,7 +273,7 @@ class CalibrationCheck:
         name = _require_safe_report_token(self.name, "check name")
         if not isinstance(self.passed, bool):
             raise ValueError("check passed must be a boolean")  # noqa: TRY004
-        _require_aggregate_detail(name, self.detail, "check detail")
+        _require_calibration_check_detail(name, self.detail, "check detail")
 
     def to_mapping(self) -> dict[str, object]:
         return {"name": self.name, "passed": self.passed, "detail": self.detail}

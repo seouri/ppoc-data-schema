@@ -204,6 +204,14 @@ def test_report_and_check_reject_sensitive_metadata() -> None:
         HeldoutCheck("patient_check", True, "matched contract")
 
 
+def test_heldout_check_preserves_aggregate_detail_vocabulary() -> None:
+    assert HeldoutCheck("schema", True, "schema contracts matched").to_mapping() == {
+        "name": "schema",
+        "passed": True,
+        "detail": "schema contracts matched",
+    }
+
+
 def test_report_rejects_pass_status_when_an_evaluable_comparison_failed() -> None:
     comparisons = compare_targets(
         (stratum(target("height_z_mean", "physiology", "mean", 2.0, unit="z_score")),),
