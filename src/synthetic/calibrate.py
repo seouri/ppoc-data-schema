@@ -24,6 +24,19 @@ from synthetic.calibration_input import (  # noqa: F401
     assign_partition,
     prepare_input,
 )
+from synthetic.calibration_targets import (  # noqa: F401
+    ENCOUNTER_CATEGORY_SLUGS,
+    ETHNICITY_CATEGORY_SLUGS,
+    LOGICAL_LINK_RESOURCES,
+    MEASUREMENT_AVAILABILITY,
+    PHYSIOLOGY_METRICS,
+    RACE_CATEGORY_SLUGS,
+    RECORDED_FLAGS,
+    SEX_CATEGORY_SLUGS,
+    TARGET_REGISTRY_VERSION,
+    RawTarget,
+    compute_raw_targets,
+)
 
 # Downstream calibration stages consume this governed boundary without exposing it to generators.
 
