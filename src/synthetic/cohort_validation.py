@@ -21,7 +21,7 @@ from synthetic.calibration_targets import (
     RACE_CATEGORY_SLUGS,
     SEX_CATEGORY_SLUGS,
 )
-from synthetic.cohort import NativeCohort
+from synthetic.cohort import CalibrationSamplingProfile, CohortMember, NativeCohort
 from synthetic.models import DisorderKind
 from synthetic.native.observations import RecordedEventKind
 
@@ -77,7 +77,7 @@ _FIXED_COMPARISON_NAMES = frozenset(
         "recorded_recognition",
         "recorded_workup",
         "recorded_diagnosis",
-        "coverage.members_with_visit",
+        "coverage.members_with_observation",
         "coverage.members_with_event",
     }
 )
@@ -495,31 +495,91 @@ def validate_native_cohort(
     if not isinstance(policy, CohortValidationPolicy):
         raise TypeError("policy must be a CohortValidationPolicy")
 
-    members = cohort.members
-    denominator = len(members)
-    comparisons: list[CohortComparison] = []
-    comparisons.append(
-        _status_only_comparison(
-            "cohort_size",
-            "cohort",
-            denominator,
-            denominator,
-            policy.minimum_cohort_size,
+    try:
+        members = cohort.members
+        if not isinstance(members, tuple) or not all(
+            isinstance(member, CohortMember) for member in members
+        ):
+            raise TypeError("cohort members are malformed")
+        denominator = len(members)
+        calibration = cohort.calibration
+        if not isinstance(calibration, CalibrationSamplingProfile):
+            raise TypeError("cohort calibration is malformed")
+        comparisons: list[CohortComparison] = []
+        comparisons.append(
+            _status_only_comparison(
+                "cohort_size",
+                "cohort",
+                denominator,
+                denominator,
+                policy.minimum_cohort_size,
+            )
         )
+        comparisons.extend(_demographic_comparisons(members, calibration, policy))
+        comparisons.extend(_latent_comparisons(members, policy))
+        comparisons.append(_observable_comparison(members, policy))
+        comparisons.extend(_recorded_comparisons(members, policy))
+        ordered = tuple(comparisons)
+        return CohortValidationReport(
+            report_version=COHORT_VALIDATION_REPORT_VERSION,
+            policy_id=policy.policy_id,
+            cohort_profile=cohort.profile,
+            seed=cohort.seed,
+            status=_report_status(ordered),
+            comparisons=ordered,
+        )
+    except Exception:  # noqa: BLE001 - evaluator failures must be redacted
+        return _malformed_cohort_report(cohort, policy)
+
+
+def _malformed_cohort_report(
+    cohort: NativeCohort,
+    policy: CohortValidationPolicy,
+) -> CohortValidationReport:
+    """Return a fixed failure without exposing injected evaluator details."""
+
+    policy_id = _safe_report_token(policy, "policy_id", "invalid-policy")
+    profile = _safe_report_token(cohort, "profile", "invalid-cohort")
+    seed = _safe_report_seed(cohort)
+    comparison = CohortComparison(
+        name="cohort_size",
+        layer="cohort",
+        status=CohortValidationStatus.FAIL,
+        observed_value=0,
+        target_value=None,
+        difference=None,
+        tolerance=None,
+        support=0,
+        denominator=1,
+        reason_code="MALFORMED_COHORT",
     )
-    comparisons.extend(_demographic_comparisons(members, cohort.calibration, policy))
-    comparisons.extend(_latent_comparisons(members, policy))
-    comparisons.append(_observable_comparison(members, policy))
-    comparisons.extend(_recorded_comparisons(members, policy))
-    ordered = tuple(comparisons)
     return CohortValidationReport(
         report_version=COHORT_VALIDATION_REPORT_VERSION,
-        policy_id=policy.policy_id,
-        cohort_profile=cohort.profile,
-        seed=cohort.seed,
-        status=_report_status(ordered),
-        comparisons=ordered,
+        policy_id=policy_id,
+        cohort_profile=profile,
+        seed=seed,
+        status=CohortValidationStatus.FAIL,
+        comparisons=(comparison,),
     )
+
+
+def _safe_report_token(value: object, attribute: str, fallback: str) -> str:
+    try:
+        candidate = getattr(value, attribute)
+        require_aggregate_safe_token(candidate, attribute)
+    except Exception:  # noqa: BLE001 - metadata failures must be redacted
+        return fallback
+    return candidate
+
+
+def _safe_report_seed(cohort: NativeCohort) -> int:
+    try:
+        seed = cohort.seed
+        if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+            return 0
+        return seed
+    except Exception:  # noqa: BLE001 - metadata failures must be redacted
+        return 0
 
 
 def _status_only_comparison(

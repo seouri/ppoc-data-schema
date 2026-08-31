@@ -11,6 +11,7 @@ from synthetic.cohort import (
     generate_native_cohort,
 )
 from synthetic.cohort_validation import (
+    CohortComparison,
     CohortValidationPolicy,
     CohortValidationStatus,
     validate_native_cohort,
@@ -259,3 +260,65 @@ def test_validator_requires_native_cohort_and_policy_types() -> None:
         validate_native_cohort(object(), _policy())  # type: ignore[arg-type]
     with pytest.raises(TypeError, match="policy"):
         validate_native_cohort(_cohort(), object())  # type: ignore[arg-type]
+
+
+def test_coverage_registry_uses_observation_not_visit_wording() -> None:
+    comparison = CohortComparison(
+        name="coverage.members_with_observation",
+        layer="coverage",
+        status=CohortValidationStatus.PASS,
+        observed_value=1.0,
+        target_value=None,
+        difference=None,
+        tolerance=None,
+        support=1,
+        denominator=1,
+        reason_code="OBSERVED",
+    )
+    assert comparison.name == "coverage.members_with_observation"
+    with pytest.raises(ValueError, match="name"):
+        CohortComparison(
+            name="coverage.members_with_visit",
+            layer="coverage",
+            status=CohortValidationStatus.PASS,
+            observed_value=1.0,
+            target_value=None,
+            difference=None,
+            tolerance=None,
+            support=1,
+            denominator=1,
+            reason_code="OBSERVED",
+        )
+
+
+@pytest.mark.parametrize("field", ["frame", "trajectory"])
+def test_malformed_member_access_returns_a_redacted_failure(field: str) -> None:
+    cohort = _cohort(patient_count=1)
+    member = cohort.members[0]
+    object.__setattr__(member, field, object())
+
+    report = validate_native_cohort(cohort, _policy())
+
+    assert report.status is CohortValidationStatus.FAIL
+    assert report.comparisons
+    mapping = report.to_mapping()
+    assert "syn-" not in str(mapping)
+    assert "patient" not in str(mapping).lower()
+    assert "truth" not in repr(report).lower()
+
+
+def test_malformed_calibration_access_returns_a_redacted_failure() -> None:
+    cohort = _cohort(patient_count=1)
+
+    class ExplodingCalibration:
+        @property
+        def sex_weights(self) -> tuple[object, ...]:
+            raise RuntimeError("syn-patient-secret calibration failure")
+
+    object.__setattr__(cohort, "calibration", ExplodingCalibration())
+
+    report = validate_native_cohort(cohort, _policy())
+
+    assert report.status is CohortValidationStatus.FAIL
+    assert report.comparisons[0].reason_code == "MALFORMED_COHORT"
+    assert "syn-patient-secret" not in str(report.to_mapping())

@@ -394,6 +394,6 @@ def test_report_status_must_match_comparison_precedence(status: CohortValidation
             dataclasses.replace(report, status=status)
 
 
-def test_validate_native_cohort_is_explicitly_unassembled() -> None:
-    with pytest.raises(NotImplementedError, match="assembly"):
+def test_validate_native_cohort_requires_a_native_cohort() -> None:
+    with pytest.raises(TypeError, match="cohort"):
         validate_native_cohort(object(), valid_policy())  # type: ignore[arg-type]
