@@ -93,10 +93,11 @@ This API is development orchestration, not evidence of prevalence validation, de
 
 `validate_native_cohort(cohort, policy)` evaluates one previously generated, completely fictional `NativeCohort` in memory. It returns an immutable `CohortValidationReport` and never generates or mutates members, reads a path, accepts a row, key, held-out report, privacy report, package, or hidden truth object, or changes the fail-closed production smoke CLI. The evaluator is useful for development preflight and counterfactual fixture checks; its aggregate output is not a release artifact.
 
-Construct a `CohortValidationPolicy` before evaluation so the cohort-size minimum, evidence-support minima, demographic tolerance, zero-centered growth bounds, and half-open age windows are explicit. The exact public API is `CohortValidationPolicy`, `CohortValidationStatus`, `CohortValidationReport`, and `validate_native_cohort` from `synthetic.cohort_validation`:
+Construct a `CohortValidationPolicy` before evaluation so the cohort-size minimum, evidence-support minima, demographic tolerance, zero-centered growth bounds, and half-open age windows are explicit. The exact public API is `CohortComparison`, `CohortValidationPolicy`, `CohortValidationStatus`, `CohortValidationReport`, and `validate_native_cohort` from `synthetic.cohort_validation`:
 
 ```python
 from synthetic.cohort_validation import (
+    CohortComparison,
     CohortValidationPolicy,
     CohortValidationStatus,
     validate_native_cohort,

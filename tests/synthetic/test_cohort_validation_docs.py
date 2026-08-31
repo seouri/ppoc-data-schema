@@ -13,6 +13,7 @@ def test_profile_guide_documents_the_exact_api_and_status_contract() -> None:
 
     for required in (
         "validate_native_cohort",
+        "CohortComparison",
         "CohortValidationPolicy",
         "CohortValidationReport",
         "CohortValidationStatus",
