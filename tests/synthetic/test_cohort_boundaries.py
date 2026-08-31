@@ -4,6 +4,8 @@ import ast
 import inspect
 from pathlib import Path
 
+import pytest
+
 from synthetic.cohort import generate_native_cohort
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -40,16 +42,37 @@ FORBIDDEN_MODULES = {
     "synthetic.synthea",
 }
 FORBIDDEN_CALL_LEAVES = {
+    "NamedTemporaryFile",
     "RunDirectory",
+    "SpooledTemporaryFile",
+    "TemporaryDirectory",
+    "TemporaryFile",
     "audit_privacy",
     "calibrate",
+    "chmod",
+    "chown",
+    "copy",
+    "copy2",
+    "copyfile",
+    "copytree",
+    "dump",
     "export_exact_schema_package",
     "export_observed_resource_package",
+    "ftruncate",
+    "hardlink_to",
+    "link",
     "load_calibration_artifact",
     "load_descriptor",
+    "make_archive",
     "makedirs",
     "mkdir",
+    "mkdtemp",
+    "mkfifo",
+    "mknod",
+    "mkstemp",
+    "move",
     "open",
+    "pwrite",
     "read_bytes",
     "read_csv",
     "read_excel",
@@ -57,15 +80,27 @@ FORBIDDEN_CALL_LEAVES = {
     "read_parquet",
     "read_text",
     "read_table",
+    "remove",
+    "removedirs",
     "rename",
+    "renames",
     "replace",
     "rmdir",
+    "rmtree",
+    "symlink",
+    "symlink_to",
+    "touch",
+    "truncate",
     "unlink",
+    "unpack_archive",
+    "utime",
     "validate_heldout",
+    "write",
     "write_bytes",
     "write_csv",
     "write_json",
     "write_text",
+    "writelines",
 }
 SAFE_NON_FILESYSTEM_CALLS = {"dataclasses.replace"}
 FORBIDDEN_ARGUMENTS = {
@@ -73,18 +108,36 @@ FORBIDDEN_ARGUMENTS = {
     "data_root",
     "descriptor_path",
     "heldout_report",
+    "key",
     "key_file",
     "output",
     "output_path",
+    "path",
     "partition_key",
     "privacy_policy",
     "privacy_report",
     "real_data_root",
     "real_root",
+    "report",
+    "row",
+    "rows",
+    "sequence",
+    "sequences",
     "snapshot_root",
     "synthea_input",
     "truth",
 }
+FORBIDDEN_ARGUMENT_SUFFIXES = (
+    "_key",
+    "_key_file",
+    "_path",
+    "_report",
+    "_root",
+    "_row",
+    "_rows",
+    "_sequence",
+    "_sequences",
+)
 
 
 def _import_base(node: ast.ImportFrom, module_name: str) -> str | None:
@@ -126,7 +179,9 @@ def _scan(source: str, module_name: str) -> tuple[set[str], set[str], set[str]]:
             if base:
                 imports.add(base)
                 for alias in node.names:
-                    bindings[alias.asname or alias.name] = f"{base}.{alias.name}"
+                    qualified = f"{base}.{alias.name}"
+                    imports.add(qualified)
+                    bindings[alias.asname or alias.name] = qualified
         elif isinstance(node, ast.arg):
             arguments.add(node.arg)
 
@@ -162,6 +217,15 @@ def _forbidden_calls(calls: set[str]) -> set[str]:
     }
 
 
+def _forbidden_arguments(arguments: set[str]) -> set[str]:
+    return {
+        name
+        for name in arguments
+        if name in FORBIDDEN_ARGUMENTS
+        or any(name.endswith(suffix) for suffix in FORBIDDEN_ARGUMENT_SUFFIXES)
+    }
+
+
 def test_cohort_module_has_no_governed_input_or_output_lifecycle_boundary() -> None:
     """Catches cohort orchestration gaining a reader, writer, or governed dependency."""
     imports, calls, arguments = _scan(
@@ -170,10 +234,10 @@ def test_cohort_module_has_no_governed_input_or_output_lifecycle_boundary() -> N
 
     assert _forbidden_modules(imports) == set()
     assert _forbidden_calls(calls) == set()
-    assert arguments.isdisjoint(FORBIDDEN_ARGUMENTS)
-    assert set(inspect.signature(generate_native_cohort).parameters).isdisjoint(
-        FORBIDDEN_ARGUMENTS
-    )
+    assert _forbidden_arguments(arguments) == set()
+    assert _forbidden_arguments(
+        set(inspect.signature(generate_native_cohort).parameters)
+    ) == set()
 
 
 def test_visible_native_generation_has_no_governed_or_package_lifecycle_dependency() -> None:
@@ -203,13 +267,78 @@ def unsafe(*, real_root, output_path):
 
     assert _forbidden_modules(imports) == {
         "pathlib",
+        "pathlib.Path",
         "synthetic.package_export",
+        "synthetic.package_export.export_observed_resource_package",
     }
     assert _forbidden_calls(calls) == {
         "pathlib.Path.read_text",
         "synthetic.package_export.export_observed_resource_package",
     }
-    assert arguments & FORBIDDEN_ARGUMENTS == {"output_path", "real_root"}
+    assert _forbidden_arguments(arguments) == {"output_path", "real_root"}
+
+
+@pytest.mark.parametrize(
+    "source",
+    (
+        "from synthetic import package_export as pe",
+        "from . import package_export as pe",
+    ),
+)
+def test_cohort_boundary_scanner_detects_imported_module_aliases(source: str) -> None:
+    imports, _calls, _arguments = _scan(source, "synthetic.cohort")
+
+    assert _forbidden_modules(imports) == {"synthetic.package_export"}
+
+
+@pytest.mark.parametrize(
+    ("source", "expected_call"),
+    (
+        ("import os\nos.remove(path)", "os.remove"),
+        ("from pathlib import Path\nPath(path).touch()", "pathlib.Path.touch"),
+        ("import os\nos.link(source, target)", "os.link"),
+        ("import os\nos.symlink(source, target)", "os.symlink"),
+        ("import os\nos.truncate(path, 0)", "os.truncate"),
+        ("import tempfile\ntempfile.mkstemp()", "tempfile.mkstemp"),
+        ("import tempfile\ntempfile.mkdtemp()", "tempfile.mkdtemp"),
+        ("import shutil\nshutil.copyfile(source, target)", "shutil.copyfile"),
+        ("import os\nos.chmod(path, 0o600)", "os.chmod"),
+    ),
+)
+def test_cohort_boundary_scanner_detects_file_output_lifecycle_calls(
+    source: str,
+    expected_call: str,
+) -> None:
+    _imports, calls, _arguments = _scan(source, "synthetic.cohort")
+
+    assert expected_call in _forbidden_calls(calls)
+
+
+def test_cohort_boundary_scanner_detects_governed_argument_families() -> None:
+    expected = {
+        "path",
+        "key",
+        "report",
+        "patient_row",
+        "patient_rows",
+        "row",
+        "rows",
+        "patient_sequence",
+        "patient_sequences",
+        "sequence",
+        "sequences",
+        "source_path",
+        "source_key",
+        "source_report",
+        "source_rows",
+        "visit_sequences",
+    }
+    parameters = ", ".join(sorted(expected))
+    _imports, _calls, arguments = _scan(
+        f"def unsafe({parameters}):\n    pass\n", "synthetic.cohort"
+    )
+
+    assert _forbidden_arguments(arguments) == expected
 
 
 def test_native_cohort_documentation_states_usage_and_deferred_gates() -> None:
