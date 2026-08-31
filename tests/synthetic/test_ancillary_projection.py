@@ -52,7 +52,13 @@ def _policy_ancillary(**changes: object) -> GhdAncillaryPolicy:
     return GhdAncillaryPolicy(**values)  # type: ignore[arg-type]
 
 
-def _member(*, treatment: bool = True, recognized: bool = True) -> CohortMember:
+def _member(
+    *,
+    treatment: bool = True,
+    recognized: bool = True,
+    diagnosed: bool = True,
+    kind: DisorderKind = DisorderKind.GROWTH_HORMONE_DEFICIENCY,
+) -> CohortMember:
     source = _event_trajectory()
     events = source.events
     if not treatment:
@@ -64,7 +70,7 @@ def _member(*, treatment: bool = True, recognized: bool = True) -> CohortMember:
     trajectory = dataclasses.replace(
         source,
         disorder=LatentDisorderState(
-            DisorderKind.GROWTH_HORMONE_DEFICIENCY,
+            kind,
             500,
             0.8,
             treatment_start_age_days=1800 if treatment else None,
@@ -76,7 +82,7 @@ def _member(*, treatment: bool = True, recognized: bool = True) -> CohortMember:
         trajectory,
         _policy(
             recognition_probability=1.0 if recognized else 0.0,
-            diagnosis_probability=1.0,
+            diagnosis_probability=1.0 if diagnosed else 0.0,
         ),
         # The projection must consume an already-realized frame; its random
         # streams are intentionally not part of the projection API.
@@ -208,6 +214,38 @@ def test_healthy_non_ghd_and_unrecognized_ghd_project_four_empty_tuples() -> Non
     for member in (healthy, _member(recognized=False)):
         projection = project_ghd_ancillary_resources(member, _shape(), _policy_ancillary())
         assert all(not projection.rows[name] for name in GHD_ANCILLARY_RESOURCE_NAMES)
+
+
+def test_non_ghd_with_a_full_event_trace_projects_four_empty_tuples() -> None:
+    member = _member(
+        treatment=True,
+        kind=DisorderKind.FAMILIAL_SHORT_STATURE,
+    )
+    assert validate_observation_frame(member.frame).status is ObservationValidationStatus.PASS
+
+    projection = project_ghd_ancillary_resources(
+        member,
+        _shape(),
+        _policy_ancillary(),
+    )
+
+    assert all(not projection.rows[name] for name in GHD_ANCILLARY_RESOURCE_NAMES)
+
+
+def test_visible_diagnosis_suppression_cannot_expose_hidden_treatment() -> None:
+    member = _member(treatment=True, diagnosed=False)
+    assert validate_observation_frame(member.frame).status is ObservationValidationStatus.PASS
+
+    resources = project_ghd_ancillary_resources(
+        member,
+        _shape(),
+        _policy_ancillary(),
+    ).to_mapping()["resources"]
+
+    assert len(resources["referrals"]) == 1  # type: ignore[index]
+    assert len(resources["labs"]) == 2  # type: ignore[index]
+    assert resources["problem_list"] == []  # type: ignore[index]
+    assert resources["medications"] == []  # type: ignore[index]
 
 
 def test_projection_is_deterministic_nonmutating_and_uses_same_age_workup_diagnosis() -> None:

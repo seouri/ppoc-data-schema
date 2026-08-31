@@ -1,7 +1,7 @@
 # Native GHD Ancillary Pathway Contract
 
-**Date:** 2026-08-31  
-**Status:** Approved next implementation slice under the synthetic growth-fixture design  
+**Date:** 2026-08-31
+**Status:** Approved next implementation slice under the synthetic growth-fixture design
 **Parent:** [Synthetic Pediatric Growth Fixture System Design](2026-08-30-synthetic-growth-fixtures-design.md)
 
 ## Purpose
