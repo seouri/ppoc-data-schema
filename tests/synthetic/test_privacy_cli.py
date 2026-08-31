@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 import json
 import subprocess
 import sys
@@ -8,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from synthetic.schema_contract import load_descriptor, resource_spec
 from tests.synthetic.privacy_fixtures import (
     policy_mapping,
     write_generated_package,
@@ -41,35 +39,6 @@ def _run(command: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(command, cwd=ROOT, text=True, capture_output=True, check=False)
 
 
-def _nonmatching_negative_control(root: Path) -> Path:
-    """Create a fictional independent control with no candidate timing buckets from the reference."""
-    package = _independent_generated(root, id_prefix="NEG")
-    descriptor = load_descriptor(package / "datapackage.json")
-    for name in ("visits", "visits_augmented"):
-        path = package / resource_spec(descriptor, name)["path"]
-        with path.open(newline="", encoding="utf-8") as handle:
-            rows = list(csv.DictReader(handle))
-            fields = tuple(rows[0])
-        for row in rows:
-            row["age_in_days"] = str(int(row["age_in_days"]) + 10000)
-        with path.open("w", newline="", encoding="utf-8") as handle:
-            writer = csv.DictWriter(handle, fieldnames=fields)
-            writer.writeheader()
-            writer.writerows(rows)
-    for name in ("patients", "patients_augmented"):
-        path = package / resource_spec(descriptor, name)["path"]
-        with path.open(newline="", encoding="utf-8") as handle:
-            rows = list(csv.DictReader(handle))
-            fields = tuple(rows[0])
-        for row in rows:
-            row["ethnicity"] = "Synthetic-control"
-        with path.open("w", newline="", encoding="utf-8") as handle:
-            writer = csv.DictWriter(handle, fieldnames=fields)
-            writer.writeheader()
-            writer.writerows(rows)
-    return package
-
-
 def test_cli_promotes_pass_and_accepts_explicit_optional_paths(tmp_path: Path) -> None:
     """Catches CLI omission of explicit optional audit inputs."""
     command = _command(tmp_path)
@@ -84,7 +53,7 @@ def test_cli_promotes_pass_and_accepts_explicit_optional_paths(tmp_path: Path) -
     command.extend([
         "--heldout-root", str(heldout), "--shadow-manifest", str(manifest),
         "--prior-release-root", str(prior_one), "--prior-release-root", str(prior_two),
-        "--negative-control-root", str(_nonmatching_negative_control(tmp_path / "negative")),
+        "--negative-control-root", str(_independent_generated(tmp_path / "negative", id_prefix="NEG")),
         "--positive-control-root", str(write_generated_package(tmp_path / "positive", id_prefix="POS")),
     ])
 

@@ -267,13 +267,15 @@ def test_negative_and_positive_controls_distinguish_independent_from_copied_pack
     heldout = _package(_profile("held-one", "0"), _profile("held-two", "0"), _profile("held-three", "1"))
 
     negative = _evaluate_negative_control(policy, reference, independent, heldout=heldout)
+    independent_positive = _evaluate_positive_control(policy, reference, independent, heldout=heldout)
     positive = _evaluate_positive_control(policy, reference, copied, heldout=heldout)
     missing = _evaluate_positive_control(policy, reference, None, heldout=heldout)
 
-    assert negative.status == "FAIL"
+    assert negative.status == "PASS"
+    assert independent_positive.status == "FAIL"
     assert positive.status == "PASS"
     assert positive.metrics["positive_control_advantage"] == 1.0
-    for result in (negative, positive):
+    for result in (negative, independent_positive, positive):
         assert {
             "harness_unique_candidate_rate",
             "harness_permutation_unique_rate",
@@ -281,6 +283,40 @@ def test_negative_and_positive_controls_distinguish_independent_from_copied_pack
         } <= set(result.metrics)
     assert missing.status == "UNEVALUABLE"
     assert "private-one" not in repr(positive)
+
+
+def test_control_harness_heldout_baseline_cannot_reduce_its_advantage() -> None:
+    """Catches a high held-out linkage rate masking a reference/permutation harness signal."""
+    thresholds = policy_mapping()["thresholds"]
+    assert isinstance(thresholds, dict)
+    policy = _policy(
+        attacker_knowledge=["demographics", "timing"],
+        thresholds=thresholds
+        | {"negative_control_advantage": 0.1, "positive_control_advantage": 0.1},
+    )
+
+    def profile(label: str, demographics: str, timing: str) -> _PrivatePatientProfile:
+        base = _profile(label, "0")
+        buckets = dict(base._component_buckets)
+        buckets.update({"demographics": demographics, "timing": timing})
+        return replace(
+            base,
+            _demographics=("F", demographics),
+            _component_buckets=MappingProxyType(buckets),
+        )
+
+    feature_pairs = (("A", "one"), ("A", "two"), ("B", "three"), ("B", "one"))
+    reference = _package(*(profile(f"reference-{index}", *pair) for index, pair in enumerate(feature_pairs)))
+    control = _package(*(profile(f"control-{index}", *pair) for index, pair in enumerate(feature_pairs)))
+    heldout = _package(*(profile(f"heldout-{index}", *pair) for index, pair in enumerate(feature_pairs)))
+
+    negative = _evaluate_negative_control(policy, reference, control, heldout=heldout)
+    positive = _evaluate_positive_control(policy, reference, control, heldout=heldout)
+
+    assert negative.metrics["harness_heldout_unique_candidate_rate"] == 1.0
+    assert negative.metrics["negative_control_advantage"] > 0.1
+    assert negative.status == "FAIL"
+    assert positive.status == "PASS"
 
 
 def test_control_threshold_equality_is_conservative_for_negative_and_detects_positive() -> None:

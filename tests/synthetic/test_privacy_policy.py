@@ -19,6 +19,8 @@ from tests.synthetic.privacy_fixtures import policy_mapping, write_policy
 
 def _passing_controls() -> tuple[PrivacyControlResult, ...]:
     return (
+        PrivacyControlResult("attribute_disclosure", "UNEVALUABLE", {}, "insufficient_evidence"),
+        PrivacyControlResult("composition", "UNEVALUABLE", {}, "insufficient_evidence"),
         PrivacyControlResult(
             control_id="exact_reproduction",
             status="PASS",
@@ -31,6 +33,11 @@ def _passing_controls() -> tuple[PrivacyControlResult, ...]:
             metrics={"overlap_rate": 0.0, "evaluated_count": 3},
             reason_code="no_overlap",
         ),
+        PrivacyControlResult("linkage", "UNEVALUABLE", {}, "insufficient_evidence"),
+        PrivacyControlResult("membership_inference", "UNEVALUABLE", {}, "insufficient_evidence"),
+        PrivacyControlResult("nearest_neighbor", "UNEVALUABLE", {}, "insufficient_evidence"),
+        PrivacyControlResult("negative_control", "UNEVALUABLE", {}, "control_package_missing"),
+        PrivacyControlResult("positive_control", "UNEVALUABLE", {}, "control_package_missing"),
     )
 
 
@@ -156,7 +163,7 @@ def test_aggregate_report_rejects_missing_required_controls_and_inconsistent_sta
         "decision_reasons": ("all_required_controls_passed",),
     }
 
-    with pytest.raises(ValueError, match="required control coverage"):
+    with pytest.raises(ValueError, match="every fixed control"):
         PrivacyAuditReport(
             status="PASS",
             control_counts=_control_counts(controls[1:]),
@@ -180,14 +187,19 @@ def test_aggregate_report_derives_fail_and_unevaluable_from_controls() -> None:
         "synthetic_artifact_id": "generated-v1",
         "decision_reasons": ("review_required",),
     }
-    required_unevaluable = (
-        PrivacyControlResult("exact_reproduction", "UNEVALUABLE", {}, "insufficient_evidence"),
-        _passing_controls()[1],
+    required_unevaluable = tuple(
+        PrivacyControlResult("exact_reproduction", "UNEVALUABLE", {}, "insufficient_evidence")
+        if control.control_id == "exact_reproduction"
+        else control
+        for control in _passing_controls()
     )
-    optional_failure = _passing_controls() + (
+    optional_failure = tuple(
         PrivacyControlResult(
             "linkage", "FAIL", {"evaluated_count": 3, "linkage_advantage": 0.5}, "threshold_exceeded"
-        ),
+        )
+        if control.control_id == "linkage"
+        else control
+        for control in _passing_controls()
     )
 
     with pytest.raises(ValueError, match="status"):
@@ -222,9 +234,11 @@ def test_aggregate_report_requires_policy_minimum_evidence_for_evaluated_control
         with pytest.raises(ValueError, match="numeric"):
             PrivacyControlResult("identifier_overlap", "PASS", metrics, "no_overlap")  # type: ignore[arg-type]
         return
-    controls = (
-        _passing_controls()[0],
-        PrivacyControlResult("identifier_overlap", "PASS", metrics, "no_overlap"),
+    controls = tuple(
+        PrivacyControlResult("identifier_overlap", "PASS", metrics, "no_overlap")
+        if control.control_id == "identifier_overlap"
+        else control
+        for control in _passing_controls()
     )
 
     with pytest.raises(ValueError, match="evaluated_count"):

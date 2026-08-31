@@ -65,6 +65,17 @@ def test_audit_passes_independent_package_and_records_optional_missing_controls(
     result = audit_privacy(_config(tmp_path))
 
     controls = {control.control_id: control for control in result.report.controls}
+    assert [control.control_id for control in result.report.controls] == [
+        "attribute_disclosure",
+        "composition",
+        "exact_reproduction",
+        "identifier_overlap",
+        "linkage",
+        "membership_inference",
+        "nearest_neighbor",
+        "negative_control",
+        "positive_control",
+    ]
     assert result.report.status == "PASS"
     assert controls["identifier_overlap"].status == "PASS"
     assert controls["exact_reproduction"].status == "PASS"
@@ -74,6 +85,18 @@ def test_audit_passes_independent_package_and_records_optional_missing_controls(
     assert "REAL-P-001" not in serialized
     assert "GEN-P-001" not in serialized
     assert str(tmp_path) not in serialized
+
+
+def test_privacy_report_rejects_a_removed_optional_control(tmp_path: Path) -> None:
+    """Catches a forged report eliding an unevaluable optional fixed control."""
+    result = audit_privacy(_config(tmp_path))
+    controls = tuple(
+        item for item in result.report.controls if item.control_id != "membership_inference"
+    )
+    counts = {name: sum(item.status == name for item in controls) for name in ("PASS", "FAIL", "UNEVALUABLE")}
+
+    with pytest.raises(ValueError, match="every fixed control"):
+        replace(result.report, controls=controls, control_counts=counts)
 
 
 def test_optional_nearest_neighbor_screen_can_fail_without_heldout_evidence(tmp_path: Path) -> None:
@@ -185,7 +208,10 @@ def test_malformed_optional_packages_never_abort_the_primary_audit(
     result = audit_privacy(_config(tmp_path / "audit", **kwargs))
 
     control_id = f"{optional}_control" if optional == "negative" else "membership_inference"
-    assert {item.control_id: item for item in result.report.controls}[control_id].status == "UNEVALUABLE"
+    control = {item.control_id: item for item in result.report.controls}[control_id]
+    assert control.status == "UNEVALUABLE"
+    if optional == "shadow":
+        assert control.reason_code == "insufficient_shadow_runs"
 
 
 def test_report_writer_rejects_forged_control_pass_metrics(tmp_path: Path) -> None:
@@ -234,6 +260,28 @@ def test_report_writer_rejects_forged_linkage_advantage(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="could not be promoted"):
         write_privacy_report(forged, tmp_path / "forged-linkage")
+
+
+def test_report_writer_rejects_subgroup_linkage_reason_without_a_subgroup_cell(tmp_path: Path) -> None:
+    """Catches a caller claiming an unreported subgroup caused an overall-only linkage failure."""
+    thresholds = policy_mapping()["thresholds"]
+    assert isinstance(thresholds, dict)
+    policy = write_policy(
+        tmp_path / "policy.json",
+        subgroups=["overall"],
+        thresholds=thresholds | {"linkage_advantage": 0.1, "nearest_neighbor_unique_rate": 1.0},
+    )
+    result = audit_privacy(_config(tmp_path, policy=policy))
+    controls = tuple(
+        replace(item, reason_code="subgroup_linkage_threshold_exceeded")
+        if item.control_id == "linkage"
+        else item
+        for item in result.report.controls
+    )
+    forged = PrivacyAuditResult(replace(result.report, controls=controls))
+
+    with pytest.raises(ValueError, match="could not be promoted"):
+        write_privacy_report(forged, tmp_path / "forged-subgroup-linkage-reason")
 
 
 def test_report_validation_rejects_incomplete_heldout_nearest_metrics(tmp_path: Path) -> None:

@@ -377,8 +377,8 @@ class PrivacyAuditReport:
         ids = tuple(control.control_id for control in self.controls)
         if ids != tuple(sorted(ids)) or len(set(ids)) != len(ids):
             raise ValueError("privacy report controls must have sorted unique IDs")
-        if not set(self.policy.required_controls) <= set(ids):
-            raise ValueError("privacy report required control coverage is incomplete")
+        if set(ids) != _CONTROL_IDS:
+            raise ValueError("privacy report controls must cover every fixed control")
         for control in self.controls:
             if control.status == "UNEVALUABLE":
                 continue
@@ -988,8 +988,11 @@ def _linkage_candidate_metrics(
                 len(queries),
             )
         )
+    # Select the attacker by its unadjusted disclosure signal.  Baselines
+    # contextualize that selected signal, but must not cause a high-risk key
+    # combination to be discarded in favor of a lower raw signal.
     advantage, unique_rate, permutation_rate, heldout_rate, evaluated_count = max(
-        candidates, key=lambda item: (item[0], item[1], item[2])
+        candidates, key=lambda item: item[1]
     )
     successes = round(unique_rate * evaluated_count)
     metrics: dict[str, int | float] = {
@@ -1062,17 +1065,8 @@ def _evaluate_linkage_control(
         group_metrics,
         key=lambda item: (item["unique_candidate_rate"], item["linkage_advantage"]),
     )
-    subgroup_failed = any(
-        _linkage_failure(item, policy)
-        for item in group_metrics[1:]
-    )
     if _linkage_failure(metrics, policy):
-        reason = (
-            "subgroup_linkage_threshold_exceeded"
-            if subgroup_failed
-            else "linkage_threshold_exceeded"
-        )
-        return PrivacyControlResult("linkage", "FAIL", metrics, reason)
+        return PrivacyControlResult("linkage", "FAIL", metrics, "linkage_threshold_exceeded")
     reason = "linkage_within_threshold" if heldout is not None else "linkage_reference_permutation_only"
     return PrivacyControlResult("linkage", "PASS", metrics, reason)
 
@@ -1370,8 +1364,18 @@ def _control_harness_advantage(
     packages = (reference, control) if heldout is None else (reference, control, heldout)
     if not _packages_have_profile_evidence(policy, *packages):
         return None
+    # The control-harness advantage is intentionally reference/permutation
+    # based.  Held-out rates remain reportable as a validity baseline, but a
+    # caller-supplied held-out aggregate must not suppress harness detection.
     linkage = _linkage_candidate_metrics(
-        reference, control, heldout, control._profiles, _linkage_selections(policy)
+        reference, control, None, control._profiles, _linkage_selections(policy)
+    )
+    heldout_linkage = (
+        _linkage_candidate_metrics(
+            reference, control, heldout, control._profiles, _linkage_selections(policy)
+        )
+        if heldout is not None
+        else None
     )
     reproduction_count = sum(
         profile._trajectory_signature in reference._trajectory_signatures for profile in control._profiles
@@ -1385,9 +1389,9 @@ def _control_harness_advantage(
         "harness_unique_candidate_rate": linkage["unique_candidate_rate"],
         "harness_permutation_unique_rate": linkage["permutation_unique_rate"],
     }
-    if "heldout_count" in linkage:
-        metrics["harness_heldout_count"] = linkage["heldout_count"]
-        metrics["harness_heldout_unique_candidate_rate"] = linkage[
+    if heldout_linkage is not None:
+        metrics["harness_heldout_count"] = heldout_linkage["heldout_count"]
+        metrics["harness_heldout_unique_candidate_rate"] = heldout_linkage[
             "heldout_unique_candidate_rate"
         ]
     return metrics
@@ -1415,10 +1419,7 @@ def _evaluate_control_package(
         max(
             0.0,
             float(harness["harness_unique_candidate_rate"])
-            - max(
-                float(harness["harness_permutation_unique_rate"]),
-                float(harness.get("harness_heldout_unique_candidate_rate", 0.0)),
-            ),
+            - float(harness["harness_permutation_unique_rate"]),
         ),
         6,
     )
@@ -1430,14 +1431,11 @@ def _evaluate_control_package(
         evaluated_count,
     )
     threshold = policy.thresholds[metric_name]
-    raw_signal = max(
-        float(harness["harness_unique_candidate_rate"]), float(harness["reproduction_rate"])
-    )
     if control_id == "negative_control":
-        if raw_signal >= threshold or advantage >= threshold:
+        if advantage >= threshold:
             return PrivacyControlResult(control_id, "FAIL", metrics, "negative_control_threshold_exceeded")
         return PrivacyControlResult(control_id, "PASS", metrics, "negative_control_within_threshold")
-    if raw_signal >= threshold:
+    if advantage >= threshold:
         return PrivacyControlResult(control_id, "PASS", metrics, "positive_control_detected")
     return PrivacyControlResult(control_id, "FAIL", metrics, "positive_control_not_detected")
 
@@ -1594,10 +1592,10 @@ def _audit_privacy(config: PrivacyRunConfig) -> PrivacyAuditResult:
             heldout_reason,
             lambda: _evaluate_linkage_control(policy, reference, generated, heldout=heldout),
         ),
-        _optional_control_result(
-            "membership_inference",
-            shadow_invalid,
-            lambda: _evaluate_membership_inference_control(policy, reference, shadow_runs),
+        (
+            _unevaluable_control("membership_inference", "insufficient_shadow_runs")
+            if shadow_invalid
+            else _evaluate_membership_inference_control(policy, reference, shadow_runs)
         ),
         _heldout_control_result(
             "attribute_disclosure",
@@ -1837,7 +1835,6 @@ def _validate_evaluated_metrics(control: PrivacyControlResult, policy: PrivacyPo
         reproduction_rate = float(metrics["reproduction_rate"])
         _validate_report_rate(metrics, "harness_unique_candidate_rate", "evaluated_count")
         _validate_report_rate(metrics, "harness_permutation_unique_rate", "evaluated_count")
-        heldout_rate = 0.0
         harness_heldout_keys = {
             "harness_heldout_count",
             "harness_heldout_unique_candidate_rate",
@@ -1850,12 +1847,11 @@ def _validate_evaluated_metrics(control: PrivacyControlResult, policy: PrivacyPo
                 "harness_heldout_unique_candidate_rate",
                 "harness_heldout_count",
             )
-            heldout_rate = float(metrics["harness_heldout_unique_candidate_rate"])
         linkage_advantage = round(
             max(
                 0.0,
                 float(metrics["harness_unique_candidate_rate"])
-                - max(float(metrics["harness_permutation_unique_rate"]), heldout_rate),
+                - float(metrics["harness_permutation_unique_rate"]),
             ),
             6,
         )
@@ -1915,13 +1911,9 @@ def _status_from_control_metrics(control: PrivacyControlResult, policy: PrivacyP
     elif control_id == "composition":
         failed = metrics["composition_reproduction_rate"] > policy.thresholds["composition_reproduction_rate"]
     elif control_id == "negative_control":
-        failed = max(
-            float(metrics["harness_unique_candidate_rate"]), float(metrics["reproduction_rate"])
-        ) >= policy.thresholds["negative_control_advantage"]
+        failed = metrics["negative_control_advantage"] >= policy.thresholds["negative_control_advantage"]
     else:
-        failed = max(
-            float(metrics["harness_unique_candidate_rate"]), float(metrics["reproduction_rate"])
-        ) < policy.thresholds["positive_control_advantage"]
+        failed = metrics["positive_control_advantage"] < policy.thresholds["positive_control_advantage"]
     return "FAIL" if failed else "PASS"
 
 
@@ -1952,7 +1944,6 @@ _UNEVALUABLE_REASON_CODES = {
             "invalid_shadow_runs",
             "insufficient_evidence",
             "inconsistent_shadow_labels",
-            "optional_package_invalid",
             "control_evaluation_unavailable",
         }
     ),
@@ -2031,7 +2022,7 @@ def _canonical_control_reason_codes(
         )
     if control.control_id == "linkage":
         if _linkage_failure(metrics, policy):
-            return frozenset({"linkage_threshold_exceeded", "subgroup_linkage_threshold_exceeded"})
+            return frozenset({"linkage_threshold_exceeded"})
         return frozenset(
             {"linkage_within_threshold"}
             if "heldout_count" in metrics

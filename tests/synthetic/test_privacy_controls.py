@@ -392,8 +392,8 @@ def test_nearest_neighbor_reports_exact_near_unique_and_tied_buckets_without_ove
     assert result.metrics["margin_zero_rate"] == round(1 / 3, 6)
 
 
-def test_linkage_full_combination_uses_permutation_and_heldout_rates(tmp_path: Path) -> None:
-    """Catches omitting the full-combination signal or either reported baseline rate."""
+def test_linkage_reports_baselines_for_the_selected_raw_signal(tmp_path: Path) -> None:
+    """Catches omitting a reported baseline after selecting the highest raw signal."""
     policy = _policy(
         required_controls=["exact_reproduction", "identifier_overlap", "linkage"],
         subgroups=["overall"],
@@ -422,9 +422,9 @@ def test_linkage_full_combination_uses_permutation_and_heldout_rates(tmp_path: P
     assert result.status == "FAIL"
     assert result.reason_code == "linkage_threshold_exceeded"
     assert result.metrics["unique_candidate_rate"] == 1.0
-    assert result.metrics["permutation_unique_rate"] == 0.0
+    assert result.metrics["permutation_unique_rate"] == 1.0
     assert result.metrics["heldout_unique_candidate_rate"] == 0.0
-    assert result.metrics["linkage_advantage"] == 1.0
+    assert result.metrics["linkage_advantage"] == 0.0
 
 
 def test_linkage_promotes_an_evaluable_subgroup_failure_without_reporting_subgroups() -> None:
@@ -458,9 +458,37 @@ def test_linkage_promotes_an_evaluable_subgroup_failure_without_reporting_subgro
     result = _evaluate_linkage_control(policy, reference, generated, heldout=heldout)
 
     assert result.status == "FAIL"
-    assert result.reason_code == "subgroup_linkage_threshold_exceeded"
+    assert result.reason_code == "linkage_threshold_exceeded"
     assert result.metrics["evaluated_count"] == 3
     assert "sex" not in repr(result).lower()
+
+
+def test_linkage_selects_highest_raw_signal_before_baseline_adjustment() -> None:
+    """Catches a high-uniqueness attacker being discarded for a lower adjusted attacker."""
+    policy = _policy(
+        attacker_knowledge=["demographics", "timing"],
+        thresholds=policy_mapping()["thresholds"] | {"linkage_advantage": 1.0},
+    )
+    reference = _private_package(
+        tuple(
+            _private_profile(f"r{index}", (f"d{index}", f"t{index}", "u", "x", "0"))
+            for index in range(3)
+        )
+    )
+    generated = _private_package(
+        (
+            _private_profile("g0", ("d0", "t0", "u", "x", "0")),
+            _private_profile("g1", ("d1", "unmatched-1", "u", "x", "0")),
+            _private_profile("g2", ("d2", "unmatched-2", "u", "x", "0")),
+        )
+    )
+
+    result = _evaluate_linkage_control(policy, reference, generated, heldout=None)
+
+    assert result.status == "PASS"
+    assert result.metrics["unique_candidate_rate"] == 1.0
+    assert result.metrics["permutation_unique_rate"] == 1.0
+    assert result.metrics["linkage_advantage"] == 0.0
 
 
 def test_linkage_suppresses_underpowered_sex_cells_without_turning_them_into_passes(
