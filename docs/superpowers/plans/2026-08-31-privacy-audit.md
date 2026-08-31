@@ -192,4 +192,6 @@ Document the qualified privacy claim, required evidence, command, statuses, aggr
 - [x] Dispatch a fresh reviewer for each task and implementer-only fix rounds for every finding; run exactly one scoped re-review after the fix round.
 - [x] Run a broad final review from the merge base through the branch tip. Resolve all Critical/Important findings with fresh fix/re-review passes; record residual Minor findings explicitly.
 - [x] From the feature worktree run the full suite, Ruff, schema check, and staged diff checks. Verify the report contains no identifiers, paths, keys, profile hashes, distances, attack examples, or undersized cells.
-- [ ] Merge to `main`, rerun the full verification suite on merged `main`, push, and verify `HEAD == origin/main`. Remove only this slice's worktree/branch/ignored SDD workspace after handoff.
+- [x] Merge to `main`, rerun the full verification suite on merged `main`, push, and verify `HEAD == origin/main`. Remove only this slice's worktree/branch/ignored SDD workspace after handoff.
+
+Merged to `main` at `da6b2f4`; post-merge verification passed with 1318 tests, Ruff, schema, and diff checks. The final parity check and push are recorded in the SDD ledger.
