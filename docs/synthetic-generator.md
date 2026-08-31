@@ -80,6 +80,29 @@ Every path is required: there is no default governed data root, descriptor, poli
 
 A passing held-out report is limited aggregate fidelity evidence. It is not evidence of growth-disorder prevalence, demographic representativeness, clinical validity, privacy or non-matchability, or release approval. Privacy evaluation, temporal drift, task utility, prevalence evaluation, and a Synthea adapter remain separate deferred gates and require their own approved evidence and governance.
 
+## Governed privacy-audit evidence
+
+An authorized operator may run the standalone privacy auditor only inside the governed environment against a completely generated exact-schema package and an approved frozen privacy policy. Every governed input is explicit; there is no default real-data root, policy, output, held-out package, shadow manifest, control package, or prior-release discovery.
+
+```sh
+uv run python -m synthetic.privacy_audit \
+  --real-root /governed/calibration \
+  --heldout-root /governed/heldout \
+  --synthetic-root /fixtures/development-20260830 \
+  --policy /governed/approved-risk-policy.json \
+  --shadow-manifest /governed/shadow-manifest.json \
+  --prior-release-root /governed/prior-release-1 \
+  --negative-control-root /governed/independent-control \
+  --positive-control-root /governed/copied-control \
+  --output /governed/privacy-audit-report
+```
+
+The required flags are `--real-root`, `--synthetic-root`, `--policy`, and `--output`; `--prior-release-root` may be repeated. The auditor stages each package in a separate private connection and runs only the fixed policy controls. It writes a new directory containing only `privacy-audit-report.json` and `privacy-audit-summary.txt`, after exclusive writes, fsync, reparse, byte comparison, and non-replacing promotion. Output failures leave only a fixed redacted failure artifact.
+
+The report contains aggregate control metrics, policy identity, counts, statuses, and decision reasons. It never contains patient or visit rows, identifiers, paths, source keys, feature tuples, candidate pairs, distances, private profile hashes, diagnosis values, or undersized cells. `PASS` means all required controls were evaluable and passed; `FAIL` means at least one evaluated control failed; `UNEVALUABLE` means a required control lacked sufficient or valid evidence. Optional missing controls are recorded as unevaluable without blocking a policy that does not require them. The CLI returns 0 only for a promoted `PASS` report, 1 for a promoted `FAIL`/`UNEVALUABLE` report or redacted hard failure, and 2 for invalid arguments.
+
+A passing report is qualified, policy-bound privacy evidence only: under the approved recipient, release context, attacker knowledge, controls, and tolerances, it found no measured linkage, membership, or attribute-inference signal above tolerance. It is not a proof of non-matchability or zero risk, a HIPAA de-identification determination, or release authorization. A privacy expert and data custodian remain responsible for release approval. Temporal drift, task utility, prevalence, and Synthea remain separate deferred evidence gates.
+
 ### Development-only age-regime smoke example
 
 When exercising the latent trajectory layer with an injected reference, cover the five `GrowthRegime` classifier regimes: infancy, transition, childhood, puberty, and adolescence. Infancy runs before the configured transition window; transition spans the configured 24-month window (700–760 days by default, so day 730 is transition); childhood follows that window until the injected puberty schedule; puberty follows onset for its configured tempo; and adolescence continues through the maximum age (including 7305). At every age, generate only two independent anthropometric dimensions: length plus weight before transition, and height plus BMI after transition, with the applicable third value derived explicitly. Do not generate height/length, weight, and BMI as three independent states.

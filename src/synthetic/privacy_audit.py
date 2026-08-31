@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import math
 import os
 import re
+import stat
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import date
@@ -21,6 +23,7 @@ from synthetic.calibration_input import (
     _stage_validated_resources,
     _validate_descriptor_mapping,
 )
+from synthetic.run_directory import RunDirectory
 from synthetic.schema_contract import (
     field_names,
     load_descriptor,
@@ -31,6 +34,8 @@ from synthetic.schema_contract import (
 REPORT_VERSION = "privacy-audit-report-v1"
 MAX_PRIVACY_POLICY_BYTES = 1024 * 1024
 MAX_PRIVACY_SHADOW_MANIFEST_BYTES = 1024 * 1024
+_PRIVACY_REPORT_FILENAME = "privacy-audit-report.json"
+_PRIVACY_SUMMARY_FILENAME = "privacy-audit-summary.txt"
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 _TOKEN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
@@ -240,7 +245,7 @@ def _read_regular_bytes(path: Path, label: str, maximum: int) -> bytes:
         raise ValueError(f"{label} must be a regular non-symlink file") from exc
     try:
         initial = os.fstat(fd)
-        if not os.path.isfile(path) or initial.st_size > maximum:
+        if not stat.S_ISREG(initial.st_mode) or initial.st_size > maximum:
             raise ValueError(f"{label} must be a bounded regular file")
         chunks: list[bytes] = []
         total = 0
@@ -1309,3 +1314,343 @@ def _evaluate_positive_control(
 ) -> PrivacyControlResult:
     """Confirm the fixed harness detects a supplied copied or overfit package."""
     return _evaluate_control_package("positive_control", policy, reference, package, heldout=heldout)
+
+
+def _synthetic_artifact_id(package_root: Path) -> str:
+    """Derive a report-safe artifact identity from the synthetic descriptor only."""
+    try:
+        descriptor = _load_governed_descriptor(package_root / "datapackage.json")
+        if descriptor.get("x-synthetic") is not True:
+            raise ValueError
+        _validate_descriptor_mapping(descriptor)
+        name = _require_token(descriptor.get("name"), "synthetic artifact name")
+        version = _require_token(descriptor.get("version"), "synthetic artifact version")
+        return _require_token(f"{name}:{version}", "synthetic_artifact_id")
+    except (TypeError, ValueError) as exc:
+        raise ValueError("synthetic artifact identity is invalid") from exc
+
+
+def _load_optional_package(
+    package_root: Path | None, *, synthetic: bool, policy: PrivacyPolicy
+) -> tuple[_PrivatePackage | None, bool]:
+    """Return a package or an aggregate-only unavailable marker for optional evidence."""
+    if package_root is None:
+        return None, False
+    try:
+        return (
+            _load_private_package(
+                package_root,
+                synthetic=synthetic,
+                longitudinal_minimum=policy.longitudinal_min_observations,
+            ),
+            False,
+        )
+    except (OSError, TypeError, ValueError):
+        return None, True
+
+
+def _optional_control_result(
+    control_id: str,
+    unavailable: bool,
+    evaluate: Any,
+) -> PrivacyControlResult:
+    """Keep optional malformed packages confined to their own aggregate control."""
+    if unavailable:
+        return _unevaluable_control(control_id, "optional_package_invalid")
+    try:
+        return evaluate()
+    except (ArithmeticError, TypeError, ValueError):
+        return _unevaluable_control(control_id, "control_evaluation_unavailable")
+
+
+def _heldout_control_result(
+    control_id: str,
+    policy: PrivacyPolicy,
+    heldout: _PrivatePackage | None,
+    heldout_invalid: bool,
+    evaluate: Any,
+) -> PrivacyControlResult:
+    """Require an explicit held-out package before an otherwise optional screen is evaluated."""
+    if heldout_invalid:
+        return _unevaluable_control(control_id, "optional_package_invalid")
+    if heldout is None and control_id not in policy.required_controls:
+        return _unevaluable_control(control_id, "optional_control_not_supplied")
+    return _optional_control_result(control_id, False, evaluate)
+
+
+def _decision_reasons(controls: tuple[PrivacyControlResult, ...], policy: PrivacyPolicy) -> tuple[str, ...]:
+    if any(control.status == "FAIL" for control in controls):
+        return ("evaluated_control_failed",)
+    if any(
+        control.control_id in policy.required_controls and control.status == "UNEVALUABLE"
+        for control in controls
+    ):
+        return ("required_control_unevaluable",)
+    return ("all_required_controls_passed",)
+
+
+def audit_privacy(config: PrivacyRunConfig) -> PrivacyAuditResult:
+    """Evaluate explicit packages privately and return only canonical aggregate evidence."""
+    if not isinstance(config, PrivacyRunConfig):
+        raise TypeError("config must be a PrivacyRunConfig")
+    policy = load_privacy_policy(config.policy)
+    synthetic_artifact_id = _synthetic_artifact_id(config.synthetic_root)
+    reference = _load_private_package(
+        config.real_root, synthetic=False, longitudinal_minimum=policy.longitudinal_min_observations
+    )
+    generated = _load_private_package(
+        config.synthetic_root, synthetic=True, longitudinal_minimum=policy.longitudinal_min_observations
+    )
+    heldout, heldout_invalid = _load_optional_package(
+        config.heldout_root, synthetic=False, policy=policy
+    )
+    prior_releases: list[_PrivatePackage] = []
+    prior_invalid = False
+    for root in config.prior_release_roots:
+        package, invalid = _load_optional_package(root, synthetic=True, policy=policy)
+        prior_invalid = prior_invalid or invalid
+        if package is not None:
+            prior_releases.append(package)
+    negative, negative_invalid = _load_optional_package(
+        config.negative_control_root, synthetic=True, policy=policy
+    )
+    positive, positive_invalid = _load_optional_package(
+        config.positive_control_root, synthetic=True, policy=policy
+    )
+    shadow_runs: tuple[_PrivateShadowRun, ...] = ()
+    shadow_invalid = False
+    if config.shadow_manifest is not None:
+        try:
+            shadow_runs = _load_private_shadow_runs(config.shadow_manifest, reference, policy)
+        except (OSError, TypeError, ValueError):
+            shadow_invalid = True
+
+    controls = (
+        _evaluate_identifier_overlap_control(policy, reference, generated),
+        _evaluate_exact_reproduction_control(policy, reference, generated),
+        _heldout_control_result(
+            "nearest_neighbor",
+            policy,
+            heldout,
+            heldout_invalid,
+            lambda: _evaluate_nearest_neighbor_control(policy, reference, generated, heldout=heldout),
+        ),
+        _heldout_control_result(
+            "linkage",
+            policy,
+            heldout,
+            heldout_invalid,
+            lambda: _evaluate_linkage_control(policy, reference, generated, heldout=heldout),
+        ),
+        _optional_control_result(
+            "membership_inference",
+            shadow_invalid,
+            lambda: _evaluate_membership_inference_control(policy, reference, shadow_runs),
+        ),
+        _heldout_control_result(
+            "attribute_disclosure",
+            policy,
+            heldout,
+            heldout_invalid,
+            lambda: _evaluate_attribute_disclosure_control(policy, reference, generated, heldout=heldout),
+        ),
+        _optional_control_result(
+            "composition",
+            prior_invalid,
+            lambda: _evaluate_composition_control(policy, generated, tuple(prior_releases)),
+        ),
+        _optional_control_result(
+            "negative_control",
+            negative_invalid,
+            lambda: _evaluate_negative_control(policy, reference, negative, heldout=heldout),
+        ),
+        _optional_control_result(
+            "positive_control",
+            positive_invalid,
+            lambda: _evaluate_positive_control(policy, reference, positive, heldout=heldout),
+        ),
+    )
+    sorted_controls = tuple(sorted(controls, key=lambda control: control.control_id))
+    status: Literal["PASS", "FAIL", "UNEVALUABLE"]
+    if any(control.status == "FAIL" for control in sorted_controls):
+        status = "FAIL"
+    elif any(
+        control.control_id in policy.required_controls and control.status == "UNEVALUABLE"
+        for control in sorted_controls
+    ):
+        status = "UNEVALUABLE"
+    else:
+        status = "PASS"
+    counts = {name: sum(control.status == name for control in sorted_controls) for name in _STATUSES}
+    return PrivacyAuditResult(
+        PrivacyAuditReport(
+            status=status,
+            policy=policy,
+            schema_fingerprint=policy.schema_fingerprint,
+            synthetic_artifact_id=synthetic_artifact_id,
+            control_counts=counts,
+            controls=sorted_controls,
+            decision_reasons=_decision_reasons(sorted_controls, policy),
+        )
+    )
+
+
+def _privacy_human_summary(report: PrivacyAuditReport) -> str:
+    return "\n".join(
+        (
+            f"status: {report.status}",
+            f"policy: {report.policy.policy_id} {report.policy.policy_version}",
+            f"synthetic artifact: {report.synthetic_artifact_id}",
+            "control counts: " + " ".join(
+                f"{status}={report.control_counts[status]}" for status in sorted(_STATUSES)
+            ),
+            "decision reasons: " + " ".join(report.decision_reasons),
+        )
+    ) + "\n"
+
+
+def _write_exclusive_fsynced(path: Path, payload: bytes) -> None:
+    descriptor = os.open(
+        path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600
+    )
+    try:
+        view = memoryview(payload)
+        while view:
+            written = os.write(descriptor, view)
+            if written <= 0:
+                raise OSError("privacy output write did not progress")
+            view = view[written:]
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _reparse_written_privacy_report(run: RunDirectory, result: PrivacyAuditResult) -> None:
+    report_bytes = _read_regular_bytes(
+        run.partial_path / _PRIVACY_REPORT_FILENAME, "privacy report output", MAX_PRIVACY_POLICY_BYTES
+    )
+    summary_bytes = _read_regular_bytes(
+        run.partial_path / _PRIVACY_SUMMARY_FILENAME, "privacy summary output", MAX_PRIVACY_POLICY_BYTES
+    )
+    try:
+        parsed = json.loads(
+            report_bytes.decode("ascii"),
+            object_pairs_hook=_reject_duplicate_json_keys,
+            parse_constant=_reject_nonfinite_json,
+        )
+        summary_bytes.decode("ascii")
+    except (UnicodeError, json.JSONDecodeError, RecursionError, ValueError) as exc:
+        raise ValueError("privacy output cannot be reparsed") from exc
+    expected_report = result.report.canonical_json_bytes()
+    expected_summary = _privacy_human_summary(result.report).encode("ascii")
+    if (
+        not isinstance(parsed, Mapping)
+        or dict(parsed) != result.report.to_mapping()
+        or report_bytes != expected_report
+        or summary_bytes != expected_summary
+    ):
+        raise ValueError("privacy output is not canonical")
+
+
+def _privacy_lifecycle_token(report: PrivacyAuditReport) -> str:
+    identity = f"{report.synthetic_artifact_id}:{report.policy.policy_id}:{report.policy.policy_version}"
+    return hashlib.sha256(identity.encode("ascii")).hexdigest()
+
+
+def _refuse_privacy_lifecycle_collision(output: Path, report: PrivacyAuditReport) -> None:
+    if os.path.lexists(output):
+        raise FileExistsError("privacy output already exists")
+    resolved = output.resolve()
+    token = _privacy_lifecycle_token(report)
+    lifecycle_paths = (
+        resolved.parent / f".{resolved.name}.{token}.partial",
+        resolved.parent / f".{resolved.name}.{token}.failed",
+    )
+    if any(os.path.lexists(path) for path in lifecycle_paths):
+        raise FileExistsError("privacy output lifecycle path already exists")
+
+
+def _prepare_privacy_failure_archive(run: RunDirectory) -> None:
+    for filename in (_PRIVACY_REPORT_FILENAME, _PRIVACY_SUMMARY_FILENAME):
+        try:
+            os.unlink(run.partial_path / filename)
+        except FileNotFoundError:
+            continue
+    with os.scandir(run.partial_path) as entries:
+        if next(entries, None) is not None:
+            raise OSError("privacy partial output could not be cleared")
+
+
+def write_privacy_report(result: PrivacyAuditResult, output: Path) -> None:
+    """Write only a canonical aggregate report and summary, then promote without replacement."""
+    if not isinstance(result, PrivacyAuditResult):
+        raise TypeError("result must be a PrivacyAuditResult")
+    if not isinstance(output, Path):
+        raise TypeError("output must be a Path")
+    _refuse_privacy_lifecycle_collision(output, result.report)
+    run = RunDirectory.start(output, _privacy_lifecycle_token(result.report))
+    try:
+        _write_exclusive_fsynced(
+            run.partial_path / _PRIVACY_REPORT_FILENAME, result.report.canonical_json_bytes()
+        )
+        _write_exclusive_fsynced(
+            run.partial_path / _PRIVACY_SUMMARY_FILENAME,
+            _privacy_human_summary(result.report).encode("ascii"),
+        )
+        _reparse_written_privacy_report(run, result)
+        run.promote()
+    except Exception:  # noqa: BLE001 - output errors are always redacted and non-promoting
+        try:
+            _prepare_privacy_failure_archive(run)
+            run.fail("privacy output validation failed")
+        except Exception:  # noqa: BLE001 - lifecycle errors must not disclose governed details
+            raise ValueError("privacy output could not be promoted") from None
+        raise ValueError("privacy output could not be promoted") from None
+
+
+class _RedactedArgumentParser(argparse.ArgumentParser):
+    def error(self, message: str) -> None:
+        del message
+        self.exit(2, "privacy audit arguments invalid\n")
+
+
+def _argument_parser() -> argparse.ArgumentParser:
+    parser = _RedactedArgumentParser(description="Run governed privacy audit")
+    parser.add_argument("--real-root", required=True, type=Path)
+    parser.add_argument("--synthetic-root", required=True, type=Path)
+    parser.add_argument("--policy", required=True, type=Path)
+    parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--heldout-root", type=Path)
+    parser.add_argument("--shadow-manifest", type=Path)
+    parser.add_argument("--prior-release-root", action="append", type=Path, default=[])
+    parser.add_argument("--negative-control-root", type=Path)
+    parser.add_argument("--positive-control-root", type=Path)
+    return parser
+
+
+def main() -> None:
+    """Run the explicit-input privacy auditor with redacted command-line failures."""
+    parser = _argument_parser()
+    arguments = parser.parse_args()
+    try:
+        config = PrivacyRunConfig(
+            real_root=arguments.real_root,
+            synthetic_root=arguments.synthetic_root,
+            policy=arguments.policy,
+            output=arguments.output,
+            heldout_root=arguments.heldout_root,
+            shadow_manifest=arguments.shadow_manifest,
+            prior_release_roots=tuple(arguments.prior_release_root),
+            negative_control_root=arguments.negative_control_root,
+            positive_control_root=arguments.positive_control_root,
+        )
+        result = audit_privacy(config)
+        write_privacy_report(result, config.output)
+    except Exception:  # noqa: BLE001 - all governed failure details remain process-local
+        parser.exit(1, "privacy audit failed\n")
+    if result.report.status != "PASS":
+        parser.exit(1, "privacy audit failed\n")
+
+
+if __name__ == "__main__":  # pragma: no cover - subprocess exercises the CLI
+    main()
