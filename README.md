@@ -13,6 +13,7 @@ This repository describes eight de-identified pediatric EHR CSV resources with a
 - [`schema/build.py`](schema/build.py): regenerate and validate `datapackage.json`.
 - [`schema/profile.py`](schema/profile.py): recompute the snapshot statistics from the CSVs.
 - [`schema/stats.json`](schema/stats.json): the statistics `build.py` reads, so the descriptor rebuilds without the data.
+- [`docs/synthetic-generator.md`](docs/synthetic-generator.md): synthetic generator and governed aggregate-calibration boundaries.
 
 ## Resources
 
@@ -65,3 +66,9 @@ The approved design is in [the synthetic growth fixture specification](docs/supe
 Until the authoritative augmentation implementation or an approved parity harness is supplied, the command-line entry point fails closed. The smoke-profile package must not be labeled a development fixture, golden fixture, or validated output.
 
 See [`docs/synthetic-generator.md`](docs/synthetic-generator.md) for the Python usage example, output contract, safety checks, and verification commands.
+
+## Governed aggregate calibration
+
+The repository also provides `python -m synthetic.calibrate` for authorized offline use inside the governed environment. It requires explicit snapshot, descriptor, policy, creation-time, key-file, and new-output arguments and emits only `calibration-artifact.json` plus an aggregate report whose status is `AGGREGATES_ONLY`. The exact command, key-file controls, target families, and suppression semantics are documented in [the synthetic generator guide](docs/synthetic-generator.md#governed-aggregate-calibration-command).
+
+CI exercises calibration only with wholly synthetic records and test key material. No visible synthetic generator path consumes the calibration artifact. Its aggregates are not prevalence validation, clinical validation, privacy evidence, or release authorization.

@@ -6,6 +6,7 @@ import pytest
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 VISIBLE_RUNTIME_PATHS = (
     Path("src/synthetic/generate.py"),
+    Path("src/synthetic/base_resources.py"),
     Path("src/synthetic/csv_package.py"),
     Path("src/synthetic/manifest.py"),
     Path("src/synthetic/schema_contract.py"),
@@ -18,13 +19,17 @@ def visible_paths() -> tuple[Path, ...]:
 
 
 def is_calibration_module(module: str | None) -> bool:
-    return module == "synthetic.calibration" or bool(
-        module and module.startswith("synthetic.calibration.")
-    )
+    return module in {
+        "synthetic.calibrate",
+        "synthetic.calibration",
+        "synthetic.calibration_input",
+    } or bool(module and module.startswith("synthetic.calibration."))
 
 
 def is_relative_calibration_module(module: str | None) -> bool:
-    return module == "calibration" or bool(module and module.startswith("calibration."))
+    return module in {"calibrate", "calibration", "calibration_input"} or bool(
+        module and module.startswith("calibration.")
+    )
 
 
 def forbidden_calibration_import(tree: ast.AST) -> bool:
@@ -36,13 +41,15 @@ def forbidden_calibration_import(tree: ast.AST) -> bool:
             if node.level == 0 and is_calibration_module(node.module):
                 return True
             if node.level == 0 and node.module == "synthetic" and any(
-                alias.name == "calibration" for alias in node.names
+                alias.name in {"calibrate", "calibration", "calibration_input"}
+                for alias in node.names
             ):
                 return True
             if node.level > 0 and is_relative_calibration_module(node.module):
                 return True
             if node.level > 0 and node.module is None and any(
-                alias.name == "calibration" for alias in node.names
+                alias.name in {"calibrate", "calibration", "calibration_input"}
+                for alias in node.names
             ):
                 return True
     return False
@@ -50,9 +57,20 @@ def forbidden_calibration_import(tree: ast.AST) -> bool:
 
 def forbidden_calibration_call(tree: ast.AST) -> bool:
     for node in ast.walk(tree):
-        if isinstance(node, ast.Name) and node.id == "load_calibration_artifact":
+        if not isinstance(node, ast.Call):
+            continue
+        callable_node = node.func
+        if isinstance(callable_node, ast.Name) and callable_node.id in {
+            "calibrate",
+            "load_calibration_artifact",
+            "prepare_input",
+        }:
             return True
-        if isinstance(node, ast.Attribute) and node.attr == "load_calibration_artifact":
+        if isinstance(callable_node, ast.Attribute) and callable_node.attr in {
+            "calibrate",
+            "load_calibration_artifact",
+            "prepare_input",
+        }:
             return True
     return False
 
@@ -62,6 +80,8 @@ def forbidden_calibration_call(tree: ast.AST) -> bool:
     [
         "import synthetic.calibration.loader",
         "from synthetic.calibration.loader import load_calibration_artifact",
+        "import synthetic.calibrate",
+        "from synthetic.calibration_input import prepare_input",
     ],
 )
 def test_forbidden_calibration_import_rejects_submodules(source: str) -> None:
@@ -73,12 +93,19 @@ def test_forbidden_calibration_import_rejects_submodules(source: str) -> None:
     [
         "from .calibration import load_calibration_artifact",
         "from . import calibration",
+        "from .calibration_input import prepare_input",
+        "from . import calibrate",
         "from ..calibration import load_calibration_artifact",
         "from .. import calibration",
     ],
 )
 def test_forbidden_calibration_import_rejects_relative_modules(source: str) -> None:
     assert forbidden_calibration_import(ast.parse(source))
+
+
+@pytest.mark.parametrize("source", ["prepare_input(connection, config)", "calibrator.prepare_input(connection, config)"])
+def test_forbidden_calibration_call_rejects_governed_input_calls(source: str) -> None:
+    assert forbidden_calibration_call(ast.parse(source))
 
 
 def test_visible_paths_do_not_import_or_call_calibration_loader() -> None:

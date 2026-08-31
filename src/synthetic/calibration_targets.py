@@ -653,59 +653,96 @@ def _age_window_targets(
 
 
 def _physiology_targets(
-    connection: duckdb.DuckDBPyConnection, window: CalibrationAgeWindow, sex: str
+    connection: duckdb.DuckDBPyConnection, window: CalibrationAgeWindow
 ) -> list[RawTarget]:
-    dimensions = _dimensions(age_regime=window.window_id, recorded_sex=sex)
-    targets: list[RawTarget] = []
-    for column, (target_prefix, unit, flag_columns) in PHYSIOLOGY_METRICS.items():
+    clean_value_expressions: list[str] = []
+    aggregate_expressions: list[str] = []
+    for column, (_target_prefix, _unit, flag_columns) in PHYSIOLOGY_METRICS.items():
         clean_flags = " AND ".join(
-            f'try_cast(source."{flag}" AS INTEGER) = 0'
-            for flag in flag_columns
+            f'try_cast(source."{flag}" AS INTEGER) = 0' for flag in flag_columns
         )
-        row = connection.execute(
-            f"""
-            WITH clean_values AS (
-                SELECT try_cast(source."{column}" AS DOUBLE) AS value
-                FROM calibration_stage_visits_augmented AS source
-                JOIN patient_partitions AS partitions USING (patient_id)
-                JOIN calibration_stage_patients AS demographics USING (patient_id)
-                WHERE partitions.partition_label = 'calibration'
-                  AND demographics.sex = ?
-                  AND try_cast(source.age_in_days AS BIGINT) >= ?
-                  AND try_cast(source.age_in_days AS BIGINT) < ?
-                  AND isfinite(try_cast(source."{column}" AS DOUBLE))
-                  AND {clean_flags}
+        clean_value_expressions.append(
+            f'CASE WHEN isfinite(try_cast(source."{column}" AS DOUBLE)) AND {clean_flags} '
+            f'THEN try_cast(source."{column}" AS DOUBLE) END AS "{column}"'
+        )
+        aggregate_expressions.extend(
+            (
+                f'count("{column}")',
+                f'avg("{column}")',
+                f'stddev_samp("{column}")',
+                f'quantile_cont("{column}", 0.1)',
+                f'quantile_cont("{column}", 0.5)',
+                f'quantile_cont("{column}", 0.9)',
             )
-            SELECT count(*), avg(value), stddev_samp(value),
-                   quantile_cont(value, 0.1), quantile_cont(value, 0.5),
-                   quantile_cont(value, 0.9)
-            FROM clean_values
-            """,
-            [sex, window.lower_age_days, window.upper_age_days],
-        ).fetchone()
-        support = row[0]
-        if support < 2:
+        )
+    rows = connection.execute(
+        f"""
+        WITH clean_values AS (
+            SELECT demographics.sex AS recorded_sex,
+                   {", ".join(clean_value_expressions)}
+            FROM calibration_stage_visits_augmented AS source
+            JOIN patient_partitions AS partitions USING (patient_id)
+            JOIN calibration_stage_patients AS demographics USING (patient_id)
+            WHERE partitions.partition_label = 'calibration'
+              AND try_cast(source.age_in_days AS BIGINT) >= ?
+              AND try_cast(source.age_in_days AS BIGINT) < ?
+        )
+        SELECT recorded_sex, {", ".join(aggregate_expressions)}
+        FROM clean_values
+        GROUP BY recorded_sex
+        """,
+        [window.lower_age_days, window.upper_age_days],
+    ).fetchall()
+    rows_by_sex = {row[0]: row for row in rows}
+    targets: list[RawTarget] = []
+    for sex in SEX_CATEGORY_SLUGS:
+        row = rows_by_sex.get(sex)
+        if row is None:
             continue
-        targets.append(
-            _target(dimensions, f"{target_prefix}_mean", "physiology", "mean", unit, row[1], support)
-        )
-        targets.append(
-            _target(dimensions, f"{target_prefix}_sd", "physiology", "sd", unit, row[2], support)
-        )
-        for index, (suffix, level) in enumerate(_QUANTILES, start=3):
+        dimensions = _dimensions(age_regime=window.window_id, recorded_sex=sex)
+        for metric_index, (_column, (target_prefix, unit, _flag_columns)) in enumerate(
+            PHYSIOLOGY_METRICS.items()
+        ):
+            offset = 1 + (metric_index * 6)
+            support = row[offset]
+            if support < 2:
+                continue
             targets.append(
                 _target(
                     dimensions,
-                    f"{target_prefix}_{suffix}",
+                    f"{target_prefix}_mean",
                     "physiology",
-                    "quantile",
+                    "mean",
                     unit,
-                    row[index],
+                    row[offset + 1],
                     support,
-                    None,
-                    level,
                 )
             )
+            targets.append(
+                _target(
+                    dimensions,
+                    f"{target_prefix}_sd",
+                    "physiology",
+                    "sd",
+                    unit,
+                    row[offset + 2],
+                    support,
+                )
+            )
+            for index, (suffix, level) in enumerate(_QUANTILES, start=3):
+                targets.append(
+                    _target(
+                        dimensions,
+                        f"{target_prefix}_{suffix}",
+                        "physiology",
+                        "quantile",
+                        unit,
+                        row[offset + index],
+                        support,
+                        None,
+                        level,
+                    )
+                )
     return targets
 
 
@@ -727,8 +764,7 @@ def compute_raw_targets(
     targets = [*_patient_targets(connection), *_utilization_targets(connection)]
     for window in config.age_windows:
         targets.extend(_age_window_targets(connection, window))
-        for sex in SEX_CATEGORY_SLUGS:
-            targets.extend(_physiology_targets(connection, window, sex))
+        targets.extend(_physiology_targets(connection, window))
     keys = [(target.stratum_id, target.target_name, target.statistic) for target in targets]
     if len(set(keys)) != len(keys):
         raise ValueError("raw target registry contains duplicate cells")

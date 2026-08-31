@@ -195,11 +195,11 @@ def test_report_rejects_identifier_values_and_field_aliases(changes: dict[str, o
         CalibrationReport(**values)  # type: ignore[arg-type]
 
 
-def test_orchestration_placeholders_remain_unassembled() -> None:
-    with pytest.raises(NotImplementedError, match="calibrator is not assembled"):
-        calibrate(valid_config())
-    with pytest.raises(NotImplementedError, match="calibrator is not assembled"):
-        write_calibration_result(object(), Path("output"))
+def test_orchestration_requires_public_model_types() -> None:
+    with pytest.raises(TypeError, match="config"):
+        calibrate(object())  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="result"):
+        write_calibration_result(object(), Path("output"))  # type: ignore[arg-type]
 
 
 def test_mock_snapshot_has_all_descriptor_resources_with_fictional_identifiers(tmp_path: Path) -> None:

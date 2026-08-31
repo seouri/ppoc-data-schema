@@ -22,6 +22,29 @@ def _row(fields: tuple[str, ...], **values: str) -> dict[str, str]:
     return {field: values.get(field, "") for field in fields}
 
 
+def _fill_required_numeric_values(
+    row: dict[str, str], resource: dict[str, object]
+) -> dict[str, str]:
+    schema = resource["schema"]
+    assert isinstance(schema, dict)
+    fields = schema["fields"]
+    assert isinstance(fields, list)
+    for field in fields:
+        assert isinstance(field, dict)
+        constraints = field.get("constraints") or {}
+        name = field.get("name")
+        field_type = field.get("type")
+        if (
+            isinstance(name, str)
+            and field_type in {"integer", "number"}
+            and isinstance(constraints, dict)
+            and constraints.get("required")
+            and not row[name]
+        ):
+            row[name] = "0" if field_type == "integer" else "0.5"
+    return row
+
+
 def _write_rows(
     root: Path, resource: dict[str, object], rows: list[dict[str, str]], descriptor: dict[str, object]
 ) -> None:
@@ -169,5 +192,8 @@ def write_mock_snapshot(root: Path, *, patient_count: int = 12) -> Path:
         assert isinstance(resource, dict)
         name = resource["name"]
         assert isinstance(name, str)
+        rows_by_name[name] = [
+            _fill_required_numeric_values(row, resource) for row in rows_by_name[name]
+        ]
         _write_rows(root, resource, rows_by_name[name], descriptor)
     return root

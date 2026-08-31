@@ -24,6 +24,37 @@ print(artifact.artifact_id, len(artifact.strata))
 
 Strict keys, types, tokens, support, suppression, and file checks apply; suppressed cells remain null. The loader does not read PPOC CSVs, calibrate prevalence, tune trajectories, validate clinical fidelity, prove non-matchability, or authorize release. Generator consumption, held-out validation, privacy auditing, and an optional Synthea adapter are separate deferred gates.
 
+### Governed aggregate calibration command
+
+Only an authorized operator inside the governed environment may run the offline calibrator against a real snapshot. Every source and policy input is explicit; there is no default data root, environment-variable fallback, hidden-truth input, patient-partition file, or generator-output input:
+
+```sh
+uv run python -m synthetic.calibrate \
+  --data-root /governed/ppoc-snapshot \
+  --descriptor datapackage.json \
+  --snapshot approved-snapshot-v1 \
+  --artifact-id approved-aggregate-v1 \
+  --created-at 2026-08-31T12:00:00Z \
+  --partition-policy /governed/partition-policy.json \
+  --disclosure-policy /governed/disclosure-policy.json \
+  --partition-key-file /governed/partition.key \
+  --output /governed/calibration-output
+```
+
+The partition key file must be a regular non-symlink file. Its exact bytes are read in memory, must contain at least 16 bytes, and are never copied, serialized, or included in the report. Policy JSON is strict: duplicate or unexpected keys fail the run. The requested output must be new and is promoted only after both canonical files are flushed and reparsed successfully:
+
+```text
+calibration-output/
+├── calibration-artifact.json
+└── calibration-report.json
+```
+
+The artifact contains fixed-registry, calibration-partition aggregates for recorded demographics and outcomes, utilization, observation availability and logical-link completeness, and clean age-windowed physiology summaries. Recorded diagnosis flags are observable outcomes, not latent prevalence. Cells below the disclosure policy's minimum support are `suppressed` with null value, support, and denominator; suppression never becomes numeric zero. The separate report has status `AGGREGATES_ONLY` and exposes only aggregate partition/resource totals, target-family and suppression counts, policy identity, checks, and the shared aggregate hash.
+
+Repository CI invokes this path only with the wholly synthetic eight-resource mock package and test key material. No visible generator, CSV exporter, or native trajectory module imports the calibrator, reads its governed input, or consumes the resulting artifact in this slice. The existing generator examples and output contract therefore remain unchanged.
+
+Calibration output is not prevalence validation, representative-cohort evidence, clinical validation, privacy or non-matchability evidence, or release authorization. Held-out fidelity validation, clinical review, privacy auditing, and any future generator-consumption contract remain separate governed gates.
+
 ### Development-only age-regime smoke example
 
 When exercising the latent trajectory layer with an injected reference, cover the five `GrowthRegime` classifier regimes: infancy, transition, childhood, puberty, and adolescence. Infancy runs before the configured transition window; transition spans the configured 24-month window (700–760 days by default, so day 730 is transition); childhood follows that window until the injected puberty schedule; puberty follows onset for its configured tempo; and adolescence continues through the maximum age (including 7305). At every age, generate only two independent anthropometric dimensions: length plus weight before transition, and height plus BMI after transition, with the applicable third value derived explicitly. Do not generate height/length, weight, and BMI as three independent states.
