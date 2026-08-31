@@ -126,6 +126,7 @@ def _report(**changes: object) -> TemporalDriftReport:
         "metric_counts": _metric_counts(),
         "checks": _checks(),
         "comparisons": (_causal_comparison(), _coverage_comparison()),
+        "_window_order": ("early", "late"),
     }
     values.update(changes)
     return TemporalDriftReport(**values)  # type: ignore[arg-type]
@@ -406,6 +407,40 @@ def test_comparison_rejects_difference_or_status_inconsistent_with_bound() -> No
         )
 
 
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"difference": 5e-13},
+        {
+            "status": TemporalDriftStatus.FAIL,
+            "reason_code": "OUTSIDE_BOUND",
+            "observed": 0.25,
+            "target": 0.5,
+            "difference": 0.2500000000005,
+        },
+        {
+            "metric": "mean_inter_visit_days",
+            "status": TemporalDriftStatus.FAIL,
+            "reason_code": "OUTSIDE_BOUND",
+            "observed": 401.0,
+            "target": 400.0,
+            "difference": 1.0000000000005,
+        },
+        {
+            "metric": "mean_visit_count_step",
+            "status": TemporalDriftStatus.FAIL,
+            "reason_code": "OUTSIDE_BOUND",
+            "observed": -3.0,
+            "target": 2.0,
+            "difference": 1.0000000000005,
+        },
+    ],
+)
+def test_comparison_requires_exact_frozen_difference(changes: dict[str, object]) -> None:
+    with pytest.raises(ValueError, match="difference"):
+        _coverage_comparison(**changes)
+
+
 def test_check_uses_only_fixed_name_status_and_reason_vocabularies() -> None:
     check = TemporalCheck("cohort_size", TemporalDriftStatus.PASS, "OK")
 
@@ -533,6 +568,27 @@ def test_report_is_frozen_canonical_aggregate_only_and_exactly_shaped() -> None:
         report.cohort_seed = 9  # type: ignore[misc]
     with pytest.raises(TypeError):
         report.status_counts["PASS"] = 9  # type: ignore[index]
+
+
+def test_report_uses_nonserialized_policy_window_order_not_lexical_ids() -> None:
+    early = _coverage_comparison(window_id="z_early")
+    late = _coverage_comparison(window_id="a_late")
+
+    report = _report(
+        comparisons=(late, early),
+        status_counts={"PASS": 2, "FAIL": 0, "UNEVALUABLE": 0},
+        metric_counts=_metric_counts(growth_window_coverage=2, causal_event_order=0),
+        _window_order=("z_early", "a_late"),
+    )
+
+    assert [comparison.window_id for comparison in report.comparisons] == [
+        "z_early",
+        "a_late",
+    ]
+    assert "_window_order" not in report.to_mapping()
+    assert "_window_order" not in {
+        field.name for field in dataclasses.fields(TemporalDriftReport)
+    }
 
 
 @pytest.mark.parametrize(

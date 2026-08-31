@@ -6,7 +6,7 @@ import json
 import math
 from collections import Counter
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import InitVar, dataclass
 from enum import Enum
 from types import MappingProxyType
 
@@ -300,7 +300,7 @@ class TemporalComparison:
             raise ValueError("target must be nonnegative")
 
         expected_difference = _comparison_difference(self.metric, observed, target)
-        if not math.isclose(difference, expected_difference, rel_tol=0.0, abs_tol=1e-12):
+        if difference != expected_difference:
             raise ValueError("difference must match the temporal metric bound")
         expected_status = (
             TemporalDriftStatus.PASS
@@ -309,7 +309,7 @@ class TemporalComparison:
         )
         if status is not expected_status:
             raise ValueError("status must match the temporal metric bound")
-        object.__setattr__(self, "difference", difference)
+        object.__setattr__(self, "difference", expected_difference)
         object.__setattr__(self, "support_count", support_count)
 
     def to_mapping(self) -> dict[str, object]:
@@ -362,10 +362,26 @@ def _freeze_counts(
     )
 
 
-def _comparison_sort_key(comparison: TemporalComparison) -> tuple[object, ...]:
+def _window_order_index(value: object) -> Mapping[str, int]:
+    if not isinstance(value, tuple):
+        raise TypeError("_window_order must be an immutable tuple")
+    if not value:
+        raise ValueError("_window_order must be a nonempty immutable tuple")
+    for window_id in value:
+        require_aggregate_safe_token(window_id, "_window_order")
+    if len(set(value)) != len(value):
+        raise ValueError("_window_order values must be unique")
+    return MappingProxyType(
+        {window_id: index for index, window_id in enumerate(value)}
+    )
+
+
+def _comparison_sort_key(
+    comparison: TemporalComparison, window_order: Mapping[str, int]
+) -> tuple[object, ...]:
     return (
         _METRIC_ORDER[comparison.metric],
-        "" if comparison.window_id is None else comparison.window_id,
+        -1 if comparison.window_id is None else window_order[comparison.window_id],
         _STATUS_ORDER[comparison.status.value],
     )
 
@@ -385,8 +401,9 @@ class TemporalDriftReport:
     metric_counts: Mapping[str, int]
     checks: tuple[TemporalCheck, ...]
     comparisons: tuple[TemporalComparison, ...]
+    _window_order: InitVar[tuple[str, ...]]
 
-    def __post_init__(self) -> None:
+    def __post_init__(self, _window_order: tuple[str, ...]) -> None:
         if self.report_version != TEMPORAL_DRIFT_REPORT_VERSION:
             raise ValueError(
                 f"report_version must be {TEMPORAL_DRIFT_REPORT_VERSION}"
@@ -422,7 +439,21 @@ class TemporalDriftReport:
         ):
             raise TypeError("comparisons must contain TemporalComparison values")
 
-        comparisons = tuple(sorted(self.comparisons, key=_comparison_sort_key))
+        window_order = _window_order_index(_window_order)
+        if any(
+            comparison.window_id is not None
+            and comparison.window_id not in window_order
+            for comparison in self.comparisons
+        ):
+            raise ValueError("comparison window_id must belong to _window_order")
+        comparisons = tuple(
+            sorted(
+                self.comparisons,
+                key=lambda comparison: _comparison_sort_key(
+                    comparison, window_order
+                ),
+            )
+        )
         counted_statuses = Counter(
             comparison.status.value for comparison in comparisons
         )
