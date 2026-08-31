@@ -9,9 +9,11 @@ from pathlib import Path
 import pytest
 
 from synthetic.cohort import generate_native_cohort
+from synthetic.cohort_validation import validate_native_cohort
 
 ROOT = Path(__file__).resolve().parents[2]
 COHORT = ROOT / "src" / "synthetic" / "cohort.py"
+COHORT_VALIDATION = ROOT / "src" / "synthetic" / "cohort_validation.py"
 GUIDE = ROOT / "docs" / "synthetic-generator.md"
 README = ROOT / "README.md"
 VISIBLE_NATIVE_GENERATION = (
@@ -279,6 +281,69 @@ def test_importing_cohort_does_not_load_governed_target_runtime_dependencies() -
 
     assert result.returncode == 0, result.stderr
     assert result.stdout.splitlines() == ["False", "False"]
+
+
+def test_cohort_validation_has_no_governed_input_or_output_lifecycle_boundary() -> None:
+    """Catches the profile evaluator gaining a governed or filesystem dependency."""
+    source = COHORT_VALIDATION.read_text(encoding="utf-8")
+    imports, calls, arguments = _scan(source, "synthetic.cohort_validation")
+
+    assert _forbidden_modules(imports) == set()
+    assert _forbidden_calls(calls) == set()
+    assert _forbidden_arguments(arguments) == set()
+    assert "duckdb" not in source.lower()
+    assert "pathlib" not in source.lower()
+    assert "Path" not in source
+    assert _forbidden_arguments(
+        set(inspect.signature(validate_native_cohort).parameters)
+    ) == set()
+
+
+def test_importing_cohort_validation_does_not_load_governed_target_dependencies() -> None:
+    """Catches profile import transitively loading governed or database runtimes."""
+    probe = (
+        "import sys; import synthetic.cohort_validation; "
+        "print('duckdb' in sys.modules); "
+        "print('synthetic.calibration_input' in sys.modules); "
+        "print('synthetic.heldout_validate' in sys.modules); "
+        "print('synthetic.privacy_audit' in sys.modules)"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", probe],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == ["False", "False", "False", "False"]
+
+
+def test_production_cli_remains_fail_closed_after_profile_addition(tmp_path: Path) -> None:
+    """Catches documentation integration accidentally enabling the production CLI."""
+    output = tmp_path / "unavailable-package"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "synthetic.generate",
+            "--output",
+            str(output),
+            "--patients",
+            "1",
+            "--seed",
+            "20260831",
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "No production growth reference or authoritative derivation oracle is configured" in result.stderr
+    assert not output.exists()
 
 
 def test_visible_native_generation_has_no_governed_or_package_lifecycle_dependency() -> None:

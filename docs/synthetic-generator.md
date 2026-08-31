@@ -89,6 +89,56 @@ The blank/nonresponse ethnicity or race category remains a distinct aggregate ce
 
 This API is development orchestration, not evidence of prevalence validation, demographic representativeness, held-out validation, privacy/non-matchability, clinical validity, task utility, ancillary resources or clinical pathways, authoritative derivation, release approval, or Synthea conformance. Those remain separate deferred gates; the production smoke CLI remains fail closed.
 
+## Evaluator-only native cohort fidelity profile
+
+`validate_native_cohort(cohort, policy)` evaluates one previously generated, completely fictional `NativeCohort` in memory. It returns an immutable `CohortValidationReport` and never generates or mutates members, reads a path, accepts a row, key, held-out report, privacy report, package, or hidden truth object, or changes the fail-closed production smoke CLI. The evaluator is useful for development preflight and counterfactual fixture checks; its aggregate output is not a release artifact.
+
+Construct a `CohortValidationPolicy` before evaluation so the cohort-size minimum, evidence-support minima, demographic tolerance, zero-centered growth bounds, and half-open age windows are explicit. The exact public API is `CohortValidationPolicy`, `CohortValidationStatus`, `CohortValidationReport`, and `validate_native_cohort` from `synthetic.cohort_validation`:
+
+```python
+from synthetic.cohort_validation import (
+    CohortValidationPolicy,
+    CohortValidationStatus,
+    validate_native_cohort,
+)
+
+cohort = build_development_cohort(artifact, descriptor_mapping)
+policy = CohortValidationPolicy(
+    policy_id="native-profile-v1",
+    policy_version="1",
+    minimum_cohort_size=50,
+    minimum_cell_support=5,
+    minimum_event_support=5,
+    proportion_tolerance=0.10,
+    growth_tolerances={
+        "height_z_score": 3.0,
+        "bmi_z_score": 3.0,
+        "height_velocity_cm_per_year": 20.0,
+        "weight_velocity_kg_per_year": 20.0,
+    },
+    required_age_windows=(
+        ("infancy", 0, 730),
+        ("childhood", 730, 3650),
+        ("adolescence", 3650, 7305),
+    ),
+)
+report = validate_native_cohort(cohort, policy)
+assert report.status in (
+    CohortValidationStatus.PASS,
+    CohortValidationStatus.FAIL,
+    CohortValidationStatus.UNEVALUABLE,
+)
+print(report.to_mapping())
+```
+
+The report keeps visible demographics and the separate aggregate checks named `latent_module.<module>`, `observable_phenotype`, `recorded_recognition`, `recorded_workup`, and `recorded_diagnosis`; these correspond to the latent module, observable phenotype, recorded recognition, recorded workup, and recorded diagnosis layers. The visible demographic checks apply the same blank/nonresponse projection used by native generation: an empty aggregate ethnicity or race category becomes visible `Unknown`, and primary race is the first race slot. A visible category is never presented as recovery of an unrecoverable source value.
+
+The growth summaries use the canonical metrics `height_z_score`, `bmi_z_score`, `height_velocity_cm_per_year`, and `weight_velocity_kg_per_year`. Each required half-open `[lower, upper)` window emits a `growth.<window>.<metric>_mean` comparison; finite values are averaged, and the first point's missing velocity is omitted. The declared bounds are zero-centered development tolerances, not WHO/CDC reference targets or clinical validity criteria. Coverage checks report only aggregate cohort size, members with an observation, and members with a recorded event.
+
+`PASS` means the evaluated structural, demographic, growth, and configured sanity checks met their policy; `FAIL` means at least one check was invalid or outside tolerance; `UNEVALUABLE` means no check failed but required evidence was too small or missing. Overall status precedence is `FAIL` over `UNEVALUABLE` over `PASS`. Layer diagnostics have no real-data target: a healthy latent module is not a real `healthy_flag`, an observable phenotype is not a recorded diagnosis, and recorded flags do not allocate latent disease.
+
+The profile report is evaluator-only aggregate diagnostics, not prevalence validation, demographic representativeness, held-out validation, clinical validity, privacy evidence, non-matchability proof, package or release evidence, task utility, ancillary clinical pathways, authoritative derivation, or Synthea evidence. It does not prove that a generated patient profile cannot be matched to a real patient; use the separately governed privacy evaluation for qualified, policy-bound evidence, which also cannot prove non-matchability. The production smoke CLI, exact-schema package exporter, held-out validator, privacy auditor, and optional Synthea route remain unchanged and separately gated.
+
 ### Governed aggregate calibration command
 
 Only an authorized operator inside the governed environment may run the offline calibrator against a real snapshot. Every source and policy input is explicit; there is no default data root, environment-variable fallback, hidden-truth input, patient-partition file, or generator-output input:
