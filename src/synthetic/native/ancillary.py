@@ -158,6 +158,7 @@ _ANCILLARY_REQUIRED_FIELDS: Mapping[str, frozenset[str]] = MappingProxyType(
     }
 )
 _SYNTHETIC_PATIENT_TOKEN = re.compile(r"^syn-[A-Za-z0-9][A-Za-z0-9._-]*$")
+_SYNTHETIC_VISIT_TOKEN = re.compile(r"^syn-[A-Za-z0-9][A-Za-z0-9._:-]*$")
 _AGGREGATE_TOKEN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
 _AGGREGATE_UNSAFE_COMPONENTS = frozenset(
     {
@@ -796,6 +797,15 @@ def validate_ghd_ancillary_resources(
                     mark("row_schema", AncillaryValidationStatus.FAIL, fixed_reason)
                 if values.get("patient_id") != projection.patient_id:
                     mark("cross_resource_links", AncillaryValidationStatus.FAIL, "PATIENT_MISMATCH")
+                if resource_name in {"labs", "medications", "referrals"} and (
+                    not isinstance(values.get("visit_id"), str)
+                    or _SYNTHETIC_VISIT_TOKEN.fullmatch(values["visit_id"]) is None
+                ):
+                    mark(
+                        "cross_resource_links",
+                        AncillaryValidationStatus.FAIL,
+                        "VISIT_REFERENCE_INVALID",
+                    )
                 if resource_name == "labs" and values.get("result_component_name") not in GHD_LAB_COMPONENT_NAMES:
                     mark("row_schema", AncillaryValidationStatus.FAIL, "INVALID_CODE")
                 if resource_name == "problem_list" and values.get("pl_diag") != GHD_DIAGNOSIS_CODE:

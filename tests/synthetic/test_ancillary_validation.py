@@ -230,6 +230,24 @@ def test_validator_keeps_visible_empty_pairing_timing_and_identity_failures_abov
     assert _check(report, "cross_resource_links")[0] is AncillaryValidationStatus.FAIL
 
 
+def test_validator_rejects_empty_required_visit_tokens_without_private_truth() -> None:
+    for resource in ("labs", "medications", "referrals"):
+        member, projection = _projection()
+        row = projection.rows[resource][0]
+        object.__setattr__(
+            row,
+            "values",
+            tuple((name, "" if name == "visit_id" else value) for name, value in row.values),
+        )
+        report = validate_ghd_ancillary_resources(_without_truth(member), projection, _policy())
+        assert report.status is AncillaryValidationStatus.FAIL
+        assert _check(report, "cross_resource_links") == (
+            AncillaryValidationStatus.FAIL,
+            "VISIT_REFERENCE_INVALID",
+        )
+        assert _check(report, "source_evidence")[0] is AncillaryValidationStatus.UNEVALUABLE
+
+
 def test_validator_marks_malformed_private_evidence_unevaluable_unless_row_is_invalid() -> None:
     member, projection = _projection()
     malformed_frame = dataclasses.replace(member.frame)
