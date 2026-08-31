@@ -162,6 +162,48 @@ def test_descriptor_base_resource_order_mismatch_fails_closed() -> None:
     assert reference.calls == 0
 
 
+@pytest.mark.parametrize(
+    ("resource_name", "field_name"),
+    [("visits", "height_in"), ("patients", "race_8")],
+)
+def test_missing_required_projection_field_fails_before_patient_draws(
+    resource_name: str,
+    field_name: str,
+) -> None:
+    descriptor = copy.deepcopy(_descriptor())
+    resource = next(
+        item
+        for item in descriptor["resources"]  # type: ignore[index]
+        if item["name"] == resource_name
+    )
+    resource["schema"]["fields"] = [  # type: ignore[index]
+        field
+        for field in resource["schema"]["fields"]  # type: ignore[index]
+        if field["name"] != field_name
+    ]
+
+    class RecordingReference(RegimeLinearTestReference):
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def value(self, metric: str, age_days: int, reference_sex: str, z: float) -> float:
+            self.calls += 1
+            return super().value(metric, age_days, reference_sex, z)
+
+    reference = RecordingReference()
+    with pytest.raises(CohortGenerationUnavailable) as error:
+        generate_native_cohort(
+            _config(patient_count=1),
+            reference,
+            _calibration(),
+            modules=_modules(),
+            descriptor=descriptor,
+        )
+
+    assert error.value.args == ("native cohort generation failed",)
+    assert reference.calls == 0
+
+
 def test_global_visit_identifier_collision_fails_closed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

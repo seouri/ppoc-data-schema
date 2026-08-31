@@ -57,6 +57,27 @@ _OBSERVED_STRATUM_ID = "outcome_layer=observed"
 _SEX_CATEGORIES = tuple(SEX_CATEGORY_SLUGS)
 _ETHNICITY_CATEGORIES = tuple(ETHNICITY_CATEGORY_SLUGS)
 _RACE_CATEGORIES = tuple(RACE_CATEGORY_SLUGS)
+_REQUIRED_PATIENT_RESOURCE_FIELDS = frozenset(
+    {
+        "patient_id",
+        "sex",
+        "ethnicity",
+        *(f"race_{index}" for index in range(1, 9)),
+    }
+)
+_REQUIRED_VISIT_RESOURCE_FIELDS = frozenset(
+    {
+        "patient_id",
+        "visit_id",
+        "age_in_days",
+        "encounter_type",
+        "orig_enc_source_Epic_yn",
+        "weight_oz",
+        "height_in",
+        "head_circ_cm",
+        "BMI",
+    }
+)
 
 
 class CohortGenerationUnavailable(ValueError):
@@ -84,6 +105,15 @@ def _resource_projection_contract(
         raise ValueError("base descriptor resources must use the fixed order")
 
     shape = ResourceShape.from_descriptor(descriptor)
+    required_fields = (
+        ("patients", _REQUIRED_PATIENT_RESOURCE_FIELDS),
+        ("visits", _REQUIRED_VISIT_RESOURCE_FIELDS),
+    )
+    for resource_name, required in required_fields:
+        if required.difference(shape.field_names(resource_name)):
+            raise ValueError(
+                f"{resource_name} descriptor lacks required projection fields"
+            )
     projection_descriptor: dict[str, object] = {
         "resources": [
             {
