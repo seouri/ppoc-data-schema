@@ -7,6 +7,7 @@ import pytest
 from synthetic.models import (
     ClinicalEvent,
     DisorderKind,
+    GrowthRegime,
     PatientState,
 )
 from synthetic.native.age_regime_disorder import AgeRegimeDisorderKernel
@@ -286,6 +287,129 @@ def test_treatment_validation_is_unevaluable_when_the_manipulated_layer_is_uncha
     assert report.status is CounterfactualValidationStatus.UNEVALUABLE
     assert permitted_changes.status is CounterfactualValidationStatus.UNEVALUABLE
     assert permitted_changes.reason_code == "MANIPULATED_LAYER_UNCHANGED"
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("code", "tampered-treatment"), ("hidden", True)],
+)
+def test_treatment_adherence_rejects_treatment_event_payload_tampering(
+    field: str, value: object
+) -> None:
+    pair = generate_counterfactual_pair(
+        _treated_ghd_kernel(),
+        PATIENT,
+        (0, 365, 730, 900, 999, 1000, 1200, 1500, 2500, 4000),
+        SEED,
+        INDEX,
+        InterventionKind.TREATMENT_ADHERENCE,
+    )
+    events = list(pair.intervention.events)
+    index = next(
+        index for index, event in enumerate(events) if event.event_type == "treatment_start"
+    )
+    events[index] = dataclasses.replace(events[index], **{field: value})
+    tampered = dataclasses.replace(
+        pair,
+        intervention=dataclasses.replace(pair.intervention, events=tuple(events)),
+    )
+
+    report = validate_counterfactual_pair(tampered)
+
+    assert report.status is CounterfactualValidationStatus.FAIL
+    assert any(check.reason_code == "TREATMENT_PAYLOAD_MISMATCH" for check in report.checks)
+
+
+def _strip_growth_z_scores(trajectory: object, *, stature: bool, mass: bool):
+    points = []
+    for point in trajectory.physiology.points:  # type: ignore[attr-defined]
+        points.append(
+            dataclasses.replace(
+                point,
+                length_z=None if stature else point.length_z,
+                height_z=None if stature else point.height_z,
+                weight_z=None if mass else point.weight_z,
+                bmi_z=None if mass else point.bmi_z,
+            )
+        )
+    return dataclasses.replace(trajectory, physiology=dataclasses.replace(  # type: ignore[attr-defined]
+        trajectory.physiology, points=tuple(points)  # type: ignore[attr-defined]
+    ))
+
+
+@pytest.mark.parametrize(
+    ("stature", "mass"),
+    [(True, True), (True, False), (False, True)],
+)
+def test_missing_or_partial_growth_z_score_evidence_is_unevaluable(
+    stature: bool, mass: bool
+) -> None:
+    pair = generate_counterfactual_pair(
+        _familial_kernel(),
+        PATIENT,
+        (0, 365, 730, 1460, 1825, 2190, 4000),
+        SEED,
+        INDEX,
+        InterventionKind.EARLIER_RECOGNITION,
+    )
+    malformed = dataclasses.replace(
+        pair,
+        baseline=_strip_growth_z_scores(pair.baseline, stature=stature, mass=mass),
+        intervention=_strip_growth_z_scores(pair.intervention, stature=stature, mass=mass),
+    )
+
+    report = validate_counterfactual_pair(malformed)
+    age_coverage = next(check for check in report.checks if check.name == "age_coverage")
+
+    assert report.status is CounterfactualValidationStatus.UNEVALUABLE
+    assert age_coverage.status is CounterfactualValidationStatus.UNEVALUABLE
+    assert age_coverage.reason_code == "GROWTH_EVIDENCE_MISSING"
+
+
+def test_missing_growth_evidence_in_one_world_is_not_a_forbidden_change() -> None:
+    pair = generate_counterfactual_pair(
+        _familial_kernel(),
+        PATIENT,
+        (0, 365, 730, 1460, 1825, 2190, 4000),
+        SEED,
+        INDEX,
+        InterventionKind.EARLIER_RECOGNITION,
+    )
+    malformed = dataclasses.replace(
+        pair,
+        baseline=_strip_growth_z_scores(pair.baseline, stature=True, mass=True),
+    )
+
+    report = validate_counterfactual_pair(malformed)
+    age_coverage = next(check for check in report.checks if check.name == "age_coverage")
+
+    assert report.status is CounterfactualValidationStatus.UNEVALUABLE
+    assert age_coverage.status is CounterfactualValidationStatus.UNEVALUABLE
+
+
+def test_point_level_growth_regime_label_tampering_fails_validation() -> None:
+    pair = generate_counterfactual_pair(
+        _familial_kernel(),
+        PATIENT,
+        (0, 365, 730, 1460, 1825, 2190, 4000),
+        SEED,
+        INDEX,
+        InterventionKind.EARLIER_RECOGNITION,
+    )
+    points = list(pair.intervention.physiology.points)
+    points[3] = dataclasses.replace(points[3], regime=GrowthRegime.PUBERTY)
+    tampered = dataclasses.replace(
+        pair,
+        intervention=dataclasses.replace(
+            pair.intervention,
+            physiology=dataclasses.replace(pair.intervention.physiology, points=tuple(points)),
+        ),
+    )
+
+    report = validate_counterfactual_pair(tampered)
+
+    assert report.status is CounterfactualValidationStatus.FAIL
+    assert any(check.reason_code == "INVARIANT_LAYER_CHANGED" for check in report.checks)
 
 
 @pytest.mark.parametrize("invalid_age", [False, 0.5, -1])

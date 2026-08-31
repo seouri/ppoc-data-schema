@@ -234,6 +234,32 @@ def test_truth_manifest_write_failure_removes_partial_and_allows_retry(
     assert destination.is_file()
 
 
+def test_truth_manifest_verification_does_not_read_or_remove_recreated_child(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pair, report = _validated_pair()
+    destination = tmp_path / "truth.json"
+    swapped = False
+    real_read = counterfactual_module.os.read
+
+    def swapping_read(descriptor: int, size: int) -> bytes:
+        nonlocal swapped
+        if not swapped:
+            destination.unlink()
+            destination.write_bytes(b"attacker replacement")
+            swapped = True
+        return real_read(descriptor, size)
+
+    monkeypatch.setattr(counterfactual_module.os, "read", swapping_read)
+
+    with pytest.raises(ValueError, match="could not be verified"):
+        write_truth_manifest(pair, report, destination)
+
+    assert swapped
+    assert destination.read_bytes() == b"attacker replacement"
+
+
 @pytest.mark.parametrize("destination", ["truth.json", Path("a") / ".." / "truth.json"])
 def test_truth_manifest_rejects_non_path_or_traversal_destination(
     tmp_path: Path, destination: object

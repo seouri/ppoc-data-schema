@@ -652,11 +652,13 @@ _REASON_CODES = frozenset(
         "STREAM_REUSE_MISMATCH",
         "EVENT_ORDER_INVALID",
         "AGE_COVERAGE_INVALID",
+        "GROWTH_EVIDENCE_MISSING",
         "INVARIANT_LAYER_CHANGED",
         "FORBIDDEN_LAYER_CHANGED",
         "MANIPULATED_LAYER_UNCHANGED",
         "ASSERTION_FAILED",
         "ASSERTION_UNEVALUABLE",
+        "TREATMENT_PAYLOAD_MISMATCH",
         "MALFORMED_PAIR",
     }
 )
@@ -806,7 +808,13 @@ def _layer_value(
     matrix: CounterfactualChangeMatrix,
 ) -> object:
     if layer is CausalLayer.AGE_REGIME:
-        return trajectory.physiology.state
+        return {
+            "state": trajectory.physiology.state,
+            "point_regimes": tuple(
+                (point.age_days, point.regime)
+                for point in trajectory.physiology.points
+            ),
+        }
     if layer is CausalLayer.LATENT_DISORDER:
         state = trajectory.disorder
         if matrix.intervention is InterventionKind.TREATMENT_ADHERENCE:
@@ -837,7 +845,7 @@ def _layer_value(
             "treatment_start_age_days": state.treatment_start_age_days,
             "treatment_response": state.treatment_response,
             "events": tuple(
-                (event.event_type, event.age_days)
+                (event.event_type, event.age_days, event.code, event.hidden)
                 for event in trajectory.events
                 if event.event_type in _TREATMENT_EVENT_TYPES
             ),
@@ -869,12 +877,32 @@ def _layer_hashes(
 def _growth_values(
     trajectory: AgeRegimeDisorderTrajectory,
 ) -> tuple[tuple[int, float | None, float | None], ...]:
+    """Return the minimum paired z-score evidence used by this contract.
+
+    Every requested point must expose one stature z-score (``height_z`` or
+    ``length_z``) and one mass z-score (``bmi_z`` or ``weight_z``).  The
+    native age-regime kernel supplies exactly those dimensions in each regime;
+    allowing a point with only raw centimetres/kilograms would make the
+    causal growth assertions unevaluable while still permitting an apparent
+    pass.
+    """
+
     values: list[tuple[int, float | None, float | None]] = []
     for point in trajectory.physiology.points:
         height_z = point.height_z if point.height_z is not None else point.length_z
         mass_z = point.bmi_z if point.bmi_z is not None else point.weight_z
         values.append((point.age_days, height_z, mass_z))
     return tuple(values)
+
+
+def _growth_evidence_complete(pair: CounterfactualPair) -> bool:
+    """Return whether both worlds meet the minimum z-score evidence contract."""
+
+    return all(
+        stature_z is not None and mass_z is not None
+        for trajectory in (pair.baseline, pair.intervention)
+        for _age, stature_z, mass_z in _growth_values(trajectory)
+    )
 
 
 def _aligned_growth_values(
@@ -1011,10 +1039,17 @@ def _check_age_coverage(pair: CounterfactualPair):
                 or not math.isfinite(float(value))
             ):
                 return CounterfactualValidationStatus.FAIL, "AGE_COVERAGE_INVALID"
+    if not _growth_evidence_complete(pair):
+        return CounterfactualValidationStatus.UNEVALUABLE, "GROWTH_EVIDENCE_MISSING"
     return CounterfactualValidationStatus.PASS, "OK"
 
 
 def _check_invariant_layers(pair: CounterfactualPair):
+    if (
+        CausalLayer.GROWTH_PHYSIOLOGY in pair.matrix.required_invariants
+        and not _growth_evidence_complete(pair)
+    ):
+        return CounterfactualValidationStatus.UNEVALUABLE, "GROWTH_EVIDENCE_MISSING"
     hashes = _layer_hashes(pair)
     for layer in pair.matrix.required_invariants:
         baseline_hash, intervention_hash = hashes[layer]
@@ -1024,6 +1059,8 @@ def _check_invariant_layers(pair: CounterfactualPair):
 
 
 def _check_permitted_changes(pair: CounterfactualPair):
+    if not _growth_evidence_complete(pair):
+        return CounterfactualValidationStatus.UNEVALUABLE, "GROWTH_EVIDENCE_MISSING"
     hashes = _layer_hashes(pair)
     changed = {
         layer
@@ -1038,6 +1075,11 @@ def _check_permitted_changes(pair: CounterfactualPair):
         and not _changes_only_recognition_timing(pair)
     ):
         return CounterfactualValidationStatus.FAIL, "FORBIDDEN_LAYER_CHANGED"
+    if (
+        pair.matrix.intervention is InterventionKind.TREATMENT_ADHERENCE
+        and not _treatment_event_payloads_match(pair)
+    ):
+        return CounterfactualValidationStatus.FAIL, "TREATMENT_PAYLOAD_MISMATCH"
     if not pair.matrix.manipulated_nodes.issubset(changed):
         return CounterfactualValidationStatus.UNEVALUABLE, "MANIPULATED_LAYER_UNCHANGED"
     return CounterfactualValidationStatus.PASS, "OK"
@@ -1052,6 +1094,39 @@ def _changes_only_recognition_timing(pair: CounterfactualPair) -> bool:
     baseline = tuple(timing_scoped_event(event) for event in pair.baseline.events)
     intervention = tuple(timing_scoped_event(event) for event in pair.intervention.events)
     return baseline == intervention
+
+
+def _treatment_event_payloads_match(pair: CounterfactualPair) -> bool:
+    """Require adherence worlds to preserve treatment event payloads.
+
+    Adherence changes the latent response and therefore may switch the outcome
+    event between ``treatment_response`` and ``treatment_nonresponse``.  It
+    does not change the event's recorded age, code, hidden marker, patient, or
+    treatment-start event.  Checking those fields separately prevents a
+    payload tamper from being accepted merely because treatment is the
+    manipulated causal layer.
+    """
+
+    baseline = tuple(
+        event
+        for event in pair.baseline.events
+        if event.event_type in _TREATMENT_EVENT_TYPES
+    )
+    intervention = tuple(
+        event
+        for event in pair.intervention.events
+        if event.event_type in _TREATMENT_EVENT_TYPES
+    )
+    if len(baseline) != len(intervention):
+        return False
+    for left, right in zip(baseline, intervention, strict=True):
+        if left.age_days != right.age_days or left.code != right.code:
+            return False
+        if left.hidden != right.hidden or (
+            left.event_type == "treatment_start"
+        ) != (right.event_type == "treatment_start"):
+            return False
+    return True
 
 
 def _recognition_ages(trajectory: AgeRegimeDisorderTrajectory) -> tuple[int, ...]:
@@ -1195,6 +1270,8 @@ def _evaluate_assertion(pair: CounterfactualPair, assertion: str):
 
 
 def _check_trajectory_assertions(pair: CounterfactualPair):
+    if not _growth_evidence_complete(pair):
+        return CounterfactualValidationStatus.UNEVALUABLE, "GROWTH_EVIDENCE_MISSING"
     unevaluable = False
     for assertion in sorted(pair.matrix.trajectory_assertions):
         status, reason_code = _evaluate_assertion(pair, assertion)
@@ -1574,6 +1651,7 @@ def _open_regular_parent(path: Path) -> tuple[Path, int]:
         nofollow is None
         or directory is None
         or os.open not in supports_dir_fd
+        or os.stat not in supports_dir_fd
         or os.unlink not in supports_dir_fd
     ):
         raise ValueError("truth manifest requires descriptor-relative path operations")
@@ -1606,32 +1684,16 @@ def _open_regular_parent(path: Path) -> tuple[Path, int]:
     return absolute, descriptor
 
 
-def _read_truth_manifest_bytes(parent_descriptor: int, name: str) -> bytes:
-    nofollow = getattr(os, "O_NOFOLLOW", None)
-    supports_dir_fd = getattr(os, "supports_dir_fd", ())
-    if nofollow is None or os.open not in supports_dir_fd:
-        raise ValueError("truth manifest requires secure no-follow opening")
-    try:
-        descriptor = os.open(
-            name,
-            os.O_RDONLY
-            | nofollow
-            | getattr(os, "O_NONBLOCK", 0)
-            | getattr(os, "O_CLOEXEC", 0),
-            dir_fd=parent_descriptor,
-        )
-    except FileNotFoundError:
-        raise ValueError("truth manifest output disappeared") from None
-    except OSError as exc:
-        if exc.errno == ELOOP:
-            raise ValueError("truth manifest must be a regular non-symlink file") from None
-        raise ValueError("truth manifest could not be securely opened") from None
+def _read_truth_manifest_descriptor(descriptor: int) -> bytes:
+    """Read a created manifest through its still-open child descriptor."""
+
     try:
         metadata = os.fstat(descriptor)
         if not stat.S_ISREG(metadata.st_mode):
             raise ValueError("truth manifest must be a regular non-symlink file")
         if metadata.st_size > MAX_TRUTH_MANIFEST_BYTES:
             raise ValueError("truth manifest exceeds the maximum size")
+        os.lseek(descriptor, 0, os.SEEK_SET)
         chunks: list[bytes] = []
         total = 0
         while total <= MAX_TRUTH_MANIFEST_BYTES:
@@ -1641,13 +1703,10 @@ def _read_truth_manifest_bytes(parent_descriptor: int, name: str) -> bytes:
             chunks.append(chunk)
             total += len(chunk)
         final_metadata = os.fstat(descriptor)
+    except ValueError:
+        raise
     except OSError:
         raise ValueError("truth manifest could not be read") from None
-    finally:
-        try:
-            os.close(descriptor)
-        except OSError:
-            pass
     payload = b"".join(chunks)
     if (
         len(payload) > MAX_TRUTH_MANIFEST_BYTES
@@ -1658,7 +1717,41 @@ def _read_truth_manifest_bytes(parent_descriptor: int, name: str) -> bytes:
     return payload
 
 
-def _remove_truth_manifest_entry(parent_descriptor: int, name: str) -> None:
+def _truth_manifest_identity(metadata: os.stat_result) -> tuple[int, int]:
+    return metadata.st_dev, metadata.st_ino
+
+
+def _truth_manifest_entry_matches(
+    parent_descriptor: int,
+    name: str,
+    identity: tuple[int, int],
+) -> bool:
+    """Return whether the child name still denotes the created inode."""
+
+    try:
+        metadata = os.stat(name, dir_fd=parent_descriptor, follow_symlinks=False)
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return False
+    return stat.S_ISREG(metadata.st_mode) and _truth_manifest_identity(metadata) == identity
+
+
+def _remove_truth_manifest_entry_if_owned(
+    parent_descriptor: int,
+    name: str,
+    identity: tuple[int, int],
+) -> None:
+    """Remove only the child inode created by this invocation.
+
+    A failed write or verification must not unlink a same-name file that an
+    attacker installed after unlinking the created child.  The descriptor-
+    pinned identity check is deliberately performed immediately before the
+    unlink; a replacement is left untouched when it no longer matches.
+    """
+
+    if not _truth_manifest_entry_matches(parent_descriptor, name, identity):
+        return
     try:
         os.unlink(name, dir_fd=parent_descriptor)
     except FileNotFoundError:
@@ -1685,13 +1778,15 @@ def _write_truth_manifest_exclusive(
     parent_descriptor: int,
     name: str,
     payload: bytes,
-) -> None:
+) -> tuple[int, tuple[int, int]]:
     """Create, write, and fsync one new child of a pinned directory.
 
     Direct descriptor-relative ``O_EXCL|O_NOFOLLOW`` creation avoids both
     ancestor TOCTOU races and a temporary-source hard-link publication.  If
     writing or fsyncing fails, the child is unlinked through the same pinned
-    descriptor so callers can retry without a partial requested artifact.
+    descriptor so callers can retry without a partial requested artifact.  On
+    success, the child descriptor remains open for identity-pinned
+    verification by the caller.
     """
 
     nofollow = getattr(os, "O_NOFOLLOW", None)
@@ -1699,7 +1794,7 @@ def _write_truth_manifest_exclusive(
     if nofollow is None or os.open not in supports_dir_fd:
         raise ValueError("truth manifest requires secure no-replace creation")
     flags = (
-        os.O_WRONLY
+        os.O_RDWR
         | os.O_CREAT
         | os.O_EXCL
         | nofollow
@@ -1714,6 +1809,15 @@ def _write_truth_manifest_exclusive(
             raise ValueError("truth manifest must be a regular non-symlink file") from None
         raise ValueError("truth manifest could not be created") from None
 
+    try:
+        identity = _truth_manifest_identity(os.fstat(descriptor))
+    except OSError:
+        try:
+            os.close(descriptor)
+        except OSError:
+            pass
+        raise ValueError("truth manifest could not be created") from None
+
     failure: Exception | None = None
     try:
         view = memoryview(payload)
@@ -1725,19 +1829,20 @@ def _write_truth_manifest_exclusive(
         os.fsync(descriptor)
     except OSError:
         failure = ValueError("truth manifest could not be written")
-    finally:
+    if failure is not None:
         try:
             os.close(descriptor)
         except OSError:
-            if failure is None:
-                failure = ValueError("truth manifest could not be closed")
+            failure = ValueError("truth manifest could not be closed")
 
     if failure is not None:
         try:
-            _remove_truth_manifest_entry(parent_descriptor, name)
+            _remove_truth_manifest_entry_if_owned(parent_descriptor, name, identity)
         except ValueError:
             failure = ValueError("truth manifest output could not be cleared")
         raise failure
+
+    return descriptor, identity
 
 
 def write_truth_manifest(
@@ -1759,11 +1864,20 @@ def write_truth_manifest(
     if not output.name:
         raise ValueError("truth manifest destination path is invalid")
     _absolute_parent, parent_descriptor = _open_regular_parent(output.parent)
+    child_descriptor: int | None = None
+    child_identity: tuple[int, int] | None = None
     try:
         payload = _truth_manifest_json_bytes(_truth_manifest_mapping(pair, report))
-        _write_truth_manifest_exclusive(parent_descriptor, output.name, payload)
+        child_descriptor, child_identity = _write_truth_manifest_exclusive(
+            parent_descriptor, output.name, payload
+        )
+        verification_error: Exception | None = None
         try:
-            written = _read_truth_manifest_bytes(parent_descriptor, output.name)
+            written = _read_truth_manifest_descriptor(child_descriptor)
+            if not _truth_manifest_entry_matches(
+                parent_descriptor, output.name, child_identity
+            ):
+                raise ValueError("truth manifest output changed during verification")
             if written != payload:
                 raise ValueError("truth manifest output is not canonical")
             parsed = json.loads(
@@ -1774,10 +1888,32 @@ def write_truth_manifest(
                 raise TypeError("truth manifest output is not an object")
             if _truth_manifest_json_bytes(parsed) != written:
                 raise ValueError("truth manifest output is not canonical")
+            if not _truth_manifest_entry_matches(
+                parent_descriptor, output.name, child_identity
+            ):
+                raise ValueError("truth manifest output changed during verification")
         except (OSError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
-            _remove_truth_manifest_entry(parent_descriptor, output.name)
-            raise ValueError("truth manifest output could not be verified") from None
+            verification_error = ValueError("truth manifest output could not be verified")
+        finally:
+            try:
+                os.close(child_descriptor)
+            except OSError:
+                if verification_error is None:
+                    verification_error = ValueError(
+                        "truth manifest output could not be verified"
+                    )
+            child_descriptor = None
+        if verification_error is not None:
+            _remove_truth_manifest_entry_if_owned(
+                parent_descriptor, output.name, child_identity
+            )
+            raise verification_error
     finally:
+        if child_descriptor is not None:
+            try:
+                os.close(child_descriptor)
+            except OSError:
+                pass
         try:
             os.close(parent_descriptor)
         except OSError:
