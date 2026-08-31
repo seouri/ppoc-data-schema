@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import traceback
 from pathlib import Path
 
 import pytest
@@ -25,6 +26,20 @@ def test_private_package_loader_enforces_marker_schema_and_private_profiles(tmp_
     assert len(real._trajectory_signatures) > 0
     assert len(real._profile_signatures) > 0
     assert real._profiles[0]._profile_signature != real._profiles[0]._trajectory_signature
+
+
+def test_private_package_loader_traceback_does_not_retain_source_path(tmp_path: Path) -> None:
+    """Catches descriptor open paths surviving in the private loader exception chain."""
+    sentinel = "PRIVATE" + "-PACKAGE-PATH"
+    root = tmp_path / sentinel
+
+    with pytest.raises(ValueError, match="^package descriptor or marker is invalid$") as error:
+        _load_private_package(root, synthetic=True, longitudinal_minimum=3)
+
+    formatted = "".join(traceback.format_exception(error.value))
+    assert str(root) not in formatted
+    assert sentinel not in formatted
+    assert error.value.__cause__ is None
 
 
 @pytest.mark.parametrize("synthetic", [True, False])
@@ -109,8 +124,11 @@ def test_private_package_loader_rejects_symlinked_resource_without_identifier_ec
     with pytest.raises(ValueError) as error:
         _load_private_package(root, synthetic=True, longitudinal_minimum=3)
 
-    assert "GEN-P-001" not in str(error.value)
-    assert "GEN-V-001" not in str(error.value)
+    formatted = "".join(traceback.format_exception(error.value))
+    assert "GEN-P-001" not in formatted
+    assert "GEN-V-001" not in formatted
+    assert str(visits_path) not in formatted
+    assert error.value.__cause__ is None
 
 
 @pytest.mark.parametrize("malformed", ["not-an-age", '"unterminated'])

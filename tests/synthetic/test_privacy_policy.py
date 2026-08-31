@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import traceback
 from dataclasses import replace
 from pathlib import Path
 
@@ -57,6 +58,52 @@ def test_load_privacy_policy_accepts_only_the_complete_approved_contract(tmp_pat
         "trajectory",
         "utilization",
     )
+
+
+@pytest.mark.parametrize("threshold_name", ["identifier_overlap_rate", "exact_reproduction_rate"])
+@pytest.mark.parametrize("invalid_value", [0.25, -0.25, True, float("nan"), float("inf")])
+def test_privacy_policy_model_requires_mandatory_zero_thresholds(
+    threshold_name: str, invalid_value: object
+) -> None:
+    """Catches accepting any nonzero, boolean, or nonfinite mandatory threshold."""
+    value = policy_mapping()
+    value["thresholds"][threshold_name] = invalid_value
+
+    with pytest.raises(ValueError) as error:
+        PrivacyPolicy.from_mapping(value)
+
+    assert repr(invalid_value) not in str(error.value)
+
+
+@pytest.mark.parametrize("threshold_name", ["identifier_overlap_rate", "exact_reproduction_rate"])
+@pytest.mark.parametrize("invalid_value", [0.25, -0.25, True, float("nan"), float("inf")])
+def test_load_privacy_policy_requires_mandatory_zero_thresholds(
+    tmp_path: Path, threshold_name: str, invalid_value: object
+) -> None:
+    """Catches the file loader admitting an invalid approved-policy threshold."""
+    value = policy_mapping()
+    value["thresholds"][threshold_name] = invalid_value
+    path = tmp_path / "policy.json"
+    path.write_text(json.dumps(value), encoding="utf-8")
+
+    with pytest.raises(ValueError) as error:
+        load_privacy_policy(path)
+
+    assert repr(invalid_value) not in str(error.value)
+
+
+def test_load_privacy_policy_traceback_does_not_retain_source_path(tmp_path: Path) -> None:
+    """Catches path-bearing open failures surviving in the public exception chain."""
+    sentinel = "PRIVATE" + "-POLICY-PATH"
+    path = tmp_path / sentinel / "policy.json"
+
+    with pytest.raises(ValueError, match="^privacy policy is invalid$") as error:
+        load_privacy_policy(path)
+
+    formatted = "".join(traceback.format_exception(error.value))
+    assert str(path) not in formatted
+    assert sentinel not in formatted
+    assert error.value.__cause__ is None
 
 
 @pytest.mark.parametrize(

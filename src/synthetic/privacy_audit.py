@@ -194,6 +194,11 @@ class PrivacyPolicy:
         frozen = {
             name: _require_threshold(self.thresholds[name], name) for name in sorted(_THRESHOLD_KEYS)
         }
+        if any(
+            frozen[name] != 0.0
+            for name in ("identifier_overlap_rate", "exact_reproduction_rate")
+        ):
+            raise ValueError("mandatory zero threshold is invalid")
         if "positive_control" in self.required_controls and frozen["positive_control_advantage"] == 0:
             raise ValueError("positive_control_advantage must be positive when required")
         object.__setattr__(self, "thresholds", MappingProxyType(frozen))
@@ -280,8 +285,8 @@ def load_privacy_policy(path: Path) -> PrivacyPolicy:
             object_pairs_hook=_reject_duplicate_json_keys,
             parse_constant=_reject_nonfinite_json,
         )
-    except (UnicodeError, json.JSONDecodeError, RecursionError, ValueError) as exc:
-        raise ValueError("privacy policy is invalid") from exc
+    except (UnicodeError, json.JSONDecodeError, RecursionError, ValueError):
+        raise ValueError("privacy policy is invalid") from None
     return PrivacyPolicy.from_mapping(mapping)
 
 
@@ -657,8 +662,8 @@ def _load_private_package(
         if (synthetic and descriptor.get("x-synthetic") is not True) or (not synthetic and marker_present):
             raise ValueError("package marker polarity is invalid")
         descriptor = _validate_descriptor_mapping(descriptor)
-    except (KeyError, TypeError, ValueError) as exc:
-        raise ValueError("package descriptor or marker is invalid") from exc
+    except (KeyError, TypeError, ValueError):
+        raise ValueError("package descriptor or marker is invalid") from None
     connection = duckdb.connect(":memory:")
     try:
         staged = _stage_validated_resources(connection, descriptor, package_root)
@@ -676,8 +681,8 @@ def _load_private_package(
             ).fetchall()
             if isinstance(value, str)
         )
-    except (duckdb.Error, TypeError, ValueError) as exc:
-        raise ValueError("package data is invalid") from exc
+    except (duckdb.Error, TypeError, ValueError):
+        raise ValueError("package data is invalid") from None
     finally:
         connection.close()
     return _PrivatePackage(
