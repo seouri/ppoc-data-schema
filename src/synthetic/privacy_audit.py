@@ -75,6 +75,7 @@ _METRIC_KEYS = frozenset({
     "composition_reproduction_rate", "negative_control_advantage", "positive_control_advantage",
     "shadow_run_count", "prior_release_count", "membership_match_rate",
     "attribute_attack_accuracy", "reference_majority_accuracy", "heldout_majority_accuracy",
+    "advantage_ci_lower", "advantage_ci_upper",
     "rate_ci_lower", "rate_ci_upper", "margin_zero_rate", "margin_positive_rate",
 })
 _FIXED_COMPONENT_ORDER = ("demographics", "timing", "utilization", "trajectory", "diagnosis")
@@ -1085,6 +1086,10 @@ def _evaluate_membership_inference_control(
                 "membership_match_rate": round(match_count / len(labels), 6),
                 "membership_inference_advantage": round(max(0.0, true_positive_rate - false_positive_rate), 6),
                 "_match_count": match_count,
+                "_true_positive": true_positive,
+                "_false_positive": false_positive,
+                "_positive_count": positives,
+                "_negative_count": negatives,
             }
         )
     metrics = max(
@@ -1092,8 +1097,16 @@ def _evaluate_membership_inference_control(
         key=lambda item: (item["membership_inference_advantage"], item["membership_match_rate"]),
     )
     match_count = int(metrics.pop("_match_count"))
+    true_positive = int(metrics.pop("_true_positive"))
+    false_positive = int(metrics.pop("_false_positive"))
+    positive_count = int(metrics.pop("_positive_count"))
+    negative_count = int(metrics.pop("_negative_count"))
     metrics["shadow_run_count"] = len(shadow_runs)
     reported = _with_interval(metrics, match_count, int(metrics["evaluated_count"]))
+    true_positive_lower, true_positive_upper = _wilson_95_interval(true_positive, positive_count)
+    false_positive_lower, false_positive_upper = _wilson_95_interval(false_positive, negative_count)
+    reported["advantage_ci_lower"] = round(max(0.0, true_positive_lower - false_positive_upper), 6)
+    reported["advantage_ci_upper"] = round(max(0.0, true_positive_upper - false_positive_lower), 6)
     advantage = float(reported["membership_inference_advantage"])
     if advantage > policy.thresholds["membership_inference_advantage"]:
         return PrivacyControlResult(
@@ -1134,9 +1147,8 @@ def _evaluate_attribute_disclosure_control(
     if not _packages_have_profile_evidence(policy, *packages):
         return _unevaluable_control("attribute_disclosure", "insufficient_evidence")
     reference_labels = _nonempty_sensitive_labels(reference)
-    generated_labels = _nonempty_sensitive_labels(generated)
     heldout_labels = _nonempty_sensitive_labels(heldout) if heldout is not None else ()
-    if reference_labels is None or generated_labels is None or heldout_labels is None:
+    if reference_labels is None or heldout_labels is None:
         return _unevaluable_control("attribute_disclosure", "inconsistent_sensitive_labels")
     reference_index: dict[str, _PrivatePatientProfile] = {}
     duplicate_reference_signatures: set[str] = set()
@@ -1156,10 +1168,12 @@ def _evaluate_attribute_disclosure_control(
     )
     if len(pairs) < policy.minimum_evaluable_patients:
         return _unevaluable_control("attribute_disclosure", "insufficient_evidence")
-    if any(generated_profile._growth_dx_flag is None or reference_profile._growth_dx_flag is None for generated_profile, reference_profile in pairs):
+    if any(reference_profile._growth_dx_flag is None for _, reference_profile in pairs):
         return _unevaluable_control("attribute_disclosure", "inconsistent_sensitive_labels")
     targets = tuple(reference_profile._growth_dx_flag for _, reference_profile in pairs)
-    predictions = tuple(generated_profile._growth_dx_flag for generated_profile, _ in pairs)
+    # The attack only uses a generated trajectory to select a unique reference candidate.
+    # The sensitive flag is read privately from that candidate, never from the generated package.
+    predictions = tuple(reference_index[generated_profile._trajectory_signature]._growth_dx_flag for generated_profile, _ in pairs)
     if any(target not in {"0", "1"} or prediction not in {"0", "1"} for target, prediction in zip(targets, predictions, strict=True)):
         return _unevaluable_control("attribute_disclosure", "inconsistent_sensitive_labels")
     attack_count = sum(prediction == target for prediction, target in zip(predictions, targets, strict=True))
@@ -1267,10 +1281,10 @@ def _evaluate_control_package(
     )
     threshold = policy.thresholds[metric_name]
     if control_id == "negative_control":
-        if advantage > threshold:
+        if advantage >= threshold:
             return PrivacyControlResult(control_id, "FAIL", metrics, "negative_control_threshold_exceeded")
         return PrivacyControlResult(control_id, "PASS", metrics, "negative_control_within_threshold")
-    if advantage > threshold:
+    if advantage >= threshold:
         return PrivacyControlResult(control_id, "PASS", metrics, "positive_control_detected")
     return PrivacyControlResult(control_id, "FAIL", metrics, "positive_control_not_detected")
 

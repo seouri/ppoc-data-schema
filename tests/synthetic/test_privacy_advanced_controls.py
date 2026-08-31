@@ -44,7 +44,7 @@ def _policy(**changes: object) -> PrivacyPolicy:
     )
 
 
-def _profile(label: str, diagnosis: str, *, copied: bool = False) -> _PrivatePatientProfile:
+def _profile(label: str, diagnosis: str | None, *, copied: bool = False) -> _PrivatePatientProfile:
     del copied
     signature = f"trajectory-{label}"
     return _PrivatePatientProfile(
@@ -141,9 +141,34 @@ def test_membership_requires_all_shadow_runs_and_reports_only_maximum_aggregate_
     assert result.status == "FAIL"
     assert result.metrics["membership_inference_advantage"] == 1.0
     assert result.metrics["shadow_run_count"] == 2
+    assert 0 <= result.metrics["advantage_ci_lower"] <= result.metrics["advantage_ci_upper"] <= 1
     assert underpowered.status == "UNEVALUABLE"
     assert underpowered.metrics == {}
     assert "trajectory-one" not in repr(result)
+
+
+def test_membership_suppresses_duplicate_runs_and_undersized_labels() -> None:
+    """Catches treating duplicate shadows or too-small member/nonmember groups as privacy evidence."""
+    policy = _policy()
+    reference = _package(
+        _profile("one", "0"), _profile("two", "0"), _profile("three", "1"),
+        _profile("four", "0"), _profile("five", "0"), _profile("six", "1"),
+    )
+    shadow = _package(_profile("one", "0"), _profile("two", "0"), _profile("three", "1"))
+    duplicate = _PrivateShadowRun(
+        "same-run", shadow, frozenset({"trajectory-one", "trajectory-two", "trajectory-three"})
+    )
+    undersized = (
+        _PrivateShadowRun("small-one", shadow, frozenset({"trajectory-one", "trajectory-two"})),
+        _PrivateShadowRun("small-two", shadow, frozenset({"trajectory-one", "trajectory-two"})),
+    )
+
+    duplicate_result = _evaluate_membership_inference_control(policy, reference, (duplicate, duplicate))
+    undersized_result = _evaluate_membership_inference_control(policy, reference, undersized)
+
+    assert duplicate_result.status == "UNEVALUABLE"
+    assert undersized_result.status == "UNEVALUABLE"
+    assert duplicate_result.metrics == undersized_result.metrics == {}
 
 
 def test_attribute_and_composition_controls_use_private_labels_and_explicit_prior_packages() -> None:
@@ -156,11 +181,18 @@ def test_attribute_and_composition_controls_use_private_labels_and_explicit_prio
     heldout = _package(_profile("held-one", "0"), _profile("held-two", "0"), _profile("held-three", "1"))
 
     attribute = _evaluate_attribute_disclosure_control(policy, reference, generated, heldout=heldout)
+    generated_without_diagnoses = _package(
+        _profile("one", None, copied=True), _profile("two", None, copied=True), _profile("three", None, copied=True)
+    )
+    unchanged_attribute = _evaluate_attribute_disclosure_control(
+        policy, reference, generated_without_diagnoses, heldout=heldout
+    )
     composition = _evaluate_composition_control(policy, generated, (generated,))
     missing_prior = _evaluate_composition_control(policy, generated, ())
 
     assert attribute.status == "FAIL"
     assert attribute.metrics["attribute_disclosure_advantage"] > 0
+    assert unchanged_attribute == attribute
     assert composition.status == "FAIL"
     assert composition.metrics["composition_reproduction_rate"] == 1.0
     assert missing_prior.status == "UNEVALUABLE"
@@ -188,3 +220,22 @@ def test_negative_and_positive_controls_distinguish_independent_from_copied_pack
     assert positive.metrics["positive_control_advantage"] == 1.0
     assert missing.status == "UNEVALUABLE"
     assert "private-one" not in repr(positive)
+
+
+def test_control_threshold_equality_is_conservative_for_negative_and_detects_positive() -> None:
+    """Catches reversing either threshold's specified equality boundary."""
+    thresholds = policy_mapping()["thresholds"]
+    assert isinstance(thresholds, dict)
+    policy = _policy(thresholds=thresholds | {"negative_control_advantage": 0, "positive_control_advantage": 1})
+    reference = _package(_profile("one", "0"), _profile("two", "0"), _profile("three", "1"))
+    independent = _package(_profile("ind-one", "0"), _profile("ind-two", "0"), _profile("ind-three", "1"))
+    copied = _package(_profile("one", "0"), _profile("two", "0"), _profile("three", "1"))
+    heldout = _package(_profile("held-one", "0"), _profile("held-two", "0"), _profile("held-three", "1"))
+
+    negative = _evaluate_negative_control(policy, reference, independent, heldout=heldout)
+    positive = _evaluate_positive_control(policy, reference, copied, heldout=heldout)
+
+    assert negative.metrics["negative_control_advantage"] == 0
+    assert negative.status == "FAIL"
+    assert positive.metrics["positive_control_advantage"] == 1
+    assert positive.status == "PASS"
