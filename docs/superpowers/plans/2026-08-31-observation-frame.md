@@ -62,7 +62,7 @@ Files:
 
 ### Completion evidence
 
-- Main tip: `44e51cd` (`docs: record observation frame handoff`), pushed to `origin/main`.
+- Main tip: `865940e` (`docs: correct observation handoff tip`), pushed to `origin/main`.
 - Observation-focused suite: `74 passed`; post-merge full suite: `806 passed`.
 - Ruff: clean; schema check: `validated 8 resources`; merge-base and working-tree diff checks: clean.
 - Scoped final re-review: PASS; broad final review: PASS with no Critical/Important findings.
