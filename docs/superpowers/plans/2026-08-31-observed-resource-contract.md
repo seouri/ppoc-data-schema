@@ -154,5 +154,5 @@
 
 - Main fast-forward merge: `2d74641` → `4566feb0ca81ff97f33b60d12ab45aba46918d8f`.
 - Merged-main verification at `4566feb`: full suite `923 passed`; focused suite `117 passed`; Ruff clean; schema checker `validated 8 resources in datapackage.json`; diff check clean; deterministic smoke report `PASS` with seven passing checks.
-- Push/parity: `HEAD == origin/main == 4566feb0ca81ff97f33b60d12ab45aba46918d8f`.
+- Implementation push/parity checkpoint: `HEAD == origin/main == 4566feb0ca81ff97f33b60d12ab45aba46918d8f` immediately after the code merge; the later documentation-only evidence commit is separate.
 - Cleanup: removed `.worktrees/observed-resource-contract`, deleted `codex/observed-resource-contract`, pruned worktree metadata; unrelated worktree `/private/tmp/ppoc-synthetic-growth-fixtures-foundation` preserved.
