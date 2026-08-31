@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import argparse
+import hashlib
 import json
 import math
 import os
@@ -14,20 +16,48 @@ from errno import ELOOP
 from pathlib import Path
 from types import MappingProxyType
 
-from synthetic.calibrate import _require_aggregate_detail, _require_safe_report_token
+import duckdb
+
+from synthetic.calibrate import (
+    DEFAULT_AGE_WINDOWS,
+    CalibrationAgeWindow,
+    CalibrationReport,
+    CalibrationRunConfig,
+    PartitionPolicy,
+    _load_disclosure_policy,
+    _load_partition_policy,
+    _read_regular_file,
+    _require_aggregate_detail,
+    _require_safe_report_token,
+    _strict_json_bytes,
+    _write_exclusive_fsynced,
+    load_calibration_report,
+)
 from synthetic.calibration import (
     ALLOWED_DIMENSION_KEYS,
     ALLOWED_STATISTICS,
     ALLOWED_TARGET_FAMILIES,
+    CalibrationArtifact,
+    CalibrationDisclosurePolicy,
     CalibrationStratum,
     CalibrationTarget,
     contains_indicator_components,
+    load_calibration_artifact,
     require_aggregate_safe_token,
 )
-from synthetic.calibration_targets import TARGET_REGISTRY_VERSION, is_registered_target_key
+from synthetic.calibration_disclosure import _aggregate_sha256, disclose_targets
+from synthetic.calibration_input import prepare_input, prepare_synthetic_input
+from synthetic.calibration_targets import (
+    TARGET_REGISTRY_VERSION,
+    compute_raw_targets,
+    is_registered_target_key,
+)
+from synthetic.run_directory import RunDirectory
 
 MAX_FIDELITY_POLICY_BYTES = 1024 * 1024
 HELDOUT_REPORT_VERSION = "heldout-validation-report-v1"
+_HELDOUT_REPORT_FILENAME = "heldout-validation-report.json"
+_HELDOUT_SUMMARY_FILENAME = "heldout-validation-summary.txt"
 _SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
 _DIMENSION_VALUE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,63}\Z")
 _FAMILIES = (
@@ -52,6 +82,41 @@ _FIDELITY_POLICY_KEYS = frozenset(
         "required_families",
         "max_unevaluable_targets",
     }
+)
+_HELDOUT_REPORT_KEYS = frozenset(
+    {
+        "report_version",
+        "status",
+        "source_snapshot",
+        "synthetic_artifact_id",
+        "schema_fingerprint",
+        "partition_policy",
+        "disclosure_policy",
+        "fidelity_policy",
+        "heldout_aggregate_sha256",
+        "synthetic_aggregate_sha256",
+        "comparison_counts",
+        "family_counts",
+        "checks",
+        "comparisons",
+    }
+)
+_COMPARISON_KEYS = frozenset(
+    {
+        "stratum_id",
+        "target_name",
+        "family",
+        "statistic",
+        "unit",
+        "status",
+        "heldout_value",
+        "synthetic_value",
+        "difference",
+        "tolerance",
+    }
+)
+_CALIBRATION_CHECK_NAMES = frozenset(
+    {"schema", "partition", "target_registry", "disclosure"}
 )
 
 
@@ -244,6 +309,56 @@ def load_fidelity_policy(path: Path) -> FidelityPolicy:
         required_families=mapping["required_families"],  # type: ignore[arg-type]
         max_unevaluable_targets=mapping["max_unevaluable_targets"],  # type: ignore[arg-type]
     )
+
+
+@dataclass(frozen=True)
+class HeldoutRunConfig:
+    """Explicit governed inputs for one held-out validation run."""
+
+    real_root: Path
+    real_descriptor: Path
+    source_snapshot: str
+    synthetic_root: Path
+    calibration_artifact: Path
+    calibration_report: Path
+    partition_policy: PartitionPolicy
+    disclosure_policy: CalibrationDisclosurePolicy
+    partition_key: bytes
+    fidelity_policy: FidelityPolicy
+    age_windows: tuple[CalibrationAgeWindow, ...]
+    output: Path
+
+    def __post_init__(self) -> None:
+        for field in (
+            "real_root",
+            "real_descriptor",
+            "synthetic_root",
+            "calibration_artifact",
+            "calibration_report",
+            "output",
+        ):
+            if not isinstance(getattr(self, field), Path):
+                raise ValueError(f"{field} must be a Path")  # noqa: TRY004
+        require_aggregate_safe_token(self.source_snapshot, "source_snapshot")
+        if not isinstance(self.partition_policy, PartitionPolicy):
+            raise ValueError("partition_policy must be a PartitionPolicy")  # noqa: TRY004
+        if not isinstance(self.disclosure_policy, CalibrationDisclosurePolicy):
+            raise ValueError(  # noqa: TRY004
+                "disclosure_policy must be a CalibrationDisclosurePolicy"
+            )
+        if not isinstance(self.partition_key, bytes) or len(self.partition_key) < 16:
+            raise ValueError("partition_key must contain at least 16 bytes")
+        if not isinstance(self.fidelity_policy, FidelityPolicy):
+            raise ValueError("fidelity_policy must be a FidelityPolicy")  # noqa: TRY004
+        if not isinstance(self.age_windows, tuple) or not self.age_windows:
+            raise ValueError("age_windows must be a nonempty immutable tuple")
+        if not all(isinstance(window, CalibrationAgeWindow) for window in self.age_windows):
+            raise ValueError("age_windows must contain CalibrationAgeWindow values")
+        if len({window.window_id for window in self.age_windows}) != len(self.age_windows):
+            raise ValueError("age_windows window_id values must be unique")
+        for previous, current in zip(self.age_windows, self.age_windows[1:], strict=False):
+            if current.lower_age_days < previous.upper_age_days:
+                raise ValueError("age_windows must be ordered and non-overlapping")
 
 
 def _require_stratum_id(value: object) -> str:
@@ -686,3 +801,404 @@ def format_human_summary(report: HeldoutValidationReport) -> str:
     if not isinstance(report, HeldoutValidationReport):
         raise TypeError("report must be a HeldoutValidationReport")
     return report.human_summary()
+
+
+@dataclass(frozen=True)
+class HeldoutValidationResult:
+    """Aggregate-only result with no retained input connection or record state."""
+
+    report: HeldoutValidationReport
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.report, HeldoutValidationReport):
+            raise ValueError("report must be a HeldoutValidationReport")  # noqa: TRY004
+
+
+def _calibration_config(
+    config: HeldoutRunConfig, artifact: CalibrationArtifact
+) -> CalibrationRunConfig:
+    return CalibrationRunConfig(
+        data_root=config.real_root,
+        source_descriptor=config.real_descriptor,
+        source_snapshot=config.source_snapshot,
+        artifact_id=artifact.artifact_id,
+        created_at=artifact.created_at,
+        partition_policy=config.partition_policy,
+        disclosure_policy=config.disclosure_policy,
+        partition_key=config.partition_key,
+        age_windows=config.age_windows,
+    )
+
+
+def _require_calibration_compatibility(
+    config: HeldoutRunConfig,
+    artifact: CalibrationArtifact,
+    report: CalibrationReport,
+) -> None:
+    if artifact.source_snapshot != config.source_snapshot:
+        raise ValueError("calibration artifact snapshot is incompatible")
+    if artifact.source_partition != "calibration":
+        raise ValueError("calibration artifact partition is incompatible")
+    if artifact.disclosure_policy != config.disclosure_policy:
+        raise ValueError("calibration artifact disclosure policy is incompatible")
+    if report.source_snapshot != config.source_snapshot:
+        raise ValueError("calibration report snapshot is incompatible")
+    if report.source_aggregate_sha256 != artifact.source_aggregate_sha256:
+        raise ValueError("calibration aggregate identities are incompatible")
+    if report.partition_policy != config.partition_policy.to_report_mapping():
+        raise ValueError("calibration partition policy is incompatible")
+    if config.fidelity_policy.target_registry_version != TARGET_REGISTRY_VERSION:
+        raise ValueError("fidelity target registry is incompatible")
+    check_names = tuple(check.name for check in report.checks)
+    if (
+        len(check_names) != len(_CALIBRATION_CHECK_NAMES)
+        or set(check_names) != _CALIBRATION_CHECK_NAMES
+        or not all(check.passed for check in report.checks)
+    ):
+        raise ValueError("calibration report checks are incompatible")
+    if _aggregate_sha256(artifact.strata) != artifact.source_aggregate_sha256:
+        raise ValueError("calibration artifact aggregate identity is incompatible")
+
+
+def _load_synthetic_descriptor(root: Path) -> Mapping[str, object]:
+    return _strict_json_bytes(
+        _read_regular_file(root / "datapackage.json", "synthetic descriptor"),
+        "synthetic descriptor",
+    )
+
+
+def _require_schema_compatibility(
+    artifact: CalibrationArtifact,
+    report: CalibrationReport,
+    real_schema_fingerprint: str,
+    synthetic_schema_fingerprint: str,
+) -> None:
+    if len(
+        {
+            artifact.schema_fingerprint,
+            report.schema_fingerprint,
+            real_schema_fingerprint,
+            synthetic_schema_fingerprint,
+        }
+    ) != 1:
+        raise ValueError("schema fingerprints are incompatible")
+
+
+def _family_coverage(
+    comparisons: tuple[HeldoutComparison, ...], policy: FidelityPolicy
+) -> bool:
+    evaluable_families = {
+        comparison.family
+        for comparison in comparisons
+        if comparison.status in {"PASS", "FAIL"}
+    }
+    return all(family in evaluable_families for family in policy.required_families)
+
+
+def validate_heldout(config: HeldoutRunConfig) -> HeldoutValidationResult:
+    """Validate one generated package against a patient-disjoint held-out partition."""
+    if not isinstance(config, HeldoutRunConfig):
+        raise TypeError("config must be a HeldoutRunConfig")
+    artifact = load_calibration_artifact(config.calibration_artifact)
+    calibration_report = load_calibration_report(config.calibration_report)
+    _require_calibration_compatibility(config, artifact, calibration_report)
+    calibration_config = _calibration_config(config, artifact)
+
+    real_connection = duckdb.connect(":memory:")
+    try:
+        synthetic_connection = duckdb.connect(":memory:")
+        try:
+            if real_connection is synthetic_connection:
+                raise ValueError("held-out inputs require independent connections")
+            prepared_real = prepare_input(real_connection, calibration_config)
+            synthetic_descriptor = _load_synthetic_descriptor(config.synthetic_root)
+            prepared_synthetic = prepare_synthetic_input(
+                synthetic_connection,
+                config.synthetic_root,
+                synthetic_descriptor,
+            )
+            _require_schema_compatibility(
+                artifact,
+                calibration_report,
+                prepared_real.schema_fingerprint,
+                prepared_synthetic.schema_fingerprint,
+            )
+
+            heldout_raw = compute_raw_targets(
+                real_connection,
+                prepared_real,
+                calibration_config,
+                partition_label="held_out",
+            )
+            synthetic_raw = compute_raw_targets(
+                synthetic_connection,
+                prepared_synthetic,
+                calibration_config,
+                partition_label="calibration",
+            )
+            heldout_strata = disclose_targets(heldout_raw, calibration_config)
+            synthetic_strata = disclose_targets(synthetic_raw, calibration_config)
+        finally:
+            synthetic_connection.close()
+    finally:
+        real_connection.close()
+
+    comparisons = compare_targets(
+        heldout_strata,
+        synthetic_strata,
+        config.fidelity_policy,
+    )
+    status = validation_status(comparisons, config.fidelity_policy)
+    coverage = _family_coverage(comparisons, config.fidelity_policy)
+    checks = (
+        HeldoutCheck("schema", True, "schema contracts matched"),
+        HeldoutCheck("partition", True, "partition policy matched"),
+        HeldoutCheck("target_registry", True, "target registry matched"),
+        HeldoutCheck("disclosure", True, "disclosure policy matched"),
+        HeldoutCheck(
+            "family_coverage",
+            coverage,
+            "required families available" if coverage else "required family unavailable",
+        ),
+    )
+    report = HeldoutValidationReport(
+        report_version=HELDOUT_REPORT_VERSION,
+        status=status,
+        source_snapshot=config.source_snapshot,
+        synthetic_artifact_id=artifact.artifact_id,
+        schema_fingerprint=prepared_real.schema_fingerprint,
+        partition_policy=config.partition_policy.to_report_mapping(),
+        disclosure_policy={
+            "policy_id": config.disclosure_policy.policy_id,
+            "policy_version": config.disclosure_policy.policy_version,
+        },
+        fidelity_policy=config.fidelity_policy,
+        heldout_aggregate_sha256=_aggregate_sha256(heldout_strata),
+        synthetic_aggregate_sha256=artifact.source_aggregate_sha256,
+        comparison_counts=comparison_counts(comparisons),
+        family_counts=family_counts(comparisons),
+        checks=checks,
+        comparisons=comparisons,
+    )
+    return HeldoutValidationResult(report)
+
+
+def _parse_heldout_report(
+    mapping: Mapping[str, object], fidelity_policy: FidelityPolicy
+) -> HeldoutValidationReport:
+    _require_exact_keys(mapping, _HELDOUT_REPORT_KEYS, "held-out report")
+    policy_identity = _require_exact_keys(
+        mapping["fidelity_policy"],
+        frozenset({"policy_id", "policy_version", "target_registry_version"}),
+        "held-out fidelity policy",
+    )
+    if dict(policy_identity) != fidelity_policy.to_report_mapping():
+        raise ValueError("held-out fidelity policy identity is incompatible")
+
+    raw_checks = mapping["checks"]
+    if not isinstance(raw_checks, list):
+        raise ValueError("held-out report checks must be a list")  # noqa: TRY004
+    checks: list[HeldoutCheck] = []
+    for raw_check in raw_checks:
+        check = _require_exact_keys(
+            raw_check,
+            frozenset({"name", "passed", "detail"}),
+            "held-out report check",
+        )
+        checks.append(
+            HeldoutCheck(
+                name=check["name"],  # type: ignore[arg-type]
+                passed=check["passed"],  # type: ignore[arg-type]
+                detail=check["detail"],  # type: ignore[arg-type]
+            )
+        )
+
+    raw_comparisons = mapping["comparisons"]
+    if not isinstance(raw_comparisons, list):
+        raise ValueError("held-out report comparisons must be a list")  # noqa: TRY004
+    comparisons: list[HeldoutComparison] = []
+    for raw_comparison in raw_comparisons:
+        if not isinstance(raw_comparison, Mapping):
+            raise ValueError(  # noqa: TRY004
+                "held-out report comparison must be an object"
+            )
+        expected_keys = (
+            _COMPARISON_KEYS | {"quantile_level"}
+            if raw_comparison.get("statistic") == "quantile"
+            else _COMPARISON_KEYS
+        )
+        comparison = _require_exact_keys(
+            raw_comparison,
+            frozenset(expected_keys),
+            "held-out report comparison",
+        )
+        comparisons.append(
+            HeldoutComparison(
+                stratum_id=comparison["stratum_id"],  # type: ignore[arg-type]
+                target_name=comparison["target_name"],  # type: ignore[arg-type]
+                family=comparison["family"],  # type: ignore[arg-type]
+                statistic=comparison["statistic"],  # type: ignore[arg-type]
+                unit=comparison["unit"],  # type: ignore[arg-type]
+                quantile_level=comparison.get("quantile_level"),  # type: ignore[arg-type]
+                status=comparison["status"],  # type: ignore[arg-type]
+                heldout_value=comparison["heldout_value"],  # type: ignore[arg-type]
+                synthetic_value=comparison["synthetic_value"],  # type: ignore[arg-type]
+                difference=comparison["difference"],  # type: ignore[arg-type]
+                tolerance=comparison["tolerance"],  # type: ignore[arg-type]
+            )
+        )
+
+    return HeldoutValidationReport(
+        report_version=mapping["report_version"],  # type: ignore[arg-type]
+        status=mapping["status"],  # type: ignore[arg-type]
+        source_snapshot=mapping["source_snapshot"],  # type: ignore[arg-type]
+        synthetic_artifact_id=mapping["synthetic_artifact_id"],  # type: ignore[arg-type]
+        schema_fingerprint=mapping["schema_fingerprint"],  # type: ignore[arg-type]
+        partition_policy=mapping["partition_policy"],  # type: ignore[arg-type]
+        disclosure_policy=mapping["disclosure_policy"],  # type: ignore[arg-type]
+        fidelity_policy=fidelity_policy,
+        heldout_aggregate_sha256=mapping["heldout_aggregate_sha256"],  # type: ignore[arg-type]
+        synthetic_aggregate_sha256=mapping["synthetic_aggregate_sha256"],  # type: ignore[arg-type]
+        comparison_counts=mapping["comparison_counts"],  # type: ignore[arg-type]
+        family_counts=mapping["family_counts"],  # type: ignore[arg-type]
+        checks=tuple(checks),
+        comparisons=tuple(comparisons),
+    )
+
+
+def _reparse_written_report(run: RunDirectory, result: HeldoutValidationResult) -> None:
+    report_bytes = _read_regular_file(
+        run.partial_path / _HELDOUT_REPORT_FILENAME,
+        "held-out report output",
+    )
+    summary_bytes = _read_regular_file(
+        run.partial_path / _HELDOUT_SUMMARY_FILENAME,
+        "held-out summary output",
+    )
+    report = _parse_heldout_report(
+        _strict_json_bytes(report_bytes, "held-out report output"),
+        result.report.fidelity_policy,
+    )
+    if report != result.report:
+        raise ValueError("held-out output reparse does not match result")
+    if report_bytes != report.to_json_bytes():
+        raise ValueError("held-out report output is not canonical")
+    try:
+        summary = summary_bytes.decode("ascii", errors="strict")
+    except UnicodeError:
+        raise ValueError("held-out summary output is not canonical") from None
+    if summary != report.human_summary() or summary_bytes != summary.encode("ascii"):
+        raise ValueError("held-out summary output is not canonical")
+
+
+def _lifecycle_run_id(report: HeldoutValidationReport) -> str:
+    identity = (
+        f"{report.synthetic_artifact_id}:"
+        f"{report.fidelity_policy.policy_id}:"
+        f"{report.fidelity_policy.policy_version}"
+    )
+    return hashlib.sha256(identity.encode("ascii")).hexdigest()
+
+
+def _refuse_existing_lifecycle_path(
+    output: Path, report: HeldoutValidationReport
+) -> None:
+    if os.path.lexists(output):
+        raise FileExistsError("held-out output already exists")
+    resolved = output.resolve()
+    lifecycle_id = _lifecycle_run_id(report)
+    lifecycle_paths = (
+        resolved.parent / f".{resolved.name}.{lifecycle_id}.partial",
+        resolved.parent / f".{resolved.name}.{lifecycle_id}.failed",
+    )
+    if any(os.path.lexists(path) for path in lifecycle_paths):
+        raise FileExistsError("held-out output lifecycle path already exists")
+
+
+def _remove_partial_outputs(run: RunDirectory) -> None:
+    for filename in (_HELDOUT_REPORT_FILENAME, _HELDOUT_SUMMARY_FILENAME):
+        try:
+            (run.partial_path / filename).unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def write_heldout_report(result: HeldoutValidationResult, output: Path) -> None:
+    """Write, verify, and atomically promote a held-out validation report."""
+    if not isinstance(result, HeldoutValidationResult):
+        raise TypeError("result must be a HeldoutValidationResult")
+    if not isinstance(output, Path):
+        raise TypeError("output must be a Path")
+    _refuse_existing_lifecycle_path(output, result.report)
+    run = RunDirectory.start(output, _lifecycle_run_id(result.report))
+    try:
+        _write_exclusive_fsynced(
+            run.partial_path / _HELDOUT_REPORT_FILENAME,
+            result.report.to_json_bytes(),
+        )
+        _write_exclusive_fsynced(
+            run.partial_path / _HELDOUT_SUMMARY_FILENAME,
+            result.report.human_summary().encode("ascii"),
+        )
+        _reparse_written_report(run, result)
+        run.promote()
+    except Exception:  # noqa: BLE001 - every output failure archives redacted evidence
+        _remove_partial_outputs(run)
+        try:
+            run.fail("held-out output validation failed")
+        except Exception:  # noqa: BLE001 - lifecycle errors must remain redacted
+            raise ValueError("held-out output could not be promoted") from None
+        raise ValueError("held-out output could not be promoted") from None
+
+
+class _RedactedArgumentParser(argparse.ArgumentParser):
+    def error(self, message: str) -> None:
+        del message
+        self.exit(2, "held-out arguments invalid\n")
+
+
+def _argument_parser() -> argparse.ArgumentParser:
+    parser = _RedactedArgumentParser(description="Run governed held-out validation")
+    parser.add_argument("--real-root", required=True, type=Path)
+    parser.add_argument("--descriptor", required=True, type=Path)
+    parser.add_argument("--snapshot", required=True)
+    parser.add_argument("--synthetic-root", required=True, type=Path)
+    parser.add_argument("--calibration-artifact", required=True, type=Path)
+    parser.add_argument("--calibration-report", required=True, type=Path)
+    parser.add_argument("--partition-policy", required=True, type=Path)
+    parser.add_argument("--disclosure-policy", required=True, type=Path)
+    parser.add_argument("--partition-key-file", required=True, type=Path)
+    parser.add_argument("--frozen-policy", required=True, type=Path)
+    parser.add_argument("--output", required=True, type=Path)
+    return parser
+
+
+def main() -> None:
+    """Run the explicit-input governed held-out validation command."""
+    parser = _argument_parser()
+    arguments = parser.parse_args()
+    try:
+        config = HeldoutRunConfig(
+            real_root=arguments.real_root,
+            real_descriptor=arguments.descriptor,
+            source_snapshot=arguments.snapshot,
+            synthetic_root=arguments.synthetic_root,
+            calibration_artifact=arguments.calibration_artifact,
+            calibration_report=arguments.calibration_report,
+            partition_policy=_load_partition_policy(arguments.partition_policy),
+            disclosure_policy=_load_disclosure_policy(arguments.disclosure_policy),
+            partition_key=_read_regular_file(arguments.partition_key_file, "partition key"),
+            fidelity_policy=load_fidelity_policy(arguments.frozen_policy),
+            age_windows=DEFAULT_AGE_WINDOWS,
+            output=arguments.output,
+        )
+        result = validate_heldout(config)
+        write_heldout_report(result, config.output)
+    except Exception:  # noqa: BLE001 - CLI must not disclose governed exception details
+        parser.exit(1, "held-out validation failed\n")
+    if result.report.status != "PASS":
+        parser.exit(1, "held-out validation failed\n")
+
+
+if __name__ == "__main__":  # pragma: no cover - exercised through subprocess tests
+    main()

@@ -91,6 +91,7 @@ _TARGET_FAMILIES = frozenset(
 _SENSITIVE_DETAIL_WORDS = frozenset({"patient", "visit", "path", "key", "identifier"})
 _ARTIFACT_FILENAME = "calibration-artifact.json"
 _REPORT_FILENAME = "calibration-report.json"
+MAX_CALIBRATION_REPORT_BYTES = 1024 * 1024
 _PARTITION_POLICY_KEYS = frozenset(
     {
         "policy_id",
@@ -433,7 +434,7 @@ def _strict_json_bytes(raw: bytes, label: str) -> Mapping[str, object]:
             object_pairs_hook=_reject_duplicate_keys,
             parse_constant=_reject_nonfinite_json,
         )
-    except (UnicodeError, json.JSONDecodeError, ValueError) as exc:
+    except (UnicodeError, json.JSONDecodeError, RecursionError, ValueError) as exc:
         raise ValueError(f"{label} JSON is invalid") from exc
     if not isinstance(value, Mapping) or not all(isinstance(key, str) for key in value):
         raise ValueError(f"{label} JSON must be an object")
@@ -448,7 +449,9 @@ def _require_exact_keys(
     return mapping
 
 
-def _read_regular_file(path: Path, label: str) -> bytes:
+def _read_regular_file(
+    path: Path, label: str, *, maximum_bytes: int | None = None
+) -> bytes:
     if not isinstance(path, Path):
         raise ValueError(f"{label} must be a Path")  # noqa: TRY004
     nofollow = getattr(os, "O_NOFOLLOW", None)
@@ -459,14 +462,35 @@ def _read_regular_file(path: Path, label: str) -> bytes:
     except OSError as exc:
         raise ValueError(f"{label} must be a regular non-symlink file") from exc
     try:
-        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+        initial_status = os.fstat(descriptor)
+        if not stat.S_ISREG(initial_status.st_mode):
             raise ValueError(f"{label} must be a regular non-symlink file")
+        if maximum_bytes is not None and initial_status.st_size > maximum_bytes:
+            raise ValueError(f"{label} exceeds the maximum size")
         chunks: list[bytes] = []
-        while chunk := os.read(descriptor, 64 * 1024):
+        size = 0
+        while True:
+            read_size = 64 * 1024
+            if maximum_bytes is not None:
+                read_size = min(read_size, maximum_bytes + 1 - size)
+                if read_size <= 0:
+                    break
+            chunk = os.read(descriptor, read_size)
+            if not chunk:
+                break
             chunks.append(chunk)
-        return b"".join(chunks)
+            size += len(chunk)
+        final_status = os.fstat(descriptor)
     finally:
         os.close(descriptor)
+    payload = b"".join(chunks)
+    if maximum_bytes is not None and (
+        len(payload) > maximum_bytes
+        or final_status.st_size > maximum_bytes
+        or final_status.st_size > len(payload)
+    ):
+        raise ValueError(f"{label} exceeds the maximum size")
+    return payload
 
 
 def _load_partition_policy(path: Path) -> PartitionPolicy:
@@ -548,6 +572,20 @@ def _parse_report(mapping: Mapping[str, object]) -> CalibrationReport:
         suppression_counts=mapping["suppression_counts"],  # type: ignore[arg-type]
         source_aggregate_sha256=mapping["source_aggregate_sha256"],  # type: ignore[arg-type]
         checks=tuple(checks),
+    )
+
+
+def load_calibration_report(path: Path) -> CalibrationReport:
+    """Securely load a strict aggregate-only calibration report."""
+    return _parse_report(
+        _strict_json_bytes(
+            _read_regular_file(
+                path,
+                "calibration report",
+                maximum_bytes=MAX_CALIBRATION_REPORT_BYTES,
+            ),
+            "calibration report",
+        )
     )
 
 
