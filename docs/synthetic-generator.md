@@ -366,7 +366,7 @@ assert report.status is AncillaryValidationStatus.PASS
 Only a GHD member with the existing valid observation frame can produce
 nonempty rows. The first visible `recognition` event emits one referral to
 `Synthetic Pediatric Endocrinology`; the first `workup` emits two `labs`
-components (`SYN-GHD-IGF1` and `SYN-GHD-STIM`); and the first visible
+components (`SYN-GHD-IGF1` and `SYN-GHD-STIM`) with exact `result_flag="Synthetic"`; and the first visible
 `diagnosis` emits one unresolved `problem_list` row with `SYN-GHD`. A hidden
 `treatment_start` event is consulted only after visible diagnosis and then
 permits one medication, `Synthetic growth hormone`, with record type
@@ -376,9 +376,12 @@ delayed by `policy.result_delay_days`.
 
 Every row follows `shape.field_names(resource)` in exact descriptor order.
 Unlisted optional values use the exact empty string (empty-string) convention (`""`): labs
-have no LOINC claim and synthetic result flags, the problem has no visit key
-and an empty resolved age, medication end age is empty, and referral count is
-`1`. The four fixed fictional values above are test vocabulary, not ICD,
+have no LOINC claim, the problem has no visit key and an empty resolved age,
+medication end age is empty, and the referral visit-count field is fixed by the
+synthetic contract. The fixed fictional content is `SYN-GHD`,
+`SYN-GHD-IGF1`, `SYN-GHD-STIM`, `result_flag="Synthetic"`,
+`Synthetic Pediatric Endocrinology`, `med_record_type="Internal"`, and
+`Synthetic growth hormone`; these are test vocabulary, not ICD,
 LOINC, RxNorm, or clinical terminology/reference values. Healthy, non-GHD,
 and unrecognized members return four empty tuples. Replaying the same inputs
 is deterministic and mutates neither member nor shape.

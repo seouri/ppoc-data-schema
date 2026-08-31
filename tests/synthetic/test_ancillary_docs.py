@@ -7,7 +7,14 @@ GUIDE = (ROOT / "docs" / "synthetic-generator.md").read_text(encoding="utf-8")
 README = (ROOT / "README.md").read_text(encoding="utf-8")
 
 
+def _ghd_section() -> str:
+    start = GUIDE.index("## Evaluator-only GHD ancillary pathway")
+    end = GUIDE.index("## Exact-schema observed-resource package export", start)
+    return GUIDE[start:end]
+
+
 def test_guide_documents_the_evaluator_only_ghd_ancillary_contract() -> None:
+    guide = _ghd_section()
     required = (
         "GhdAncillaryPolicy",
         "AncillaryResourceProjection",
@@ -23,6 +30,8 @@ def test_guide_documents_the_evaluator_only_ghd_ancillary_contract() -> None:
         "SYN-GHD-STIM",
         "Synthetic Pediatric Endocrinology",
         "Synthetic growth hormone",
+        'result_flag="Synthetic"',
+        'med_record_type="Internal"',
         "hidden",
         "treatment_start",
         "visible diagnosis",
@@ -37,10 +46,11 @@ def test_guide_documents_the_evaluator_only_ghd_ancillary_contract() -> None:
         "deterministic",
     )
     for term in required:
-        assert term in GUIDE, f"guide is missing required contract term: {term}"
+        assert term in guide, f"GHD section is missing required contract term: {term}"
 
 
 def test_guide_preserves_all_deferred_boundaries() -> None:
+    guide = _ghd_section()
     for term in (
         "ObservedResourceBundle",
         "complete package export",
@@ -56,14 +66,32 @@ def test_guide_preserves_all_deferred_boundaries() -> None:
         "Synthea",
         "fail-closed",
     ):
-        assert term in GUIDE, f"guide is missing deferred boundary: {term}"
+        assert term in guide, f"GHD section is missing deferred boundary: {term}"
+
+
+def test_guide_states_exact_ghd_timing_and_aggregate_contract() -> None:
+    guide = _ghd_section()
+    for phrase in (
+        "first visible `recognition` event",
+        "first `workup`",
+        "first visible\n`diagnosis`",
+        "hidden\n`treatment_start`",
+        "only after visible diagnosis",
+        "hidden treatment alone never creates a visible row",
+        "delayed by `policy.result_delay_days`",
+        "`shape.field_names(resource)` in exact descriptor order",
+        'empty string (empty-string) convention (`""`)',
+        "`FAIL` wins over `UNEVALUABLE`, which wins\nover `PASS`",
+    ):
+        assert phrase in guide, f"GHD section is missing exact semantic: {phrase}"
 
 
 def test_readme_links_guide_without_overclaiming_ghd_pathway() -> None:
     assert "docs/synthetic-generator.md#evaluator-only-ghd-ancillary-pathway" in README
     assert "GHD ancillary" in README
     paragraph_start = README.index("GHD ancillary")
-    paragraph = README[paragraph_start : paragraph_start + 2000]
+    paragraph_end = README.index("\n\n", paragraph_start)
+    paragraph = README[paragraph_start:paragraph_end]
     for term in (
         "evaluator-only",
         "package",
