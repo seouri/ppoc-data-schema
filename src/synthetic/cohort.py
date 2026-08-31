@@ -618,6 +618,11 @@ def generate_native_cohort(
         try:
             module_kind = getattr(module, "kind", None)
             module_version = getattr(module, "module_version", None)
+            module_version_is_nonempty = (
+                bool(module_version.strip())
+                if isinstance(module_version, str)
+                else False
+            )
             module_methods = tuple(
                 getattr(module, method_name, None)
                 for method_name in (
@@ -631,7 +636,7 @@ def generate_native_cohort(
             raise CohortGenerationUnavailable("native cohort generation failed") from None
         if not isinstance(module_kind, DisorderKind):
             raise TypeError("modules must declare DisorderKind values")
-        if not isinstance(module_version, str) or not module_version.strip():
+        if not isinstance(module_version, str) or not module_version_is_nonempty:
             raise TypeError("modules must declare nonempty module versions")
         if not all(callable(method) for method in module_methods):
             raise TypeError("modules must provide the growth-disorder methods")

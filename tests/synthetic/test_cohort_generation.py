@@ -268,7 +268,10 @@ def test_generation_failure_is_redacted_from_mapping_repr_and_exception() -> Non
     assert "truth_hash" not in encoded
 
 
-@pytest.mark.parametrize("failure_kind", ["reference", "module", "mapping"])
+@pytest.mark.parametrize(
+    "failure_kind",
+    ["reference", "module", "module_version", "mapping"],
+)
 def test_preflight_injected_object_failures_are_redacted(failure_kind: str) -> None:
     sensitive = "real-patient-preflight /governed/preflight.csv truth_hash"
 
@@ -283,6 +286,14 @@ def test_preflight_injected_object_failures_are_redacted(failure_kind: str) -> N
         @property
         def kind(self) -> DisorderKind:
             raise RuntimeError(sensitive)
+
+    class SensitiveVersion(str):
+        def strip(self, chars: str | None = None) -> str:
+            del chars
+            raise RuntimeError(sensitive)
+
+    class SensitiveVersionModule(HealthyGrowthModule):
+        module_version = SensitiveVersion("sensitive-module-v1")
 
     class SensitiveMapping(Mapping[DisorderKind, object]):
         def __getitem__(self, key: DisorderKind) -> object:
@@ -302,6 +313,11 @@ def test_preflight_injected_object_failures_are_redacted(failure_kind: str) -> N
     elif failure_kind == "module":
         modules = {
             DisorderKind.HEALTHY: SensitiveModule(),
+            DisorderKind.GROWTH_HORMONE_DEFICIENCY: GrowthHormoneDeficiencyModule(),
+        }
+    elif failure_kind == "module_version":
+        modules = {
+            DisorderKind.HEALTHY: SensitiveVersionModule(),
             DisorderKind.GROWTH_HORMONE_DEFICIENCY: GrowthHormoneDeficiencyModule(),
         }
     else:
