@@ -254,6 +254,24 @@ def test_prepare_input_fails_closed_for_bad_snapshot_rows(tmp_path: Path, mutate
         prepare_input(connection, config_for(root))
 
 
+def test_prepare_input_rejects_declared_visit_foreign_key_orphan_without_identifier_leakage(
+    tmp_path: Path,
+) -> None:
+    root = _valid_snapshot(tmp_path / "snapshot")
+    orphan_id = "SYN-ORPHAN-VISIT-001"
+
+    def orphan_augmented_visit(rows: list[list[str]]) -> None:
+        rows[1][rows[0].index("visit_id")] = orphan_id
+
+    _rewrite_resource_csv(root, "visits_augmented", orphan_augmented_visit)
+
+    with duckdb.connect(":memory:") as connection, pytest.raises(ValueError) as error:
+        prepare_input(connection, config_for(root))
+
+    assert orphan_id not in str(error.value)
+    assert "SYN-P-001" not in str(error.value)
+
+
 @pytest.mark.parametrize("unsafe_path", ["/tmp/patients.csv", "../patients.csv"])
 def test_prepare_input_rejects_unsafe_descriptor_paths(tmp_path: Path, unsafe_path: str) -> None:
     root = _valid_snapshot(tmp_path / "snapshot")

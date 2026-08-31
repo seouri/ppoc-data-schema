@@ -206,6 +206,8 @@ def _validate_descriptor(config: CalibrationRunConfig) -> dict[str, Any]:
 def _validate_descriptor_mapping(descriptor: Mapping[str, Any]) -> dict[str, Any]:
     if not isinstance(descriptor, Mapping):
         raise TypeError("descriptor must be a mapping")
+    if descriptor.get("profile") != "tabular-data-package":
+        raise ValueError("descriptor is not a tabular-data-package")
     resources = descriptor.get("resources")
     if not isinstance(resources, list):
         raise TypeError("descriptor resources must be a list")
@@ -407,6 +409,80 @@ def _partition_counts(connection: duckdb.DuckDBPyConnection, relation: str) -> d
     return counts
 
 
+def _foreign_key_fields(value: object) -> tuple[str, ...]:
+    if isinstance(value, str):
+        fields = (value,)
+    elif isinstance(value, list):
+        fields = tuple(value)
+    else:
+        raise TypeError("descriptor foreign key is invalid")
+    if (
+        not fields
+        or not all(isinstance(field, str) and field for field in fields)
+        or len(set(fields)) != len(fields)
+    ):
+        raise ValueError("descriptor foreign key is invalid")
+    return fields
+
+
+def _quoted_identifier(value: str) -> str:
+    return '"' + value.replace('"', '""') + '"'
+
+
+def _validate_foreign_keys(
+    connection: duckdb.DuckDBPyConnection,
+    descriptor: dict[str, Any],
+    staged: Mapping[str, str],
+) -> None:
+    for name, relation in staged.items():
+        resource = resource_spec(descriptor, name)
+        schema = resource.get("schema")
+        if not isinstance(schema, Mapping):
+            raise TypeError("descriptor foreign key is invalid")
+        foreign_keys = schema.get("foreignKeys", [])
+        if not isinstance(foreign_keys, list):
+            raise TypeError("descriptor foreign key is invalid")
+        source_field_names = set(field_names(descriptor, name))
+        for foreign_key in foreign_keys:
+            if not isinstance(foreign_key, Mapping):
+                raise TypeError("descriptor foreign key is invalid")
+            reference = foreign_key.get("reference")
+            if not isinstance(reference, Mapping):
+                raise TypeError("descriptor foreign key is invalid")
+            source_fields = _foreign_key_fields(foreign_key.get("fields"))
+            target_resource = reference.get("resource")
+            target_fields = _foreign_key_fields(reference.get("fields"))
+            if (
+                not isinstance(target_resource, str)
+                or target_resource not in staged
+                or len(source_fields) != len(target_fields)
+                or not set(source_fields).issubset(source_field_names)
+                or not set(target_fields).issubset(
+                    field_names(descriptor, target_resource)
+                )
+            ):
+                raise ValueError("descriptor foreign key is invalid")
+            present = " AND ".join(
+                f"source_rows.{_quoted_identifier(field)} IS NOT NULL "
+                f"AND source_rows.{_quoted_identifier(field)} <> ''"
+                for field in source_fields
+            )
+            matches = " AND ".join(
+                f"source_rows.{_quoted_identifier(source_field)} = "
+                f"target_rows.{_quoted_identifier(target_field)}"
+                for source_field, target_field in zip(
+                    source_fields, target_fields, strict=True
+                )
+            )
+            if _has_rows(
+                connection,
+                f'SELECT count(*) FROM "{relation}" AS source_rows '
+                f"WHERE {present} AND NOT EXISTS (SELECT 1 FROM "
+                f'"{staged[target_resource]}" AS target_rows WHERE {matches})',
+            ):
+                raise ValueError(f"{name} foreign key relationship is invalid")
+
+
 def _stage_validated_resources(
     connection: duckdb.DuckDBPyConnection, descriptor: dict[str, Any], data_root: Path
 ) -> dict[str, str]:
@@ -420,6 +496,7 @@ def _stage_validated_resources(
             _validate_relation(connection, name, descriptor, staged[name])
         finally:
             os.close(source.fd)
+    _validate_foreign_keys(connection, descriptor, staged)
     return staged
 
 

@@ -8,11 +8,12 @@ from pathlib import Path
 import duckdb
 import pytest
 
+from synthetic import calibration_input
 from synthetic.calibrate import DEFAULT_AGE_WINDOWS, CalibrationRunConfig, PartitionPolicy
 from synthetic.calibration import CalibrationDisclosurePolicy
 from synthetic.calibration_input import prepare_input, prepare_synthetic_input
 from synthetic.calibration_targets import compute_raw_targets
-from synthetic.schema_contract import resource_spec
+from synthetic.schema_contract import resource_spec, schema_fingerprint
 from tests.synthetic.calibration_fixtures import write_mock_snapshot
 from tests.synthetic.heldout_fixtures import descriptor_for, write_synthetic_package
 
@@ -140,6 +141,86 @@ def test_synthetic_input_omits_undefined_recorded_targets_for_missing_augmented_
         targets = compute_raw_targets(connection, prepared, _test_config(package_root))
     assert any(target.family == "demographics" for target in targets)
     assert not any(target.family == "recorded_outcome" for target in targets)
+
+
+@pytest.mark.parametrize("mutation", ["missing", "wrong"])
+def test_synthetic_input_rejects_non_tabular_profile_before_staging(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mutation: str
+) -> None:
+    package_root = write_synthetic_package(tmp_path / "generated")
+    descriptor = dict(descriptor_for(package_root))
+    if mutation == "missing":
+        descriptor.pop("profile")
+    else:
+        descriptor["profile"] = "not-a-tabular-package"
+
+    def reject_staging(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("staging must not run for an invalid package profile")
+
+    monkeypatch.setattr(calibration_input, "_stage_validated_resources", reject_staging)
+    with duckdb.connect(":memory:") as connection, pytest.raises(
+        ValueError, match="tabular-data-package"
+    ):
+        prepare_synthetic_input(connection, package_root, descriptor)
+
+
+def test_synthetic_input_rejects_declared_visit_foreign_key_orphan_without_identifier_leakage(
+    tmp_path: Path,
+) -> None:
+    package_root = write_synthetic_package(tmp_path / "generated")
+    descriptor = descriptor_for(package_root)
+    resource = resource_spec(descriptor, "visits_augmented")
+    path = package_root / resource["path"]
+    encoding = resource.get("encoding", "utf-8")
+    orphan_id = "GEN-ORPHAN-VISIT-001"
+    with path.open(newline="", encoding=encoding) as handle:
+        rows = list(csv.DictReader(handle))
+        headers = tuple(rows[0])
+    rows[0]["visit_id"] = orphan_id
+    with path.open("w", newline="", encoding=encoding) as handle:
+        writer = csv.DictWriter(handle, fieldnames=headers)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    with duckdb.connect(":memory:") as connection, pytest.raises(ValueError) as error:
+        prepare_synthetic_input(connection, package_root, descriptor)
+
+    assert orphan_id not in str(error.value)
+    assert "GEN-P-001" not in str(error.value)
+
+
+def test_synthetic_input_enforces_declared_composite_foreign_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    package_root = write_synthetic_package(tmp_path / "generated")
+    descriptor = dict(descriptor_for(package_root))
+    visits_augmented = resource_spec(descriptor, "visits_augmented")
+    visits_augmented["schema"]["foreignKeys"][1] = {
+        "fields": ["patient_id", "visit_id"],
+        "reference": {
+            "resource": "visits",
+            "fields": ["patient_id", "visit_id"],
+        },
+    }
+    path = package_root / visits_augmented["path"]
+    with path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+        headers = tuple(rows[0])
+    rows[0]["visit_id"] = "GEN-COMPOSITE-ORPHAN-001"
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=headers)
+        writer.writeheader()
+        writer.writerows(rows)
+    monkeypatch.setattr(
+        calibration_input,
+        "_repository_fingerprint",
+        lambda: schema_fingerprint(descriptor),
+    )
+
+    with duckdb.connect(":memory:") as connection, pytest.raises(ValueError) as error:
+        prepare_synthetic_input(connection, package_root, descriptor)
+
+    assert "GEN-COMPOSITE-ORPHAN-001" not in str(error.value)
 
 
 @pytest.mark.parametrize("mutation", ["missing_marker", "path_traversal", "duplicate_key", "unknown_patient"])

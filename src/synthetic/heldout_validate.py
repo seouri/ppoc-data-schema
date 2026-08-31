@@ -47,7 +47,11 @@ from synthetic.calibration import (
     require_aggregate_safe_token,
 )
 from synthetic.calibration_disclosure import _aggregate_sha256, disclose_targets
-from synthetic.calibration_input import prepare_input, prepare_synthetic_input
+from synthetic.calibration_input import (
+    MAX_GOVERNED_DESCRIPTOR_BYTES,
+    prepare_input,
+    prepare_synthetic_input,
+)
 from synthetic.calibration_targets import (
     TARGET_REGISTRY_VERSION,
     compute_raw_targets,
@@ -873,10 +877,17 @@ def _require_calibration_compatibility(
 
 
 def _load_synthetic_descriptor(root: Path) -> Mapping[str, object]:
-    return _strict_json_bytes(
-        _read_regular_file(root / "datapackage.json", "synthetic descriptor"),
+    descriptor = _strict_json_bytes(
+        _read_regular_file(
+            root / "datapackage.json",
+            "synthetic descriptor",
+            maximum_bytes=MAX_GOVERNED_DESCRIPTOR_BYTES,
+        ),
         "synthetic descriptor",
     )
+    if descriptor.get("profile") != "tabular-data-package":
+        raise ValueError("synthetic descriptor is not a tabular-data-package")
+    return descriptor
 
 
 def _require_schema_compatibility(

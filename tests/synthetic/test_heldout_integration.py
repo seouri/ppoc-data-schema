@@ -295,6 +295,34 @@ def test_real_descriptor_rejects_insecure_or_non_strict_json_without_leakage(
     assert not config.output.exists()
 
 
+@pytest.mark.parametrize("mutation", ["missing", "wrong"])
+def test_generated_descriptor_loader_rejects_non_tabular_profile(
+    tmp_path: Path, mutation: str
+) -> None:
+    package_root = write_synthetic_package(tmp_path / "generated")
+    descriptor_path = package_root / "datapackage.json"
+    descriptor = json.loads(descriptor_path.read_text(encoding="utf-8"))
+    if mutation == "missing":
+        descriptor.pop("profile")
+    else:
+        descriptor["profile"] = "not-a-tabular-package"
+    descriptor_path.write_text(json.dumps(descriptor), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="tabular-data-package"):
+        heldout_module._load_synthetic_descriptor(package_root)
+
+
+def test_generated_descriptor_loader_rejects_oversized_input_before_parsing(
+    tmp_path: Path,
+) -> None:
+    package_root = tmp_path / "generated"
+    package_root.mkdir()
+    (package_root / "datapackage.json").write_bytes(b" " * (1024 * 1024 + 1))
+
+    with pytest.raises(ValueError, match="maximum size"):
+        heldout_module._load_synthetic_descriptor(package_root)
+
+
 def test_heldout_report_is_repeatable_and_binds_key_and_generated_comparisons(
     tmp_path: Path,
 ) -> None:
