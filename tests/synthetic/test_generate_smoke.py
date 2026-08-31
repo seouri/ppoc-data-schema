@@ -8,6 +8,7 @@ import pytest
 from synthetic.derivation import DerivationUnavailable
 from synthetic.generate import _scan_tree, generate_smoke
 from synthetic.package_export import PackageExportMetadata
+from synthetic.run_directory import RunDirectory
 from tests.synthetic.fakes import (
     IdentityPreservingTestDerivationOracle,
     LinearTestReference,
@@ -78,6 +79,39 @@ def test_smoke_manifest_records_injected_reference_digest(tmp_path: Path) -> Non
 
     manifest = json.loads((output / "manifest.json").read_text())
     assert manifest["reference_sha256"] == "a" * 64
+
+
+def test_smoke_generation_preserves_legacy_lifecycle_run_token(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    started: list[tuple[Path, str]] = []
+    original_start = RunDirectory.start
+
+    def start(cls: type[RunDirectory], target: Path, run_id: str) -> RunDirectory:
+        started.append((target, run_id))
+        return original_start(target, run_id)
+
+    monkeypatch.setattr("synthetic.package_export.RunDirectory.start", classmethod(start))
+    seed = 20260830
+    patient_count = 2
+    reference_time = "2026-08-30T00:00:00Z"
+    output = tmp_path / "run"
+
+    generate_smoke(
+        descriptor_path=ROOT / "datapackage.json",
+        output=output,
+        patient_count=patient_count,
+        seed=seed,
+        reference_time=reference_time,
+        software_revision="test-revision",
+        reference=LinearTestReference(),
+        derivation_oracle=IdentityPreservingTestDerivationOracle(),
+        trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
+        trusted_derivation_test_only=True,
+    )
+
+    expected = hashlib.sha256(f"{seed}:{patient_count}:{reference_time}".encode()).hexdigest()[:12]
+    assert started == [(output, expected)]
 
 
 def test_smoke_generation_delegates_exact_rows_and_metadata_to_shared_package_lifecycle(

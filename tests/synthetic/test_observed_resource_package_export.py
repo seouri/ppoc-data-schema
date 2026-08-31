@@ -5,6 +5,7 @@ import csv
 import dataclasses
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -205,6 +206,41 @@ def test_export_rejects_invalid_bundles_before_creating_lifecycle_paths(
         )
     else:
         object.__setattr__(first.rows["patients"][0], "values", ())
+
+    with pytest.raises(PackageExportUnavailable, match="observed package export failed"):
+        _export(tmp_path, bundles)
+    assert _lifecycle_paths(tmp_path) == []
+
+
+@pytest.mark.parametrize("failure", ["sort", "mapping"])
+def test_export_redacts_post_validation_bundle_mutation(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, failure: str
+) -> None:
+    first = _bundle("syn-observed-a", 0)
+    second = _bundle("syn-observed-b", 1)
+    monkeypatch.setattr(
+        "synthetic.package_export.validate_observed_resources",
+        lambda _: SimpleNamespace(status=ResourceValidationStatus.PASS),
+    )
+    bundles: list[object] = [first]
+    if failure == "sort":
+        class SyntheticIdWithoutOrdering:
+            def __init__(self, value: str) -> None:
+                self.value = value
+
+            def __hash__(self) -> int:
+                return hash(self.value)
+
+            def __eq__(self, other: object) -> bool:
+                return isinstance(other, SyntheticIdWithoutOrdering) and self.value == other.value
+
+        object.__setattr__(first, "patient_id", SyntheticIdWithoutOrdering("first"))
+        object.__setattr__(second, "patient_id", SyntheticIdWithoutOrdering("second"))
+        bundles.append(second)
+    else:
+        rows = dict(first.rows)
+        rows["patients"] = (object(),)
+        object.__setattr__(first, "rows", rows)
 
     with pytest.raises(PackageExportUnavailable, match="observed package export failed"):
         _export(tmp_path, bundles)

@@ -399,14 +399,14 @@ def export_observed_resource_package(
                 if visit_id in visit_ids:
                     raise ValueError("duplicate observed synthetic visit")
                 visit_ids.add(visit_id)
+        ordered = tuple(sorted(materialized, key=lambda bundle: bundle.patient_id))
+        base_rows = {
+            name: [row.to_mapping() for bundle in ordered for row in bundle.rows[name]]
+            for name in BASE_RESOURCES
+        }
     except Exception:  # noqa: BLE001 - bundle-boundary failures are deliberately redacted.
         raise PackageExportUnavailable(_FAILURE_REASON) from None
 
-    ordered = tuple(sorted(materialized, key=lambda bundle: bundle.patient_id))
-    base_rows = {
-        name: [row.to_mapping() for bundle in ordered for row in bundle.rows[name]]
-        for name in BASE_RESOURCES
-    }
     return export_exact_schema_package(
         descriptor,
         base_rows,
