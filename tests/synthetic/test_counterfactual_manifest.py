@@ -251,8 +251,8 @@ def test_truth_manifest_fstat_creation_failure_quarantines_child_and_allows_retr
 
     assert not destination.exists()
     quarantine = next(tmp_path.glob(".counterfactual-truth-cleanup-*"))
-    assert (quarantine / destination.name).is_file()
-    assert (quarantine / destination.name).read_bytes() == b""
+    assert quarantine.is_file()
+    assert quarantine.read_bytes() == b""
 
     write_truth_manifest(pair, report, destination)
     assert destination.is_file()
@@ -285,47 +285,15 @@ def test_truth_manifest_quarantine_rename_never_overwrites_existing_child(
     assert (quarantine_directory / "truth.json").read_bytes() == b"preexisting"
 
 
-def test_truth_manifest_cleanup_uses_pinned_namespace_after_path_swap(
+def test_truth_manifest_cleanup_uses_random_parent_quarantine_entry(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     destination = tmp_path / "truth.json"
     destination.write_bytes(b"created by this invocation")
-    _absolute_parent, parent_descriptor = counterfactual_module._open_regular_parent(tmp_path)
+    parent_descriptor = os.open(tmp_path, os.O_RDONLY)
     try:
         metadata = os.stat(destination, follow_symlinks=False)
         identity = counterfactual_module._truth_manifest_identity(metadata)
-        original_match = counterfactual_module._truth_manifest_entry_matches
-        original_open_namespace = (
-            counterfactual_module._open_truth_manifest_cleanup_namespace
-        )
-        swapped = False
-
-        def swap_namespace_path(descriptor: int) -> tuple[str, int]:
-            nonlocal swapped
-            name, namespace_descriptor = original_open_namespace(descriptor)
-            namespace = tmp_path / name
-            original_namespace = tmp_path / f"{name}-original"
-            attacker = tmp_path / f"{name}-attacker"
-            namespace.rename(original_namespace)
-            attacker.mkdir()
-            namespace.symlink_to(attacker, target_is_directory=True)
-            swapped = True
-            return name, namespace_descriptor
-
-        monkeypatch.setattr(
-            counterfactual_module,
-            "_truth_manifest_entry_matches",
-            lambda descriptor, name, expected_identity: original_match(
-                descriptor, name, expected_identity
-            ),
-        )
-        monkeypatch.setattr(
-            counterfactual_module,
-            "_open_truth_manifest_cleanup_namespace",
-            swap_namespace_path,
-        )
-
         with pytest.raises(ValueError, match="owner retained"):
             counterfactual_module._remove_truth_manifest_entry_if_owned(
                 parent_descriptor, destination.name, identity
@@ -333,82 +301,53 @@ def test_truth_manifest_cleanup_uses_pinned_namespace_after_path_swap(
     finally:
         os.close(parent_descriptor)
 
-    assert swapped
-    assert destination is not None and not destination.exists()
-    original_namespaces = list(tmp_path.glob(".counterfactual-truth-cleanup-*-original"))
-    attackers = list(tmp_path.glob(".counterfactual-truth-cleanup-*-attacker"))
-    assert len(original_namespaces) == 1
-    assert len(attackers) == 1
-    assert (original_namespaces[0] / destination.name).read_bytes() == (
-        b"created by this invocation"
-    )
-    assert not list(attackers[0].iterdir())
+    assert not destination.exists()
+    quarantine = next(tmp_path.glob(".counterfactual-truth-cleanup-*"))
+    assert quarantine.is_file()
+    assert quarantine.read_bytes() == b"created by this invocation"
 
 
-def test_truth_manifest_cleanup_retries_when_namespace_is_replaced_before_open(
+def test_truth_manifest_cleanup_leaves_replacement_seen_before_first_stat(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    parent_descriptor = os.open(tmp_path, os.O_RDONLY)
+    destination = tmp_path / "truth.json"
+    destination.write_bytes(b"created by this invocation")
+    _absolute_parent, parent_descriptor = counterfactual_module._open_regular_parent(tmp_path)
+    metadata = os.stat(destination, follow_symlinks=False)
+    identity = counterfactual_module._truth_manifest_identity(metadata)
+    real_stat = counterfactual_module.os.stat
     swapped = False
-    original_name: str | None = None
-    original_identity: tuple[int, int] | None = None
-    real_open = counterfactual_module.os.open
 
-    def replace_namespace_before_open(
+    def swap_before_first_stat(
         path: object,
-        flags: int,
-        mode: int = 0o777,
         *,
         dir_fd: int | None = None,
-    ) -> int:
-        nonlocal swapped, original_name, original_identity
-        if dir_fd == parent_descriptor and not swapped:
-            assert isinstance(path, str)
-            namespace = tmp_path / path
-            original_name = path
-            metadata = os.stat(namespace, follow_symlinks=False)
-            original_identity = counterfactual_module._truth_manifest_identity(metadata)
-            original_namespace = tmp_path / f"{path}-original"
-            attacker = tmp_path / f"{path}-attacker"
-            namespace.rename(original_namespace)
-            attacker.mkdir()
-            (attacker / "sentinel").write_bytes(b"attacker directory")
-            attacker.rename(namespace)
+        follow_symlinks: bool = True,
+    ) -> os.stat_result:
+        nonlocal swapped
+        if dir_fd == parent_descriptor and path == destination.name and not swapped:
+            destination.unlink()
+            destination.write_bytes(b"replacement installed before first stat")
             swapped = True
-        return real_open(path, flags, mode, dir_fd=dir_fd)
+        return real_stat(path, dir_fd=dir_fd, follow_symlinks=follow_symlinks)
 
-    monkeypatch.setattr(counterfactual_module.os, "open", replace_namespace_before_open)
+    monkeypatch.setattr(counterfactual_module.os, "stat", swap_before_first_stat)
     monkeypatch.setattr(
         counterfactual_module.os,
         "supports_dir_fd",
-        set(counterfactual_module.os.supports_dir_fd) | {replace_namespace_before_open},
+        set(counterfactual_module.os.supports_dir_fd) | {swap_before_first_stat},
     )
     try:
-        name, descriptor = counterfactual_module._open_truth_manifest_cleanup_namespace(
-            parent_descriptor
+        counterfactual_module._remove_truth_manifest_entry_if_owned(
+            parent_descriptor, destination.name, identity
         )
     finally:
         os.close(parent_descriptor)
 
-    try:
-        assert swapped
-        assert original_name is not None
-        assert original_identity is not None
-        assert name != original_name
-        assert counterfactual_module._truth_manifest_identity(
-            os.fstat(descriptor)
-        ) != original_identity
-        assert (tmp_path / original_name / "sentinel").read_bytes() == (
-            b"attacker directory"
-        )
-        assert (tmp_path / f"{original_name}-original").is_dir()
-        returned_metadata = os.stat(tmp_path / name, follow_symlinks=False)
-        assert counterfactual_module._truth_manifest_identity(
-            returned_metadata
-        ) == counterfactual_module._truth_manifest_identity(os.fstat(descriptor))
-    finally:
-        os.close(descriptor)
+    assert swapped
+    assert destination.read_bytes() == b"replacement installed before first stat"
+    assert not list(tmp_path.glob(".counterfactual-truth-cleanup-*"))
 
 
 def test_truth_manifest_verification_does_not_read_or_remove_recreated_child(
@@ -482,9 +421,7 @@ def test_truth_manifest_cleanup_preserves_replacement_between_check_and_cleanup(
     assert swapped
     assert destination.read_bytes() == b"replacement installed by attacker"
     quarantine = next(tmp_path.glob(".counterfactual-truth-cleanup-*"))
-    assert (quarantine / destination.name).read_bytes() == (
-        b"replacement installed by attacker"
-    )
+    assert quarantine.read_bytes() == b"replacement installed by attacker"
 
 
 def test_truth_manifest_cleanup_never_unlinks_post_restore_replacement(
@@ -531,8 +468,12 @@ def test_truth_manifest_cleanup_never_unlinks_post_restore_replacement(
                 dst_dir_fd=dst_dir_fd,
                 follow_symlinks=follow_symlinks,
             )
-            if dst_dir_fd == parent_descriptor and not post_restore_swapped:
-                # Simulate an actor replacing the private quarantine child
+            if (
+                src_dir_fd == parent_descriptor
+                and dst_dir_fd == parent_descriptor
+                and not post_restore_swapped
+            ):
+                # Simulate an actor replacing the private quarantine entry
                 # immediately after restoration.  Cleanup must not unlink it.
                 original_unlink(source, dir_fd=src_dir_fd)
                 replacement_descriptor = original_open(
@@ -570,9 +511,7 @@ def test_truth_manifest_cleanup_never_unlinks_post_restore_replacement(
     assert post_restore_swapped
     assert destination.read_bytes() == b"replacement before restoration"
     quarantine = next(tmp_path.glob(".counterfactual-truth-cleanup-*"))
-    assert (quarantine / destination.name).read_bytes() == (
-        b"replacement after restoration"
-    )
+    assert quarantine.read_bytes() == b"replacement after restoration"
 
 
 def test_truth_manifest_cleanup_quarantines_nonlinkable_directory_replacement(
@@ -618,9 +557,7 @@ def test_truth_manifest_cleanup_quarantines_nonlinkable_directory_replacement(
     assert swapped
     assert not destination.exists()
     quarantine = next(tmp_path.glob(".counterfactual-truth-cleanup-*"))
-    assert (quarantine / destination.name / "sentinel").read_bytes() == (
-        b"directory replacement"
-    )
+    assert (quarantine / "sentinel").read_bytes() == b"directory replacement"
 
 
 @pytest.mark.parametrize("destination", ["truth.json", Path("a") / ".." / "truth.json"])

@@ -61,7 +61,6 @@ _TRUTH_MANIFEST_OWNER_CLEANUP_ERROR = (
 )
 _DARWIN_RENAME_EXCL = 0x00000004
 _LINUX_RENAME_NOREPLACE = 0x00000001
-_TRUSTED_FSTAT = os.fstat
 
 
 class InterventionKind(str, Enum):
@@ -1759,22 +1758,6 @@ def _truth_manifest_identity(metadata: os.stat_result) -> tuple[int, int]:
     return metadata.st_dev, metadata.st_ino
 
 
-def _truth_manifest_namespace_fstat(descriptor: int) -> os.stat_result:
-    """Read namespace identity through an unwrapped platform fstat binding."""
-
-    # The writer's failure-injection seam can replace ``os.fstat`` while a
-    # partial child is being quarantined.  Namespace identity proof must still
-    # use the platform syscall; it may fall back to the captured binding only
-    # when the public name has been wrapped.  A real syscall failure remains a
-    # fail-closed error.
-    try:
-        return os.fstat(descriptor)
-    except OSError:
-        if os.fstat is _TRUSTED_FSTAT:
-            raise
-        return _TRUSTED_FSTAT(descriptor)
-
-
 def _truth_manifest_entry_matches(
     parent_descriptor: int,
     name: str,
@@ -1800,9 +1783,9 @@ def _rename_truth_manifest_child_exclusive(
     """Rename a child without replacing an existing destination child.
 
     ``os.rename`` is an unconditional replacement operation on both Darwin
-    and Linux.  The cleanup namespace is private but must still fail closed if
-    an unexpected child appears there, so use the platform no-replace rename
-    primitive instead of a check followed by ``rename``.
+    and Linux.  The cleanup quarantine is private but must still fail closed
+    if an unexpected entry appears there, so use the platform no-replace
+    rename primitive instead of a check followed by ``rename``.
     """
 
     try:
@@ -1842,109 +1825,10 @@ def _rename_truth_manifest_child_exclusive(
         return
     error_number = ctypes.get_errno()
     if error_number == EEXIST:
-        raise FileExistsError(error_number, "cleanup namespace child already exists")
+        raise FileExistsError(error_number, "cleanup quarantine entry already exists")
     if error_number == 0:
         raise OSError("exclusive rename failed")
     raise OSError(error_number, os.strerror(error_number))
-
-
-def _open_truth_manifest_cleanup_namespace(parent_descriptor: int) -> tuple[str, int]:
-    """Create a private directory used to detach one child without unlink races.
-
-    A random, mode-0700 directory is created directly below the already pinned
-    parent.  Moving the destination into this namespace is an atomic,
-    no-replace rename; the moved inode can then be compared with the owner
-    descriptor without a pathname-based unlink.  The random namespace also
-    prevents a same-directory actor from pre-populating the quarantine entry.
-    """
-
-    nofollow = getattr(os, "O_NOFOLLOW", None)
-    directory = getattr(os, "O_DIRECTORY", None)
-    supports_dir_fd = getattr(os, "supports_dir_fd", ())
-    if (
-        nofollow is None
-        or directory is None
-        or os.open not in supports_dir_fd
-        or os.mkdir not in supports_dir_fd
-    ):
-        raise ValueError("truth manifest requires secure cleanup operations")
-
-    flags = os.O_RDONLY | directory | nofollow | getattr(os, "O_CLOEXEC", 0)
-    for _ in range(_TRUTH_MANIFEST_CLEANUP_ATTEMPTS):
-        name = f".counterfactual-truth-cleanup-{secrets.token_hex(16)}"
-        try:
-            os.mkdir(name, 0o700, dir_fd=parent_descriptor)
-        except FileExistsError:
-            continue
-        except OSError:
-            raise ValueError("truth manifest cleanup namespace could not be created") from None
-        try:
-            created_metadata = os.stat(
-                name,
-                dir_fd=parent_descriptor,
-                follow_symlinks=False,
-            )
-            if not stat.S_ISDIR(created_metadata.st_mode):
-                raise OSError("cleanup namespace is not a directory")
-            created_identity = _truth_manifest_identity(created_metadata)
-        except OSError:
-            # The namespace was created by this invocation, but its pathname
-            # is no longer trustworthy.  Do not try to remove it by name:
-            # another actor may now own that name.  Retry with a fresh random
-            # namespace instead.
-            continue
-        try:
-            descriptor = os.open(name, flags, dir_fd=parent_descriptor)
-        except OSError:
-            # As above, leave the namespace alone.  A pathname-based cleanup
-            # here could delete an actor's replacement.
-            continue
-        try:
-            descriptor_metadata = _truth_manifest_namespace_fstat(descriptor)
-            path_metadata = os.stat(
-                name,
-                dir_fd=parent_descriptor,
-                follow_symlinks=False,
-            )
-        except OSError:
-            try:
-                os.close(descriptor)
-            except OSError:
-                pass
-            continue
-        descriptor_identity = _truth_manifest_identity(descriptor_metadata)
-        path_identity = _truth_manifest_identity(path_metadata)
-        if (
-            not stat.S_ISDIR(descriptor_metadata.st_mode)
-            or not stat.S_ISDIR(path_metadata.st_mode)
-            or created_identity != descriptor_identity
-            or descriptor_identity != path_identity
-        ):
-            # The descriptor is not proven to refer to the directory created
-            # above.  Close only the descriptor we opened and never touch the
-            # pathname: a concurrent actor may have replaced it.
-            try:
-                os.close(descriptor)
-            except OSError:
-                pass
-            continue
-        return name, descriptor
-    raise ValueError("truth manifest cleanup namespace could not be created")
-
-
-def _close_truth_manifest_cleanup_namespace(descriptor: int) -> None:
-    """Close a private cleanup namespace without pathname-based deletion.
-
-    The directory is intentionally retained.  There is no descriptor-relative
-    ``rmdir`` that can prove the pathname still names this directory after its
-    descriptor is closed, and deleting a replacement pathname would be worse
-    than retaining a private, mode-0700 quarantine.
-    """
-
-    try:
-        os.close(descriptor)
-    except OSError:
-        raise ValueError("truth manifest cleanup namespace could not be closed") from None
 
 
 def _remove_truth_manifest_entry_if_owned(
@@ -1959,12 +1843,13 @@ def _remove_truth_manifest_entry_if_owned(
     A name-based ``stat`` followed by ``unlink`` is not an ownership check:
     another actor can replace the name in between.  This helper instead moves
     the current child atomically, without replacing a pre-existing quarantine
-    child, into a private descriptor-pinned namespace.  The moved inode is
-    compared with the still-open owner descriptor (or the recorded identity).
-    No quarantined inode is unlinked: a same-name replacement is restored with
-    a no-overwrite hard link when possible, while the owner or replacement
-    remains in private quarantine and cleanup reports an explicit error.  This
-    avoids a second stat-to-unlink race inside the quarantine namespace.
+    entry, into a private random child of the already pinned parent.  The moved
+    inode is compared with the still-open owner descriptor (or the recorded
+    identity).  No quarantined inode is unlinked: a same-name replacement is
+    restored with a no-overwrite hard link when possible, while the owner or
+    replacement remains in private quarantine and cleanup reports an explicit
+    error.  Keeping the quarantine entry in the pinned parent avoids a
+    mkdir/open/rmdir namespace race.
     """
 
     owner_identity = identity
@@ -1991,74 +1876,67 @@ def _remove_truth_manifest_entry_if_owned(
     ):
         return
 
-    _, namespace_descriptor = _open_truth_manifest_cleanup_namespace(parent_descriptor)
+    supports_dir_fd = getattr(os, "supports_dir_fd", ())
+    if os.stat not in supports_dir_fd or os.link not in supports_dir_fd:
+        raise ValueError("truth manifest requires secure cleanup operations")
+
+    quarantine_name: str | None = None
     operation_error: ValueError | None = None
-    try:
+    for _ in range(_TRUTH_MANIFEST_CLEANUP_ATTEMPTS):
+        candidate = f".counterfactual-truth-cleanup-{secrets.token_hex(16)}"
         try:
-            # The destination name is resolved against the pinned parent, and
-            # the same entry name is installed into the private namespace by
-            # a platform no-replace rename primitive.
             _rename_truth_manifest_child_exclusive(
                 name,
                 parent_descriptor,
-                name,
-                namespace_descriptor,
+                candidate,
+                parent_descriptor,
             )
         except FileNotFoundError:
-            pass
+            return
         except FileExistsError:
-            operation_error = ValueError(
-                "truth manifest output could not be cleared; "
-                "cleanup quarantine child already exists"
-            )
+            continue
         except OSError:
             operation_error = ValueError("truth manifest output could not be cleared")
+        break
+    else:
+        operation_error = ValueError("truth manifest cleanup quarantine could not be created")
+    if operation_error is None:
+        quarantine_name = candidate
+    if operation_error is not None:
+        raise operation_error
+
+    try:
+        moved_metadata = os.stat(
+            quarantine_name,
+            dir_fd=parent_descriptor,
+            follow_symlinks=False,
+        )
+    except OSError:
+        operation_error = ValueError("truth manifest output could not be cleared")
+    else:
+        moved_identity = _truth_manifest_identity(moved_metadata)
+        if owner_identity is None or moved_identity == owner_identity:
+            operation_error = ValueError(_TRUTH_MANIFEST_OWNER_CLEANUP_ERROR)
         else:
+            # link(2) never overwrites an existing destination.  It preserves
+            # the replacement even if another actor wins the restoration race.
+            # The private copy is deliberately retained after a successful
+            # link: unlinking it would reopen a race in which an actor can
+            # replace that path between the link and unlink operations.
             try:
-                moved_metadata = os.stat(
+                os.link(
+                    quarantine_name,
                     name,
-                    dir_fd=namespace_descriptor,
+                    src_dir_fd=parent_descriptor,
+                    dst_dir_fd=parent_descriptor,
                     follow_symlinks=False,
                 )
+            except FileExistsError:
+                operation_error = ValueError(_TRUTH_MANIFEST_REPLACEMENT_CLEANUP_ERROR)
             except OSError:
-                operation_error = ValueError("truth manifest output could not be cleared")
+                operation_error = ValueError(_TRUTH_MANIFEST_REPLACEMENT_CLEANUP_ERROR)
             else:
-                moved_identity = _truth_manifest_identity(moved_metadata)
-                if owner_identity is None or moved_identity == owner_identity:
-                    operation_error = ValueError(_TRUTH_MANIFEST_OWNER_CLEANUP_ERROR)
-                else:
-                    # link(2) never overwrites an existing destination.  It
-                    # preserves the replacement even if another actor wins
-                    # the restoration race.  The private copy is deliberately
-                    # retained after a successful link: unlinking it would
-                    # reopen a race in which an actor can replace that path
-                    # between the link and unlink operations.
-                    try:
-                        os.link(
-                            name,
-                            name,
-                            src_dir_fd=namespace_descriptor,
-                            dst_dir_fd=parent_descriptor,
-                            follow_symlinks=False,
-                        )
-                    except FileExistsError:
-                        operation_error = ValueError(
-                            _TRUTH_MANIFEST_REPLACEMENT_CLEANUP_ERROR
-                        )
-                    except OSError:
-                        operation_error = ValueError(
-                            _TRUTH_MANIFEST_REPLACEMENT_CLEANUP_ERROR
-                        )
-                    else:
-                        operation_error = ValueError(
-                            _TRUTH_MANIFEST_REPLACEMENT_CLEANUP_ERROR
-                        )
-    finally:
-        try:
-            _close_truth_manifest_cleanup_namespace(namespace_descriptor)
-        except ValueError as cleanup_error:
-            if operation_error is None:
-                operation_error = cleanup_error
+                operation_error = ValueError(_TRUTH_MANIFEST_REPLACEMENT_CLEANUP_ERROR)
     if operation_error is not None:
         raise operation_error
 
