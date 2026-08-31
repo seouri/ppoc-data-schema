@@ -2,8 +2,8 @@
 
 This module accepts only an already-loaded descriptor mapping and an
 ``ObservationFrame``.  It deliberately has no file, package, governed-data,
-or calibration interface.  Projection and validation are added in later
-steps; the records here establish their strict, immutable boundary.
+or calibration interface.  Its pure projection produces only immutable,
+descriptor-shaped fictional resource rows for evaluator use.
 """
 
 from __future__ import annotations
@@ -542,10 +542,28 @@ def project_observed_resources(
     if missing_fields:
         raise ResourceProjectionUnavailable("base visits resource lacks required projection fields")
 
-    patient_values = {field_name: "" for field_name in shape.field_names("patients")}
+    patient_fields = shape.field_names("patients")
+    required_patient_fields = {
+        "patient_id",
+        "sex",
+        "ethnicity",
+        *(f"race_{index}" for index in range(1, 9)),
+    }
+    if required_patient_fields.difference(patient_fields):
+        raise ResourceProjectionUnavailable("base patients resource lacks required projection fields")
+
+    patient_values = {field_name: "" for field_name in patient_fields}
     patient_values.update(demographics.to_mapping())
     visit_values: list[dict[str, object]] = []
-    visit_id_by_age: dict[int, str] = {}
+    realized_opportunities = tuple(
+        opportunity for opportunity in frame.truth.opportunities if opportunity.realized
+    )
+    if len(realized_opportunities) != len(frame.visits):
+        raise ResourceProjectionUnavailable("realized opportunities do not match visible visits")
+    visit_by_source_point = {
+        opportunity.source_point_index: visit
+        for opportunity, visit in zip(realized_opportunities, frame.visits, strict=True)
+    }
     diagnosis_slots = tuple(
         field_name for field_name in visit_fields if field_name.startswith("enc_diag_")
     )
@@ -570,18 +588,17 @@ def project_observed_resources(
                 measurement.channel, measurement.recorded_value
             )
         visit_values.append(values)
-        visit_id_by_age[visit.age_days] = visit.visit_id
         next_diagnosis_slot.append(0)
 
-    visit_index_by_id = {
-        visit_id: index for index, visit_id in enumerate(visit_id_by_age.values())
-    }
+    visit_index_by_id = {visit.visit_id: index for index, visit in enumerate(frame.visits)}
     descendants: list[ClinicalDescendant] = []
     for event in frame.events:
-        visit_id = visit_id_by_age.get(event.age_days)
-        if visit_id is None:
+        if event.opportunity_index is None:
+            raise ResourceProjectionUnavailable("recorded event has no opportunity link")
+        visit = visit_by_source_point.get(event.opportunity_index)
+        if visit is None:
             raise ResourceProjectionUnavailable("recorded event has no linked visible visit")
-        visit_index = visit_index_by_id[visit_id]
+        visit_index = visit_index_by_id[visit.visit_id]
         slot_index = next_diagnosis_slot[visit_index]
         if slot_index >= len(diagnosis_slots):
             raise ResourceProjectionUnavailable("recorded events exceed available enc_diag slots")
@@ -591,7 +608,7 @@ def project_observed_resources(
         descendants.append(
             ClinicalDescendant(
                 frame.patient_id,
-                visit_id,
+                visit.visit_id,
                 event.age_days,
                 event.event_kind,
                 code,

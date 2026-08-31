@@ -107,6 +107,18 @@ def test_projection_links_fictional_events_to_exact_visits_and_replays_determini
     assert descendants[0]["visit_id"] == _row_by_age(first, 1000)["visit_id"]
     assert descendants[1]["visit_id"] == _row_by_age(first, 1500)["visit_id"]
     assert descendants[2]["visit_id"] == _row_by_age(first, 1500)["visit_id"]
+    realized_opportunities = tuple(
+        opportunity for opportunity in frame.truth.opportunities if opportunity.realized
+    )
+    visible_visit_by_source_point = {
+        opportunity.source_point_index: visit
+        for opportunity, visit in zip(realized_opportunities, frame.visits, strict=True)
+    }
+    assert all(event.opportunity_index is not None for event in frame.events)
+    assert [descendant["visit_id"] for descendant in descendants] == [
+        visible_visit_by_source_point[event.opportunity_index].visit_id  # type: ignore[index]
+        for event in frame.events
+    ]
     visit_1500 = _row_by_age(first, 1500)
     assert visit_1500["enc_diag_1"] == "SYN-GROWTH-WORKUP"
     assert visit_1500["enc_diag_2"] == "SYN-GROWTH-DIAGNOSIS"
@@ -150,6 +162,21 @@ def test_projection_rejects_valid_observed_length_before_emitting_rows() -> None
             _descriptor(),
             SyntheticDemographics("syn-observation-patient", "F", "Hispanic or Latino", ("White",) * 8),
         )
+
+
+def test_projection_rejects_descriptors_missing_required_patient_fields() -> None:
+    descriptor = _descriptor()
+    patient_resource = next(
+        resource for resource in descriptor["resources"] if resource["name"] == "patients"  # type: ignore[index]
+    )
+    patient_resource["schema"]["fields"] = [  # type: ignore[index]
+        field
+        for field in patient_resource["schema"]["fields"]  # type: ignore[index]
+        if field["name"] != "race_8"
+    ]
+
+    with pytest.raises(ResourceProjectionUnavailable, match="patients resource lacks"):
+        project_observed_resources(_resource_compatible_frame(), descriptor)
 
 
 def test_projection_rejects_tampered_visible_values_even_when_the_frame_type_is_valid() -> None:
