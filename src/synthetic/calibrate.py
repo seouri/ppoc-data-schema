@@ -52,12 +52,9 @@ _RESOURCE_NAMES = frozenset(
 _TARGET_FAMILIES = frozenset(
     {"demographics", "observation", "physiology", "utilization", "recorded_outcome"}
 )
-_IDENTIFIER_RE = re.compile(r"\b[A-Za-z][A-Za-z0-9]*-[PV]-[0-9]{3,}\b")
-_PATH_RE = re.compile(r"(?:^|\s)(?:/|\.\.?/|[A-Za-z]:\\)")
-_SENSITIVE_ALIAS_RE = re.compile(
-    r"(?:\b(?:patient|visit|identifier|path)\b|\b(?:partition[_ -]?)?key(?:[_ -]?(?:id|material))?\b|partitionKey)",
-    re.IGNORECASE,
-)
+_IDENTIFIER_RE = re.compile(r"\b[A-Za-z][A-Za-z0-9]*-[PV]-[0-9]{3,}\b", re.IGNORECASE)
+_PATH_EXTENSION_RE = re.compile(r"\b[A-Za-z0-9_-]+\.(?:csv|tsv|json|parquet|txt|zip|gz)\b", re.IGNORECASE)
+_SENSITIVE_DETAIL_WORDS = frozenset({"patient", "visit", "path", "key", "identifier"})
 
 
 def _require_token(value: object, field: str) -> str:
@@ -90,12 +87,32 @@ def _require_utc_timestamp(value: object) -> str:
     return value
 
 
+def _contains_sensitive_report_material(value: str) -> bool:
+    """Detect values that could carry governed identifiers, paths, or key material."""
+    camel_separated = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", value)
+    words = frozenset(re.findall(r"[a-z0-9]+", camel_separated.lower()))
+    return (
+        bool(_IDENTIFIER_RE.search(value))
+        or "/" in value
+        or "\\" in value
+        or bool(_PATH_EXTENSION_RE.search(value))
+        or bool(words & _SENSITIVE_DETAIL_WORDS)
+    )
+
+
 def _require_aggregate_detail(value: object, field: str) -> str:
     if not isinstance(value, str) or not value:
         raise ValueError(f"{field} must be a nonempty aggregate detail")
-    if _IDENTIFIER_RE.search(value) or _PATH_RE.search(value) or _SENSITIVE_ALIAS_RE.search(value):
+    if _contains_sensitive_report_material(value):
         raise ValueError(f"{field} must be aggregate-only")
     return value
+
+
+def _require_safe_report_token(value: object, field: str) -> str:
+    token = _require_token(value, field)
+    if _contains_sensitive_report_material(token):
+        raise ValueError(f"{field} must be aggregate-only")
+    return token
 
 
 @dataclass(frozen=True)
@@ -234,8 +251,8 @@ def _validate_partition_policy(value: object) -> Mapping[str, object]:
     mapping = _require_aggregate_mapping(value, "partition_policy")
     if set(mapping) != {"policy_id", "policy_version"}:
         raise ValueError("partition_policy must contain only aggregate policy identity")
-    _require_token(mapping["policy_id"], "partition_policy.policy_id")
-    _require_token(mapping["policy_version"], "partition_policy.policy_version")
+    _require_safe_report_token(mapping["policy_id"], "partition_policy.policy_id")
+    _require_safe_report_token(mapping["policy_version"], "partition_policy.policy_version")
     return mapping
 
 
@@ -270,10 +287,10 @@ class CalibrationReport:
     checks: tuple[CalibrationCheck, ...]
 
     def __post_init__(self) -> None:
-        _require_token(self.report_version, "report_version")
+        _require_safe_report_token(self.report_version, "report_version")
         if self.status != "AGGREGATES_ONLY":
             raise ValueError("status must be AGGREGATES_ONLY")
-        _require_token(self.source_snapshot, "source_snapshot")
+        _require_safe_report_token(self.source_snapshot, "source_snapshot")
         _require_sha256(self.schema_fingerprint, "schema_fingerprint")
         _require_sha256(self.source_aggregate_sha256, "source_aggregate_sha256")
         validators = {

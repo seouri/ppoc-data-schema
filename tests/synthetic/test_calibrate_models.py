@@ -158,8 +158,11 @@ def test_check_rejects_key_material_in_detail() -> None:
     "detail",
     [
         "unknown SYN-P-001",
+        "unknown syn-p-001",
         "opened /restricted/patients.csv",
         "opened ../snapshot/patients.csv",
+        "opened fixtures/patients.csv",
+        "patientId matched",
         "partitionKey was provided",
     ],
 )
@@ -172,9 +175,11 @@ def test_check_rejects_identifier_path_and_key_alias_details(detail: str) -> Non
     "changes",
     [
         {"partition_counts": {"calibration": "SYN-P-001", "held_out": 4}},
+        {"partition_counts": {"calibration": "syn-p-001", "held_out": 4}},
         {"partition_counts": {"partitionKey": 8, "held_out": 4}},
         {"resource_row_counts": {"patients": {"sourcePath": 1}}},
         {"target_family_counts": {"patientCount": 1}},
+        {"partition_policy": {"policy_id": "patientId", "policy_version": "1"}},
     ],
 )
 def test_report_rejects_identifier_values_and_field_aliases(changes: dict[str, object]) -> None:
