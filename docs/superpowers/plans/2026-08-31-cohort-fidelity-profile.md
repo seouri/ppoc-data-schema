@@ -32,27 +32,27 @@
 - Consumes: `DisorderKind`, `NativeCohort`, `CalibrationSamplingProfile`, and `require_aggregate_safe_token` from existing modules.
 - Produces: `CohortValidationStatus`, `CohortValidationPolicy`, `CohortComparison`, `CohortValidationReport`, fixed registries/constants, and a placeholder `validate_native_cohort` that raises a clear assembly error until Task 2.
 
-- [ ] **Step 1: Write the failing model tests**
+- [x] **Step 1: Write the failing model tests**
 
   Test frozen dataclasses, exact enum values, safe policy IDs/versions, positive integer minima, finite nonnegative tolerances, canonical growth keys, sorted non-overlapping safe age windows, exact comparison layers/statuses/reason codes, null fields for `UNEVALUABLE`, targeted difference arithmetic, status-only aggregate diagnostics with null target fields, support/denominator constraints, fixed report comparison ordering, exact `to_mapping()` keys, and evaluator-safe `repr`. Include rejection of IDs, paths, truth terms, unknown keys, duplicate windows, booleans, NaN/infinite values, and mutable mappings.
 
-- [ ] **Step 2: Run the focused tests to verify they fail**
+- [x] **Step 2: Run the focused tests to verify they fail**
 
   Run: `uv run pytest -q tests/synthetic/test_cohort_validation_models.py`
 
   Expected: collection or import failure because `synthetic.cohort_validation` is not present.
 
-- [ ] **Step 3: Implement the immutable model layer**
+- [x] **Step 3: Implement the immutable model layer**
 
   Define fixed status/layer/reason registries. Validate policy fields in `__post_init__`, freeze mappings with `MappingProxyType`, normalize age-window values into a canonical immutable representation, and reject unsupported growth keys. Define `CohortComparison` so `UNEVALUABLE` requires all numeric fields null; targeted `PASS`/`FAIL` comparisons require finite observed/target/difference/tolerance with exact `abs(observed-target)` arithmetic; status-only aggregate diagnostics permit a finite observed value with null target/difference/tolerance. Define `CohortValidationReport` with fixed version, profile/seed validation, sorted canonical comparisons, and aggregate-only `to_mapping()`/`repr()` methods. Add a temporary `validate_native_cohort` signature that raises `NotImplementedError` with no sensitive detail.
 
-- [ ] **Step 4: Run focused tests and lint**
+- [x] **Step 4: Run focused tests and lint**
 
   Run: `uv run pytest -q tests/synthetic/test_cohort_validation_models.py && uv run ruff check src/synthetic/cohort_validation.py tests/synthetic/test_cohort_validation_models.py`
 
   Expected: all model tests pass and Ruff reports no issues.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
   ```bash
   git add src/synthetic/cohort_validation.py tests/synthetic/test_cohort_validation_models.py
@@ -119,7 +119,7 @@
 
 - [ ] **Step 3: Implement age-window and coverage evaluators**
 
-  Iterate only evaluator-held trajectory points and observation frames. For each required window and canonical metric, collect finite values, calculate an arithmetic mean, apply minimum support and absolute bound, and emit a fixed comparison name. Add fixed cohort-size, visited-member, and recorded-event coverage checks; validate patient identity/age ordering without exposing offending values. Aggregate statuses as `FAIL` > `UNEVALUABLE` > `PASS`. Keep the module pure and avoid imports or calls that cross governed/filesystem/package boundaries.
+  Iterate only evaluator-held trajectory points and observation frames. For each required window and canonical metric, collect finite values, calculate an arithmetic mean, apply minimum support and absolute bound, and emit a fixed comparison name. Add fixed `coverage.cohort_size`, `coverage.members_with_observation`, and `coverage.members_with_event` checks for cohort size, visited members, and members with recorded events; validate patient identity/age ordering without exposing offending values. Aggregate statuses as `FAIL` > `UNEVALUABLE` > `PASS`. Keep the module pure and avoid imports or calls that cross governed/filesystem/package boundaries.
 
 - [ ] **Step 4: Run focused tests and lint**
 
