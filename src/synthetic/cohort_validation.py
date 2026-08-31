@@ -1,13 +1,15 @@
-"""Aggregate-only models for native synthetic-cohort fidelity profiling.
+"""Aggregate-only evaluator for native synthetic-cohort fidelity profiling.
 
-This module intentionally contains only the immutable policy/report contract.
-The evaluator is assembled in a later layer and must consume an in-memory
-``NativeCohort`` without crossing into governed inputs or output lifecycles.
+The policy, report, and evaluator consume an in-memory ``NativeCohort``
+without crossing into governed inputs or output lifecycles. Latent state is
+used only for aggregate module diagnostics; visible observation events remain
+a separate recorded layer.
 """
 
 from __future__ import annotations
 
 import math
+from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
@@ -21,6 +23,7 @@ from synthetic.calibration_targets import (
 )
 from synthetic.cohort import NativeCohort
 from synthetic.models import DisorderKind
+from synthetic.native.observations import RecordedEventKind
 
 COHORT_VALIDATION_REPORT_VERSION = "cohort-validation-report-v1"
 
@@ -48,6 +51,13 @@ _LAYER_ORDER = MappingProxyType(
     {name: index for index, name in enumerate(COHORT_COMPARISON_LAYERS)}
 )
 _DEMOGRAPHIC_DIMENSIONS = frozenset({"sex", "ethnicity", "race"})
+_DEMOGRAPHIC_REGISTRIES = MappingProxyType(
+    {
+        "sex": SEX_CATEGORY_SLUGS,
+        "ethnicity": ETHNICITY_CATEGORY_SLUGS,
+        "race": RACE_CATEGORY_SLUGS,
+    }
+)
 _DEMOGRAPHIC_VALUES = MappingProxyType(
     {
         "sex": frozenset({*SEX_CATEGORY_SLUGS, *SEX_CATEGORY_SLUGS.values()}),
@@ -112,6 +122,11 @@ COMPARISON_REASON_CODES = frozenset(
 
 _STATUS_VALUES = frozenset(COHORT_COMPARISON_REASON_CODES)
 _DISORDER_ORDER = {kind.value: index for index, kind in enumerate(DisorderKind)}
+_RECORDED_LAYER_NAMES = (
+    (RecordedEventKind.RECOGNITION, "recorded_recognition"),
+    (RecordedEventKind.WORKUP, "recorded_workup"),
+    (RecordedEventKind.DIAGNOSIS, "recorded_diagnosis"),
+)
 
 
 class CohortValidationStatus(str, Enum):
@@ -303,7 +318,12 @@ def _comparison_sort_key(comparison: CohortComparison) -> tuple[object, ...]:
     if name.startswith("demographics."):
         parts = name.split(".", 2)
         dimension_order = {"sex": 0, "ethnicity": 1, "race": 2}
-        return (1, dimension_order[parts[1]], parts[2])
+        registry = _DEMOGRAPHIC_REGISTRIES[parts[1]]
+        category_order: dict[str, int] = {}
+        for index, (category, slug) in enumerate(registry.items()):
+            category_order[category] = index
+            category_order[slug] = index
+        return (1, dimension_order[parts[1]], category_order[parts[2]])
     if name.startswith("latent_module."):
         module = name.split(".", 1)[1]
         return (2, _DISORDER_ORDER[module], module)
@@ -462,10 +482,287 @@ def validate_native_cohort(
     cohort: NativeCohort,
     policy: CohortValidationPolicy,
 ) -> CohortValidationReport:
-    """Placeholder for the aggregate evaluator assembled in Task 2."""
+    """Evaluate demographic and event-layer aggregates for one cohort.
 
-    del cohort, policy
-    raise NotImplementedError("native cohort validation assembly is not available")
+    The evaluator intentionally consumes only the already materialized native
+    cohort.  It reads latent state only for aggregate module counts and reads
+    visible frames only for recorded-event counts; neither layer is treated as
+    a target for the other.
+    """
+
+    if not isinstance(cohort, NativeCohort):
+        raise TypeError("cohort must be a NativeCohort")
+    if not isinstance(policy, CohortValidationPolicy):
+        raise TypeError("policy must be a CohortValidationPolicy")
+
+    members = cohort.members
+    denominator = len(members)
+    comparisons: list[CohortComparison] = []
+    comparisons.append(
+        _status_only_comparison(
+            "cohort_size",
+            "cohort",
+            denominator,
+            denominator,
+            policy.minimum_cohort_size,
+        )
+    )
+    comparisons.extend(_demographic_comparisons(members, cohort.calibration, policy))
+    comparisons.extend(_latent_comparisons(members, policy))
+    comparisons.append(_observable_comparison(members, policy))
+    comparisons.extend(_recorded_comparisons(members, policy))
+    ordered = tuple(comparisons)
+    return CohortValidationReport(
+        report_version=COHORT_VALIDATION_REPORT_VERSION,
+        policy_id=policy.policy_id,
+        cohort_profile=cohort.profile,
+        seed=cohort.seed,
+        status=_report_status(ordered),
+        comparisons=ordered,
+    )
+
+
+def _status_only_comparison(
+    name: str,
+    layer: str,
+    observed_value: float,
+    support: int,
+    minimum_cohort_size: int,
+) -> CohortComparison:
+    denominator = observed_value if name == "cohort_size" else None
+    if name != "cohort_size":
+        raise ValueError("status-only cohort comparison requires a proportion denominator")
+    if not isinstance(denominator, int):
+        raise TypeError("status-only cohort size must be an integer")
+    if denominator < minimum_cohort_size:
+        return CohortComparison(
+            name=name,
+            layer=layer,
+            status=CohortValidationStatus.UNEVALUABLE,
+            observed_value=None,
+            target_value=None,
+            difference=None,
+            tolerance=None,
+            support=support,
+            denominator=denominator,
+            reason_code="COHORT_TOO_SMALL",
+        )
+    return CohortComparison(
+        name=name,
+        layer=layer,
+        status=CohortValidationStatus.PASS,
+        observed_value=observed_value,
+        target_value=None,
+        difference=None,
+        tolerance=None,
+        support=support,
+        denominator=denominator,
+        reason_code="ABOVE_MINIMUM_SUPPORT",
+    )
+
+
+def _unevaluable_comparison(
+    name: str,
+    layer: str,
+    support: int,
+    denominator: int,
+    reason_code: str,
+) -> CohortComparison:
+    return CohortComparison(
+        name=name,
+        layer=layer,
+        status=CohortValidationStatus.UNEVALUABLE,
+        observed_value=None,
+        target_value=None,
+        difference=None,
+        tolerance=None,
+        support=support,
+        denominator=denominator,
+        reason_code=reason_code,
+    )
+
+
+def _targeted_comparison(
+    name: str,
+    layer: str,
+    support: int,
+    denominator: int,
+    target: float,
+    policy: CohortValidationPolicy,
+) -> CohortComparison:
+    if denominator < policy.minimum_cohort_size:
+        return _unevaluable_comparison(
+            name, layer, support, denominator, "COHORT_TOO_SMALL"
+        )
+    if support < policy.minimum_cell_support:
+        return _unevaluable_comparison(
+            name, layer, support, denominator, "INSUFFICIENT_SUPPORT"
+        )
+    observed = support / denominator
+    difference = abs(observed - target)
+    status = (
+        CohortValidationStatus.PASS
+        if difference <= policy.proportion_tolerance
+        else CohortValidationStatus.FAIL
+    )
+    reason = (
+        "WITHIN_TOLERANCE"
+        if status is CohortValidationStatus.PASS
+        else "OUTSIDE_TOLERANCE"
+    )
+    return CohortComparison(
+        name=name,
+        layer=layer,
+        status=status,
+        observed_value=observed,
+        target_value=target,
+        difference=difference,
+        tolerance=policy.proportion_tolerance,
+        support=support,
+        denominator=denominator,
+        reason_code=reason,
+    )
+
+
+def _status_rate_comparison(
+    name: str,
+    layer: str,
+    support: int,
+    denominator: int,
+    minimum_support: int,
+    minimum_cohort_size: int,
+) -> CohortComparison:
+    if denominator < minimum_cohort_size:
+        return _unevaluable_comparison(
+            name, layer, support, denominator, "COHORT_TOO_SMALL"
+        )
+    if support == 0:
+        status = CohortValidationStatus.PASS
+        reason = "NO_EVIDENCE"
+    elif support < minimum_support:
+        return _unevaluable_comparison(
+            name, layer, support, denominator, "INSUFFICIENT_SUPPORT"
+        )
+    else:
+        status = CohortValidationStatus.PASS
+        reason = "ABOVE_MINIMUM_SUPPORT"
+    return CohortComparison(
+        name=name,
+        layer=layer,
+        status=status,
+        observed_value=support / denominator,
+        target_value=None,
+        difference=None,
+        tolerance=None,
+        support=support,
+        denominator=denominator,
+        reason_code=reason,
+    )
+
+
+def _demographic_comparisons(
+    members: tuple[object, ...],
+    calibration: object,
+    policy: CohortValidationPolicy,
+) -> tuple[CohortComparison, ...]:
+    registries = (
+        ("sex", SEX_CATEGORY_SLUGS, "sex_weights", "sex"),
+        ("ethnicity", ETHNICITY_CATEGORY_SLUGS, "ethnicity_weights", "ethnicity"),
+        ("race", RACE_CATEGORY_SLUGS, "race_weights", "race"),
+    )
+    comparisons: list[CohortComparison] = []
+    for dimension, registry, weights_field, attribute in registries:
+        weights = getattr(calibration, weights_field)
+        projected_targets: dict[str, float] = {}
+        for category, probability in weights:
+            visible_category = "Unknown" if category == "" else category
+            slug = registry[visible_category]
+            projected_targets[slug] = projected_targets.get(slug, 0.0) + probability
+        total = math.fsum(projected_targets.values())
+        projected_targets = {
+            slug: value / total for slug, value in projected_targets.items()
+        }
+        counts = Counter()
+        for member in members:
+            demographics = member.demographics
+            value = demographics.races[0] if attribute == "race" else getattr(demographics, attribute)
+            visible_category = "Unknown" if value == "" else value
+            counts[registry[visible_category]] += 1
+        for category, slug in registry.items():
+            if category == "":
+                continue
+            comparisons.append(
+                _targeted_comparison(
+                    f"demographics.{dimension}.{slug}",
+                    "demographics",
+                    counts[slug],
+                    len(members),
+                    projected_targets[slug],
+                    policy,
+                )
+            )
+    return tuple(comparisons)
+
+
+def _latent_comparisons(
+    members: tuple[object, ...],
+    policy: CohortValidationPolicy,
+) -> tuple[CohortComparison, ...]:
+    counts = Counter(member.trajectory.disorder.kind for member in members)
+    denominator = len(members)
+    return tuple(
+        _status_rate_comparison(
+            f"latent_module.{kind.value}",
+            "latent",
+            counts[kind],
+            denominator,
+            policy.minimum_event_support,
+            policy.minimum_cohort_size,
+        )
+        for kind in DisorderKind
+    )
+
+
+def _observable_comparison(
+    members: tuple[object, ...],
+    policy: CohortValidationPolicy,
+) -> CohortComparison:
+    support = sum(
+        any(event.event_type == "observable_phenotype" for event in member.trajectory.events)
+        for member in members
+    )
+    return _status_rate_comparison(
+        "observable_phenotype",
+        "observable",
+        support,
+        len(members),
+        policy.minimum_event_support,
+        policy.minimum_cohort_size,
+    )
+
+
+def _recorded_comparisons(
+    members: tuple[object, ...],
+    policy: CohortValidationPolicy,
+) -> tuple[CohortComparison, ...]:
+    denominator = len(members)
+    comparisons: list[CohortComparison] = []
+    for event_kind, name in _RECORDED_LAYER_NAMES:
+        support = sum(
+            any(event.event_kind is event_kind for event in member.frame.events)
+            for member in members
+        )
+        comparisons.append(
+            _status_rate_comparison(
+                name,
+                "recorded",
+                support,
+                denominator,
+                policy.minimum_event_support,
+                policy.minimum_cohort_size,
+            )
+        )
+    return tuple(comparisons)
 
 
 __all__ = [
