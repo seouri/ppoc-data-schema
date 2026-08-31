@@ -48,8 +48,9 @@ functions:
 - `AncillaryResourceProjection(patient_id, shape, rows)` — visible fictional
   rows for exactly `labs`, `medications`, `problem_list`, and `referrals`.
   Every row uses the extracted descriptor field order and empty strings for
-  missing values. The mapping and `repr` contain no trajectory, severity,
-  hidden-event, truth, or source-frame fields.
+  missing values. Its mapping contains only the generated synthetic row
+  values required by the exact schema; its `repr` contains no row payload,
+  trajectory, severity, hidden-event, truth, or source-frame fields.
 - `AncillaryValidationStatus`, `AncillaryCheck`, and
   `AncillaryValidationReport` — fixed aggregate/status-only validation values
   with `PASS`, `FAIL`, and `UNEVALUABLE` semantics.
@@ -93,7 +94,10 @@ an already observed diagnosis-to-treatment descendant.
 
 IDs are deterministic fictional tokens derived from the member's synthetic
 patient identity and fixed resource role. They are unique within the
-projection contract and do not reproduce or hash any real identifier.
+projection contract and do not reproduce or hash any real identifier. The
+visible projection mapping necessarily contains these generated patient and
+row identifiers so it can represent exact-schema rows; validation reports,
+reprs, and errors never expose them.
 
 ## Exact-schema row contract
 
