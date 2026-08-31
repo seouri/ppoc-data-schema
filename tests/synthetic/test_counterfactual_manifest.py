@@ -127,6 +127,80 @@ def test_truth_manifest_rejects_symlink_ancestor(tmp_path: Path) -> None:
         write_truth_manifest(pair, report, linked_ancestor / "nested" / "truth.json")
 
 
+def test_truth_manifest_pins_parent_when_ancestor_is_swapped(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pair, report = _validated_pair()
+    outer = tmp_path / "outer"
+    (outer / "nested").mkdir(parents=True)
+    attacker = tmp_path / "attacker"
+    (attacker / "nested").mkdir(parents=True)
+    output = outer / "nested" / "truth.json"
+    original_outer = tmp_path / "original-outer"
+    swapped = False
+    real_open = counterfactual_module.os.open
+
+    def swap_ancestor() -> None:
+        nonlocal swapped
+        if swapped:
+            return
+        outer.rename(original_outer)
+        outer.symlink_to(attacker, target_is_directory=True)
+        swapped = True
+
+    def swapping_open(
+        path: object,
+        flags: int,
+        mode: int = 0o777,
+        *,
+        dir_fd: int | None = None,
+    ) -> int:
+        # A path-based temporary-file implementation is forced through the
+        # swapped ancestor before it opens its temporary source.  A secure
+        # component walk opens `outer` first, then keeps its descriptor pinned
+        # while the same swap occurs.
+        if dir_fd is None and outer in Path(path).parents:
+            swap_ancestor()
+        descriptor = real_open(path, flags, mode, dir_fd=dir_fd)
+        if dir_fd is not None and path == outer.name:
+            swap_ancestor()
+        return descriptor
+
+    supported_dir_fd = set(counterfactual_module.os.supports_dir_fd)
+    monkeypatch.setattr(counterfactual_module.os, "open", swapping_open)
+    monkeypatch.setattr(
+        counterfactual_module.os,
+        "supports_dir_fd",
+        supported_dir_fd | {swapping_open},
+    )
+
+    write_truth_manifest(pair, report, output)
+
+    assert (original_outer / "nested" / "truth.json").is_file()
+    assert not (attacker / "nested" / "truth.json").exists()
+
+
+def test_truth_manifest_does_not_publish_through_a_temporary_source(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pair, report = _validated_pair()
+    destination = tmp_path / "truth.json"
+    link_calls: list[object] = []
+
+    def unexpected_link(*args: object, **kwargs: object) -> object:
+        link_calls.append((args, kwargs))
+        raise AssertionError("temporary-source publication must not be used")
+
+    monkeypatch.setattr(counterfactual_module.os, "link", unexpected_link)
+
+    write_truth_manifest(pair, report, destination)
+
+    assert not link_calls
+    assert destination.is_file()
+
+
 @pytest.mark.parametrize("failure", ["write", "fsync"])
 def test_truth_manifest_write_failure_removes_partial_and_allows_retry(
     tmp_path: Path,

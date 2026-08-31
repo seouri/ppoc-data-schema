@@ -14,11 +14,10 @@ import math
 import os
 import re
 import stat
-import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum
-from errno import ELOOP
+from errno import ELOOP, ENOENT, ENOTDIR
 from itertools import pairwise
 from numbers import Real
 from pathlib import Path
@@ -1545,41 +1544,82 @@ def _reject_truth_path_parts(path: Path) -> None:
         raise ValueError("truth manifest destination path is invalid")
 
 
-def _assert_regular_parent(path: Path) -> Path:
-    """Require every ancestor through the parent to be a real directory.
+def _parent_open_failure(error: OSError) -> ValueError:
+    if error.errno == ENOENT:
+        return ValueError(
+            "truth manifest destination parent must be an existing directory"
+        )
+    if error.errno in {ELOOP, ENOTDIR}:
+        return ValueError(
+            "truth manifest destination parent must be a regular non-symlink directory"
+        )
+    return ValueError("truth manifest destination parent is unavailable")
 
-    ``lstat`` is used component-by-component so this invariant does not
-    depend on platform-specific path resolution or follow an ancestor
-    symlink.  The caller must therefore pre-create the complete destination
-    parent tree without symlinks.
+
+def _open_regular_parent(path: Path) -> tuple[Path, int]:
+    """Open and pin every destination-parent component without following links.
+
+    The returned descriptor remains anchored to the directory that was
+    actually walked.  All subsequent child operations use that descriptor,
+    so replacing an ancestor pathname after this function returns cannot
+    redirect publication or verification to another tree.
     """
 
     _reject_truth_path_parts(path)
     absolute = Path(os.path.abspath(path))
-    current = Path(absolute.anchor)
-    for part in absolute.parts[1:]:
-        current /= part
-        try:
-            metadata = os.lstat(current)
-        except FileNotFoundError:
-            raise ValueError(
-                "truth manifest destination parent must be an existing directory"
-            ) from None
-        except OSError:
-            raise ValueError("truth manifest destination parent is unavailable") from None
-        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
-            raise ValueError(
-                "truth manifest destination parent must be a regular non-symlink directory"
-            )
-    return absolute
-
-
-def _read_truth_manifest_bytes(path: Path) -> bytes:
     nofollow = getattr(os, "O_NOFOLLOW", None)
-    if nofollow is None:
+    directory = getattr(os, "O_DIRECTORY", None)
+    supports_dir_fd = getattr(os, "supports_dir_fd", ())
+    if (
+        nofollow is None
+        or directory is None
+        or os.open not in supports_dir_fd
+        or os.unlink not in supports_dir_fd
+    ):
+        raise ValueError("truth manifest requires descriptor-relative path operations")
+
+    flags = os.O_RDONLY | directory | nofollow | getattr(os, "O_CLOEXEC", 0)
+    try:
+        descriptor = os.open(absolute.anchor, flags)
+    except OSError as exc:
+        raise _parent_open_failure(exc) from None
+
+    try:
+        for part in absolute.parts[1:]:
+            try:
+                child = os.open(part, flags, dir_fd=descriptor)
+            except OSError as exc:
+                raise _parent_open_failure(exc) from None
+            previous = descriptor
+            descriptor = child
+            try:
+                os.close(previous)
+            except OSError:
+                os.close(descriptor)
+                raise ValueError("truth manifest destination parent is unavailable") from None
+    except (OSError, ValueError):
+        try:
+            os.close(descriptor)
+        except OSError:
+            pass
+        raise
+    return absolute, descriptor
+
+
+def _read_truth_manifest_bytes(parent_descriptor: int, name: str) -> bytes:
+    nofollow = getattr(os, "O_NOFOLLOW", None)
+    supports_dir_fd = getattr(os, "supports_dir_fd", ())
+    if nofollow is None or os.open not in supports_dir_fd:
         raise ValueError("truth manifest requires secure no-follow opening")
     try:
-        descriptor = os.open(path, os.O_RDONLY | nofollow | getattr(os, "O_NONBLOCK", 0))
+        descriptor = os.open(
+            name,
+            os.O_RDONLY
+            | nofollow
+            | getattr(os, "O_NONBLOCK", 0)
+            | getattr(os, "O_CLOEXEC", 0),
+            dir_fd=parent_descriptor,
+        )
     except FileNotFoundError:
         raise ValueError("truth manifest output disappeared") from None
     except OSError as exc:
@@ -1592,82 +1632,111 @@ def _read_truth_manifest_bytes(path: Path) -> bytes:
             raise ValueError("truth manifest must be a regular non-symlink file")
         if metadata.st_size > MAX_TRUTH_MANIFEST_BYTES:
             raise ValueError("truth manifest exceeds the maximum size")
-        payload = os.read(descriptor, MAX_TRUTH_MANIFEST_BYTES + 1)
+        chunks: list[bytes] = []
+        total = 0
+        while total <= MAX_TRUTH_MANIFEST_BYTES:
+            chunk = os.read(descriptor, MAX_TRUTH_MANIFEST_BYTES + 1 - total)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
         final_metadata = os.fstat(descriptor)
     except OSError:
         raise ValueError("truth manifest could not be read") from None
     finally:
-        os.close(descriptor)
+        try:
+            os.close(descriptor)
+        except OSError:
+            pass
+    payload = b"".join(chunks)
     if (
         len(payload) > MAX_TRUTH_MANIFEST_BYTES
         or final_metadata.st_size > MAX_TRUTH_MANIFEST_BYTES
-        or final_metadata.st_size > len(payload)
+        or final_metadata.st_size != len(payload)
     ):
         raise ValueError("truth manifest exceeds the maximum size")
     return payload
 
 
-def _write_truth_manifest_exclusive(path: Path, payload: bytes) -> None:
-    """Publish a fully written manifest without replacing the destination.
+def _remove_truth_manifest_entry(parent_descriptor: int, name: str) -> None:
+    try:
+        os.unlink(name, dir_fd=parent_descriptor)
+    except FileNotFoundError:
+        return
+    except OSError:
+        raise ValueError("truth manifest output could not be cleared") from None
 
-    The payload is first written to a private same-directory temporary file.
-    The requested destination is created only after the temporary file has
-    been flushed, so a write or file-fsync failure cannot leave a partial
-    requested artifact.  The temporary file is removed on every exit; a
-    cleanup failure is surfaced as an explicit error while the requested
-    destination remains absent.
+
+def _existing_truth_manifest_error(parent_descriptor: int, name: str) -> Exception:
+    try:
+        metadata = os.stat(name, dir_fd=parent_descriptor, follow_symlinks=False)
+    except FileNotFoundError:
+        # The entry may have been removed between O_EXCL and this diagnostic;
+        # retain the no-overwrite error and leave the directory untouched.
+        return FileExistsError("truth manifest destination already exists")
+    except OSError:
+        return ValueError("truth manifest destination is unavailable")
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+        return ValueError("truth manifest must be a regular non-symlink file")
+    return FileExistsError("truth manifest destination already exists")
+
+
+def _write_truth_manifest_exclusive(
+    parent_descriptor: int,
+    name: str,
+    payload: bytes,
+) -> None:
+    """Create, write, and fsync one new child of a pinned directory.
+
+    Direct descriptor-relative ``O_EXCL|O_NOFOLLOW`` creation avoids both
+    ancestor TOCTOU races and a temporary-source hard-link publication.  If
+    writing or fsyncing fails, the child is unlinked through the same pinned
+    descriptor so callers can retry without a partial requested artifact.
     """
 
-    if not hasattr(os, "link"):
-        raise ValueError("truth manifest requires no-replace file publication")
+    nofollow = getattr(os, "O_NOFOLLOW", None)
+    supports_dir_fd = getattr(os, "supports_dir_fd", ())
+    if nofollow is None or os.open not in supports_dir_fd:
+        raise ValueError("truth manifest requires secure no-replace creation")
+    flags = (
+        os.O_WRONLY
+        | os.O_CREAT
+        | os.O_EXCL
+        | nofollow
+        | getattr(os, "O_CLOEXEC", 0)
+    )
     try:
-        descriptor, temporary_name = tempfile.mkstemp(
-            prefix=f".{path.name}.",
-            suffix=".partial",
-            dir=path.parent,
-        )
+        descriptor = os.open(name, flags, 0o600, dir_fd=parent_descriptor)
+    except FileExistsError:
+        raise _existing_truth_manifest_error(parent_descriptor, name) from None
     except OSError as exc:
-        del exc
+        if exc.errno == ELOOP:
+            raise ValueError("truth manifest must be a regular non-symlink file") from None
         raise ValueError("truth manifest could not be created") from None
 
-    temporary_path = Path(temporary_name)
     failure: Exception | None = None
     try:
-        try:
-            view = memoryview(payload)
-            while view:
-                written = os.write(descriptor, view)
-                if written <= 0:
-                    raise OSError("truth manifest write did not progress")
-                view = view[written:]
-            os.fsync(descriptor)
-            try:
-                # A hard link is an atomic no-replace publication on the same
-                # filesystem.  The source is our mkstemp-created regular
-                # file, and a pre-existing destination cannot be replaced.
-                os.link(temporary_path, path)
-            except FileExistsError:
-                raise FileExistsError(
-                    "truth manifest destination already exists"
-                ) from None
-        except FileExistsError as exc:
-            failure = exc
-        except OSError:
-            failure = ValueError("truth manifest could not be written")
+        view = memoryview(payload)
+        while view:
+            written = os.write(descriptor, view)
+            if written <= 0:
+                raise OSError("truth manifest write did not progress")
+            view = view[written:]
+        os.fsync(descriptor)
+    except OSError:
+        failure = ValueError("truth manifest could not be written")
     finally:
         try:
             os.close(descriptor)
         except OSError:
             if failure is None:
                 failure = ValueError("truth manifest could not be closed")
-        try:
-            os.unlink(temporary_path)
-        except FileNotFoundError:
-            pass
-        except OSError:
-            failure = ValueError("truth manifest temporary output could not be cleared")
 
     if failure is not None:
+        try:
+            _remove_truth_manifest_entry(parent_descriptor, name)
+        except ValueError:
+            failure = ValueError("truth manifest output could not be cleared")
         raise failure
 
 
@@ -1689,28 +1758,30 @@ def write_truth_manifest(
     _reject_truth_path_parts(output)
     if not output.name:
         raise ValueError("truth manifest destination path is invalid")
-    absolute_output = _assert_regular_parent(output.parent) / output.name
-    if os.path.lexists(absolute_output):
-        if os.path.islink(absolute_output):
-            raise ValueError("truth manifest must be a regular non-symlink file")
-        raise FileExistsError("truth manifest destination already exists")
-
-    payload = _truth_manifest_json_bytes(_truth_manifest_mapping(pair, report))
-    _write_truth_manifest_exclusive(absolute_output, payload)
+    _absolute_parent, parent_descriptor = _open_regular_parent(output.parent)
     try:
-        written = _read_truth_manifest_bytes(absolute_output)
-        if written != payload:
-            raise ValueError("truth manifest output is not canonical")
-        parsed = json.loads(
-            written.decode("ascii"),
-            parse_constant=_reject_truth_manifest_json_constant,
-        )
-        if not isinstance(parsed, Mapping):
-            raise TypeError("truth manifest output is not an object")
-        if _truth_manifest_json_bytes(parsed) != written:
-            raise ValueError("truth manifest output is not canonical")
-    except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
-        raise ValueError("truth manifest output could not be verified") from None
+        payload = _truth_manifest_json_bytes(_truth_manifest_mapping(pair, report))
+        _write_truth_manifest_exclusive(parent_descriptor, output.name, payload)
+        try:
+            written = _read_truth_manifest_bytes(parent_descriptor, output.name)
+            if written != payload:
+                raise ValueError("truth manifest output is not canonical")
+            parsed = json.loads(
+                written.decode("ascii"),
+                parse_constant=_reject_truth_manifest_json_constant,
+            )
+            if not isinstance(parsed, Mapping):
+                raise TypeError("truth manifest output is not an object")
+            if _truth_manifest_json_bytes(parsed) != written:
+                raise ValueError("truth manifest output is not canonical")
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
+            _remove_truth_manifest_entry(parent_descriptor, output.name)
+            raise ValueError("truth manifest output could not be verified") from None
+    finally:
+        try:
+            os.close(parent_descriptor)
+        except OSError:
+            pass
     return output
 
 
