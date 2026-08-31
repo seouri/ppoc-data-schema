@@ -575,17 +575,25 @@ class ObservationTruth:
                 raise ValueError("source event code must be None until terminology is reviewed")
             if not isinstance(event.hidden, bool):
                 raise TypeError("source event hidden must be a boolean")
+            if event.event_type == "latent_onset" and not event.hidden:
+                raise ValueError("latent_onset source events must remain hidden")
 
         decision_indices = tuple(item.source_event_index for item in event_decisions)
         if decision_indices != tuple(range(len(source_events))):
             raise ValueError("event decisions must contain exactly one decision per source event")
-        opportunity_indices = {item.source_point_index for item in opportunities}
-        if any(
-            decision.recorded
-            and decision.opportunity_index not in opportunity_indices
-            for decision in event_decisions
-        ):
-            raise ValueError("recorded event decision must reference an existing opportunity")
+        opportunity_by_source_point = {
+            item.source_point_index: item for item in opportunities
+        }
+        for event, decision in zip(source_events, event_decisions, strict=True):
+            if not decision.recorded:
+                continue
+            opportunity = opportunity_by_source_point.get(decision.opportunity_index)
+            if opportunity is None:
+                raise ValueError("recorded event decision must reference an existing opportunity")
+            if not opportunity.realized:
+                raise ValueError("recorded event decision must reference a realized opportunity")
+            if event.hidden:
+                raise ValueError("hidden source events must not be recorded")
         if len({(item.source_point_index, item.channel) for item in measurement_truth}) != len(
             measurement_truth
         ):

@@ -372,6 +372,46 @@ def test_truth_requires_one_decision_per_source_event_and_valid_opportunity_link
         build((EventRecordingDecision(0, True, 1), EventRecordingDecision(1, False, None)))
 
 
+def test_truth_rejects_recorded_decisions_linked_to_unrealized_opportunities() -> None:
+    with pytest.raises(ValueError, match="realized"):
+        ObservationTruth(
+            patient_id="syn-patient-a",
+            window=_window(),
+            opportunities=(VisitOpportunity(0, 730, EncounterType.ROUTINE, False),),
+            measurement_truth=(),
+            event_decisions=(EventRecordingDecision(0, True, 0),),
+            source_events=(
+                ClinicalEvent("syn-patient-a", 600, "observable_phenotype", None, False),
+            ),
+        )
+
+
+def test_truth_rejects_malformed_or_recorded_latent_onset_events() -> None:
+    with pytest.raises(ValueError, match="latent_onset"):
+        ObservationTruth(
+            patient_id="syn-patient-a",
+            window=_window(),
+            opportunities=(),
+            measurement_truth=(),
+            event_decisions=(EventRecordingDecision(0, False, None),),
+            source_events=(
+                ClinicalEvent("syn-patient-a", 0, "latent_onset", None, False),
+            ),
+        )
+
+    with pytest.raises(ValueError, match="hidden"):
+        ObservationTruth(
+            patient_id="syn-patient-a",
+            window=_window(),
+            opportunities=(VisitOpportunity(0, 730, EncounterType.ROUTINE, True),),
+            measurement_truth=(),
+            event_decisions=(EventRecordingDecision(0, True, 0),),
+            source_events=(
+                ClinicalEvent("syn-patient-a", 0, "latent_onset", None, True),
+            ),
+        )
+
+
 @pytest.mark.parametrize(
     "event",
     [
