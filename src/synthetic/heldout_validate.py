@@ -19,6 +19,7 @@ from types import MappingProxyType
 import duckdb
 
 from synthetic.calibrate import (
+    CALIBRATION_REPORT_VERSION,
     DEFAULT_AGE_WINDOWS,
     CalibrationAgeWindow,
     CalibrationReport,
@@ -835,6 +836,8 @@ def _require_calibration_compatibility(
     artifact: CalibrationArtifact,
     report: CalibrationReport,
 ) -> None:
+    if report.report_version != CALIBRATION_REPORT_VERSION:
+        raise ValueError("calibration report version is incompatible")
     if artifact.source_snapshot != config.source_snapshot:
         raise ValueError("calibration artifact snapshot is incompatible")
     if artifact.source_partition != "calibration":
@@ -849,6 +852,10 @@ def _require_calibration_compatibility(
         raise ValueError("calibration partition policy is incompatible")
     if config.fidelity_policy.target_registry_version != TARGET_REGISTRY_VERSION:
         raise ValueError("fidelity target registry is incompatible")
+    for stratum in artifact.strata:
+        for target in stratum.targets:
+            if not is_registered_target_key(*_target_key(stratum.stratum_id, target)):
+                raise ValueError("calibration artifact target registry is incompatible")
     check_names = tuple(check.name for check in report.checks)
     if (
         len(check_names) != len(_CALIBRATION_CHECK_NAMES)
@@ -1115,12 +1122,15 @@ def _refuse_existing_lifecycle_path(
         raise FileExistsError("held-out output lifecycle path already exists")
 
 
-def _remove_partial_outputs(run: RunDirectory) -> None:
+def _prepare_failure_archive(run: RunDirectory) -> None:
     for filename in (_HELDOUT_REPORT_FILENAME, _HELDOUT_SUMMARY_FILENAME):
         try:
-            (run.partial_path / filename).unlink(missing_ok=True)
-        except OSError:
-            pass
+            os.unlink(run.partial_path / filename)
+        except FileNotFoundError:
+            continue
+    with os.scandir(run.partial_path) as entries:
+        if next(entries, None) is not None:
+            raise OSError("held-out partial output could not be cleared")
 
 
 def write_heldout_report(result: HeldoutValidationResult, output: Path) -> None:
@@ -1143,8 +1153,8 @@ def write_heldout_report(result: HeldoutValidationResult, output: Path) -> None:
         _reparse_written_report(run, result)
         run.promote()
     except Exception:  # noqa: BLE001 - every output failure archives redacted evidence
-        _remove_partial_outputs(run)
         try:
+            _prepare_failure_archive(run)
             run.fail("held-out output validation failed")
         except Exception:  # noqa: BLE001 - lifecycle errors must remain redacted
             raise ValueError("held-out output could not be promoted") from None

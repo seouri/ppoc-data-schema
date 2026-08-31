@@ -92,6 +92,7 @@ _SENSITIVE_DETAIL_WORDS = frozenset({"patient", "visit", "path", "key", "identif
 _ARTIFACT_FILENAME = "calibration-artifact.json"
 _REPORT_FILENAME = "calibration-report.json"
 MAX_CALIBRATION_REPORT_BYTES = 1024 * 1024
+CALIBRATION_REPORT_VERSION = "calibration-report-v1"
 _PARTITION_POLICY_KEYS = frozenset(
     {
         "policy_id",
@@ -340,7 +341,10 @@ class CalibrationReport:
     checks: tuple[CalibrationCheck, ...]
 
     def __post_init__(self) -> None:
-        _require_safe_report_token(self.report_version, "report_version")
+        if self.report_version != CALIBRATION_REPORT_VERSION:
+            raise ValueError(
+                f"report_version must be {CALIBRATION_REPORT_VERSION}"
+            )
         if self.status != "AGGREGATES_ONLY":
             raise ValueError("status must be AGGREGATES_ONLY")
         _require_safe_report_token(self.source_snapshot, "source_snapshot")

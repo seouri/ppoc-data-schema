@@ -17,7 +17,7 @@ from synthetic.calibrate import (
     load_calibration_report,
     write_calibration_result,
 )
-from synthetic.calibration import CalibrationDisclosurePolicy
+from synthetic.calibration import CalibrationArtifact, CalibrationDisclosurePolicy
 from synthetic.calibration_targets import TARGET_REGISTRY_VERSION
 from synthetic.heldout_validate import (
     FidelityPolicy,
@@ -141,6 +141,26 @@ def _rewrite_json(path: Path, mutate: object) -> None:
     path.write_text(json.dumps(value), encoding="utf-8")
 
 
+def _replace_artifact_target_with_unregistered_target(config: HeldoutRunConfig) -> None:
+    artifact = json.loads(config.calibration_artifact.read_text(encoding="utf-8"))
+    artifact["strata"][0]["targets"][0]["target_name"] = "unregistered_metric"
+    normalized = CalibrationArtifact.from_mapping(artifact).to_mapping()
+    canonical_strata = json.dumps(
+        normalized["strata"],
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+        allow_nan=False,
+    )
+    aggregate_hash = hashlib.sha256(canonical_strata.encode("ascii")).hexdigest()
+    artifact["source_aggregate_sha256"] = aggregate_hash
+    config.calibration_artifact.write_text(json.dumps(artifact), encoding="utf-8")
+    _rewrite_json(
+        config.calibration_report,
+        lambda value: value.__setitem__("source_aggregate_sha256", aggregate_hash),
+    )
+
+
 def test_config_is_immutable_and_validates_every_governed_field(tmp_path: Path) -> None:
     config = _config(tmp_path)
 
@@ -232,11 +252,13 @@ def test_high_disclosure_minimum_produces_promotable_unevaluable(tmp_path: Path)
         "artifact_snapshot",
         "artifact_schema",
         "artifact_disclosure",
+        "artifact_registry",
         "report_snapshot",
         "report_schema",
         "report_hash",
         "report_partition",
         "report_check",
+        "report_version",
         "synthetic_marker",
     ],
 )
@@ -255,6 +277,8 @@ def test_compatibility_mismatches_fail_before_target_computation(
             config.calibration_artifact,
             lambda value: value["disclosure_policy"].__setitem__("policy_version", "2"),
         )
+    elif mismatch == "artifact_registry":
+        _replace_artifact_target_with_unregistered_target(config)
     elif mismatch == "report_snapshot":
         _rewrite_json(config.calibration_report, lambda value: value.__setitem__("source_snapshot", "other"))
     elif mismatch == "report_schema":
@@ -271,6 +295,11 @@ def test_compatibility_mismatches_fail_before_target_computation(
             config.calibration_report,
             lambda value: value["checks"][0].__setitem__("passed", False),
         )
+    elif mismatch == "report_version":
+        _rewrite_json(
+            config.calibration_report,
+            lambda value: value.__setitem__("report_version", "calibration-report-v2"),
+        )
     else:
         descriptor = config.synthetic_root / "datapackage.json"
         _rewrite_json(descriptor, lambda value: value.pop("x-synthetic"))
@@ -284,6 +313,10 @@ def test_compatibility_mismatches_fail_before_target_computation(
     with pytest.raises(ValueError):
         validate_heldout(config)
     assert not config.output.exists()
+    lifecycle_prefix = f".{config.output.name}."
+    assert not any(
+        path.name.startswith(lifecycle_prefix) for path in config.output.parent.iterdir()
+    )
 
 
 def test_write_promotes_only_canonical_report_and_summary(tmp_path: Path) -> None:
@@ -363,3 +396,43 @@ def test_noncanonical_write_archives_only_fixed_aggregate_failure(
         "status": "FAILED",
         "reason": "held-out output validation failed",
     }
+
+
+@pytest.mark.parametrize(
+    "cleanup_failure",
+    ["heldout-validation-report.json", "heldout-validation-summary.txt"],
+)
+def test_cleanup_failure_leaves_partial_unpromoted_and_never_archives_outputs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cleanup_failure: str,
+) -> None:
+    config = _config(tmp_path)
+    result = validate_heldout(config)
+    real_unlink = heldout_module.os.unlink
+
+    monkeypatch.setattr(
+        heldout_module,
+        "_reparse_written_report",
+        lambda *_args: (_ for _ in ()).throw(OSError("raw reparse detail")),
+    )
+
+    def selective_unlink(path: Path) -> None:
+        if Path(path).name == cleanup_failure:
+            raise OSError("raw cleanup detail")
+        real_unlink(path)
+
+    monkeypatch.setattr(heldout_module.os, "unlink", selective_unlink)
+
+    with pytest.raises(ValueError, match="could not be promoted") as error:
+        write_heldout_report(result, config.output)
+
+    assert "raw" not in str(error.value)
+    assert not config.output.exists()
+    lifecycle_id = heldout_module._lifecycle_run_id(result.report)
+    partial = config.output.parent / f".{config.output.name}.{lifecycle_id}.partial"
+    failed = config.output.parent / f".{config.output.name}.{lifecycle_id}.failed"
+    assert partial.is_dir()
+    assert (partial / cleanup_failure).is_file()
+    assert not (partial / "failure.json").exists()
+    assert not failed.exists()
