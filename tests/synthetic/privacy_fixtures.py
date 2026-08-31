@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import csv
 import json
 from pathlib import Path
 from typing import Any
 
-from synthetic.schema_contract import load_descriptor, schema_fingerprint
+from synthetic.schema_contract import load_descriptor, resource_spec, schema_fingerprint
 from tests.synthetic.calibration_fixtures import write_mock_snapshot, write_synthetic_descriptor
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -89,3 +90,87 @@ def write_shadow_manifest(path: Path, runs: list[dict[str, object]]) -> Path:
         json.dumps({"version": "privacy-shadow-v1", "runs": runs}), encoding="utf-8"
     )
     return path
+
+
+def retain_eligible_growth_profiles(root: Path, patient_ids: set[str]) -> Path:
+    """Blank growth observations outside a fictional eligible-patient set."""
+    descriptor = load_descriptor(root / "datapackage.json")
+    path = root / resource_spec(descriptor, "visits_augmented")["path"]
+    with path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+        fields = tuple(rows[0])
+    for row in rows:
+        if row["patient_id"] not in patient_ids:
+            for field in ("height_cm", "weight_kg", "head_circ_cm"):
+                row[field] = ""
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(rows)
+    return root
+
+
+def offset_growth_trajectories(root: Path, amount: float) -> Path:
+    """Offset fictional measurements so a package is trajectory-independent."""
+    descriptor = load_descriptor(root / "datapackage.json")
+    path = root / resource_spec(descriptor, "visits_augmented")["path"]
+    with path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+        fields = tuple(rows[0])
+    for row in rows:
+        for field in ("height_cm", "weight_kg", "head_circ_cm"):
+            if row[field]:
+                row[field] = str(float(row[field]) + amount)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(rows)
+    return root
+
+
+def set_first_growth_value(root: Path, value: str) -> Path:
+    """Set one fictional growth value for private-error redaction tests."""
+    descriptor = load_descriptor(root / "datapackage.json")
+    path = root / resource_spec(descriptor, "visits_augmented")["path"]
+    with path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+        fields = tuple(rows[0])
+    rows[0]["height_cm"] = value
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(rows)
+    return root
+
+
+def copy_growth_trajectory(root: Path, source_patient: str, target_patient: str) -> Path:
+    """Copy one fictional patient's growth measurements onto another patient."""
+    descriptor = load_descriptor(root / "datapackage.json")
+    path = root / resource_spec(descriptor, "visits_augmented")["path"]
+    with path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+        fields = tuple(rows[0])
+    measurements = {
+        row["age_in_days"]: tuple(row[field] for field in ("height_cm", "weight_kg", "head_circ_cm"))
+        for row in rows
+        if row["patient_id"] == source_patient
+    }
+    if not measurements:
+        raise ValueError("fictional source trajectory is missing")
+    copied = 0
+    for row in rows:
+        if row["patient_id"] != target_patient:
+            continue
+        values = measurements.get(row["age_in_days"])
+        if values is None:
+            raise ValueError("fictional trajectory ages do not align")
+        for field, value in zip(("height_cm", "weight_kg", "head_circ_cm"), values, strict=True):
+            row[field] = value
+        copied += 1
+    if copied == 0:
+        raise ValueError("fictional target trajectory is missing")
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(rows)
+    return root

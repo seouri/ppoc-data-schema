@@ -744,6 +744,17 @@ def _packages_have_profile_evidence(policy: PrivacyPolicy, *packages: _PrivatePa
     return all(len(package._profiles) >= policy.minimum_evaluable_patients for package in packages)
 
 
+def _private_package_root_identity(package_root: Path) -> tuple[int, int]:
+    """Return a process-local filesystem identity without exposing its governed path."""
+    try:
+        metadata = package_root.stat()
+    except OSError as exc:
+        raise ValueError from exc
+    if not stat.S_ISDIR(metadata.st_mode):
+        raise ValueError
+    return metadata.st_dev, metadata.st_ino
+
+
 def _evaluate_identifier_overlap_control(
     policy: PrivacyPolicy, reference: _PrivatePackage, generated: _PrivatePackage
 ) -> PrivacyControlResult:
@@ -1165,6 +1176,8 @@ def _load_private_shadow_runs(
     manifest_path: Path, reference: _PrivatePackage, policy: PrivacyPolicy
 ) -> tuple[_PrivateShadowRun, ...]:
     """Load exact-versioned shadow inputs without retaining manifest labels or paths in results."""
+    load_failed = False
+    runs: list[_PrivateShadowRun] = []
     try:
         payload = _read_regular_bytes(
             manifest_path, "privacy shadow manifest", MAX_PRIVACY_SHADOW_MANIFEST_BYTES
@@ -1180,8 +1193,8 @@ def _load_private_shadow_runs(
         if manifest["version"] != "privacy-shadow-v1" or not isinstance(manifest["runs"], list):
             raise ValueError
         profiles_by_id = {profile._patient_id: profile for profile in reference._profiles}
-        runs: list[_PrivateShadowRun] = []
         run_ids: set[str] = set()
+        package_identities: set[tuple[int, int]] = set()
         for entry in manifest["runs"]:
             if not isinstance(entry, Mapping):
                 raise TypeError
@@ -1195,24 +1208,39 @@ def _load_private_shadow_runs(
                 raise ValueError
             if len(set(members)) != len(members):
                 raise ValueError
-            try:
-                member_signatures = frozenset(profiles_by_id[item]._trajectory_signature for item in members)
-            except KeyError as exc:
-                raise ValueError from exc
+            member_signatures = frozenset(
+                profiles_by_id[item]._trajectory_signature for item in members
+            )
             if len(member_signatures) != len(members):
+                raise ValueError
+            member_ids = frozenset(members)
+            if any(
+                profile._patient_id not in member_ids
+                and profile._trajectory_signature in member_signatures
+                for profile in reference._profiles
+            ):
+                raise ValueError
+            root = Path(package_root)
+            package_identity = _private_package_root_identity(root)
+            if package_identity in package_identities:
                 raise ValueError
             runs.append(
                 _PrivateShadowRun(
                     run_id,
                     _load_private_package(
-                        Path(package_root), synthetic=True, longitudinal_minimum=policy.longitudinal_min_observations
+                        root,
+                        synthetic=True,
+                        longitudinal_minimum=policy.longitudinal_min_observations,
                     ),
                     member_signatures,
                 )
             )
             run_ids.add(run_id)
-    except (KeyError, OSError, RecursionError, TypeError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
-        raise ValueError("privacy shadow manifest is invalid") from exc
+            package_identities.add(package_identity)
+    except (KeyError, OSError, RecursionError, TypeError, UnicodeError, ValueError, json.JSONDecodeError):
+        load_failed = True
+    if load_failed:
+        raise ValueError("privacy shadow manifest is invalid")
     return tuple(runs)
 
 
@@ -1224,12 +1252,26 @@ def _evaluate_membership_inference_control(
     """Run the fixed exact-trajectory membership screen across every supplied shadow run."""
     if not shadow_runs or len(shadow_runs) < policy.minimum_shadow_runs:
         return _unevaluable_control("membership_inference", "insufficient_shadow_runs")
-    if len({run.run_id for run in shadow_runs}) != len(shadow_runs):
+    if (
+        len({run.run_id for run in shadow_runs}) != len(shadow_runs)
+        or len({id(run._package) for run in shadow_runs}) != len(shadow_runs)
+    ):
         return _unevaluable_control("membership_inference", "invalid_shadow_runs")
-    if not _packages_have_profile_evidence(policy, reference):
+    if not _packages_have_profile_evidence(
+        policy, reference, *(run._package for run in shadow_runs)
+    ):
         return _unevaluable_control("membership_inference", "insufficient_evidence")
+    reference_signature_counts: dict[str, int] = {}
+    for profile in reference._profiles:
+        signature = profile._trajectory_signature
+        reference_signature_counts[signature] = reference_signature_counts.get(signature, 0) + 1
     candidates: list[dict[str, int | float]] = []
     for run in shadow_runs:
+        if any(
+            reference_signature_counts.get(signature) != 1
+            for signature in run._member_trajectory_signatures
+        ):
+            return _unevaluable_control("membership_inference", "inconsistent_shadow_labels")
         labels = tuple(
             profile._trajectory_signature in run._member_trajectory_signatures for profile in reference._profiles
         )
@@ -1417,6 +1459,8 @@ def _evaluate_composition_control(
 ) -> PrivacyControlResult:
     """Compare generated trajectories only with the explicitly supplied prior synthetic releases."""
     if not prior_releases or len(prior_releases) < policy.minimum_prior_releases:
+        return _unevaluable_control("composition", "insufficient_prior_releases")
+    if len({id(package) for package in prior_releases}) != len(prior_releases):
         return _unevaluable_control("composition", "insufficient_prior_releases")
     if not _packages_have_profile_evidence(policy, generated, *prior_releases):
         return _unevaluable_control("composition", "insufficient_evidence")
@@ -1646,8 +1690,18 @@ def _audit_privacy(config: PrivacyRunConfig) -> PrivacyAuditResult:
         heldout_invalid = True
         heldout_reason = "heldout_not_patient_disjoint"
     prior_releases: list[_PrivatePackage] = []
+    prior_identities: set[tuple[int, int]] = set()
     prior_invalid = False
     for root in config.prior_release_roots:
+        try:
+            identity = _private_package_root_identity(root)
+        except ValueError:
+            prior_invalid = True
+            continue
+        if identity in prior_identities:
+            prior_invalid = True
+            continue
+        prior_identities.add(identity)
         package, invalid = _load_optional_package(root, synthetic=True, policy=policy)
         prior_invalid = prior_invalid or invalid
         if package is not None:

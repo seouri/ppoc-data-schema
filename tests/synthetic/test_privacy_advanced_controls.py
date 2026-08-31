@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import traceback
 from dataclasses import replace
 from pathlib import Path
 from types import MappingProxyType
@@ -11,6 +12,7 @@ import pytest
 
 from synthetic.privacy_audit import (
     PrivacyPolicy,
+    PrivacyRunConfig,
     _evaluate_attribute_disclosure_control,
     _evaluate_composition_control,
     _evaluate_membership_inference_control,
@@ -21,10 +23,17 @@ from synthetic.privacy_audit import (
     _PrivatePackage,
     _PrivatePatientProfile,
     _PrivateShadowRun,
+    audit_privacy,
 )
 from tests.synthetic.privacy_fixtures import (
+    copy_growth_trajectory,
+    exception_graph,
+    offset_growth_trajectories,
     policy_mapping,
+    retain_eligible_growth_profiles,
+    set_first_growth_value,
     write_generated_package,
+    write_policy,
     write_real_package,
     write_shadow_manifest,
 )
@@ -106,6 +115,44 @@ def test_shadow_manifest_is_strict_and_does_not_echo_private_members(tmp_path: P
     assert "unknown-private-member" not in str(error.value)
 
 
+@pytest.mark.parametrize(
+    "failure", ["unknown_member", "missing_manifest", "missing_package", "bad_row"]
+)
+def test_shadow_manifest_failures_detach_private_exception_graph(
+    tmp_path: Path, failure: str
+) -> None:
+    """Catches private member or path values surviving in chained loader exceptions."""
+    reference = _load_private_package(
+        write_real_package(tmp_path / "reference"), synthetic=False, longitudinal_minimum=3
+    )
+    shadow = write_generated_package(tmp_path / "shadow")
+    sentinel = f"PRIVATE-{failure.upper()}-SENTINEL"
+    if failure == "missing_manifest":
+        manifest = tmp_path / sentinel / "shadows.json"
+    else:
+        if failure == "bad_row":
+            set_first_growth_value(shadow, sentinel)
+        manifest = write_shadow_manifest(
+            tmp_path / "shadows.json",
+            [
+                {
+                    "run_id": "shadow-one",
+                    "package_root": str(tmp_path / sentinel) if failure == "missing_package" else str(shadow),
+                    "members": [sentinel] if failure == "unknown_member" else ["REAL-P-001"],
+                }
+            ],
+        )
+
+    with pytest.raises(ValueError, match="^privacy shadow manifest is invalid$") as error:
+        _load_private_shadow_runs(manifest, reference, _policy(minimum_shadow_runs=1))
+
+    formatted = "".join(traceback.format_exception(error.value))
+    graph = exception_graph(error.value)
+    assert graph == (error.value,)
+    assert sentinel not in formatted
+    assert all(sentinel not in repr(item) for item in graph)
+
+
 def test_membership_requires_all_shadow_runs_and_reports_only_maximum_aggregate_signal() -> None:
     """Catches treating one shadow or an individual label as sufficient membership evidence."""
     policy = _policy()
@@ -174,6 +221,213 @@ def test_membership_suppresses_duplicate_runs_and_undersized_labels() -> None:
     assert duplicate_result.status == "UNEVALUABLE"
     assert undersized_result.status == "UNEVALUABLE"
     assert duplicate_result.metrics == undersized_result.metrics == {}
+
+
+def test_membership_requires_shadow_profiles_and_unambiguous_reference_labels() -> None:
+    """Catches empty shadows or signature collisions becoming membership evidence."""
+    policy = _policy(minimum_shadow_runs=1)
+    reference = _package(
+        _profile("one", "0"), _profile("two", "0"), _profile("three", "1"),
+        replace(_profile("four", "0"), _trajectory_signature="trajectory-one"),
+        _profile("five", "0"), _profile("six", "1"), _profile("seven", "0"),
+    )
+    labels = frozenset({"trajectory-one", "trajectory-two", "trajectory-three"})
+    empty = _PrivateShadowRun("empty", _package(), labels)
+    underpowered = _PrivateShadowRun(
+        "underpowered", _package(_profile("one", "0"), _profile("two", "0")), labels
+    )
+    ambiguous = _PrivateShadowRun(
+        "ambiguous",
+        _package(_profile("one", "0"), _profile("two", "0"), _profile("three", "1")),
+        labels,
+    )
+
+    results = tuple(
+        _evaluate_membership_inference_control(policy, reference, (run,))
+        for run in (empty, underpowered, ambiguous)
+    )
+
+    assert all(result.status == "UNEVALUABLE" for result in results)
+    assert all(result.metrics == {} for result in results)
+
+
+def test_composition_does_not_count_the_same_private_package_twice() -> None:
+    """Catches duplicate in-memory prior evidence satisfying the release minimum."""
+    policy = _policy(minimum_prior_releases=2)
+    generated = _package(_profile("one", "0"), _profile("two", "0"), _profile("three", "1"))
+
+    result = _evaluate_composition_control(policy, generated, (generated, generated))
+
+    assert result.status == "UNEVALUABLE"
+    assert result.metrics == {}
+
+
+@pytest.mark.parametrize("eligible_count", [0, 2])
+def test_audit_rejects_empty_or_underpowered_shadow_package_evidence(
+    tmp_path: Path, eligible_count: int
+) -> None:
+    """Catches an insufficient shadow artifact producing aggregate membership metrics."""
+    thresholds = policy_mapping()["thresholds"]
+    assert isinstance(thresholds, dict)
+    reference = write_real_package(tmp_path / "reference")
+    generated = offset_growth_trajectories(
+        write_generated_package(tmp_path / "generated"), 100.0
+    )
+    shadow = retain_eligible_growth_profiles(
+        write_generated_package(tmp_path / "shadow", id_prefix="SHD"),
+        {f"SHD-P-{index:03d}" for index in range(1, eligible_count + 1)},
+    )
+    manifest = write_shadow_manifest(
+        tmp_path / "shadows.json",
+        [
+            {
+                "run_id": "shadow-one",
+                "package_root": str(shadow),
+                "members": ["REAL-P-001", "REAL-P-002", "REAL-P-003"],
+            }
+        ],
+    )
+    policy = write_policy(
+        tmp_path / "policy.json",
+        minimum_shadow_runs=1,
+        required_controls=["exact_reproduction", "identifier_overlap", "membership_inference"],
+        thresholds=thresholds | {"linkage_advantage": 1.0, "nearest_neighbor_unique_rate": 1.0},
+    )
+
+    result = audit_privacy(
+        PrivacyRunConfig(reference, generated, policy, tmp_path / "output", shadow_manifest=manifest)
+    )
+    membership = next(
+        control for control in result.report.controls if control.control_id == "membership_inference"
+    )
+
+    assert membership.status == "UNEVALUABLE"
+    assert membership.metrics == {}
+    assert result.report.status == "UNEVALUABLE"
+
+
+def test_audit_rejects_ambiguous_shadow_membership_labels(tmp_path: Path) -> None:
+    """Catches one member signature silently relabelling a nonmember reference patient."""
+    thresholds = policy_mapping()["thresholds"]
+    assert isinstance(thresholds, dict)
+    reference = copy_growth_trajectory(
+        write_real_package(tmp_path / "reference"), "REAL-P-001", "REAL-P-004"
+    )
+    generated = offset_growth_trajectories(
+        write_generated_package(tmp_path / "generated"), 100.0
+    )
+    shadow = write_generated_package(tmp_path / "shadow", id_prefix="SHD")
+    manifest = write_shadow_manifest(
+        tmp_path / "shadows.json",
+        [
+            {
+                "run_id": "shadow-one",
+                "package_root": str(shadow),
+                "members": ["REAL-P-001", "REAL-P-002", "REAL-P-003"],
+            }
+        ],
+    )
+    policy = write_policy(
+        tmp_path / "policy.json",
+        minimum_shadow_runs=1,
+        required_controls=["exact_reproduction", "identifier_overlap", "membership_inference"],
+        thresholds=thresholds | {"linkage_advantage": 1.0, "nearest_neighbor_unique_rate": 1.0},
+    )
+
+    result = audit_privacy(
+        PrivacyRunConfig(reference, generated, policy, tmp_path / "output", shadow_manifest=manifest)
+    )
+    membership = next(
+        control for control in result.report.controls if control.control_id == "membership_inference"
+    )
+
+    assert membership.status == "UNEVALUABLE"
+    assert membership.metrics == {}
+    assert result.report.status == "UNEVALUABLE"
+
+
+def test_shadow_manifest_rejects_equivalent_package_roots(tmp_path: Path) -> None:
+    """Catches a symlink alias counting one shadow package as two independent runs."""
+    reference = _load_private_package(
+        write_real_package(tmp_path / "reference"), synthetic=False, longitudinal_minimum=3
+    )
+    shadow = write_generated_package(tmp_path / "shadow")
+    alias = tmp_path / "shadow-alias"
+    alias.symlink_to(shadow, target_is_directory=True)
+    manifest = write_shadow_manifest(
+        tmp_path / "shadows.json",
+        [
+            {"run_id": "shadow-one", "package_root": str(shadow), "members": ["REAL-P-001"]},
+            {"run_id": "shadow-two", "package_root": str(alias), "members": ["REAL-P-002"]},
+        ],
+    )
+
+    with pytest.raises(ValueError, match="^privacy shadow manifest is invalid$"):
+        _load_private_shadow_runs(manifest, reference, _policy())
+
+
+@pytest.mark.parametrize("evidence", ["shadow", "prior"])
+def test_repeated_evidence_roots_cannot_satisfy_required_privacy_controls(
+    tmp_path: Path, evidence: str
+) -> None:
+    """Catches repeated roots promoting required shadow or prior-release controls."""
+    thresholds = policy_mapping()["thresholds"]
+    assert isinstance(thresholds, dict)
+    reference = write_real_package(tmp_path / "reference")
+    generated = offset_growth_trajectories(
+        write_generated_package(tmp_path / "generated"), 100.0
+    )
+    required = ["exact_reproduction", "identifier_overlap"]
+    config_changes: dict[str, object] = {}
+    policy_changes: dict[str, object] = {
+        "thresholds": thresholds | {"linkage_advantage": 1.0, "nearest_neighbor_unique_rate": 1.0}
+    }
+    if evidence == "shadow":
+        package = write_generated_package(tmp_path / "shadow", id_prefix="SHD")
+        config_changes["shadow_manifest"] = write_shadow_manifest(
+            tmp_path / "shadows.json",
+            [
+                {
+                    "run_id": "shadow-one",
+                    "package_root": str(package),
+                    "members": ["REAL-P-001", "REAL-P-002", "REAL-P-003"],
+                },
+                {
+                    "run_id": "shadow-two",
+                    "package_root": str(package),
+                    "members": ["REAL-P-004", "REAL-P-005", "REAL-P-006"],
+                },
+            ],
+        )
+        required.append("membership_inference")
+        policy_changes["minimum_shadow_runs"] = 2
+        control_id = "membership_inference"
+    else:
+        package = offset_growth_trajectories(
+            write_generated_package(tmp_path / "prior", id_prefix="PRIOR"), 200.0
+        )
+        config_changes["prior_release_roots"] = (package, package)
+        required.append("composition")
+        required.sort()
+        policy_changes["minimum_prior_releases"] = 2
+        control_id = "composition"
+    policy_changes["required_controls"] = required
+    policy = write_policy(tmp_path / "policy.json", **policy_changes)
+
+    result = audit_privacy(
+        PrivacyRunConfig(
+            reference,
+            generated,
+            policy,
+            tmp_path / "output",
+            **config_changes,
+        )
+    )
+    control = next(item for item in result.report.controls if item.control_id == control_id)
+
+    assert control.status == "UNEVALUABLE"
+    assert control.metrics == {}
+    assert result.report.status == "UNEVALUABLE"
 
 
 def test_attribute_and_composition_controls_use_private_labels_and_explicit_prior_packages() -> None:
