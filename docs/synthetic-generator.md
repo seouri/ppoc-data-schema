@@ -55,6 +55,31 @@ Repository CI invokes this path only with the wholly synthetic eight-resource mo
 
 Calibration output is not prevalence validation, representative-cohort evidence, clinical validation, privacy or non-matchability evidence, or release authorization. Held-out fidelity validation, clinical review, privacy auditing, and any future generator-consumption contract remain separate governed gates.
 
+## Patient-disjoint held-out validation
+
+An authorized operator may run the standalone held-out validator only inside the governed environment. It derives the real-data partition privately from the keyed partition policy, compares disclosed aggregate targets from the real `held_out` partition with the complete generated package, and applies a frozen fidelity policy; it does not expose patient rows, identifiers, sequences, or the partition key.
+
+```sh
+uv run python -m synthetic.heldout_validate \
+  --real-root /governed/ppoc \
+  --descriptor /governed/ppoc/datapackage.json \
+  --snapshot 2026-08-24 \
+  --synthetic-root /fixtures/development-20260830 \
+  --calibration-artifact /approved/calibration/calibration-artifact.json \
+  --calibration-report /approved/calibration/calibration-report.json \
+  --partition-policy /governed/partition-policy.json \
+  --disclosure-policy /governed/disclosure-policy.json \
+  --partition-key-file /governed/partition.key \
+  --frozen-policy /governed/fidelity-policy.json \
+  --output /governed/heldout-report
+```
+
+Every path is required: there is no default governed data root, descriptor, policy, key, snapshot, or output. Repository CI is synthetic-only: it uses fictional exact-schema packages and test key material, with no real data in CI. Visible generation, export, manifest, and trajectory paths do not import this validator or consume a governed path, key, calibration artifact, or held-out report.
+
+`PASS` means every evaluable disclosed aggregate target met the frozen tolerance. `FAIL` means an evaluable target fell outside that tolerance. `UNEVALUABLE` means a target was suppressed, missing, underpowered, or a required target family had no evaluable cell; it is never treated as zero or `PASS`. `FAIL` and `UNEVALUABLE` both promote their aggregate-only report but return a nonzero gate status, while input or compatibility failures promote no report.
+
+A passing held-out report is limited aggregate fidelity evidence. It is not evidence of growth-disorder prevalence, demographic representativeness, clinical validity, privacy or non-matchability, or release approval. Privacy evaluation, temporal drift, task utility, prevalence evaluation, and a Synthea adapter remain separate deferred gates and require their own approved evidence and governance.
+
 ### Development-only age-regime smoke example
 
 When exercising the latent trajectory layer with an injected reference, cover the five `GrowthRegime` classifier regimes: infancy, transition, childhood, puberty, and adolescence. Infancy runs before the configured transition window; transition spans the configured 24-month window (700–760 days by default, so day 730 is transition); childhood follows that window until the injected puberty schedule; puberty follows onset for its configured tempo; and adolescence continues through the maximum age (including 7305). At every age, generate only two independent anthropometric dimensions: length plus weight before transition, and height plus BMI after transition, with the applicable third value derived explicitly. Do not generate height/length, weight, and BMI as three independent states.
