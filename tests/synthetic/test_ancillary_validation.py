@@ -95,6 +95,28 @@ def test_validator_fails_delay_duplicate_and_cross_resource_link_tampering() -> 
     assert _check(validate_ghd_ancillary_resources(member, projection, _policy()), "cross_resource_links") == (AncillaryValidationStatus.FAIL, "VISIT_REFERENCE_INVALID")
 
 
+def test_validator_rejects_float_for_descriptor_integer_even_when_values_compare_equal() -> None:
+    member, projection = _projection()
+    row = projection.rows["labs"][0]
+    _tamper_row(
+        projection,
+        "labs",
+        0,
+        tuple((name, 1.0 if name == "result_line_num" else value) for name, value in row.values),
+    )
+    report = validate_ghd_ancillary_resources(member, projection, _policy())
+    assert report.status is AncillaryValidationStatus.FAIL
+    assert _check(report, "row_schema")[0] is AncillaryValidationStatus.FAIL
+
+    malformed_frame = dataclasses.replace(member.frame)
+    object.__setattr__(malformed_frame, "truth", None)
+    malformed_member = dataclasses.replace(member, frame=malformed_frame)
+    report = validate_ghd_ancillary_resources(malformed_member, projection, _policy())
+    assert report.status is AncillaryValidationStatus.FAIL
+    assert _check(report, "row_schema")[0] is AncillaryValidationStatus.FAIL
+    assert _check(report, "source_evidence")[0] is AncillaryValidationStatus.UNEVALUABLE
+
+
 def test_validator_marks_malformed_private_evidence_unevaluable_unless_row_is_invalid() -> None:
     member, projection = _projection()
     malformed_frame = dataclasses.replace(member.frame)

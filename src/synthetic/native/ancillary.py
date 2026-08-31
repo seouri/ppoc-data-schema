@@ -110,6 +110,20 @@ ANCILLARY_REASON_CODES = frozenset(
 )
 
 _GHD_RESOURCE_NAME_SET = frozenset(GHD_ANCILLARY_RESOURCE_NAMES)
+_ANCILLARY_INTEGER_FIELDS = frozenset(
+    {
+        "result_line_num",
+        "lab_order_date_age_in_days",
+        "lab_result_date_age_in_days",
+        "med_order_date_age_in_days",
+        "med_start_date_age_in_days",
+        "med_end_date_age_in_days",
+        "noted_date_age_in_days",
+        "resolved_date_age_in_days",
+        "referral_date_age_in_days",
+        "referral_number_of_visits",
+    }
+)
 _SYNTHETIC_PATIENT_TOKEN = re.compile(r"^syn-[A-Za-z0-9][A-Za-z0-9._-]*$")
 _AGGREGATE_TOKEN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
 _AGGREGATE_UNSAFE_COMPONENTS = frozenset(
@@ -192,6 +206,18 @@ def _row_values(row: ResourceRow) -> dict[str, object]:
             raise ValueError("row values must contain unique field names")
         values[field_name] = value
     return values
+
+
+def _ancillary_row_types_are_valid(values: Mapping[str, object]) -> bool:
+    """Check exact scalar kinds before value comparison can coerce equality."""
+
+    for field_name, value in values.items():
+        if field_name in _ANCILLARY_INTEGER_FIELDS:
+            if value != "" and (isinstance(value, bool) or not isinstance(value, int)):
+                return False
+        elif not isinstance(value, str):
+            return False
+    return True
 
 
 @dataclass(frozen=True, repr=False)
@@ -639,6 +665,8 @@ def validate_ghd_ancillary_resources(
                     mark("row_schema", AncillaryValidationStatus.FAIL, "DUPLICATE_ROW")
                 seen.add(row.values)
                 values = _row_values(row)
+                if not _ancillary_row_types_are_valid(values):
+                    mark("row_schema", AncillaryValidationStatus.FAIL, "INVALID_VALUE")
                 if values.get("patient_id") != projection.patient_id:
                     mark("cross_resource_links", AncillaryValidationStatus.FAIL, "PATIENT_MISMATCH")
                 if resource_name == "labs" and values.get("result_component_name") not in GHD_LAB_COMPONENT_NAMES:
