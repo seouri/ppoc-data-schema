@@ -171,6 +171,60 @@ Repository CI invokes this path only with the wholly synthetic eight-resource mo
 
 Calibration output is not prevalence validation, representative-cohort evidence, clinical validation, privacy or non-matchability evidence, or release authorization. Held-out fidelity validation, clinical review, privacy auditing, and any future generator-consumption contract remain separate governed gates.
 
+## Evaluator-only temporal-drift validation
+
+`validate_temporal_drift` evaluates one previously generated, completely fictional `NativeCohort` against an explicit immutable `TemporalDriftPolicy` entirely in memory. Each `TemporalWindowPolicy` declares one ordered half-open `[lower_age_days, upper_age_days)` age window and its visible support floors and drift bounds; the evaluator accepts only the cohort and policy and does not read, write, export, or mutate a package or report.
+
+```python
+from synthetic.temporal_drift import (
+    TemporalDriftPolicy,
+    TemporalWindowPolicy,
+    validate_temporal_drift,
+)
+
+policy = TemporalDriftPolicy(
+    policy_id="temporal-v1",
+    policy_version="1",
+    minimum_cohort_size=2,
+    maximum_unevaluable_checks=1,
+    windows=(
+        TemporalWindowPolicy(
+            window_id="early",
+            lower_age_days=0,
+            upper_age_days=730,
+            minimum_member_support=2,
+            minimum_growth_points=1,
+            minimum_visible_visits=1,
+            minimum_growth_coverage=0.5,
+            minimum_visible_visit_coverage=0.5,
+            maximum_mean_inter_visit_days=400.0,
+            maximum_visit_count_step=2.0,
+            maximum_recorded_event_rate_step=0.5,
+        ),
+        TemporalWindowPolicy(
+            window_id="late",
+            lower_age_days=730,
+            upper_age_days=1_460,
+            minimum_member_support=2,
+            minimum_growth_points=1,
+            minimum_visible_visits=1,
+            minimum_growth_coverage=0.5,
+            minimum_visible_visit_coverage=0.5,
+            maximum_mean_inter_visit_days=365.0,
+            maximum_visit_count_step=2.0,
+            maximum_recorded_event_rate_step=0.5,
+        ),
+    ),
+)
+report = validate_temporal_drift(cohort, policy)
+```
+
+The fixed visible metrics are `growth_window_coverage`, `visible_visit_coverage`, `visible_event_rate`, and `mean_inter_visit_days`; `mean_visit_count_step` and `recorded_event_rate_step` compare adjacent configured windows, with no step for the first window. The evaluator also performs the hidden causal checks `causal_event_order` and `causal_event_timing` over evaluator-held source evidence, but emits only aggregate statuses and fixed reason codes rather than hidden ages, events, or identifiers.
+
+`PASS` means all evaluated comparisons satisfy the frozen policy, `FAIL` means any comparison is outside its bound or any evidence is structurally invalid, and `UNEVALUABLE` means no check failed but required support or evidence is missing, the cohort is too small, or the policy's unevaluable limit is exceeded. Overall precedence is `FAIL` over `UNEVALUABLE` over `PASS`; missing evidence never becomes zero or a pass.
+
+This report diagnoses development sequence behavior only. It does not establish real-data temporal fidelity, growth-disorder prevalence, clinical validity, privacy/non-matchability, task utility, release readiness, or Synthea conformance; each remains a separate deferred evidence and governance gate.
+
 ## Patient-disjoint held-out validation
 
 An authorized operator may run the standalone held-out validator only inside the governed environment. It derives the real-data partition privately from the keyed partition policy, compares disclosed aggregate targets from the real `held_out` partition with the complete generated package, and applies a frozen fidelity policy; it does not expose patient rows, identifiers, sequences, or the partition key.
