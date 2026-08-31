@@ -345,6 +345,72 @@ def test_truth_manifest_cleanup_uses_pinned_namespace_after_path_swap(
     assert not list(attackers[0].iterdir())
 
 
+def test_truth_manifest_cleanup_retries_when_namespace_is_replaced_before_open(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    parent_descriptor = os.open(tmp_path, os.O_RDONLY)
+    swapped = False
+    original_name: str | None = None
+    original_identity: tuple[int, int] | None = None
+    real_open = counterfactual_module.os.open
+
+    def replace_namespace_before_open(
+        path: object,
+        flags: int,
+        mode: int = 0o777,
+        *,
+        dir_fd: int | None = None,
+    ) -> int:
+        nonlocal swapped, original_name, original_identity
+        if dir_fd == parent_descriptor and not swapped:
+            assert isinstance(path, str)
+            namespace = tmp_path / path
+            original_name = path
+            metadata = os.stat(namespace, follow_symlinks=False)
+            original_identity = counterfactual_module._truth_manifest_identity(metadata)
+            original_namespace = tmp_path / f"{path}-original"
+            attacker = tmp_path / f"{path}-attacker"
+            namespace.rename(original_namespace)
+            attacker.mkdir()
+            (attacker / "sentinel").write_bytes(b"attacker directory")
+            attacker.rename(namespace)
+            swapped = True
+        return real_open(path, flags, mode, dir_fd=dir_fd)
+
+    monkeypatch.setattr(counterfactual_module.os, "open", replace_namespace_before_open)
+    monkeypatch.setattr(
+        counterfactual_module.os,
+        "supports_dir_fd",
+        set(counterfactual_module.os.supports_dir_fd) | {replace_namespace_before_open},
+    )
+    try:
+        name, descriptor = counterfactual_module._open_truth_manifest_cleanup_namespace(
+            parent_descriptor
+        )
+    finally:
+        os.close(parent_descriptor)
+
+    try:
+        assert swapped
+        assert original_name is not None
+        assert original_identity is not None
+        assert name != original_name
+        assert counterfactual_module._truth_manifest_identity(
+            os.fstat(descriptor)
+        ) != original_identity
+        assert (tmp_path / original_name / "sentinel").read_bytes() == (
+            b"attacker directory"
+        )
+        assert (tmp_path / f"{original_name}-original").is_dir()
+        returned_metadata = os.stat(tmp_path / name, follow_symlinks=False)
+        assert counterfactual_module._truth_manifest_identity(
+            returned_metadata
+        ) == counterfactual_module._truth_manifest_identity(os.fstat(descriptor))
+    finally:
+        os.close(descriptor)
+
+
 def test_truth_manifest_verification_does_not_read_or_remove_recreated_child(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

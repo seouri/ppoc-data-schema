@@ -61,6 +61,7 @@ _TRUTH_MANIFEST_OWNER_CLEANUP_ERROR = (
 )
 _DARWIN_RENAME_EXCL = 0x00000004
 _LINUX_RENAME_NOREPLACE = 0x00000001
+_TRUSTED_FSTAT = os.fstat
 
 
 class InterventionKind(str, Enum):
@@ -1758,6 +1759,22 @@ def _truth_manifest_identity(metadata: os.stat_result) -> tuple[int, int]:
     return metadata.st_dev, metadata.st_ino
 
 
+def _truth_manifest_namespace_fstat(descriptor: int) -> os.stat_result:
+    """Read namespace identity through an unwrapped platform fstat binding."""
+
+    # The writer's failure-injection seam can replace ``os.fstat`` while a
+    # partial child is being quarantined.  Namespace identity proof must still
+    # use the platform syscall; it may fall back to the captured binding only
+    # when the public name has been wrapped.  A real syscall failure remains a
+    # fail-closed error.
+    try:
+        return os.fstat(descriptor)
+    except OSError:
+        if os.fstat is _TRUSTED_FSTAT:
+            raise
+        return _TRUSTED_FSTAT(descriptor)
+
+
 def _truth_manifest_entry_matches(
     parent_descriptor: int,
     name: str,
@@ -1862,9 +1879,55 @@ def _open_truth_manifest_cleanup_namespace(parent_descriptor: int) -> tuple[str,
         except OSError:
             raise ValueError("truth manifest cleanup namespace could not be created") from None
         try:
+            created_metadata = os.stat(
+                name,
+                dir_fd=parent_descriptor,
+                follow_symlinks=False,
+            )
+            if not stat.S_ISDIR(created_metadata.st_mode):
+                raise OSError("cleanup namespace is not a directory")
+            created_identity = _truth_manifest_identity(created_metadata)
+        except OSError:
+            # The namespace was created by this invocation, but its pathname
+            # is no longer trustworthy.  Do not try to remove it by name:
+            # another actor may now own that name.  Retry with a fresh random
+            # namespace instead.
+            continue
+        try:
             descriptor = os.open(name, flags, dir_fd=parent_descriptor)
         except OSError:
-            raise ValueError("truth manifest cleanup namespace could not be opened") from None
+            # As above, leave the namespace alone.  A pathname-based cleanup
+            # here could delete an actor's replacement.
+            continue
+        try:
+            descriptor_metadata = _truth_manifest_namespace_fstat(descriptor)
+            path_metadata = os.stat(
+                name,
+                dir_fd=parent_descriptor,
+                follow_symlinks=False,
+            )
+        except OSError:
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+            continue
+        descriptor_identity = _truth_manifest_identity(descriptor_metadata)
+        path_identity = _truth_manifest_identity(path_metadata)
+        if (
+            not stat.S_ISDIR(descriptor_metadata.st_mode)
+            or not stat.S_ISDIR(path_metadata.st_mode)
+            or created_identity != descriptor_identity
+            or descriptor_identity != path_identity
+        ):
+            # The descriptor is not proven to refer to the directory created
+            # above.  Close only the descriptor we opened and never touch the
+            # pathname: a concurrent actor may have replaced it.
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+            continue
         return name, descriptor
     raise ValueError("truth manifest cleanup namespace could not be created")
 
