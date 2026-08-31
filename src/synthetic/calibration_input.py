@@ -419,10 +419,9 @@ def prepare_synthetic_input(
     staged = _stage_validated_resources(connection, validated_descriptor, package_root)
     patient_rows = connection.execute('SELECT patient_id FROM "calibration_stage_patients"').fetchall()
     connection.execute("CREATE OR REPLACE TEMP TABLE patient_partitions(patient_id VARCHAR, partition_label VARCHAR)")
-    connection.executemany(
-        "INSERT INTO patient_partitions VALUES (?, ?)",
-        [(patient_id, "calibration") for patient_id, in patient_rows],
-    )
+    partitions = [(patient_id, "calibration") for patient_id, in patient_rows]
+    if partitions:
+        connection.executemany("INSERT INTO patient_partitions VALUES (?, ?)", partitions)
     patient_counts = _partition_counts(connection, "patient_partitions")
     resource_counts = _resource_partition_counts(connection, staged)
     return CalibrationInput(

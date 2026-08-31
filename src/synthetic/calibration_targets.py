@@ -364,55 +364,66 @@ def _patient_targets(
     ).fetchone()
     denominator = rows[0]
     dimensions = _dimensions(outcome_layer="observed")
-    targets = [
-        _target(dimensions, f"sex_{slug}", "demographics", "proportion", "proportion", rows[index] / denominator, rows[index], denominator)
-        for index, slug in enumerate(SEX_CATEGORY_SLUGS.values(), start=1)
-    ]
-    targets.append(
-        _target(
-            dimensions,
-            "race_multiselect",
-            "demographics",
-            "proportion",
-            "proportion",
-            rows[4] / denominator,
-            rows[4],
-            denominator,
+    targets: list[RawTarget] = []
+    if denominator:
+        targets.extend(
+            _target(
+                dimensions,
+                f"sex_{slug}",
+                "demographics",
+                "proportion",
+                "proportion",
+                rows[index] / denominator,
+                rows[index],
+                denominator,
+            )
+            for index, slug in enumerate(SEX_CATEGORY_SLUGS.values(), start=1)
         )
-    )
-    for column, registry, prefix in (
-        ("ethnicity", ETHNICITY_CATEGORY_SLUGS, "ethnicity"),
-        ("race_1", RACE_CATEGORY_SLUGS, "race"),
-    ):
-        category_rows = connection.execute(
-            f"""
-            WITH calibration_patients AS (
-                SELECT source.*
-                FROM calibration_stage_patients AS source
-                JOIN patient_partitions AS partitions USING (patient_id)
-                WHERE partitions.partition_label = ?
+        targets.append(
+            _target(
+                dimensions,
+                "race_multiselect",
+                "demographics",
+                "proportion",
+                "proportion",
+                rows[4] / denominator,
+                rows[4],
+                denominator,
             )
-            SELECT coalesce("{column}", ''), count(*)
-            FROM calibration_patients
-            GROUP BY 1
-            """,
-            [partition_label],
-        ).fetchall()
-        counts = dict(category_rows)
-        for category, slug in registry.items():
-            support = counts.get(category, 0)
-            targets.append(
-                _target(
-                    dimensions,
-                    f"{prefix}_{slug}",
-                    "demographics",
-                    "proportion",
-                    "proportion",
-                    support / denominator,
-                    support,
-                    denominator,
+        )
+        for column, registry, prefix in (
+            ("ethnicity", ETHNICITY_CATEGORY_SLUGS, "ethnicity"),
+            ("race_1", RACE_CATEGORY_SLUGS, "race"),
+        ):
+            category_rows = connection.execute(
+                f"""
+                WITH calibration_patients AS (
+                    SELECT source.*
+                    FROM calibration_stage_patients AS source
+                    JOIN patient_partitions AS partitions USING (patient_id)
+                    WHERE partitions.partition_label = ?
                 )
-            )
+                SELECT coalesce("{column}", ''), count(*)
+                FROM calibration_patients
+                GROUP BY 1
+                """,
+                [partition_label],
+            ).fetchall()
+            counts = dict(category_rows)
+            for category, slug in registry.items():
+                support = counts.get(category, 0)
+                targets.append(
+                    _target(
+                        dimensions,
+                        f"{prefix}_{slug}",
+                        "demographics",
+                        "proportion",
+                        "proportion",
+                        support / denominator,
+                        support,
+                        denominator,
+                    )
+                )
     flag_select = ", ".join(
         f'count(*) FILTER (WHERE try_cast(source."{column}" AS INTEGER) = 1)'
         for column in RECORDED_FLAGS
@@ -431,20 +442,21 @@ def _patient_targets(
         [partition_label],
     ).fetchone()
     flag_denominator = flag_row[0]
-    for index, target_name in enumerate(RECORDED_FLAGS.values(), start=1):
-        support = flag_row[index]
-        targets.append(
-            _target(
-                dimensions,
-                target_name,
-                "recorded_outcome",
-                "proportion",
-                "proportion",
-                support / flag_denominator,
-                support,
-                flag_denominator,
+    if flag_denominator:
+        for index, target_name in enumerate(RECORDED_FLAGS.values(), start=1):
+            support = flag_row[index]
+            targets.append(
+                _target(
+                    dimensions,
+                    target_name,
+                    "recorded_outcome",
+                    "proportion",
+                    "proportion",
+                    support / flag_denominator,
+                    support,
+                    flag_denominator,
+                )
             )
-        )
     diagnosis_age = connection.execute(
         """
         WITH diagnosis_ages AS (
@@ -502,20 +514,22 @@ def _utilization_targets(
         [partition_label],
     ).fetchone()
     support = summary[0]
-    targets = [
-        _target(dimensions, name, "utilization", statistic, unit, summary[index], support, None, level)
-        for index, (name, statistic, unit, level) in enumerate(
-            (
-                ("encounters_per_person_mean", "mean", "count", None),
-                ("encounters_per_person_q50", "quantile", "count", 0.5),
-                ("encounters_per_person_q90", "quantile", "count", 0.9),
-                ("observation_span_days_mean", "mean", "day", None),
-                ("observation_span_days_q50", "quantile", "day", 0.5),
-                ("observation_span_days_q90", "quantile", "day", 0.9),
-            ),
-            start=1,
-        )
-    ]
+    targets = []
+    if support:
+        targets = [
+            _target(dimensions, name, "utilization", statistic, unit, summary[index], support, None, level)
+            for index, (name, statistic, unit, level) in enumerate(
+                (
+                    ("encounters_per_person_mean", "mean", "count", None),
+                    ("encounters_per_person_q50", "quantile", "count", 0.5),
+                    ("encounters_per_person_q90", "quantile", "count", 0.9),
+                    ("observation_span_days_mean", "mean", "day", None),
+                    ("observation_span_days_q50", "quantile", "day", 0.5),
+                    ("observation_span_days_q90", "quantile", "day", 0.9),
+                ),
+                start=1,
+            )
+        ]
     category_rows = connection.execute(
         """
         WITH calibration_encounters AS (
