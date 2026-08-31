@@ -672,7 +672,9 @@ class _RedactedArgumentParser(argparse.ArgumentParser):
 
 
 def _argument_parser() -> argparse.ArgumentParser:
-    parser = _RedactedArgumentParser(description="Run governed aggregate calibration")
+    parser = _RedactedArgumentParser(
+        description="Run governed aggregate calibration", allow_abbrev=False
+    )
     parser.add_argument("--data-root", required=True, type=Path)
     parser.add_argument("--descriptor", required=True, type=Path)
     parser.add_argument("--snapshot", required=True)

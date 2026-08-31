@@ -129,6 +129,19 @@ def test_cli_rejects_missing_required_flag(tmp_path: Path, missing: str) -> None
     assert not (tmp_path / "output").exists()
 
 
+def test_cli_rejects_abbreviated_required_flag(tmp_path: Path) -> None:
+    output = tmp_path / "output"
+    command = _command(tmp_path, output)
+    command[command.index("--snapshot")] = "--snap"
+
+    completed = _run(command)
+
+    assert completed.returncode == 2
+    assert completed.stdout == ""
+    assert completed.stderr == "calibration arguments invalid\n"
+    assert not output.exists()
+
+
 def test_cli_rejects_missing_or_symlink_partition_key(tmp_path: Path) -> None:
     command = _command(tmp_path, tmp_path / "output")
     key_index = command.index("--partition-key-file") + 1
