@@ -571,6 +571,12 @@ class ObservationTruth:
     source_events: tuple[ClinicalEvent, ...] = field(repr=False)
     latent_trajectory_hash: str | None = field(default=None, repr=False)
     truth_hash: str | None = field(default=None, repr=False)
+    # These evaluator-only references let validation recompute the hashes and
+    # check that latent measurement values came from the exact source point.
+    # They are intentionally optional so callers holding only a redacted truth
+    # object receive UNEVALUABLE rather than an unsafe PASS.
+    policy: ObservationPolicy | None = field(default=None, repr=False)
+    latent_trajectory: AgeRegimeDisorderTrajectory | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         _require_synthetic_patient_id(self.patient_id)
@@ -626,6 +632,18 @@ class ObservationTruth:
             raise ValueError("opportunities must not duplicate a source point")
         _require_hash(self.latent_trajectory_hash, "latent_trajectory_hash")
         _require_hash(self.truth_hash, "truth_hash")
+        if self.policy is not None and not isinstance(self.policy, ObservationPolicy):
+            raise TypeError("policy must be an ObservationPolicy or None")
+        if self.latent_trajectory is not None and not isinstance(
+            self.latent_trajectory, AgeRegimeDisorderTrajectory
+        ):
+            raise TypeError(
+                "latent_trajectory must be an AgeRegimeDisorderTrajectory or None"
+            )
+        if self.latent_trajectory is not None:
+            points = self.latent_trajectory.physiology.points
+            if points and points[0].patient_id != self.patient_id:
+                raise ValueError("latent trajectory must identify the truth patient")
 
     def __repr__(self) -> str:
         return "ObservationTruth(<evaluator-only>)"
@@ -1246,6 +1264,8 @@ def generate_observation_frame(
         source_events=trajectory.events,
         latent_trajectory_hash=latent_trajectory_hash,
         truth_hash=None,
+        policy=policy,
+        latent_trajectory=trajectory,
     )
     truth_hash = _canonical_hash((policy.to_mapping(), base_truth))
     truth = replace(base_truth, truth_hash=truth_hash)
@@ -1282,6 +1302,7 @@ _OBSERVATION_REASON_CODES = frozenset(
         "EVENT_ORDER_INVALID",
         "FORBIDDEN_EVENT",
         "INSUFFICIENT_EVIDENCE",
+        "TRUTH_INTEGRITY_INVALID",
     }
 )
 
@@ -1458,6 +1479,124 @@ def _source_event_data(
     return events, decisions
 
 
+def _truth_provenance(
+    frame: ObservationFrame,
+) -> tuple[
+    ObservationValidationStatus,
+    str,
+    ObservationPolicy | None,
+    AgeRegimeDisorderTrajectory | None,
+]:
+    """Return validated hidden provenance without exposing any of its detail.
+
+    A frame assembled from a redacted ``ObservationTruth`` cannot establish
+    that its hidden values are authentic.  Such a frame is deliberately
+    unevaluable.  When provenance is present, the hashes and source-point
+    identities are checked before downstream validators use the hidden values.
+    """
+
+    truth = frame.truth
+    policy = truth.policy
+    trajectory = truth.latent_trajectory
+    if not isinstance(policy, ObservationPolicy) or not isinstance(
+        trajectory, AgeRegimeDisorderTrajectory
+    ):
+        return (
+            ObservationValidationStatus.UNEVALUABLE,
+            "INSUFFICIENT_EVIDENCE",
+            None,
+            None,
+        )
+    if truth.latent_trajectory_hash is None or truth.truth_hash is None:
+        return (
+            ObservationValidationStatus.UNEVALUABLE,
+            "INSUFFICIENT_EVIDENCE",
+            None,
+            None,
+        )
+    try:
+        # A redacted/incomplete measurement truth payload cannot support a
+        # meaningful hash-integrity verdict.  Preserve the public contract that
+        # missing evidence is UNEVALUABLE rather than turning it into FAIL just
+        # because its old hash no longer matches.
+        opportunities = _opportunity_map(truth)
+        _truth_measurements_by_point(
+            truth,
+            {index for index, item in opportunities.items() if item.realized},
+        )
+        trajectory = _validate_observation_trajectory(trajectory)
+        if policy.policy_version != frame.policy_version:
+            return (
+                ObservationValidationStatus.FAIL,
+                "TRUTH_INTEGRITY_INVALID",
+                policy,
+                trajectory,
+            )
+        expected_window = ObservationWindow(
+            policy.window_start_age_days,
+            policy.effective_end_age_days,
+            policy.window_end_age_days,
+            policy.censoring_mode,
+        )
+        if truth.window != expected_window:
+            return (
+                ObservationValidationStatus.FAIL,
+                "TRUTH_INTEGRITY_INVALID",
+                policy,
+                trajectory,
+            )
+        if truth.source_events != trajectory.events:
+            return (
+                ObservationValidationStatus.FAIL,
+                "TRUTH_INTEGRITY_INVALID",
+                policy,
+                trajectory,
+            )
+        points = trajectory.physiology.points
+        opportunities = _opportunity_map(truth)
+        for opportunity in opportunities.values():
+            if opportunity.source_point_index >= len(points):
+                return (
+                    ObservationValidationStatus.FAIL,
+                    "TRUTH_INTEGRITY_INVALID",
+                    policy,
+                    trajectory,
+                )
+            if opportunity.age_days != points[opportunity.source_point_index].age_days:
+                return (
+                    ObservationValidationStatus.FAIL,
+                    "TRUTH_INTEGRITY_INVALID",
+                    policy,
+                    trajectory,
+                )
+        expected_latent_hash = _canonical_hash(trajectory)
+        if truth.latent_trajectory_hash != expected_latent_hash:
+            return (
+                ObservationValidationStatus.FAIL,
+                "TRUTH_INTEGRITY_INVALID",
+                policy,
+                trajectory,
+            )
+        expected_truth_hash = _canonical_hash(
+            (policy.to_mapping(), replace(truth, truth_hash=None))
+        )
+        if truth.truth_hash != expected_truth_hash:
+            return (
+                ObservationValidationStatus.FAIL,
+                "TRUTH_INTEGRITY_INVALID",
+                policy,
+                trajectory,
+            )
+    except (ArithmeticError, AttributeError, IndexError, KeyError, TypeError, ValueError):
+        return (
+            ObservationValidationStatus.UNEVALUABLE,
+            "INSUFFICIENT_EVIDENCE",
+            None,
+            None,
+        )
+    return ObservationValidationStatus.PASS, "OK", policy, trajectory
+
+
 def _validation_check(
     name: str,
     evaluator: Any,
@@ -1614,6 +1753,33 @@ def _valid_truth_measurement(item: MeasurementTruth) -> bool:
     return False
 
 
+def _reconstructed_measurement_value(
+    item: MeasurementTruth,
+    policy: ObservationPolicy,
+) -> float | None:
+    """Reconstruct the visible value prescribed by one hidden measurement."""
+
+    if item.availability is not MeasurementAvailability.OBSERVED:
+        return None
+    assert item.latent_value is not None and item.error_delta is not None
+    if _error_standard_deviation(policy, item.channel) == 0 and item.error_delta != 0:
+        raise ValueError("zero-error policy requires a zero error delta")
+    post_error = _require_finite_real(
+        item.latent_value + item.error_delta,
+        "post-error measurement",
+    )
+    if post_error <= 0:
+        raise ValueError("post-error measurement must be finite and positive")
+    if policy.rounding_digits is None:
+        recorded = post_error
+    else:
+        recorded = round(post_error, policy.rounding_digits)
+    recorded = _require_finite_real(recorded, "rounded measurement")
+    if recorded <= 0:
+        raise ValueError("rounded measurement must be finite and positive")
+    return recorded
+
+
 def _check_measurements(frame: object) -> tuple[ObservationValidationStatus, str]:
     frame = _observation_frame_parts(frame)
     opportunities = _opportunity_map(frame.truth)
@@ -1622,6 +1788,10 @@ def _check_measurements(frame: object) -> tuple[ObservationValidationStatus, str
         truth_by_key = _truth_measurements_by_point(frame.truth, realized)
     except (TypeError, ValueError):
         return ObservationValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
+    provenance_status, provenance_reason, policy, trajectory = _truth_provenance(frame)
+    if provenance_status is not ObservationValidationStatus.PASS:
+        return provenance_status, provenance_reason
+    assert policy is not None and trajectory is not None
     expected_ids = _expected_visit_ids(frame)
     for visit in frame.visits:
         if not isinstance(visit, ObservedVisit):
@@ -1647,12 +1817,31 @@ def _check_measurements(frame: object) -> tuple[ObservationValidationStatus, str
             truth_item = truth_by_key.get((opportunity.source_point_index, channel))
             if truth_item is None or not _valid_truth_measurement(truth_item):
                 return ObservationValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
+            try:
+                point = trajectory.physiology.points[opportunity.source_point_index]
+                expected_latent = _point_channel_value(point, channel)
+            except (ArithmeticError, AttributeError, IndexError, TypeError, ValueError):
+                return ObservationValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
+            if truth_item.availability is MeasurementAvailability.NOT_APPLICABLE:
+                if expected_latent is not None:
+                    return ObservationValidationStatus.FAIL, "TRUTH_INTEGRITY_INVALID"
+            elif expected_latent is None or truth_item.latent_value != expected_latent:
+                return ObservationValidationStatus.FAIL, "TRUTH_INTEGRITY_INVALID"
+            availability_probability = _availability_probability(policy, channel)
+            if expected_latent is not None:
+                if availability_probability == 0 and truth_item.availability is not MeasurementAvailability.MISSING:
+                    return ObservationValidationStatus.FAIL, "TRUTH_INTEGRITY_INVALID"
+                if availability_probability == 1 and truth_item.availability is not MeasurementAvailability.OBSERVED:
+                    return ObservationValidationStatus.FAIL, "TRUTH_INTEGRITY_INVALID"
             if observation.availability is not truth_item.availability:
                 return ObservationValidationStatus.FAIL, "MEASUREMENT_INVALID"
             if observation.availability is MeasurementAvailability.OBSERVED:
                 try:
                     _require_positive_real(observation.recorded_value, "recorded measurement")
-                except (TypeError, ValueError):
+                    expected_recorded = _reconstructed_measurement_value(truth_item, policy)
+                except (ArithmeticError, TypeError, ValueError):
+                    return ObservationValidationStatus.FAIL, "TRUTH_INTEGRITY_INVALID"
+                if observation.recorded_value != expected_recorded:
                     return ObservationValidationStatus.FAIL, "MEASUREMENT_INVALID"
             elif observation.recorded_value is not None:
                 return ObservationValidationStatus.FAIL, "MEASUREMENT_INVALID"
@@ -1688,6 +1877,10 @@ def _check_measurements(frame: object) -> tuple[ObservationValidationStatus, str
 
 def _check_hidden_events(frame: object) -> tuple[ObservationValidationStatus, str]:
     frame = _observation_frame_parts(frame)
+    provenance_status, provenance_reason, policy, _trajectory = _truth_provenance(frame)
+    if provenance_status is not ObservationValidationStatus.PASS:
+        return provenance_status, provenance_reason
+    assert policy is not None
     try:
         source_events, decisions = _source_event_data(frame.truth)
         opportunities = _opportunity_map(frame.truth)
@@ -1695,7 +1888,9 @@ def _check_hidden_events(frame: object) -> tuple[ObservationValidationStatus, st
         return ObservationValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
     if any(event.patient_id != frame.patient_id for event in source_events):
         return ObservationValidationStatus.FAIL, "PATIENT_MISMATCH"
-    source_by_type = {event.event_type: (index, event) for index, event in enumerate(source_events)}
+    source_by_type = {
+        event.event_type: (index, event) for index, event in enumerate(source_events)
+    }
     recorded_source_indices: set[int] = set()
     for index, (event, decision) in enumerate(zip(source_events, decisions, strict=True)):
         if decision.recorded and event.hidden:
@@ -1724,12 +1919,22 @@ def _check_hidden_events(frame: object) -> tuple[ObservationValidationStatus, st
         source_index, source_event = source_entry
         if source_event.hidden:
             return ObservationValidationStatus.FAIL, "HIDDEN_EVENT_VISIBLE"
-        if not decisions[source_index].recorded:
+        decision = decisions[source_index]
+        if not decision.recorded:
             return ObservationValidationStatus.FAIL, "HIDDEN_EVENT_VISIBLE"
         if source_index in visible_for_source:
             return ObservationValidationStatus.FAIL, "FORBIDDEN_EVENT"
-        opportunity = opportunities.get(record.opportunity_index)
+        # The visible record must preserve the exact source decision link.  A
+        # different realized opportunity is not an equivalent observation.
+        if record.opportunity_index != decision.opportunity_index:
+            return ObservationValidationStatus.FAIL, "FORBIDDEN_EVENT"
+        opportunity = opportunities.get(decision.opportunity_index)
         if opportunity is None or not opportunity.realized:
+            return ObservationValidationStatus.FAIL, "FORBIDDEN_EVENT"
+        minimum_age = source_event.age_days
+        if record.event_kind is RecordedEventKind.RECOGNITION:
+            minimum_age += policy.recognition_delay_days
+        if record.age_days != opportunity.age_days or record.age_days < minimum_age:
             return ObservationValidationStatus.FAIL, "FORBIDDEN_EVENT"
         visible_for_source[source_index] = record
     if set(visible_for_source) != recorded_source_indices:
@@ -1739,6 +1944,10 @@ def _check_hidden_events(frame: object) -> tuple[ObservationValidationStatus, st
 
 def _check_event_order(frame: object) -> tuple[ObservationValidationStatus, str]:
     frame = _observation_frame_parts(frame)
+    provenance_status, provenance_reason, policy, _trajectory = _truth_provenance(frame)
+    if provenance_status is not ObservationValidationStatus.PASS:
+        return provenance_status, provenance_reason
+    assert policy is not None
     try:
         source_events, decisions = _source_event_data(frame.truth)
         opportunities = _opportunity_map(frame.truth)
@@ -1746,14 +1955,14 @@ def _check_event_order(frame: object) -> tuple[ObservationValidationStatus, str]
         return ObservationValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
     previous_age = -1
     previous_phase = -1
-    source_by_type: dict[str, ClinicalEvent] = {}
-    for event in source_events:
+    source_by_type: dict[str, tuple[int, ClinicalEvent]] = {}
+    for source_index, event in enumerate(source_events):
         phase = _SOURCE_EVENT_PHASES[event.event_type]
         if event.age_days < previous_age or phase <= previous_phase:
             return ObservationValidationStatus.FAIL, "EVENT_ORDER_INVALID"
         previous_age = event.age_days
         previous_phase = phase
-        source_by_type[event.event_type] = event
+        source_by_type[event.event_type] = (source_index, event)
     previous_record_age = -1
     previous_record_order = -1
     seen_source_types: set[str] = set()
@@ -1763,22 +1972,26 @@ def _check_event_order(frame: object) -> tuple[ObservationValidationStatus, str]
         if not isinstance(record.event_kind, RecordedEventKind):
             return ObservationValidationStatus.FAIL, "EVENT_ORDER_INVALID"
         source_type = _RECORDED_TO_SOURCE_EVENT[record.event_kind]
-        source = source_by_type.get(source_type)
-        if source is None:
+        source_entry = source_by_type.get(source_type)
+        if source_entry is None:
             return ObservationValidationStatus.FAIL, "EVENT_ORDER_INVALID"
-        source_index = next(
-            index for index, event in enumerate(source_events) if event.event_type == source_type
-        )
-        opportunity = opportunities.get(record.opportunity_index)
+        source_index, source = source_entry
+        decision = decisions[source_index]
+        if record.opportunity_index != decision.opportunity_index:
+            return ObservationValidationStatus.FAIL, "EVENT_ORDER_INVALID"
+        opportunity = opportunities.get(decision.opportunity_index)
         if opportunity is None or not opportunity.realized or record.age_days != opportunity.age_days:
             return ObservationValidationStatus.FAIL, "EVENT_ORDER_INVALID"
-        if record.age_days < source.age_days or record.age_days < previous_record_age:
+        minimum_age = source.age_days
+        if record.event_kind is RecordedEventKind.RECOGNITION:
+            minimum_age += policy.recognition_delay_days
+        if record.age_days < minimum_age or record.age_days < previous_record_age:
             return ObservationValidationStatus.FAIL, "EVENT_ORDER_INVALID"
         if source_type in seen_source_types:
             return ObservationValidationStatus.FAIL, "EVENT_ORDER_INVALID"
         if _RECORDED_EVENT_ORDER[record.event_kind] <= previous_record_order:
             return ObservationValidationStatus.FAIL, "EVENT_ORDER_INVALID"
-        if not decisions[source_index].recorded:
+        if not decision.recorded:
             return ObservationValidationStatus.FAIL, "EVENT_ORDER_INVALID"
         seen_source_types.add(source_type)
         previous_record_age = record.age_days
@@ -1788,6 +2001,9 @@ def _check_event_order(frame: object) -> tuple[ObservationValidationStatus, str]
 
 def _check_evidence(frame: object) -> tuple[ObservationValidationStatus, str]:
     frame = _observation_frame_parts(frame)
+    provenance_status, provenance_reason, _policy, _trajectory = _truth_provenance(frame)
+    if provenance_status is not ObservationValidationStatus.PASS:
+        return provenance_status, provenance_reason
     opportunities = _opportunity_map(frame.truth)
     if not opportunities or not any(item.realized for item in opportunities.values()):
         return ObservationValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
