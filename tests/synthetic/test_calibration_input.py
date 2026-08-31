@@ -161,6 +161,7 @@ def test_prepare_input_stages_non_ascii_latin1_using_descriptor_encoding(tmp_pat
         rows[1][rows[0].index("lab_procedure_description")] = "Jos\u00e9 panel"
 
     _rewrite_resource_csv(root, "labs", add_latin1)
+    assert b"Jos\xe9 panel" in _resource_path(root, "labs").read_bytes()
     with duckdb.connect(":memory:") as connection:
         prepare_input(connection, config_for(root))
         value = connection.execute(
@@ -168,6 +169,65 @@ def test_prepare_input_stages_non_ascii_latin1_using_descriptor_encoding(tmp_pat
         ).fetchone()[0]
 
     assert value == "Jos\u00e9 panel"
+
+
+@pytest.mark.parametrize(
+    ("resource", "field"),
+    [
+        ("patients", "sex"),
+        ("patients_augmented", "healthy_flag"),
+        ("visits", "encounter_type"),
+        ("visits_augmented", "sex"),
+        ("labs", "lab_order_id"),
+        ("medications", "med_simple_generic_name"),
+        ("problem_list", "pl_diag"),
+        ("referrals", "referral_date_age_in_days"),
+    ],
+)
+def test_prepare_input_enforces_required_fields_across_every_exact_schema_resource(
+    tmp_path: Path, resource: str, field: str
+) -> None:
+    root = _valid_snapshot(tmp_path / "snapshot")
+
+    def blank_required_field(rows: list[list[str]]) -> None:
+        rows[1][rows[0].index(field)] = ""
+
+    _rewrite_resource_csv(root, resource, blank_required_field)
+    with duckdb.connect(":memory:") as connection, pytest.raises(
+        ValueError, match=rf"{resource}.*{field}"
+    ):
+        prepare_input(connection, config_for(root))
+
+
+@pytest.mark.parametrize(
+    ("resource", "field"),
+    [
+        ("patients", "patient_id"),
+        ("patients_augmented", "patient_id"),
+        ("visits", "visit_id"),
+        ("visits_augmented", "visit_id"),
+        ("medications", "med_record_id"),
+        ("problem_list", "problem_list_id"),
+        ("referrals", "referral_id"),
+    ],
+)
+@pytest.mark.parametrize("mutation", ["blank", "duplicate"])
+def test_prepare_input_enforces_every_declared_primary_key_component(
+    tmp_path: Path, resource: str, field: str, mutation: str
+) -> None:
+    root = _valid_snapshot(tmp_path / "snapshot")
+
+    def corrupt_primary_key(rows: list[list[str]]) -> None:
+        field_index = rows[0].index(field)
+        rows[1][field_index] = "" if mutation == "blank" else rows[2][field_index]
+
+    _rewrite_resource_csv(root, resource, corrupt_primary_key)
+    with duckdb.connect(":memory:") as connection, pytest.raises(ValueError) as error:
+        prepare_input(connection, config_for(root))
+
+    assert resource in str(error.value)
+    assert field in str(error.value)
+    assert "SYN-" not in str(error.value)
 
 
 @pytest.mark.parametrize("malformed", ["100.5", "1e2"])
@@ -268,8 +328,60 @@ def test_prepare_input_rejects_declared_visit_foreign_key_orphan_without_identif
     with duckdb.connect(":memory:") as connection, pytest.raises(ValueError) as error:
         prepare_input(connection, config_for(root))
 
+    assert "visits_augmented.visit_id" in str(error.value)
     assert orphan_id not in str(error.value)
     assert "SYN-P-001" not in str(error.value)
+
+
+def test_prepare_input_rejects_blank_required_medication_visit_without_identifier_leakage(
+    tmp_path: Path,
+) -> None:
+    root = _valid_snapshot(tmp_path / "snapshot")
+
+    def blank_required_visit(rows: list[list[str]]) -> None:
+        rows[1][rows[0].index("visit_id")] = ""
+
+    _rewrite_resource_csv(root, "medications", blank_required_visit)
+    with duckdb.connect(":memory:") as connection, pytest.raises(ValueError) as error:
+        prepare_input(connection, config_for(root))
+
+    assert "medications.visit_id" in str(error.value)
+    assert "SYN-" not in str(error.value)
+
+
+def test_prepare_input_preserves_permitted_null_and_unresolved_logical_visit_links(
+    tmp_path: Path,
+) -> None:
+    root = _valid_snapshot(tmp_path / "snapshot")
+
+    def set_visit_links(rows: list[list[str]], first: str, second: str) -> None:
+        visit_index = rows[0].index("visit_id")
+        rows[1][visit_index] = first
+        rows[2][visit_index] = second
+
+    _rewrite_resource_csv(
+        root,
+        "labs",
+        lambda rows: set_visit_links(rows, "SYN-UNRESOLVED-LAB-001", ""),
+    )
+    _rewrite_resource_csv(
+        root,
+        "medications",
+        lambda rows: set_visit_links(rows, "SYN-UNRESOLVED-MED-001", "SYN-UNRESOLVED-MED-002"),
+    )
+    _rewrite_resource_csv(
+        root,
+        "referrals",
+        lambda rows: set_visit_links(rows, "SYN-UNRESOLVED-REF-001", ""),
+    )
+
+    with duckdb.connect(":memory:") as connection:
+        prepared = prepare_input(connection, config_for(root))
+
+    assert sum(prepared.partition_summary.resource_row_counts["labs"].values()) == 12
+    assert sum(prepared.partition_summary.resource_row_counts["medications"].values()) == 12
+    assert sum(prepared.partition_summary.resource_row_counts["referrals"].values()) == 12
+    assert "SYN-UNRESOLVED" not in json.dumps(prepared.to_mapping())
 
 
 @pytest.mark.parametrize("unsafe_path", ["/tmp/patients.csv", "../patients.csv"])

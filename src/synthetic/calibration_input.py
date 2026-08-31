@@ -320,6 +320,10 @@ def _has_rows(
     return connection.execute(query, parameters).fetchone()[0] > 0
 
 
+def _field_scope(resource_name: str, field_names: tuple[str, ...]) -> str:
+    return ", ".join(f"{resource_name}.{field_name}" for field_name in field_names)
+
+
 def _validate_relation(
     connection: duckdb.DuckDBPyConnection, name: str, descriptor: dict[str, Any], relation: str
 ) -> None:
@@ -345,7 +349,7 @@ def _validate_relation(
             f'SELECT count(*) FROM (SELECT {selected_fields} FROM "{relation}" '
             f'GROUP BY {selected_fields} HAVING count(*) > 1)',
         ):
-            raise ValueError(f"{name} primary key must be unique")
+            raise ValueError(f"{_field_scope(name, primary_fields)} primary key must be unique")
     for field in fields:
         constraints = field.get("constraints") or {}
         field_name = field.get("name")
@@ -480,7 +484,9 @@ def _validate_foreign_keys(
                 f"WHERE {present} AND NOT EXISTS (SELECT 1 FROM "
                 f'"{staged[target_resource]}" AS target_rows WHERE {matches})',
             ):
-                raise ValueError(f"{name} foreign key relationship is invalid")
+                raise ValueError(
+                    f"{_field_scope(name, source_fields)} foreign key relationship is invalid"
+                )
 
 
 def _stage_validated_resources(
