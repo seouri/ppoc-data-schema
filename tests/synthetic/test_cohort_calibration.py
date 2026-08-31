@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+from dataclasses import replace
 
 import pytest
 
@@ -111,18 +112,45 @@ def test_profile_mapping_is_aggregate_only_and_preserves_blank_cells() -> None:
         assert forbidden not in encoded
 
 
-def test_profile_normalizes_rounded_categorical_weights_within_envelope() -> None:
+def test_profile_preserves_released_weights_and_normalizes_only_selection() -> None:
     mapping = aggregate_calibration_mapping()
-    _mapping_target(mapping, "sex_f")["value"] = 0.333
-    _mapping_target(mapping, "sex_m")["value"] = 0.333
-    _mapping_target(mapping, "sex_u")["value"] = 0.333
+    for name in ("sex_f", "sex_m", "sex_u"):
+        _mapping_target(mapping, name).update(value=0.33, support_count=3300)
 
     profile = CalibrationSamplingProfile.from_artifact(
         CalibrationArtifact.from_mapping(mapping)
     )
 
-    assert math.isclose(sum(value for _, value in profile.sex_weights), 1.0)
-    assert profile.sex_weights[0][1] == pytest.approx(1 / 3)
+    assert profile.sex_weights == (("F", 0.33), ("M", 0.33), ("U", 0.33))
+    assert profile.to_mapping()["sex_weights"] == [
+        {"category": "F", "probability": 0.33},
+        {"category": "M", "probability": 0.33},
+        {"category": "U", "probability": 0.33},
+    ]
+    assert cohort._select_weighted_category(profile.sex_weights, 0.331) == "F"
+
+
+@pytest.mark.parametrize(
+    ("sex_f", "expected_total"),
+    [(0.48, 0.99), (0.50, 1.01)],
+)
+def test_profile_accepts_inclusive_weight_sum_envelope_boundaries(
+    sex_f: float,
+    expected_total: float,
+) -> None:
+    mapping = aggregate_calibration_mapping()
+    _mapping_target(mapping, "sex_f").update(
+        value=sex_f,
+        support_count=round(sex_f * 10_000),
+    )
+
+    profile = CalibrationSamplingProfile.from_artifact(
+        CalibrationArtifact.from_mapping(mapping)
+    )
+
+    assert sum(value for _, value in profile.sex_weights) == pytest.approx(
+        expected_total
+    )
 
 
 @pytest.mark.parametrize("replacement", [0.98, 1.02])
@@ -130,7 +158,11 @@ def test_profile_rejects_rounded_category_totals_outside_one_percent_envelope(
     replacement: float,
 ) -> None:
     mapping = aggregate_calibration_mapping()
-    _mapping_target(mapping, "sex_f")["value"] = replacement - 0.51
+    sex_f = replacement - 0.51
+    _mapping_target(mapping, "sex_f").update(
+        value=sex_f,
+        support_count=round(sex_f * 10_000),
+    )
 
     with pytest.raises(ValueError, match="sex_weights.*sum"):
         CalibrationSamplingProfile.from_artifact(
@@ -171,7 +203,7 @@ def test_profile_requires_exactly_one_observed_outcome_stratum() -> None:
         CalibrationSamplingProfile.from_artifact(artifact)
 
 
-def test_profile_rejects_any_target_outside_fixed_registry() -> None:
+def test_profile_rejects_any_target_outside_fixed_registry_without_echoing_it() -> None:
     mapping = aggregate_calibration_mapping()
     mapping["strata"][0]["targets"].append(  # type: ignore[index]
         {
@@ -187,10 +219,11 @@ def test_profile_rejects_any_target_outside_fixed_registry() -> None:
         }
     )
 
-    with pytest.raises(ValueError, match="unregistered_metric.*registry"):
+    with pytest.raises(ValueError, match="outside the fixed registry") as error:
         CalibrationSamplingProfile.from_artifact(
             CalibrationArtifact.from_mapping(mapping)
         )
+    assert "unregistered_metric" not in str(error.value)
 
 
 def test_profile_rejects_missing_duplicate_and_suppressed_required_targets() -> None:
@@ -228,7 +261,7 @@ def test_profile_rejects_semantically_malformed_required_targets() -> None:
         statistic="mean",
         denominator=None,
     )
-    with pytest.raises(ValueError, match="healthy_flag.*registry|healthy_flag.*proportion"):
+    with pytest.raises(ValueError, match="outside the fixed registry"):
         CalibrationSamplingProfile.from_artifact(
             CalibrationArtifact.from_mapping(non_proportion)
         )
@@ -251,11 +284,69 @@ def test_profile_rejects_semantically_malformed_required_targets() -> None:
         CalibrationSamplingProfile.from_artifact(out_of_range)
 
 
+@pytest.mark.parametrize(
+    ("field_name", "bad_value"),
+    [
+        ("denominator", 0),
+        ("denominator", True),
+        ("denominator", -1),
+        ("support_count", True),
+        ("support_count", -1),
+        ("support_count", 10_001),
+    ],
+)
+def test_profile_rejects_invalid_denominator_and_support_bounds(
+    field_name: str,
+    bad_value: object,
+) -> None:
+    artifact = aggregate_calibration_artifact()
+    object.__setattr__(_artifact_target(artifact, "sex_f"), field_name, bad_value)
+
+    with pytest.raises(ValueError, match="sex_f.*denominator|sex_f.*support"):
+        CalibrationSamplingProfile.from_artifact(artifact)
+
+
+def test_profile_rejects_inconsistent_ratio_and_cross_cell_denominator() -> None:
+    inconsistent_ratio = aggregate_calibration_mapping()
+    _mapping_target(inconsistent_ratio, "sex_f")["support_count"] = 3900
+    with pytest.raises(ValueError, match="sex_f.*support_count.*denominator"):
+        CalibrationSamplingProfile.from_artifact(
+            CalibrationArtifact.from_mapping(inconsistent_ratio)
+        )
+
+    inconsistent_denominator = aggregate_calibration_mapping()
+    _mapping_target(inconsistent_denominator, "sex_f").update(
+        denominator=20_000,
+        support_count=9800,
+    )
+    with pytest.raises(ValueError, match="denominators must match"):
+        CalibrationSamplingProfile.from_artifact(
+            CalibrationArtifact.from_mapping(inconsistent_denominator)
+        )
+
+
+def test_profile_accepts_value_consistent_at_declared_rounding_precision() -> None:
+    mapping = aggregate_calibration_mapping()
+    _mapping_target(mapping, "race_multiselect").update(
+        value=0.06,
+        support_count=649,
+    )
+
+    profile = CalibrationSamplingProfile.from_artifact(
+        CalibrationArtifact.from_mapping(mapping)
+    )
+
+    assert profile.race_multiselect_probability == 0.06
+
+
 def test_recorded_outcomes_remain_evidence_and_do_not_change_sampling_weights() -> None:
     first = aggregate_calibration_mapping()
     second = aggregate_calibration_mapping()
-    _mapping_target(second, "healthy_flag")["value"] = 0.2
-    _mapping_target(second, "growth_dx_flag")["value"] = 0.7
+    _mapping_target(second, "healthy_flag").update(value=0.2, support_count=2000)
+    _mapping_target(second, "growth_dx_flag").update(
+        value=0.7,
+        support_count=7000,
+    )
 
     left = CalibrationSamplingProfile.from_artifact(
         CalibrationArtifact.from_mapping(first)
@@ -292,6 +383,78 @@ def test_private_sampling_and_projection_helpers_use_fixed_visible_rules() -> No
         "Unknown",
         "Unknown",
     )
+
+
+def test_public_profile_constructor_requires_fixed_registry_categories_and_totals() -> None:
+    profile = CalibrationSamplingProfile.from_artifact(
+        aggregate_calibration_artifact()
+    )
+
+    with pytest.raises(ValueError, match="target_registry_version"):
+        replace(profile, target_registry_version="calibration-targets-v9")
+    for field_name, bad_weights in (
+        ("sex_weights", profile.sex_weights[:-1]),
+        ("ethnicity_weights", tuple(reversed(profile.ethnicity_weights))),
+        ("race_weights", (*profile.race_weights, ("Extra", 0.0))),
+        ("sex_weights", (("/real/patient.csv", 0.49), *profile.sex_weights[1:])),
+        ("ethnicity_weights", (("truth", 0.02), *profile.ethnicity_weights[1:])),
+        ("race_weights", (("identifier", 0.01), *profile.race_weights[1:])),
+    ):
+        with pytest.raises(ValueError, match=field_name) as error:
+            replace(profile, **{field_name: bad_weights})
+        assert "/real/patient.csv" not in str(error.value)
+        assert "truth" not in str(error.value)
+        assert "identifier" not in str(error.value)
+
+    for total, first_value in ((0.98, 0.47), (1.02, 0.51)):
+        invalid = (("F", first_value), *profile.sex_weights[1:])
+        assert sum(value for _, value in invalid) == pytest.approx(total)
+        with pytest.raises(ValueError, match="sex_weights.*sum"):
+            replace(profile, sex_weights=invalid)
+
+    assert repr(profile) == "CalibrationSamplingProfile(<aggregate-only>)"
+    assert profile.artifact_id not in repr(profile)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "secret"),
+    [
+        ("target_name", "/private/real-patient.csv"),
+        ("target_family", "patient-secret"),
+        ("target_value", "/private/key/truth.csv"),
+        ("stratum_id", "/private/real-patient.csv"),
+        ("dimensions", "/private/key/truth.csv"),
+        ("duplicate_stratum", "/private/real-patient.csv"),
+    ],
+)
+def test_profile_errors_never_echo_malicious_postconstruction_values(
+    mutation: str,
+    secret: str,
+) -> None:
+    artifact = aggregate_calibration_artifact()
+    target = _artifact_target(artifact, "sex_f")
+    stratum = artifact.strata[0]
+    if mutation == "target_name":
+        object.__setattr__(target, "target_name", secret)
+    elif mutation == "target_family":
+        object.__setattr__(target, "family", secret)
+    elif mutation == "target_value":
+        object.__setattr__(target, "value", secret)
+    elif mutation == "stratum_id":
+        object.__setattr__(stratum, "stratum_id", secret)
+    elif mutation == "dimensions":
+        object.__setattr__(stratum, "dimensions", (("outcome_layer", secret),))
+    else:
+        extra = aggregate_calibration_artifact().strata[0]
+        object.__setattr__(extra, "stratum_id", secret)
+        object.__setattr__(extra, "targets", (extra.targets[0], extra.targets[0]))
+        object.__setattr__(artifact, "strata", (*artifact.strata, extra))
+
+    with pytest.raises((TypeError, ValueError)) as error:
+        CalibrationSamplingProfile.from_artifact(artifact)
+    assert secret not in str(error.value)
+    for forbidden in ("/private", "patient", "key", "truth", ".csv"):
+        assert forbidden not in str(error.value).lower()
 
 
 def test_fixture_uses_checked_in_schema_contract() -> None:

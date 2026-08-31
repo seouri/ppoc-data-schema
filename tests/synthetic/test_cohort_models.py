@@ -40,6 +40,7 @@ from synthetic.native.resources import (
     ResourceSpec,
     SyntheticDemographics,
 )
+from tests.synthetic.cohort_fixtures import aggregate_calibration_artifact
 
 
 def _policy() -> ObservationPolicy:
@@ -68,15 +69,8 @@ def _config(**changes: object) -> CohortConfig:
 
 
 def _calibration() -> CalibrationSamplingProfile:
-    return CalibrationSamplingProfile(
-        artifact_id="aggregate-artifact-v1",
-        target_registry_version="calibration-targets-v1",
-        sex_weights=(("F", 0.5), ("M", 0.49), ("U", 0.01)),
-        ethnicity_weights=(("Unknown", 1.0),),
-        race_weights=(("Unknown", 1.0),),
-        race_multiselect_probability=0.1,
-        recorded_healthy_probability=0.9,
-        recorded_growth_dx_probability=0.1,
+    return CalibrationSamplingProfile.from_artifact(
+        aggregate_calibration_artifact()
     )
 
 

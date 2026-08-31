@@ -37,6 +37,9 @@ _MAX_PATIENT_COUNT = 100_000
 _WEIGHT_SUM_MINIMUM = 0.99
 _WEIGHT_SUM_MAXIMUM = 1.01
 _OBSERVED_STRATUM_ID = "outcome_layer=observed"
+_SEX_CATEGORIES = tuple(SEX_CATEGORY_SLUGS)
+_ETHNICITY_CATEGORIES = tuple(ETHNICITY_CATEGORY_SLUGS)
+_RACE_CATEGORIES = tuple(RACE_CATEGORY_SLUGS)
 
 
 class CohortGenerationUnavailable(ValueError):
@@ -121,20 +124,44 @@ def _project_race_slots(
     return tuple(races)
 
 
-def _normalize_category_weights(
+def _validate_category_weights(
     weights: tuple[tuple[str, float], ...],
     field_name: str,
 ) -> tuple[tuple[str, float], ...]:
-    total = sum(value for _, value in weights)
-    if not _WEIGHT_SUM_MINIMUM <= total <= _WEIGHT_SUM_MAXIMUM:
+    total = math.fsum(value for _, value in weights)
+    below_minimum = total < _WEIGHT_SUM_MINIMUM and not math.isclose(
+        total,
+        _WEIGHT_SUM_MINIMUM,
+        rel_tol=0.0,
+        abs_tol=1e-12,
+    )
+    above_maximum = total > _WEIGHT_SUM_MAXIMUM and not math.isclose(
+        total,
+        _WEIGHT_SUM_MAXIMUM,
+        rel_tol=0.0,
+        abs_tol=1e-12,
+    )
+    if below_minimum or above_maximum:
         raise ValueError(f"{field_name} values must sum within [0.99, 1.01]")
     if total <= 0:
         raise ValueError(f"{field_name} values must have positive total")
-    return tuple((category, value / total) for category, value in weights)
+    return weights
+
+
+def _require_canonical_category_weights(
+    value: object,
+    field_name: str,
+    expected_categories: tuple[str, ...],
+) -> tuple[tuple[str, float], ...]:
+    weights = _require_weight_pairs(value, field_name)
+    if tuple(category for category, _ in weights) != expected_categories:
+        raise ValueError(f"{field_name} must use the fixed registry category order")
+    return _validate_category_weights(weights, field_name)
 
 
 def _require_released_proportion(
     target: CalibrationTarget,
+    minimum_cell_count: int,
 ) -> float:
     name = target.target_name
     if target.status != "released":
@@ -150,7 +177,7 @@ def _require_released_proportion(
     if (
         isinstance(target.support_count, bool)
         or not isinstance(target.support_count, int)
-        or not 0 <= target.support_count <= target.denominator
+        or not minimum_cell_count <= target.support_count <= target.denominator
     ):
         raise ValueError(f"{name} must have valid aggregate support")
     if isinstance(target.value, bool) or not isinstance(target.value, Real):
@@ -163,6 +190,11 @@ def _require_released_proportion(
         raise ValueError(f"{name} must have a finite numeric value")
     if not 0 <= value <= 1:
         raise ValueError(f"{name} must be in [0, 1]")
+    expected = round(target.support_count / target.denominator, target.rounding_decimals)
+    if value != expected:
+        raise ValueError(
+            f"{name} value must match support_count / denominator at declared precision"
+        )
     return value
 
 
@@ -281,24 +313,36 @@ class CalibrationSamplingProfile:
 
     def __post_init__(self) -> None:
         require_aggregate_safe_token(self.artifact_id, "artifact_id")
-        require_aggregate_safe_token(
-            self.target_registry_version,
-            "target_registry_version",
-        )
+        if self.target_registry_version != TARGET_REGISTRY_VERSION:
+            raise ValueError(
+                "target_registry_version must match the fixed target registry"
+            )
         object.__setattr__(
             self,
             "sex_weights",
-            _require_weight_pairs(self.sex_weights, "sex_weights"),
+            _require_canonical_category_weights(
+                self.sex_weights,
+                "sex_weights",
+                _SEX_CATEGORIES,
+            ),
         )
         object.__setattr__(
             self,
             "ethnicity_weights",
-            _require_weight_pairs(self.ethnicity_weights, "ethnicity_weights"),
+            _require_canonical_category_weights(
+                self.ethnicity_weights,
+                "ethnicity_weights",
+                _ETHNICITY_CATEGORIES,
+            ),
         )
         object.__setattr__(
             self,
             "race_weights",
-            _require_weight_pairs(self.race_weights, "race_weights"),
+            _require_canonical_category_weights(
+                self.race_weights,
+                "race_weights",
+                _RACE_CATEGORIES,
+            ),
         )
         for field_name in (
             "race_multiselect_probability",
@@ -339,7 +383,7 @@ class CalibrationSamplingProfile:
         for stratum in artifact.strata:
             names = tuple(target.target_name for target in stratum.targets)
             if len(names) != len(set(names)):
-                raise ValueError(f"duplicate target in {stratum.stratum_id}")
+                raise ValueError("artifact contains duplicate target names")
             for target in stratum.targets:
                 if not is_registered_target_key(
                     stratum.stratum_id,
@@ -349,44 +393,57 @@ class CalibrationSamplingProfile:
                     target.unit,
                     target.quantile_level,
                 ):
-                    raise ValueError(
-                        f"{target.target_name} does not belong to "
-                        f"{TARGET_REGISTRY_VERSION} registry"
-                    )
+                    raise ValueError("artifact contains a target outside the fixed registry")
 
         targets = {target.target_name: target for target in observed[0].targets}
 
-        def required_value(target_name: str) -> float:
+        def required_target(target_name: str) -> CalibrationTarget:
             target = targets.get(target_name)
             if target is None:
                 raise ValueError(f"{target_name} is missing from the observed stratum")
-            return _require_released_proportion(target)
+            return target
+
+        required_names = (
+            *(f"sex_{slug}" for slug in SEX_CATEGORY_SLUGS.values()),
+            *(f"ethnicity_{slug}" for slug in ETHNICITY_CATEGORY_SLUGS.values()),
+            *(f"race_{slug}" for slug in RACE_CATEGORY_SLUGS.values()),
+            "race_multiselect",
+            "healthy_flag",
+            "growth_dx_flag",
+        )
+        required = {name: required_target(name) for name in required_names}
+        values = {
+            name: _require_released_proportion(
+                target,
+                artifact.disclosure_policy.minimum_cell_count,
+            )
+            for name, target in required.items()
+        }
+        if len({target.denominator for target in required.values()}) != 1:
+            raise ValueError("observed target denominators must match")
 
         sex_weights = tuple(
-            (category, required_value(f"sex_{slug}"))
+            (category, values[f"sex_{slug}"])
             for category, slug in SEX_CATEGORY_SLUGS.items()
         )
         ethnicity_weights = tuple(
-            (category, required_value(f"ethnicity_{slug}"))
+            (category, values[f"ethnicity_{slug}"])
             for category, slug in ETHNICITY_CATEGORY_SLUGS.items()
         )
         race_weights = tuple(
-            (category, required_value(f"race_{slug}"))
+            (category, values[f"race_{slug}"])
             for category, slug in RACE_CATEGORY_SLUGS.items()
         )
 
         return cls(
             artifact_id=artifact.artifact_id,
             target_registry_version=TARGET_REGISTRY_VERSION,
-            sex_weights=_normalize_category_weights(sex_weights, "sex_weights"),
-            ethnicity_weights=_normalize_category_weights(
-                ethnicity_weights,
-                "ethnicity_weights",
-            ),
-            race_weights=_normalize_category_weights(race_weights, "race_weights"),
-            race_multiselect_probability=required_value("race_multiselect"),
-            recorded_healthy_probability=required_value("healthy_flag"),
-            recorded_growth_dx_probability=required_value("growth_dx_flag"),
+            sex_weights=sex_weights,
+            ethnicity_weights=ethnicity_weights,
+            race_weights=race_weights,
+            race_multiselect_probability=values["race_multiselect"],
+            recorded_healthy_probability=values["healthy_flag"],
+            recorded_growth_dx_probability=values["growth_dx_flag"],
         )
 
     def to_mapping(self) -> dict[str, object]:
