@@ -17,7 +17,7 @@ from types import MappingProxyType
 from typing import ClassVar
 
 from synthetic.cohort import CohortMember
-from synthetic.models import ClinicalEvent, DisorderKind
+from synthetic.models import AgeRegimeDisorderTrajectory, ClinicalEvent, DisorderKind
 from synthetic.native.observations import (
     ObservationValidationStatus,
     RecordedEvent,
@@ -365,11 +365,16 @@ def project_ghd_ancillary_resources(
 
         patient_id = member.demographics.patient_id
         trajectory = member.trajectory
+        truth_trajectory = frame.truth.latent_trajectory
         if (
             patient_id != frame.patient_id
+            or not isinstance(trajectory, AgeRegimeDisorderTrajectory)
+            or not isinstance(truth_trajectory, AgeRegimeDisorderTrajectory)
             or trajectory.physiology.points[0].patient_id != patient_id
+            or trajectory != truth_trajectory
+            or trajectory.events != frame.truth.source_events
         ):
-            raise ValueError("member objects must identify one synthetic patient")
+            raise ValueError("member trajectory is not bound to frame truth")
 
         rows: dict[str, tuple[ResourceRow, ...]] = {
             resource_name: () for resource_name in GHD_ANCILLARY_RESOURCE_NAMES

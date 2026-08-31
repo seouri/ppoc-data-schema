@@ -234,3 +234,27 @@ def test_projection_redacts_malformed_observation_evidence() -> None:
         project_ghd_ancillary_resources(malformed_member, _shape(), _policy_ancillary())
     assert "syn-" not in str(exc_info.value)
     assert "truth" not in str(exc_info.value).lower()
+
+
+def test_projection_rejects_trajectory_not_bound_to_frame_truth() -> None:
+    member = _member(treatment=True)
+    tampered_events = tuple(
+        dataclasses.replace(event, age_days=1801)
+        if event.event_type == "treatment_start"
+        else event
+        for event in member.trajectory.events
+    )
+    tampered_trajectory = dataclasses.replace(member.trajectory, events=tampered_events)
+    tampered_member = dataclasses.replace(member, trajectory=tampered_trajectory)
+
+    with pytest.raises(
+        AncillaryProjectionUnavailable,
+        match="^GHD ancillary projection failed$",
+    ) as exc_info:
+        project_ghd_ancillary_resources(
+            tampered_member,
+            _shape(),
+            _policy_ancillary(),
+        )
+    assert "1801" not in str(exc_info.value)
+    assert "truth" not in str(exc_info.value).lower()
