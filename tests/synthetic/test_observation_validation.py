@@ -3,6 +3,8 @@ from __future__ import annotations
 import dataclasses
 import json
 
+import pytest
+
 from synthetic.native import observations as observation_module
 from synthetic.native.observations import (
     MeasurementChannel,
@@ -290,6 +292,85 @@ def test_recorded_event_must_respect_recognition_delay_provenance() -> None:
         unsealed_truth,
         truth_hash=observation_module._canonical_hash(
             (delayed_policy.to_mapping(), unsealed_truth)
+        ),
+    )
+    tampered = dataclasses.replace(frame, truth=resealed_truth)
+
+    report = validate_observation_frame(tampered)
+
+    assert report.status is ObservationValidationStatus.FAIL
+    check = next(check for check in report.checks if check.name == "hidden_events")
+    assert check.reason_code == "FORBIDDEN_EVENT"
+
+
+def test_recorded_descendants_require_recorded_ancestor_chain() -> None:
+    frame = generate_observation_frame(
+        _event_trajectory(),
+        _policy(
+            recognition_probability=1.0,
+            diagnosis_probability=1.0,
+            visit_probability=1.0,
+        ),
+        NamedRandomStreams(20260831, 0),
+    )
+    decisions = list(frame.truth.event_decisions)
+    recognition_source_index = next(
+        index
+        for index, event in enumerate(frame.truth.source_events)
+        if event.event_type == "recognition_opportunity"
+    )
+    decisions[recognition_source_index] = dataclasses.replace(
+        decisions[recognition_source_index],
+        recorded=False,
+        opportunity_index=None,
+    )
+    unsealed_truth = dataclasses.replace(
+        frame.truth,
+        event_decisions=tuple(decisions),
+        truth_hash=None,
+    )
+    resealed_truth = dataclasses.replace(
+        unsealed_truth,
+        truth_hash=observation_module._canonical_hash(
+            (unsealed_truth.policy.to_mapping(), unsealed_truth)  # type: ignore[union-attr]
+        ),
+    )
+    tampered = dataclasses.replace(frame, events=frame.events[1:], truth=resealed_truth)
+
+    report = validate_observation_frame(tampered)
+
+    assert report.status is ObservationValidationStatus.FAIL
+    check = next(check for check in report.checks if check.name == "hidden_events")
+    assert check.reason_code == "FORBIDDEN_EVENT"
+
+
+@pytest.mark.parametrize("probability_field", ("recognition_probability", "diagnosis_probability"))
+def test_recorded_descendants_cannot_survive_zero_policy_probability(
+    probability_field: str,
+) -> None:
+    frame = generate_observation_frame(
+        _event_trajectory(),
+        _policy(
+            recognition_probability=1.0,
+            diagnosis_probability=1.0,
+            visit_probability=1.0,
+        ),
+        NamedRandomStreams(20260831, 0),
+    )
+    assert frame.truth.policy is not None
+    zero_probability_policy = dataclasses.replace(
+        frame.truth.policy,
+        **{probability_field: 0.0},
+    )
+    unsealed_truth = dataclasses.replace(
+        frame.truth,
+        policy=zero_probability_policy,
+        truth_hash=None,
+    )
+    resealed_truth = dataclasses.replace(
+        unsealed_truth,
+        truth_hash=observation_module._canonical_hash(
+            (zero_probability_policy.to_mapping(), unsealed_truth)
         ),
     )
     tampered = dataclasses.replace(frame, truth=resealed_truth)

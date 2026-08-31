@@ -1892,16 +1892,29 @@ def _check_hidden_events(frame: object) -> tuple[ObservationValidationStatus, st
         event.event_type: (index, event) for index, event in enumerate(source_events)
     }
     recorded_source_indices: set[int] = set()
+    recorded_source_types: set[str] = set()
     for index, (event, decision) in enumerate(zip(source_events, decisions, strict=True)):
         if decision.recorded and event.hidden:
             return ObservationValidationStatus.FAIL, "HIDDEN_EVENT_VISIBLE"
         if decision.recorded and event.event_type in _DEFERRED_SOURCE_EVENT_TYPES:
             return ObservationValidationStatus.FAIL, "FORBIDDEN_EVENT"
         if decision.recorded:
+            if (
+                event.event_type == "recognition_opportunity"
+                and policy.recognition_probability == 0.0
+            ):
+                return ObservationValidationStatus.FAIL, "FORBIDDEN_EVENT"
+            if event.event_type == "recorded_diagnosis" and policy.diagnosis_probability == 0.0:
+                return ObservationValidationStatus.FAIL, "FORBIDDEN_EVENT"
+            if event.event_type == "workup" and "recognition_opportunity" not in recorded_source_types:
+                return ObservationValidationStatus.FAIL, "FORBIDDEN_EVENT"
+            if event.event_type == "recorded_diagnosis" and "workup" not in recorded_source_types:
+                return ObservationValidationStatus.FAIL, "FORBIDDEN_EVENT"
             opportunity = opportunities.get(decision.opportunity_index)
             if opportunity is None or not opportunity.realized:
                 return ObservationValidationStatus.FAIL, "FORBIDDEN_EVENT"
             recorded_source_indices.add(index)
+            recorded_source_types.add(event.event_type)
 
     visible_for_source: dict[int, RecordedEvent] = {}
     for record in frame.events:
