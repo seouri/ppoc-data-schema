@@ -17,6 +17,15 @@ from types import MappingProxyType
 from typing import NoReturn
 
 from synthetic.calibration import CalibrationArtifact, CalibrationDisclosurePolicy
+from synthetic.calibration_input import (  # noqa: F401
+    CalibrationInput,
+    PartitionLabel,
+    PartitionSummary,
+    assign_partition,
+    prepare_input,
+)
+
+# Downstream calibration stages consume this governed boundary without exposing it to generators.
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
 _SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
