@@ -52,7 +52,7 @@
   ) -> Path: ...
   ```
 
-- [ ] **Step 1: Write failing API, output, and deterministic tests.**
+- [x] **Step 1: Write failing API, output, and deterministic tests.**
 
   Build one valid physiology pair with the existing fictional fixture and
   `IdentityPreservingTestDerivationOracle`. Assert that the function returns a
@@ -81,7 +81,7 @@
   assert result == tmp_path / "pair"
   ```
 
-- [ ] **Step 2: Run the new tests and verify the expected failure.**
+- [x] **Step 2: Run the new tests and verify the expected failure.**
 
   Run:
 
@@ -91,7 +91,7 @@
 
   Expected: collection fails because the pair-export API is not implemented.
 
-- [ ] **Step 3: Implement the minimal pair lifecycle.**
+- [x] **Step 3: Implement the minimal pair lifecycle.**
 
   Add a fixed pair failure reason and a pair-specific run-start helper that
   preserves `FileExistsError` for the final target and deterministic partial/
@@ -115,7 +115,7 @@
   `{"status":"FAILED","reason":"counterfactual package export failed"}`
   before raising the fixed pair exception.
 
-- [ ] **Step 4: Run the lifecycle tests and commit.**
+- [x] **Step 4: Run the lifecycle tests and commit.**
 
   Run:
 
@@ -146,7 +146,7 @@
   the oracle exactly twice with visible child staging only, and fails closed
   before or after public run creation with fixed redaction.
 
-- [ ] **Step 1: Add failing safety and matrix tests.**
+- [x] **Step 1: Add failing safety and matrix tests.**
 
   Parameterize valid physiology, earlier-recognition, and treatment-adherence
   pairs. Assert each child retains its correct visible matrix differences and
@@ -165,7 +165,7 @@
   no raw exception, identifier, temporary path, or hidden token, and the final
   target is absent.
 
-- [ ] **Step 2: Run the tests and confirm each new regression fails.**
+- [x] **Step 2: Run the tests and confirm each new regression fails.**
 
   Run:
 
@@ -173,7 +173,7 @@
   UV_CACHE_DIR=/tmp/ppoc-uv-cache PYTHONDONTWRITEBYTECODE=1 uv run pytest -q tests/synthetic/test_counterfactual_package_export.py
   ```
 
-- [ ] **Step 3: Harden implementation without changing existing exporters.**
+- [x] **Step 3: Harden implementation without changing existing exporters.**
 
   Ensure pair preflight rejects non-PASS aggregate validation before any
   public lifecycle path, maps each visible `ResourceRow.to_mapping()` in
@@ -186,7 +186,7 @@
   deterministic bytes, fixed child order, no-replace promotion, and fixed
   redacted errors.
 
-- [ ] **Step 4: Run integration tests and commit.**
+- [x] **Step 4: Run integration tests and commit.**
 
   Run:
 
@@ -221,7 +221,7 @@
   filesystem, real/governed-data, calibration, held-out, privacy, model,
   network, Synthea, or hidden-truth leakage through the pair API.
 
-- [ ] **Step 1: Write failing documentation and boundary tests.**
+- [x] **Step 1: Write failing documentation and boundary tests.**
 
   Assert the guide and README name the exact function/class, explain the
   `baseline/` and `intervention/` child layout, list the pair manifest's
@@ -233,7 +233,7 @@
   lifecycle helpers, path-like public arguments, hidden truth object names in
   mappings/reprs, or calls to `export_observed_resource_package`.
 
-- [ ] **Step 2: Run the new tests to verify they fail before documentation/guards.**
+- [x] **Step 2: Run the new tests to verify they fail before documentation/guards.**
 
   Run:
 
@@ -241,7 +241,7 @@
   UV_CACHE_DIR=/tmp/ppoc-uv-cache PYTHONDONTWRITEBYTECODE=1 uv run pytest -q tests/synthetic/test_counterfactual_package_export_boundaries.py
   ```
 
-- [ ] **Step 3: Implement documentation and boundary coverage.**
+- [x] **Step 3: Implement documentation and boundary coverage.**
 
   Add a concise example that receives a previously assembled pair and a
   caller-loaded descriptor, invokes the pair exporter with explicit metadata
@@ -252,7 +252,7 @@
   privacy, non-matchability, release, or Synthea evidence. Extend existing
   static allowlists only for the new in-memory world validator and API.
 
-- [ ] **Step 4: Run docs/boundary tests and commit.**
+- [x] **Step 4: Run docs/boundary tests and commit.**
 
   Run:
 
@@ -277,14 +277,14 @@
 - Modify: this plan (checkbox/evidence metadata only)
 - Create/modify: ignored `.superpowers/sdd/2026-08-31-counterfactual-package-export/` evidence
 
-- [ ] **Step 1: Create the SDD ledger and run fresh scoped review after each task.**
+- [x] **Step 1: Create the SDD ledger and run fresh scoped review after each task.**
 
   Record the plan identity, non-overlapping file ownership, implementation
   commits, review findings, fix rounds, exact fix ranges, and PASS verdicts.
   Every Critical/Important finding goes to an implementer for a bounded fix;
   the reviewer then rechecks only that exact range before the next task.
 
-- [ ] **Step 2: Run a fresh broad review over the complete feature range.**
+- [x] **Step 2: Run a fresh broad review over the complete feature range.**
 
   Review matrix preservation, nonempty ancillary export, child exact-schema
   inventories, oracle/staging boundaries, deterministic bytes, pair-manifest
@@ -293,7 +293,7 @@
   Important findings through one consolidated implementer fix wave and one
   scoped re-review.
 
-- [ ] **Step 3: Run final feature verification.**
+- [x] **Step 3: Run final feature verification.**
 
   From the feature worktree run:
 
