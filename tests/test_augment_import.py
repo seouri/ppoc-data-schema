@@ -100,11 +100,16 @@ def test_documentation_describes_synthetic_only_import_boundary() -> None:
     guide = (ROOT / "docs" / "augment-import.md").read_text()
     readme = (ROOT / "README.md").read_text()
     synthetic_guide = (ROOT / "docs" / "synthetic-generator.md").read_text()
+    design = (ROOT / "docs" / "superpowers" / "specs" / "2026-09-01-augment-import-design.md").read_text()
+    plan = (ROOT / "docs" / "superpowers" / "plans" / "2026-09-01-augment-import.md").read_text()
+    data_readme = (DATA_DIR / "README.md").read_text()
 
     for required_input in ("visits.csv", "patients.csv", "problem_list.csv"):
         assert required_input in guide
     assert "uv sync" in guide
-    assert "python scripts/augment.py fixtures/augment-input --output_dir artifacts/augment-output --output_format csv" in guide
+    documented_command = "uv run python scripts/augment.py fixtures/augment-input --output_dir artifacts/augment-output --output_format csv"
+    assert documented_command in guide
+    assert "\npython scripts/augment.py fixtures/augment-input" not in guide
     assert "replace `csv` with `parquet`" in guide
     assert "visits_augmented-YYYYMMDDHHMMSS.csv" in guide
     assert "patients_augmented-YYYYMMDDHHMMSS.csv" in guide
@@ -118,6 +123,15 @@ def test_documentation_describes_synthetic_only_import_boundary() -> None:
         assert "source-matched growth augmenter" in document
         assert "not bound as authoritative" in document
         assert "no production growth reference or authoritative augmentation oracle is shipped" not in document
+
+    for document in (design, plan):
+        assert "CLI-only" in document
+        assert "importable `scripts.augment`" not in document
+        assert "import `scripts.augment`" not in document
+
+    assert "git@github.com:hms-dbmi/growth-ai.git" in data_readme
+    assert "cd6abdd313d8ebadcb5c66052857a3bb107419ad" in data_readme
+    assert "upstream dataset provenance and redistribution terms were not independently verified" in data_readme.lower()
 
 
 def test_documented_cli_preserves_descriptor_output_headers_for_synthetic_input(tmp_path) -> None:

@@ -4,7 +4,7 @@
 
 **Goal:** Vendor the supplied growth augmenter and its complete non-patient runtime closure for synthetic exact-schema development runs.
 
-**Architecture:** Keep the supplied `scripts/augment.py` and `scripts/harrall_outliers.py` byte-identical and preserve their `data/` relative lookup contract. Vendor only the ten CDC/LMS/velocity reference tables and the ICD-10-CM chronic-code table that the module reads, record their hashes in a manifest, and keep the augmenter outside the native generator and authoritative derivation boundary.
+**Architecture:** Keep the supplied `scripts/augment.py` and `scripts/harrall_outliers.py` byte-identical and preserve their `data/` relative lookup contract. Vendor only the ten CDC/LMS/velocity reference tables and the ICD-10-CM chronic-code table that the CLI reads, record their hashes in a manifest, and expose only the repo-root CLI-only contract while keeping the augmenter outside the native generator and authoritative derivation boundary.
 
 **Tech Stack:** Python 3.12+, pandas, NumPy, SciPy, PyArrow, pytest, Ruff, uv, Frictionless-style `datapackage.json` headers.
 
@@ -15,6 +15,7 @@
 - The copied Python and reference files remain byte-identical to the supplied source files.
 - Runtime reference files are exactly the ten CDC LMS/height-velocity CSVs and `icd10cm-tabular-2026.csv`; no patient or generated-output files are copied.
 - The command expects `visits.csv`, `patients.csv`, and `problem_list.csv` in an explicit caller-provided input directory and uses `data/` references.
+- The supported interface is CLI-only: run `uv run python scripts/augment.py ...` from the repository root; ordinary `import scripts.augment` is not supported by the byte-identical source.
 - The augmenter is a development derivation candidate, not an authoritative oracle; the native generator, exporters, calibration, privacy, and counterfactual paths must not import or execute it.
 - Tests use only temporary wholly synthetic input rows and must verify augmented output headers against `datapackage.json`.
 - `pandas`, `scipy`, and `pyarrow` are direct project dependencies alongside the existing NumPy dependency because the copied CLI imports or executes them.
@@ -47,11 +48,11 @@
 
 **Interfaces:**
 - Consumes: supplied source files under `/Users/joon/w/growth-ai/scripts` and `/Users/joon/w/growth-ai/data`; checked-in `datapackage.json` for test headers.
-- Produces: importable `scripts.augment`, local `detect_harrall_outliers`, bundled `data/` reference files, a manifest with exact relative paths/digests, and project dependencies sufficient for CSV and Parquet modes.
+- Produces: runnable repo-root CLI `uv run python scripts/augment.py ...`, local CLI resolution of `detect_harrall_outliers`, bundled `data/` reference files, a manifest with exact relative paths/digests, and project dependencies sufficient for CSV and Parquet modes.
 
 - [ ] **Step 1: Write the failing closure test**
 
-Add `tests/test_augment_import.py` with tests that (a) load the manifest and assert every listed path is relative, regular, present, and matches its recorded byte size and lowercase SHA-256; (b) assert the manifest's path set is the eleven exact runtime data names plus the two Python source names and `scripts/__init__.py`; (c) assert each CDC table has the expected `Sex`/LMS header and the ICD-10 table has `diag_name`/`chronic`; (d) import `scripts.augment` from the repository root and assert its ten `cdc_data` keys; and (e) create a temporary synthetic input package from the descriptor headers, call `augment_visits` and `augment_patients`, and assert the resulting column names equal the descriptor fields for `visits_augmented` and `patients_augmented`.
+Add `tests/test_augment_import.py` with tests that (a) load the manifest and assert every listed path is relative, regular, present, and matches its recorded byte size and lowercase SHA-256; (b) assert the manifest's path set is the eleven exact runtime data names plus the two Python source names and `scripts/__init__.py`; (c) assert each CDC table has the expected `Sex`/LMS header and the ICD-10 table has `diag_name`/`chronic`; and (d) create a temporary synthetic input package from the descriptor headers, run the supported repo-root CLI in a subprocess, and assert the resulting column names equal the descriptor fields for `visits_augmented` and `patients_augmented`.
 
 - [ ] **Step 2: Run the focused test to verify it fails**
 
@@ -59,7 +60,7 @@ Run `PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q 
 
 - [ ] **Step 3: Copy the exact runtime closure**
 
-Copy the supplied `augment.py`, `harrall_outliers.py`, and empty `__init__.py` into `scripts/`; copy only the ten filenames listed in `load_cdc_data` and `data/icd10cm-tabular-2026.csv` into `data/`. Do not copy any source `input/`, `p3-data/`, patient, visit, problem-list, output, notebook, cache, environment, or repository-control files. Generate `data/augment-runtime-manifest.json` with a fixed manifest version, relative paths, byte sizes, SHA-256 digests, roles (`python`, `cdc_reference`, `icd10_reference`), and source-relative names; do not record absolute workstation paths or patient identifiers. Add `data/README.md` describing the lookup contract, reference-table provenance as supplied public standards/code tables, the exact excluded classes, and the fact that the files are not clinical validation evidence.
+Copy the supplied `augment.py`, `harrall_outliers.py`, and empty `__init__.py` into `scripts/`; copy only the ten filenames listed in `load_cdc_data` and `data/icd10cm-tabular-2026.csv` into `data/`. Do not copy any source `input/`, `p3-data/`, patient, visit, problem-list, output, notebook, cache, environment, or repository-control files. Generate `data/augment-runtime-manifest.json` with a fixed manifest version, relative paths, byte sizes, SHA-256 digests, roles (`python`, `cdc_reference`, `icd10_reference`), and source-relative names; do not record absolute workstation paths or patient identifiers. Add `data/README.md` describing the lookup contract, the verified source-checkout snapshot and source-relative paths, the exact excluded classes, and the limits of provenance, licensing, validation, and redistribution evidence.
 
 - [ ] **Step 4: Declare dependencies and refresh the lock**
 
@@ -91,7 +92,7 @@ Add assertions that `docs/augment-import.md` names the three required input file
 
 - [ ] **Step 2: Update the usage documentation**
 
-Create `docs/augment-import.md` with setup (`uv sync`), a command using an explicit synthetic input directory and output directory, the expected timestamped outputs, the manifest/hash verification command, the exact base-resource requirements, and a prominent warning not to point the script at governed or real data. Update README and the synthetic-generator guide to link this document and retain the existing fail-closed authority statement.
+Create `docs/augment-import.md` with setup (`uv sync`), a repo-root `uv run python scripts/augment.py ...` command using an explicit synthetic input directory and output directory, the expected timestamped outputs, the manifest/hash verification command, the exact base-resource requirements, and a prominent warning not to point the script at governed or real data. Update README and the synthetic-generator guide to link this document and retain the existing fail-closed authority statement.
 
 - [ ] **Step 3: Run focused documentation tests**
 

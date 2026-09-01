@@ -28,7 +28,7 @@ Each file must satisfy the matching base-resource schema and header order in `da
 Run the command from the repository root, with explicit synthetic input and output directories:
 
 ```sh
-python scripts/augment.py fixtures/augment-input --output_dir artifacts/augment-output --output_format csv
+uv run python scripts/augment.py fixtures/augment-input --output_dir artifacts/augment-output --output_format csv
 ```
 
 For Parquet output, replace `csv` with `parquet`. The importer creates the output directory when needed and writes timestamped files such as:
