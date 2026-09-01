@@ -391,7 +391,7 @@ git commit -m "docs: document derivation binding handoff"
 - Modify: docs/superpowers/plans/2026-09-01-derivation-oracle-binding.md to mark completed checkboxes and record verification evidence.
 - Create (ignored SDD workspace): .superpowers/sdd/2026-09-01-derivation-oracle-binding/progress.md and per-task review reports.
 
-- [ ] **Step 1: Run the full repository verification matrix**
+- [x] **Step 1: Run the full repository verification matrix**
 
 Run each command separately from the isolated worktree and retain complete output in the SDD evidence directory:
 
@@ -405,11 +405,11 @@ git diff --check 603b874e4ddecff2ddaa91136a7146d6bc40e19b..HEAD
 
 Expected: full suite passes with zero failures, Ruff is clean, lockfile resolves, eight resources validate, and diff check emits no output.
 
-- [ ] **Step 2: Run deterministic and redaction checks**
+- [x] **Step 2: Run deterministic and redaction checks**
 
 Construct the same fictional binding twice, call to_json_bytes twice, and assert byte equality and unchanged input mappings. Scan binding/report mappings, JSON bytes, reprs, and fixed exceptions for patient, visit, row, path, truth, secret, slash, and the fictional IDs used only in input fixtures. Assert no report contains nested evidence, arbitrary review text, or rows.
 
-- [ ] **Step 3: Perform fresh broad review**
+- [x] **Step 3: Perform fresh broad review**
 
 Package the complete feature diff and dispatch a final reviewer on the most capable available model. The review must independently trace the spec, all five tasks, the exporter boundary, exact redaction, and no-real-data/no-Synthea boundary. Resolve every Critical/Important finding in one consolidated fix wave, rerun focused review, and record residual Minor rulings in the SDD ledger.
 
