@@ -198,7 +198,7 @@ git commit -m "feat: add derivation binding models"
 - validate_derivation_binding(binding: DerivationBinding, *, expected_schema_fingerprint: str) -> DerivationBindingReport uses an explicit expected fingerprint.
 - require_approved_derivation_binding(binding: DerivationBinding, *, expected_schema_fingerprint: str) -> None raises DerivationBindingUnavailable unless approval requirements pass.
 
-- [ ] **Step 1: Write failing evaluator tests**
+- [x] **Step 1: Write failing evaluator tests**
 
 Using the Task 1 fixture, add tests for:
 
@@ -209,7 +209,7 @@ Using the Task 1 fixture, add tests for:
 5. Reports have exactly the fixed check order, recomputed status counts, fixed reason codes OK/MISSING_EVIDENCE/OUTSIDE_POLICY/STRUCTURAL_INVALID, and no rows, paths, patient/visit identifiers, arbitrary review prose, or private text in mappings, JSON, repr, or exceptions. The fixed binding, oracle, reference-standard, and parity-report identities are the only serialized IDs.
 6. Direct public construction rejects PASS with a positive mismatch count and OUTSIDE_POLICY with zero mismatches.
 
-- [ ] **Step 2: Run evaluator tests and verify expected failure**
+- [x] **Step 2: Run evaluator tests and verify expected failure**
 
 ~~~sh
 PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_derivation_binding_evaluation.py
@@ -217,7 +217,7 @@ PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests
 
 Expected: collection fails because the report models and evaluator functions do not exist.
 
-- [ ] **Step 3: Implement fixed report models**
+- [x] **Step 3: Implement fixed report models**
 
 Define DERIVATION_BINDING_CHECK_NAMES in this exact order: contract, schema_contract, oracle_identity, reference_standard, golden_coverage, parity_evidence, synthetic_fuzz_evidence, review, classification. Define DerivationBindingStatus with PASS, FAIL, and UNEVALUABLE.
 
@@ -227,7 +227,7 @@ DerivationBindingReport has binding_version, binding_id, schema_fingerprint, ora
 
 The report also carries the safe oracle_id and reference_standard_id, plus parity_report_id when present, so a custodian can connect aggregate evidence without exposing patient/visit identifiers or source paths. These IDs use the same bounded aggregate-safe token validator as the binding and are suppressed to None when their owning evidence check is unevaluable.
 
-- [ ] **Step 4: Implement validate_derivation_binding**
+- [x] **Step 4: Implement validate_derivation_binding**
 
 Build the nine checks without opening or executing evidence bytes:
 
@@ -243,11 +243,11 @@ Build the nine checks without opening or executing evidence bytes:
 
 Suppress counts and details for unevaluable checks. Never convert missing values to passing zero evidence.
 
-- [ ] **Step 5: Implement the approval helper**
+- [x] **Step 5: Implement the approval helper**
 
 require_approved_derivation_binding calls the evaluator with the explicit expected fingerprint and raises DerivationBindingUnavailable unless the report is PASS, test_only is false, parity_status is PASS, review.status is APPROVED, and candidate/parity/schema identities match. The exception contains no binding or report values.
 
-- [ ] **Step 6: Run focused evaluator tests and lint**
+- [x] **Step 6: Run focused evaluator tests and lint**
 
 ~~~sh
 PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_derivation_binding_models.py tests/synthetic/test_derivation_binding_evaluation.py
@@ -256,7 +256,7 @@ UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run ruff check src/synthetic/derivation_bindi
 
 Expected: focused tests pass and Ruff reports All checks passed!
 
-- [ ] **Step 7: Commit the evaluator slice**
+- [x] **Step 7: Commit the evaluator slice**
 
 ~~~sh
 git add src/synthetic/derivation_binding.py tests/synthetic/test_derivation_binding_evaluation.py
