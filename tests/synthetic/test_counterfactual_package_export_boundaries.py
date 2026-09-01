@@ -138,6 +138,7 @@ def test_pair_export_documentation_states_the_exact_envelope_and_child_contract(
     )
     assert all(term in guide for term in required)
     assert "export_counterfactual_ehr_world_pair" in readme
+    assert "CounterfactualPackageExportUnavailable" in readme
     assert "pair-manifest.json" in readme
     assert "baseline/" in readme and "intervention/" in readme
     assert "not a PPOC package" in readme
