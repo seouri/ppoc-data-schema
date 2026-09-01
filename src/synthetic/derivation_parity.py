@@ -158,6 +158,10 @@ class DerivationParityCheck:
             _count(mismatch_count, "mismatch_count")
             if mismatch_count > compared_count:
                 raise ValueError("mismatch_count exceeds compared_count")
+            if status is DerivationParityStatus.PASS and (mismatch_count != 0 or reason_code != "OK"):
+                raise ValueError("passing checks require coherent zero-mismatch evidence")
+            if status is DerivationParityStatus.FAIL and reason_code == "OUTSIDE_TOLERANCE" and mismatch_count == 0:
+                raise ValueError("outside-tolerance checks require a mismatch")
             if maximum_absolute_difference is None:
                 raise ValueError("evaluable checks require maximum difference")
             maximum_absolute_difference = _finite(maximum_absolute_difference, "maximum_absolute_difference", nonnegative=True)

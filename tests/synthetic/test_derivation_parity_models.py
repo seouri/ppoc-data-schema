@@ -119,6 +119,16 @@ def test_check_rejects_incompatible_reason(status, reason):
         DerivationParityCheck("schema_contract", status, reason, 1, 0, 0.0)
 
 
+def test_passing_check_rejects_mismatches():
+    with pytest.raises((TypeError, ValueError)):
+        DerivationParityCheck("schema_contract", DerivationParityStatus.PASS, "OK", 2, 1, 0.5)
+
+
+def test_outside_tolerance_failure_requires_a_mismatch():
+    with pytest.raises((TypeError, ValueError)):
+        DerivationParityCheck("schema_contract", DerivationParityStatus.FAIL, "OUTSIDE_TOLERANCE", 2, 0, 0.0)
+
+
 def test_unevaluable_check_suppresses_evidence():
     item = DerivationParityCheck("schema_contract", DerivationParityStatus.UNEVALUABLE, "MISSING_EVIDENCE", 9, 2, 1.0)
     assert item.compared_count is None
