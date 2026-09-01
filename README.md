@@ -67,6 +67,10 @@ Until the authoritative augmentation implementation or an approved parity harnes
 
 See [`docs/synthetic-generator.md`](docs/synthetic-generator.md) for the Python usage example, output contract, safety checks, and verification commands.
 
+## Evaluator-only augmented-derivation parity gate
+
+`validate_derivation_parity` (`DERIVATION_PARITY_VERSION = "derivation-parity-v1"`) is an aggregate-only in-memory comparison of already-loaded candidate and independently supplied reference augmented rows against the six base resources. It checks deterministic age, unit, BMI, patient-summary, clinical-flag, and reference-field parity under explicit tolerances with `FAIL > UNEVALUABLE > PASS` status precedence; its fixed redacted failure and report expose aggregate checks only. A passing comparison binds the candidate/reference implementations, not clinical authority: an independently reviewed reference implementation and reference standard remain prerequisites, and the gate does not establish clinical validity, real-population prevalence, privacy/non-matchability, release approval, or Synthea conformance. See [the parity-gate guide](docs/synthetic-generator.md#evaluator-only-augmented-derivation-parity-gate).
+
 ## Development-only native cohort
 
 The in-memory `generate_native_cohort` API composes deterministic healthy-plus-disorder trajectories from a `CalibrationSamplingProfile`, an injected fictional growth reference, an explicit `ObservationPolicy`, and an explicit module prior. The profile accepts only complete released aggregate cells from an already-loaded `CalibrationArtifact`; suppressed or missing targets fail closed, and recorded diagnosis flags remain validation evidence rather than latent-disease allocators. An optional already-loaded descriptor mapping projects passing visible resource bundles. The API accepts no real-data path, key, report, or output destination, and the fail-closed command-line smoke entry point remains unchanged.

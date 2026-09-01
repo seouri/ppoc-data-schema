@@ -609,6 +609,53 @@ The visible resource-level intervention matrix is deliberately narrow. `PHYSIOLO
 
 This has no file input or output: it is not a file writer, package exporter, manifest workflow, CLI, real-data or governed-data interface, calibration or held-out evaluator, privacy or non-matchability proof, clinical model, prevalence or demographic calibration, task utility experiment, or release approval. Pair-aware exact-schema export is the next gate. A Synthea implementation is an optional later adapter only after conformance to this native contract; it does not replace the resource-level validator or hidden-truth boundary.
 
+## Evaluator-only augmented-derivation parity gate
+
+`DERIVATION_PARITY_VERSION = "derivation-parity-v1"` identifies the in-memory `validate_derivation_parity` evaluator. It compares an already-loaded fictional or privately controlled candidate output with an independently supplied reference output; it never opens a path, reads or writes a file, invokes generation or export, or consumes calibration, held-out, privacy, model, network, or Synthea inputs. `base_rows` contains exactly `patients`, `visits`, `labs`, `medications`, `problem_list`, and `referrals`; `candidate_rows` and `reference_rows` each contain exactly `patients_augmented` and `visits_augmented`.
+
+The evaluator separately checks `deterministic_age_conversion`, `deterministic_unit_conversion`, `deterministic_bmi`, `deterministic_patient_summaries`, and `clinical_flag_relationships`, then applies `reference_field_parity` to every augmented field. `deterministic_tolerance` applies to independently recomputed relationships and `reference_tolerance` to candidate/reference finite numeric comparisons. Structural or comparison failures are `FAIL`; missing required evidence or support is `UNEVALUABLE`; otherwise a check is `PASS`, with overall precedence `FAIL > UNEVALUABLE > PASS`.
+
+```python
+from collections.abc import Iterable, Mapping
+
+from synthetic.derivation_parity import (
+    DerivationImplementation,
+    DerivationParityPolicy,
+    DerivationParityStatus,
+    validate_derivation_parity,
+)
+
+
+def evaluate_loaded_rows(
+    base_rows: Mapping[str, Iterable[Mapping[str, object]]],
+    candidate_rows: Mapping[str, Iterable[Mapping[str, object]]],
+    reference_rows: Mapping[str, Iterable[Mapping[str, object]]],
+    descriptor_mapping: Mapping[str, object],
+    candidate: DerivationImplementation,
+    reference: DerivationImplementation,
+    policy: DerivationParityPolicy,
+) -> dict[str, object]:
+    report = validate_derivation_parity(
+        base_rows,
+        candidate_rows,
+        reference_rows,
+        descriptor_mapping,
+        candidate=candidate,
+        reference=reference,
+        policy=policy,
+    )
+    assert report.status in (
+        DerivationParityStatus.PASS,
+        DerivationParityStatus.FAIL,
+        DerivationParityStatus.UNEVALUABLE,
+    )
+    return report.to_mapping()
+```
+
+`DerivationParityReport` is aggregate-only: its fixed fields are `contract`, `schema_fingerprint`, `policy`, `candidate`, `reference`, `patient_row_count`, `visit_row_count`, `status`, `status_counts`, and `checks`; every check has only `name`, `status`, `reason_code`, `compared_count`, `mismatch_count`, and `maximum_absolute_difference`. Unevaluable checks suppress their counts and difference to `null`. `DerivationParityUnavailable` is a fixed redacted failure, and neither reports nor exceptions include rows, identifiers, source values, diagnosis codes, paths, or hidden truth.
+
+A passing comparison binds the supplied candidate and reference implementations; it does not make either clinically authoritative. An independently reviewed reference implementation, reference standard, code-set decision, fixed reference fixture, and data-custodian approval are prerequisites for using a passing report in a release decision. This evaluator-only parity gate does not establish clinical validity, real-population prevalence, privacy/non-matchability, release approval, or Synthea conformance; those require separate approved evidence and governance.
+
 ## Exact-schema observed-resource package export
 
 `export_observed_resource_package` is the development-only bridge from one or more passing in-memory observed-resource bundles to an exact-schema, synthetic-only package. The caller supplies an already-loaded descriptor mapping; the exporter does not accept a descriptor path, a real-data root, a calibration input, a held-out report, a privacy policy, or a Synthea input. Every bundle must already validate as `PASS`. The exporter checks each bundle against the supplied descriptor shape, rejects duplicate synthetic patient and visit identifiers, then sorts bundles deterministically by synthetic patient ID before it writes the shared exact-schema lifecycle.
