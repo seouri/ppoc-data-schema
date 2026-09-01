@@ -112,7 +112,7 @@ Run `git add README.md docs/synthetic-generator.md docs/augment-import.md tests/
 
 - [ ] **Step 1: Run repository verification**
 
-Run `PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q`, `PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run ruff check .`, `PYTHONDONTWRITEBYTECODE=1 python3 schema/build.py --check`, and `git diff --check`. Also run a boundary scan confirming no tracked path under `data/` contains patient/input/output names and no synthetic package module imports `scripts.augment`.
+Run `PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q`, `PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run ruff check src tests`, `PYTHONDONTWRITEBYTECODE=1 python3 schema/build.py --check`, and `git diff --check`. Run an informational `PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run ruff check scripts/augment.py scripts/harrall_outliers.py` and record its inherited findings without changing byte-identical source. Also run a boundary scan confirming no tracked path under `data/` contains patient/input/output names and no synthetic package module imports `scripts.augment`.
 
 - [ ] **Step 2: Commit the verification ledger**
 
