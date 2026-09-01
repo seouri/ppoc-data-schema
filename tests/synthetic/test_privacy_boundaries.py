@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 _VISIBLE_GENERATOR_MODULES = (
     "__init__.py",
     "generate.py",
+    "development_runtime.py",
     "csv_package.py",
     "manifest.py",
     "derivation.py",
@@ -143,9 +144,12 @@ def _transitive_imports(paths: tuple[Path, ...]) -> set[str]:
 
 
 def _visible_generator_imports() -> set[str]:
-    return _transitive_imports(
-        tuple(ROOT / "src" / "synthetic" / module for module in _VISIBLE_GENERATOR_MODULES)
+    roots = tuple(
+        ROOT / "src" / "synthetic" / module for module in _VISIBLE_GENERATOR_MODULES
     )
+    # Visible roots are held to the stricter source-level boundary because their
+    # deferred imports can be invoked by public generator/package entry points.
+    return _transitive_imports(roots) | set().union(*(_imports(path) for path in roots))
 
 
 @pytest.mark.parametrize(
@@ -213,6 +217,45 @@ def test_visible_generator_interfaces_do_not_import_governed_privacy_inputs() ->
     imported = _visible_generator_imports()
 
     assert not imported & forbidden
+
+
+@pytest.mark.parametrize(
+    ("module", "source", "forbidden"),
+    (
+        (
+            "generate.py",
+            (
+                "def main() -> None:\n"
+                "    from .privacy_audit import audit\n"
+            ),
+            "synthetic.privacy_audit",
+        ),
+        (
+            "development_runtime.py",
+            (
+                "def build() -> None:\n"
+                "    from .calibration_input import CalibrationInput\n"
+            ),
+            "synthetic.calibration_input",
+        ),
+    ),
+)
+def test_visible_generator_scan_rejects_deferred_governed_direct_root_imports(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    module: str,
+    source: str,
+    forbidden: str,
+) -> None:
+    """Visible roots remain protected even when their governed import is deferred."""
+    for relative_module in _VISIBLE_GENERATOR_MODULES:
+        path = tmp_path / "src" / "synthetic" / relative_module
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("", encoding="utf-8")
+    (tmp_path / "src" / "synthetic" / module).write_text(source, encoding="utf-8")
+    monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
+
+    assert forbidden in _visible_generator_imports()
 
 
 @pytest.mark.parametrize(
