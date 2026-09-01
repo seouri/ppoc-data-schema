@@ -69,14 +69,6 @@ def _count(value: object, field: str) -> int:
     return value
 
 
-def _fresh(value: object) -> object:
-    if isinstance(value, Mapping):
-        return {str(key): _fresh(item) for key, item in value.items()}
-    if isinstance(value, tuple):
-        return [_fresh(item) for item in value]
-    return value
-
-
 @dataclass(frozen=True)
 class DerivationImplementation:
     implementation_id: str
@@ -117,7 +109,14 @@ class DerivationParityPolicy:
         object.__setattr__(self, "reference_tolerance", _finite(self.reference_tolerance, "reference_tolerance", nonnegative=True))
 
     def to_mapping(self) -> dict[str, object]:
-        return {"policy_id": self.policy_id, "policy_version": self.policy_version}
+        return {
+            "policy_id": self.policy_id,
+            "policy_version": self.policy_version,
+            "minimum_patient_rows": self.minimum_patient_rows,
+            "minimum_visit_rows": self.minimum_visit_rows,
+            "deterministic_tolerance": self.deterministic_tolerance,
+            "reference_tolerance": self.reference_tolerance,
+        }
 
     def __repr__(self) -> str:
         return "DerivationParityPolicy(<aggregate-safe>)"
@@ -211,10 +210,10 @@ class DerivationParityReport:
         if not isinstance(status, DerivationParityStatus):
             raise TypeError("status must be a DerivationParityStatus")
         checks = tuple(values["checks"]) if isinstance(values["checks"], Iterable) and not isinstance(values["checks"], (str, bytes, Mapping)) else ()
-        if len(checks) != len(DERIVATION_PARITY_CHECK_NAMES) or tuple(item.name for item in checks) != DERIVATION_PARITY_CHECK_NAMES:
-            raise ValueError("checks must use the fixed ordered check names")
         if not all(isinstance(item, DerivationParityCheck) for item in checks):
             raise TypeError("checks must contain DerivationParityCheck values")
+        if len(checks) != len(DERIVATION_PARITY_CHECK_NAMES) or tuple(item.name for item in checks) != DERIVATION_PARITY_CHECK_NAMES:
+            raise ValueError("checks must use the fixed ordered check names")
         raw_counts = values["status_counts"]
         if not isinstance(raw_counts, Mapping) or set(raw_counts) != {"PASS", "FAIL", "UNEVALUABLE"}:
             raise ValueError("status_counts keys are fixed")

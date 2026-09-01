@@ -12,6 +12,7 @@ from synthetic.derivation_parity import (
     DerivationParityPolicy,
     DerivationParityReport,
     DerivationParityStatus,
+    DerivationParityUnavailable,
 )
 from synthetic.schema_contract import EXPECTED_SCHEMA_FINGERPRINT
 
@@ -102,6 +103,20 @@ def test_report_rejects_duplicate_checks_bad_counts_and_unknown_keys():
         DerivationParityCheck("schema_contract", DerivationParityStatus.PASS, "OK", 1, 0, math.inf)
     with pytest.raises((TypeError, ValueError)):
         DerivationParityCheck("schema_contract", DerivationParityStatus.PASS, "OK", 1, 0, 0.0, extra="x")
+    with pytest.raises((TypeError, ValueError)):
+        report(checks=(object(),) * len(DERIVATION_PARITY_CHECK_NAMES))
+
+
+@pytest.mark.parametrize("counts", [(-1, 0), (True, 0), (1, -1), (1, True)])
+def test_check_rejects_negative_or_boolean_counts(counts):
+    with pytest.raises((TypeError, ValueError)):
+        DerivationParityCheck("schema_contract", DerivationParityStatus.PASS, "OK", counts[0], counts[1], 0.0)
+
+
+@pytest.mark.parametrize("status,reason", [(DerivationParityStatus.PASS, "MISSING_EVIDENCE"), (DerivationParityStatus.FAIL, "OK")])
+def test_check_rejects_incompatible_reason(status, reason):
+    with pytest.raises((TypeError, ValueError)):
+        DerivationParityCheck("schema_contract", status, reason, 1, 0, 0.0)
 
 
 def test_unevaluable_check_suppresses_evidence():
@@ -109,3 +124,29 @@ def test_unevaluable_check_suppresses_evidence():
     assert item.compared_count is None
     assert item.mismatch_count is None
     assert item.maximum_absolute_difference is None
+
+
+def test_models_reject_mutable_and_non_json_constructor_values():
+    with pytest.raises((TypeError, ValueError)):
+        DerivationImplementation(["candidate"], "a" * 64, True)
+    with pytest.raises((TypeError, ValueError)):
+        DerivationParityPolicy(object(), "v1", 1, 1, 0.1, 0.1)
+
+
+def test_report_rejects_negative_row_counts_and_policy_serializes_controls():
+    with pytest.raises((TypeError, ValueError)):
+        report(patient_row_count=-1)
+    mapping = report(policy=policy(minimum_patient_rows=3, minimum_visit_rows=4, deterministic_tolerance=0.2, reference_tolerance=0.3)).to_mapping()
+    assert mapping["policy"] == {
+        "policy_id": "parity-policy", "policy_version": "v1",
+        "minimum_patient_rows": 3, "minimum_visit_rows": 4,
+        "deterministic_tolerance": 0.2, "reference_tolerance": 0.3,
+    }
+
+
+def test_unavailable_message_is_fixed_and_json_is_ascii_compact():
+    assert str(DerivationParityUnavailable("secret/path", object())) == "derivation parity evaluation is unavailable"
+    encoded = report().to_json_bytes()
+    assert encoded.isascii()
+    assert b" " not in encoded
+    assert encoded.endswith(b"\n")
