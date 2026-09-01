@@ -62,6 +62,8 @@ from tests.synthetic.cohort_fixtures import aggregate_calibration_artifact
 from tests.synthetic.fakes import RegimeLinearTestReference, test_derivation_binding
 
 ROOT = Path(__file__).resolve().parents[2]
+GUIDE = ROOT / "docs" / "synthetic-generator.md"
+README = ROOT / "README.md"
 _SCALE_ENABLED = os.environ.get("SYNTHETIC_RUN_SCALE") == "1"
 _SCALE_SEEDS = (20260830, 20260831, 20260901)
 _SCALE_PATIENT_COUNT = 10_000
@@ -284,6 +286,49 @@ def _package_inventory(package: Path) -> tuple[str, ...]:
             if path.is_file()
         )
     )
+
+
+def _scale_documentation_section(document: str) -> str:
+    heading = "## Scheduled development scale profile\n"
+    assert heading in document
+    return document.split(heading, maxsplit=1)[1].split("\n## ", maxsplit=1)[0]
+
+
+def test_development_scale_documentation_declares_scheduled_gate_and_boundaries() -> None:
+    guide = _scale_documentation_section(GUIDE.read_text(encoding="utf-8"))
+    readme = README.read_text(encoding="utf-8")
+    readme_start = readme.index("The [scheduled development scale profile]")
+    readme_paragraph = readme[readme_start : readme.index("\n\n", readme_start)]
+
+    assert "SYNTHETIC_RUN_SCALE=1 uv run pytest -m scale tests/synthetic/test_development_scale.py" in guide
+    for detail in (
+        "20260830",
+        "20260831",
+        "20260901",
+        "10,000-patient",
+        "temporary package",
+        "all eight descriptor resources",
+        "derivation",
+        "longitudinal",
+        "task",
+        "opt-in",
+    ):
+        assert detail in guide
+
+    for document in (guide, readme_paragraph):
+        for non_claim in (
+            "prevalence",
+            "clinical validity",
+            "real labels",
+            "privacy/non-matchability",
+            "held-out",
+            "Synthea",
+            "release evidence",
+        ):
+            assert non_claim in document
+
+    assert "does not bind the augmenter" in readme_paragraph
+    assert "docs/synthetic-generator.md#scheduled-development-scale-profile" in readme_paragraph
 
 
 @pytest.mark.parametrize(

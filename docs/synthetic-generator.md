@@ -14,6 +14,18 @@ The evaluator-only [golden trajectory guide](golden-trajectories.md) provides a 
 
 The visible smoke example remains the healthy age-730+ profile: three visits at ages 730, 1095, and 1460 days. It does not export latent age-regime state, puberty state, or any other evaluator-only trajectory state. The broader age-regime behavior below is a development-only injected-reference example, not a change to that visible smoke contract.
 
+## Scheduled development scale profile
+
+The scheduled development scale profile is an opt-in, test-only composition gate for the native cohort, evaluator, exact-schema exporter, and test-only source-matched augmenter oracle. Run the complete fixed-seed profile with:
+
+```sh
+SYNTHETIC_RUN_SCALE=1 uv run pytest -m scale tests/synthetic/test_development_scale.py
+```
+
+The parameterized run uses the fixed seeds `20260830`, `20260831`, and `20260901`, generates an exact 10,000-patient fictional cohort per seed, and writes each temporary package beneath pytest's `tmp_path` rather than retaining output in the repository. It checks all eight descriptor resources, exact row counts and schema identity, test-only derivation, longitudinal drift, and visible-only task execution. The opt-in keeps this multi-minute development check out of ordinary CI; normal focused runs collect the test but skip it unless `SYNTHETIC_RUN_SCALE=1` is set.
+
+This gate is composition evidence only. It does not bind the augmenter, prove prevalence or clinical validity, evaluate against real labels, establish privacy/non-matchability, provide held-out or release evidence, run Synthea, or authorize release.
+
 ## Aggregate calibration artifacts (development boundary)
 
 An approved calibration artifact is a disclosure-controlled aggregate from the governed `calibration` partition. Load it only as an aggregate artifact for development review:
