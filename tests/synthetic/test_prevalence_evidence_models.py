@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from synthetic import prevalence_evidence
 from synthetic.prevalence_evidence import (
     PACKAGE_MANIFEST_MAX_BYTES,
     PackageIdentity,
@@ -42,6 +43,21 @@ def test_evidence_config_requires_three_distinct_roots_and_seeds(tmp_path: Path)
         PrevalenceEvidenceConfig((runs[0], runs[1], PrevalenceRunSpec(runs[0].package_root, 103)))
     with pytest.raises(TypeError, match="heldout_template"):
         PrevalenceEvidenceConfig(runs, heldout_template=object())  # type: ignore[arg-type]
+
+
+def test_evidence_config_rejects_distinct_paths_with_the_same_directory_identity(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    runs = _runs(tmp_path)
+    monkeypatch.setattr(
+        prevalence_evidence,
+        "_configured_root_identity",
+        lambda _root: (123, 456),
+        raising=False,
+    )
+
+    with pytest.raises(ValueError, match="package_root"):
+        PrevalenceEvidenceConfig(runs)
 
 
 def test_verify_package_identity_binds_non_test_generated_manifest_and_exact_tree(tmp_path: Path) -> None:
@@ -141,16 +157,70 @@ def test_verify_package_identity_rejects_tampered_resource_and_extra_tree_entry(
         verify_package_identity(PrevalenceRunSpec(extra, 101))
 
 
+@pytest.mark.parametrize(
+    "mutation",
+    ("empty-profile", "empty-derivation", "wrong-file-hash", "wrong-row-count", "missing-artifact"),
+)
+def test_verify_package_identity_rejects_missing_or_inconsistent_identity_material(
+    tmp_path: Path, mutation: str
+) -> None:
+    package = write_prevalence_package(tmp_path / "package")
+    manifest_path = package / "manifest.json"
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if mutation == "empty-profile":
+        payload["profile"] = ""
+    elif mutation == "empty-derivation":
+        payload["derivation_fingerprint"] = ""
+    elif mutation == "wrong-file-hash":
+        payload["file_sha256"]["patients.csv"] = "f" * 64
+    elif mutation == "wrong-row-count":
+        payload["row_counts"]["patients"] += 1
+    else:
+        (package / "validation-report.json").unlink()
+    if mutation != "missing-artifact":
+        manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(PrevalenceEvidenceUnavailable, match="unavailable"):
+        verify_package_identity(PrevalenceRunSpec(package, 101))
+
+
+@pytest.mark.parametrize("replaced", ("manifest.json", "validation-report.json"))
+def test_verify_package_identity_rechecks_every_allowed_file_after_initial_verification(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, replaced: str
+) -> None:
+    package = write_prevalence_package(tmp_path / "package")
+    original_read = prevalence_evidence._read_regular_at
+    replaced_once = False
+
+    def swap_after_read(directory_descriptor: int, relative: str, **kwargs: object) -> bytes:
+        nonlocal replaced_once
+        payload = original_read(directory_descriptor, relative, **kwargs)
+        if relative == replaced and not replaced_once:
+            replaced_once = True
+            (package / replaced).write_bytes(b"{}\n")
+        return payload
+
+    monkeypatch.setattr(prevalence_evidence, "_read_regular_at", swap_after_read)
+
+    with pytest.raises(PrevalenceEvidenceUnavailable, match="unavailable"):
+        verify_package_identity(PrevalenceRunSpec(package, 101))
+
+
 @pytest.mark.skipif(not hasattr(os, "symlink"), reason="platform lacks symlink support")
 def test_verify_package_identity_rejects_links_and_descriptor_schema_changes(tmp_path: Path) -> None:
     linked = write_prevalence_package(tmp_path / "linked")
+    source = tmp_path / "patients-source.csv"
+    source.write_bytes((linked / "patients.csv").read_bytes())
     (linked / "patients.csv").unlink()
-    (linked / "patients.csv").symlink_to(linked / "visits.csv")
+    (linked / "patients.csv").symlink_to(source)
     with pytest.raises(PrevalenceEvidenceUnavailable, match="unavailable"):
         verify_package_identity(PrevalenceRunSpec(linked, 101))
 
     hard_linked = write_prevalence_package(tmp_path / "hard-linked")
-    (hard_linked / "duplicate.csv").hardlink_to(hard_linked / "patients.csv")
+    hard_link_source = tmp_path / "patients-hard-link-source.csv"
+    hard_link_source.write_bytes((hard_linked / "patients.csv").read_bytes())
+    (hard_linked / "patients.csv").unlink()
+    (hard_linked / "patients.csv").hardlink_to(hard_link_source)
     with pytest.raises(PrevalenceEvidenceUnavailable, match="unavailable"):
         verify_package_identity(PrevalenceRunSpec(hard_linked, 101))
 

@@ -263,8 +263,8 @@ def _scan_exact_tree_at(directory_descriptor: int, files: frozenset[str], direct
     scan(directory_descriptor, ())
 
 
-def _strict_descriptor(directory_descriptor: int) -> dict[str, object]:
-    descriptor = _strict_json_bytes(_read_regular_at(directory_descriptor, "datapackage.json", maximum_bytes=PACKAGE_MANIFEST_MAX_BYTES))
+def _strict_descriptor(payload: bytes) -> dict[str, object]:
+    descriptor = _strict_json_bytes(payload)
     try:
         if descriptor.get("profile") != "tabular-data-package":
             raise _unavailable()
@@ -332,6 +332,68 @@ def _validated_row_counts(directory_descriptor: int, descriptor: Mapping[str, ob
 
 
 @dataclass(frozen=True)
+class _VerifiedPackageSnapshot:
+    descriptor: Mapping[str, object]
+    manifest: Mapping[str, object]
+    allowed_files: frozenset[str]
+    allowed_directories: frozenset[str]
+    descriptor_sha256: str
+    manifest_sha256: str
+    row_counts: Mapping[str, int]
+    file_sha256: Mapping[str, str]
+
+
+def _verify_package_snapshot(
+    directory_descriptor: int,
+    expected_seed: int,
+) -> _VerifiedPackageSnapshot:
+    """Read one coherent package snapshot strictly through a pinned directory."""
+    descriptor_payload = _read_regular_at(
+        directory_descriptor,
+        "datapackage.json",
+        maximum_bytes=PACKAGE_MANIFEST_MAX_BYTES,
+    )
+    descriptor = _strict_descriptor(descriptor_payload)
+    allowed_files, allowed_dirs = _allowed_tree(descriptor)
+    _scan_exact_tree_at(directory_descriptor, allowed_files, allowed_dirs)
+    manifest_payload = _read_regular_at(
+        directory_descriptor,
+        "manifest.json",
+        maximum_bytes=PACKAGE_MANIFEST_MAX_BYTES,
+    )
+    resource_names = tuple(resource["name"] for resource in descriptor["resources"])
+    manifest = _parse_manifest(manifest_payload, expected_seed, allowed_files, resource_names)
+    if manifest["schema_fingerprint"] != schema_fingerprint(descriptor):
+        raise _unavailable()
+    row_counts = _validated_row_counts(directory_descriptor, descriptor)
+    if row_counts != dict(manifest["row_counts"]):
+        raise _unavailable()
+    file_hashes = {
+        relative: hashlib.sha256(_read_regular_at(directory_descriptor, relative)).hexdigest()
+        for relative in sorted(set(allowed_files) - {"manifest.json"})
+    }
+    if file_hashes != dict(manifest["file_sha256"]):
+        raise _unavailable()
+    _scan_exact_tree_at(directory_descriptor, allowed_files, allowed_dirs)
+    return _VerifiedPackageSnapshot(
+        descriptor=descriptor,
+        manifest=manifest,
+        allowed_files=allowed_files,
+        allowed_directories=allowed_dirs,
+        descriptor_sha256=hashlib.sha256(descriptor_payload).hexdigest(),
+        manifest_sha256=hashlib.sha256(manifest_payload).hexdigest(),
+        row_counts=row_counts,
+        file_sha256=file_hashes,
+    )
+
+
+def _configured_root_identity(root: Path) -> tuple[int, int]:
+    descriptor, identity = _open_pinned_directory(root)
+    os.close(descriptor)
+    return identity
+
+
+@dataclass(frozen=True)
 class PrevalenceRunSpec:
     package_root: Path
     expected_seed: int
@@ -358,6 +420,9 @@ class PrevalenceEvidenceConfig:
         roots = {os.path.realpath(os.path.abspath(run.package_root)) for run in self.runs}
         if len(roots) != len(self.runs):
             raise ValueError("package_root values must be distinct")
+        identities = tuple(_configured_root_identity(run.package_root) for run in self.runs)
+        if len(set(identities)) != len(identities):
+            raise ValueError("package_root values must have distinct directory identities")
         if self.heldout_template is not None and not isinstance(self.heldout_template, HeldoutRunConfig):
             raise TypeError("heldout_template must be a HeldoutRunConfig")
 
@@ -429,45 +494,36 @@ def verify_package_identity(spec: PrevalenceRunSpec) -> PackageIdentity:
     descriptor_fd: int | None = None
     try:
         descriptor_fd, root_identity = _open_pinned_directory(spec.package_root)
-        descriptor = _strict_descriptor(descriptor_fd)
-        allowed_files, allowed_dirs = _allowed_tree(descriptor)
-        _scan_exact_tree_at(descriptor_fd, allowed_files, allowed_dirs)
-        manifest_payload = _read_regular_at(
-            descriptor_fd, "manifest.json", maximum_bytes=PACKAGE_MANIFEST_MAX_BYTES
-        )
-        resource_names = tuple(resource["name"] for resource in descriptor["resources"])
-        manifest = _parse_manifest(manifest_payload, spec.expected_seed, allowed_files, resource_names)
-        if manifest["schema_fingerprint"] != schema_fingerprint(descriptor):
+        initial = _verify_package_snapshot(descriptor_fd, spec.expected_seed)
+        final = _verify_package_snapshot(descriptor_fd, spec.expected_seed)
+        if (
+            initial.descriptor_sha256 != final.descriptor_sha256
+            or initial.manifest_sha256 != final.manifest_sha256
+            or initial.allowed_files != final.allowed_files
+            or initial.allowed_directories != final.allowed_directories
+            or initial.row_counts != final.row_counts
+            or initial.file_sha256 != final.file_sha256
+        ):
             raise _unavailable()
-        row_counts = _validated_row_counts(descriptor_fd, descriptor)
-        if row_counts != dict(manifest["row_counts"]):
-            raise _unavailable()
-        file_hashes = {
-            relative: hashlib.sha256(_read_regular_at(descriptor_fd, relative)).hexdigest()
-            for relative in sorted(set(allowed_files) - {"manifest.json"})
-        }
-        if file_hashes != dict(manifest["file_sha256"]):
-            raise _unavailable()
-        _scan_exact_tree_at(descriptor_fd, allowed_files, allowed_dirs)
         _require_directory_identity(spec.package_root, root_identity)
         package_payload = json.dumps(
-            file_hashes, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False
+            dict(final.file_sha256), sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False
         ).encode("ascii")
         return PackageIdentity(
-            profile=str(manifest["profile"]),
-            engine=str(manifest["engine"]),
+            profile=str(final.manifest["profile"]),
+            engine=str(final.manifest["engine"]),
             seed=spec.expected_seed,
-            schema_fingerprint=str(manifest["schema_fingerprint"]),
-            reference_time=str(manifest["reference_time"]),
-            reference_id=str(manifest["reference_id"]),
-            reference_sha256=str(manifest["reference_sha256"]),
-            configuration_sha256=str(manifest["configuration_sha256"]),
-            software_revision=str(manifest["software_revision"]),
-            prng_family=str(manifest["prng_family"]),
-            seed_derivation_version=str(manifest["seed_derivation_version"]),
-            derivation_fingerprint=str(manifest["derivation_fingerprint"]),
+            schema_fingerprint=str(final.manifest["schema_fingerprint"]),
+            reference_time=str(final.manifest["reference_time"]),
+            reference_id=str(final.manifest["reference_id"]),
+            reference_sha256=str(final.manifest["reference_sha256"]),
+            configuration_sha256=str(final.manifest["configuration_sha256"]),
+            software_revision=str(final.manifest["software_revision"]),
+            prng_family=str(final.manifest["prng_family"]),
+            seed_derivation_version=str(final.manifest["seed_derivation_version"]),
+            derivation_fingerprint=str(final.manifest["derivation_fingerprint"]),
             package_sha256=hashlib.sha256(package_payload).hexdigest(),
-            manifest_sha256=hashlib.sha256(manifest_payload).hexdigest(),
+            manifest_sha256=final.manifest_sha256,
         )
     except PrevalenceEvidenceUnavailable:
         raise
