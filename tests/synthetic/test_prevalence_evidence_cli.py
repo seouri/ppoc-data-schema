@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -19,6 +20,16 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def _result(tmp_path: Path) -> PrevalenceEvidenceResult:
     return PrevalenceEvidenceResult(evaluate_prevalence_evidence(_config(tmp_path)))
+
+
+def _passing_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[PrevalenceEvidenceResult, object]:
+    config = _config(tmp_path)
+    module = __import__("synthetic.prevalence_evidence", fromlist=["validate_heldout"])
+    controlled = _controlled_heldout_result(config.heldout_template)
+    monkeypatch.setattr(module, "validate_heldout", lambda _config: controlled)
+    return PrevalenceEvidenceResult(evaluate_prevalence_evidence(config)), module
 
 
 def _command(output: Path) -> list[str]:
@@ -152,6 +163,63 @@ def test_result_canonical_report_and_summary_round_trip_without_governed_details
         "outcome_layer=latent",
     )
     assert all(value not in public for value in forbidden)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "run-status",
+        "run-comparison-count",
+        "missing-required-key",
+        "count-over-run-count",
+        "pass-with-missing-run",
+        "unevaluable-with-failure",
+        "fail-without-positive-exceedance",
+    ),
+)
+def test_strict_report_parser_rejects_cross_field_invalid_public_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mutation: str
+) -> None:
+    """Dropping semantic cross-field checks would accept impossible aggregate evidence."""
+    result, module = _passing_result(tmp_path, monkeypatch)
+    mapping = deepcopy(result.report.to_mapping())
+    comparisons = mapping["comparisons"]
+    runs = mapping["runs"]
+    assert isinstance(comparisons, list)
+    assert isinstance(runs, list)
+    comparison = comparisons[0]
+    assert isinstance(comparison, dict)
+    run = runs[0]
+    assert isinstance(run, dict)
+
+    if mutation == "run-status":
+        run["status"] = "FAIL"
+    elif mutation == "run-comparison-count":
+        run["comparison_count"] = 0
+    elif mutation == "missing-required-key":
+        comparisons.pop()
+    elif mutation == "count-over-run-count":
+        comparison["evaluable_count"] = 4
+        comparison["pass_count"] = 4
+    elif mutation == "pass-with-missing-run":
+        comparison["evaluable_count"] = 2
+        comparison["pass_count"] = 2
+    elif mutation == "unevaluable-with-failure":
+        comparison["status"] = "UNEVALUABLE"
+        comparison["pass_count"] = 2
+        comparison["fail_count"] = 1
+        mapping["status"] = "UNEVALUABLE"
+        run["status"] = "UNEVALUABLE"
+    else:
+        comparison["status"] = "FAIL"
+        comparison["pass_count"] = 2
+        comparison["fail_count"] = 1
+        comparison["maximum_tolerance_exceedance"] = 0.0
+        mapping["status"] = "FAIL"
+        run["status"] = "FAIL"
+
+    with pytest.raises(ValueError, match="report is invalid"):
+        module._parse_prevalence_evidence_report(mapping)
 
 
 def test_writer_promotes_only_reparsed_canonical_aggregate_output(tmp_path: Path) -> None:

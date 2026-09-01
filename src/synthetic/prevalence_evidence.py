@@ -479,6 +479,11 @@ class PrevalenceRunSpec:
 class PrevalenceEvidenceConfig:
     runs: tuple[PrevalenceRunSpec, ...]
     heldout_template: HeldoutRunConfig | None = None
+    _root_identities: tuple[tuple[int, int], ...] = dataclass_field(
+        init=False,
+        repr=False,
+        compare=False,
+    )
 
     def __post_init__(self) -> None:
         if not isinstance(self.runs, tuple) or not all(isinstance(run, PrevalenceRunSpec) for run in self.runs):
@@ -493,6 +498,7 @@ class PrevalenceEvidenceConfig:
         identities = tuple(_configured_root_identity(run.package_root) for run in self.runs)
         if len(set(identities)) != len(identities):
             raise ValueError("package_root values must have distinct directory identities")
+        object.__setattr__(self, "_root_identities", identities)
         if self.heldout_template is not None and not isinstance(self.heldout_template, HeldoutRunConfig):
             raise TypeError("heldout_template must be a HeldoutRunConfig")
 
@@ -582,6 +588,21 @@ def _aggregate_status(statuses: tuple[str, ...]) -> str:
     return "PASS"
 
 
+def _normalize_v1_comparisons(
+    comparisons: tuple[HeldoutComparison, ...],
+) -> tuple[HeldoutComparison, ...]:
+    indexed = {_comparison_key(comparison): comparison for comparison in comparisons}
+    if len(indexed) != len(comparisons):
+        raise ValueError("comparisons must not contain duplicate canonical keys")
+    return tuple(
+        indexed.get(
+            key,
+            HeldoutComparison(*key, "UNEVALUABLE", None, None, None, None),
+        )
+        for key in V1_REQUIRED_TARGET_KEYS
+    )
+
+
 @dataclass(frozen=True)
 class PrevalenceComparison:
     """One safe v1 target comparison aggregated across all predeclared runs."""
@@ -597,7 +618,7 @@ class PrevalenceComparison:
     generated_minimum: int | float | None
     generated_maximum: int | float | None
     maximum_absolute_difference: float | None
-    tolerance: float | None
+    maximum_tolerance_exceedance: float | None
     evaluable_count: int
     pass_count: int
     fail_count: int
@@ -631,7 +652,7 @@ class PrevalenceComparison:
             self.generated_minimum,
             self.generated_maximum,
             self.maximum_absolute_difference,
-            self.tolerance,
+            self.maximum_tolerance_exceedance,
         )
         if self.evaluable_count == 0:
             if any(value is not None for value in values):
@@ -644,7 +665,7 @@ class PrevalenceComparison:
                 "generated_minimum",
                 "generated_maximum",
                 "maximum_absolute_difference",
-                "tolerance",
+                "maximum_tolerance_exceedance",
             ):
                 value = getattr(self, field)
                 if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
@@ -653,19 +674,23 @@ class PrevalenceComparison:
             assert self.generated_minimum is not None
             assert self.generated_maximum is not None
             assert self.maximum_absolute_difference is not None
-            assert self.tolerance is not None
+            assert self.maximum_tolerance_exceedance is not None
             if self.generated_minimum > self.generated_maximum:
                 raise ValueError("generated range must be ordered")
             expected_difference = max(
                 abs(float(self.heldout_value) - float(self.generated_minimum)),
                 abs(float(self.heldout_value) - float(self.generated_maximum)),
             )
-            if self.maximum_absolute_difference != expected_difference or self.tolerance < 0:
-                raise ValueError("aggregate difference and tolerance must be valid")
-        if self.status == "PASS" and self.fail_count:
-            raise ValueError("passing comparison cannot contain failures")
+            if self.maximum_absolute_difference != expected_difference:
+                raise ValueError("aggregate difference must match the disclosed range")
+            if self.fail_count and self.maximum_tolerance_exceedance <= 0:
+                raise ValueError("failed comparisons require a positive tolerance exceedance")
+            if not self.fail_count and self.maximum_tolerance_exceedance > 0:
+                raise ValueError("non-failing comparisons cannot exceed tolerance")
         if self.status == "FAIL" and not self.fail_count:
             raise ValueError("failing comparison requires a failed run")
+        if self.status != "FAIL" and self.fail_count:
+            raise ValueError("only failing comparisons can contain failed runs")
         if self.status == "PASS" and self.evaluable_count != self.pass_count:
             raise ValueError("passing comparison requires every run to pass")
 
@@ -692,7 +717,7 @@ class PrevalenceComparison:
             "generated_minimum": self.generated_minimum,
             "generated_maximum": self.generated_maximum,
             "maximum_absolute_difference": self.maximum_absolute_difference,
-            "tolerance": self.tolerance,
+            "maximum_tolerance_exceedance": self.maximum_tolerance_exceedance,
             "evaluable_count": self.evaluable_count,
             "pass_count": self.pass_count,
             "fail_count": self.fail_count,
@@ -721,12 +746,10 @@ class PrevalenceRunResult:
             raise TypeError("comparisons must be a tuple of HeldoutComparison values")
         if any(not _is_v1_comparison(comparison) for comparison in self.comparisons):
             raise ValueError("comparisons must contain only v1 observed targets")
-        if len({_comparison_key(comparison) for comparison in self.comparisons}) != len(self.comparisons):
-            raise ValueError("comparisons must not contain duplicate canonical keys")
-        sorted_comparisons = tuple(sorted(self.comparisons, key=_comparison_key))
-        if self.status != _aggregate_status(tuple(item.status for item in sorted_comparisons)):
+        normalized_comparisons = _normalize_v1_comparisons(self.comparisons)
+        if self.status != _aggregate_status(tuple(item.status for item in normalized_comparisons)):
             raise ValueError("status must match comparisons")
-        object.__setattr__(self, "comparisons", sorted_comparisons)
+        object.__setattr__(self, "comparisons", normalized_comparisons)
 
     def to_mapping(self) -> dict[str, object]:
         return {
@@ -898,11 +921,17 @@ def _snapshot_matches_identity(snapshot: _VerifiedPackageSnapshot, identity: Pac
 
 
 @contextmanager
-def _staged_verified_package(spec: PrevalenceRunSpec, identity: PackageIdentity) -> Iterator[Path]:
+def _staged_verified_package(
+    spec: PrevalenceRunSpec,
+    identity: PackageIdentity,
+    configured_root_identity: tuple[int, int],
+) -> Iterator[Path]:
     """Stage descriptor-pinned bytes, then verify the staged package before evaluation."""
     descriptor_fd: int | None = None
     try:
         descriptor_fd, root_identity = _open_pinned_directory(spec.package_root)
+        if root_identity != configured_root_identity:
+            raise _unavailable()
         snapshot = _verify_package_snapshot(descriptor_fd, spec.expected_seed)
         if not _snapshot_matches_identity(snapshot, identity):
             raise _unavailable()
@@ -966,13 +995,17 @@ def _aggregate_comparisons(runs: tuple[PrevalenceRunResult, ...]) -> tuple[Preva
             generated_minimum = min(value for value in generated_values if value is not None)
             generated_maximum = max(value for value in generated_values if value is not None)
             maximum_absolute_difference = max(value for value in differences if value is not None)
-            tolerance = max(value for value in tolerances if value is not None)
+            maximum_tolerance_exceedance = max(
+                float(difference) - float(tolerance)
+                for difference, tolerance in zip(differences, tolerances, strict=True)
+                if difference is not None and tolerance is not None
+            )
         else:
             heldout_value = None
             generated_minimum = None
             generated_maximum = None
             maximum_absolute_difference = None
-            tolerance = None
+            maximum_tolerance_exceedance = None
         aggregate.append(
             PrevalenceComparison(
                 *key,
@@ -981,7 +1014,7 @@ def _aggregate_comparisons(runs: tuple[PrevalenceRunResult, ...]) -> tuple[Preva
                 generated_minimum,
                 generated_maximum,
                 maximum_absolute_difference,
-                tolerance,
+                maximum_tolerance_exceedance,
                 len(evaluable),
                 sum(entry.status == "PASS" for entry in evaluable),
                 len(failures),
@@ -997,17 +1030,24 @@ def evaluate_prevalence_evidence(config: PrevalenceEvidenceConfig) -> Prevalence
     if config.heldout_template is None:
         raise _unavailable()
     try:
-        initial = tuple((spec, verify_package_identity(spec)) for spec in config.runs)
-        generation = _generation_identity(initial[0][1])
-        if any(_generation_identity(identity) != generation for _, identity in initial[1:]):
+        initial = tuple(
+            (
+                spec,
+                root_identity,
+                _verify_package_identity(spec, configured_root_identity=root_identity),
+            )
+            for spec, root_identity in zip(config.runs, config._root_identities, strict=True)
+        )
+        generation = _generation_identity(initial[0][2])
+        if any(_generation_identity(identity) != generation for _, _, identity in initial[1:]):
             raise _unavailable()
 
         heldout_identity: _HeldoutIdentity | None = None
         run_results: list[PrevalenceRunResult] = []
-        for spec, identity in initial:
-            if verify_package_identity(spec) != identity:
+        for spec, root_identity, identity in initial:
+            if _verify_package_identity(spec, configured_root_identity=root_identity) != identity:
                 raise _unavailable()
-            with _staged_verified_package(spec, identity) as staged_root:
+            with _staged_verified_package(spec, identity, root_identity) as staged_root:
                 heldout_config = replace(
                     config.heldout_template,
                     synthetic_root=staged_root,
@@ -1016,14 +1056,16 @@ def evaluate_prevalence_evidence(config: PrevalenceEvidenceConfig) -> Prevalence
                 result = validate_heldout(heldout_config)
                 if verify_package_identity(PrevalenceRunSpec(staged_root, spec.expected_seed)) != identity:
                     raise _unavailable()
-            if verify_package_identity(spec) != identity:
+            if _verify_package_identity(spec, configured_root_identity=root_identity) != identity:
                 raise _unavailable()
             report_identity = _HeldoutIdentity.from_report(result.report)
             if heldout_identity is None:
                 heldout_identity = report_identity
             elif report_identity != heldout_identity:
                 raise _unavailable()
-            selected = tuple(item for item in result.report.comparisons if _is_v1_comparison(item))
+            selected = _normalize_v1_comparisons(
+                tuple(item for item in result.report.comparisons if _is_v1_comparison(item))
+            )
             run_results.append(
                 PrevalenceRunResult(
                     identity=identity,
@@ -1049,13 +1091,18 @@ def evaluate_prevalence_evidence(config: PrevalenceEvidenceConfig) -> Prevalence
         raise _unavailable() from None
 
 
-def verify_package_identity(spec: PrevalenceRunSpec) -> PackageIdentity:
-    """Verify one exact generated package without exposing its location on failure."""
+def _verify_package_identity(
+    spec: PrevalenceRunSpec,
+    *,
+    configured_root_identity: tuple[int, int] | None = None,
+) -> PackageIdentity:
     if not isinstance(spec, PrevalenceRunSpec):
         raise TypeError("spec must be a PrevalenceRunSpec")
     descriptor_fd: int | None = None
     try:
         descriptor_fd, root_identity = _open_pinned_directory(spec.package_root)
+        if configured_root_identity is not None and root_identity != configured_root_identity:
+            raise _unavailable()
         initial = _verify_package_snapshot(descriptor_fd, spec.expected_seed)
         final = _verify_package_snapshot(descriptor_fd, spec.expected_seed)
         if (
@@ -1094,6 +1141,11 @@ def verify_package_identity(spec: PrevalenceRunSpec) -> PackageIdentity:
     finally:
         if descriptor_fd is not None:
             os.close(descriptor_fd)
+
+
+def verify_package_identity(spec: PrevalenceRunSpec) -> PackageIdentity:
+    """Verify one exact generated package without exposing its location on failure."""
+    return _verify_package_identity(spec)
 
 
 def _canonical_json_bytes(mapping: Mapping[str, object]) -> bytes:
@@ -1221,7 +1273,7 @@ def _parse_prevalence_comparison(value: object) -> PrevalenceComparison:
             "generated_minimum",
             "generated_maximum",
             "maximum_absolute_difference",
-            "tolerance",
+            "maximum_tolerance_exceedance",
             "evaluable_count",
             "pass_count",
             "fail_count",
@@ -1242,7 +1294,7 @@ def _parse_prevalence_comparison(value: object) -> PrevalenceComparison:
             generated_minimum=value["generated_minimum"],  # type: ignore[arg-type]
             generated_maximum=value["generated_maximum"],  # type: ignore[arg-type]
             maximum_absolute_difference=value["maximum_absolute_difference"],  # type: ignore[arg-type]
-            tolerance=value["tolerance"],  # type: ignore[arg-type]
+            maximum_tolerance_exceedance=value["maximum_tolerance_exceedance"],  # type: ignore[arg-type]
             evaluable_count=value["evaluable_count"],  # type: ignore[arg-type]
             pass_count=value["pass_count"],  # type: ignore[arg-type]
             fail_count=value["fail_count"],  # type: ignore[arg-type]
@@ -1263,19 +1315,25 @@ def _parse_prevalence_evidence_report(value: object) -> dict[str, object]:
     if not isinstance(raw_runs, list) or len(raw_runs) < 3 or not isinstance(raw_comparisons, list):
         raise ValueError("prevalence evidence report is invalid")
     identities: list[PackageIdentity] = []
+    run_statuses: list[str] = []
+    required_comparison_count = len(V1_REQUIRED_TARGET_KEYS)
     for item in raw_runs:
         run = _require_exact_mapping(
             item,
             frozenset({"identity", "status", "comparison_count"}),
         )
         identity = _parse_public_identity(run["identity"])
-        if run["status"] not in _EVIDENCE_STATUSES or isinstance(run["comparison_count"], bool) or not isinstance(
-            run["comparison_count"], int
-        ) or run["comparison_count"] < 0:
+        if (
+            run["status"] not in _EVIDENCE_STATUSES
+            or isinstance(run["comparison_count"], bool)
+            or not isinstance(run["comparison_count"], int)
+            or run["comparison_count"] != required_comparison_count
+        ):
             raise ValueError("prevalence evidence report is invalid")
         if _generation_identity(identity) != generation:
             raise ValueError("prevalence evidence report is invalid")
         identities.append(identity)
+        run_statuses.append(run["status"])
     if len({identity.seed for identity in identities}) != len(identities) or identities != sorted(
         identities, key=lambda identity: identity.seed
     ):
@@ -1285,7 +1343,39 @@ def _parse_prevalence_evidence_report(value: object) -> dict[str, object]:
         {item.canonical_key for item in comparisons}
     ) != len(comparisons):
         raise ValueError("prevalence evidence report is invalid")
-    if mapping["status"] != _aggregate_status(tuple(item.status for item in comparisons)):
+    if {item.canonical_key for item in comparisons} != set(V1_REQUIRED_TARGET_KEYS):
+        raise ValueError("prevalence evidence report is invalid")
+    run_count = len(raw_runs)
+    for comparison in comparisons:
+        if comparison.evaluable_count > run_count:
+            raise ValueError("prevalence evidence report is invalid")
+        missing_count = run_count - comparison.evaluable_count
+        expected_status = (
+            "FAIL"
+            if comparison.fail_count
+            else "UNEVALUABLE"
+            if missing_count
+            else "PASS"
+        )
+        if comparison.status != expected_status:
+            raise ValueError("prevalence evidence report is invalid")
+    comparison_status = _aggregate_status(tuple(item.status for item in comparisons))
+    run_status = _aggregate_status(tuple(run_statuses))
+    if mapping["status"] != comparison_status or mapping["status"] != run_status:
+        raise ValueError("prevalence evidence report is invalid")
+    target_count = len(comparisons)
+    failed_run_count = run_statuses.count("FAIL")
+    unevaluable_run_count = run_statuses.count("UNEVALUABLE")
+    pass_run_count = run_statuses.count("PASS")
+    failed_cell_count = sum(item.fail_count for item in comparisons)
+    missing_cell_count = sum(run_count - item.evaluable_count for item in comparisons)
+    passed_cell_count = sum(item.pass_count for item in comparisons)
+    if not (
+        failed_run_count <= failed_cell_count <= failed_run_count * target_count
+        and unevaluable_run_count <= missing_cell_count
+        <= (unevaluable_run_count + failed_run_count) * target_count
+        and pass_run_count * target_count <= passed_cell_count
+    ):
         raise ValueError("prevalence evidence report is invalid")
     return {
         "report_version": mapping["report_version"],

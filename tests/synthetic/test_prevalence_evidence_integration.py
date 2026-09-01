@@ -387,6 +387,65 @@ def test_evidence_injects_a_globally_absent_required_v1_key_as_unevaluable(
     comparison = next(item for item in report.comparisons if item.canonical_key == omitted)
     assert comparison.status == "UNEVALUABLE"
     assert comparison.evaluable_count == 0
+    assert {run.status for run in report.runs} == {"UNEVALUABLE"}
+    assert {run.to_mapping()["comparison_count"] for run in report.runs} == {
+        len(_required_v1_keys())
+    }
+
+
+def test_evidence_publishes_the_worst_paired_tolerance_exceedance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Independently maximizing differences and tolerances can make a FAIL look within tolerance."""
+    config = _config(tmp_path)
+    module = __import__("synthetic.prevalence_evidence", fromlist=["validate_heldout"])
+    target = _required_v1_keys()[0]
+    variants = iter(
+        (
+            ("PASS", 0.46, 0.05),
+            ("FAIL", 0.47, 0.02),
+            ("PASS", 0.50, 0.01),
+        )
+    )
+
+    def controlled(_config: HeldoutRunConfig) -> SimpleNamespace:
+        status, synthetic_value, tolerance = next(variants)
+        difference = abs(0.5 - synthetic_value)
+        result = _controlled_heldout_result(config.heldout_template)
+        replacement = HeldoutComparison(
+            *target,
+            status,
+            0.5,
+            synthetic_value,
+            difference,
+            tolerance,
+        )
+        result.report.comparisons = tuple(
+            replacement
+            if (
+                item.stratum_id,
+                item.target_name,
+                item.family,
+                item.statistic,
+                item.unit,
+                item.quantile_level,
+            )
+            == target
+            else item
+            for item in result.report.comparisons
+        )
+        return result
+
+    monkeypatch.setattr(module, "validate_heldout", controlled)
+
+    report = evaluate_prevalence_evidence(config)
+    comparison = next(item for item in report.comparisons if item.canonical_key == target)
+
+    assert comparison.status == "FAIL"
+    assert comparison.maximum_absolute_difference == pytest.approx(0.04)
+    assert comparison.maximum_tolerance_exceedance == pytest.approx(0.01)
+    assert "tolerance" not in comparison.to_mapping()
+    assert comparison.to_mapping()["maximum_tolerance_exceedance"] == pytest.approx(0.01)
 
 
 def test_evidence_ignores_latent_and_observable_comparisons_from_a_controlled_heldout_result(
@@ -545,6 +604,21 @@ def test_evidence_rejects_a_source_package_replaced_during_heldout_evaluation(
 
     with pytest.raises(PrevalenceEvidenceUnavailable, match="unavailable"):
         evaluate_prevalence_evidence(config)
+
+
+def test_evidence_rejects_a_declared_package_root_replaced_after_configuration(
+    tmp_path: Path,
+) -> None:
+    """Discarding configuration-time directory identity admits a substitute predeclared run."""
+    config = _config(tmp_path)
+    declared = config.runs[0].package_root
+    declared.rename(tmp_path / "original-run-101")
+    write_prevalence_package(declared, seed=config.runs[0].expected_seed)
+
+    with pytest.raises(PrevalenceEvidenceUnavailable, match="unavailable"):
+        evaluate_prevalence_evidence(config)
+
+    assert "root_identities" not in repr(config)
 
 
 def test_staged_package_rejects_mutation_and_restore_before_evaluation(
