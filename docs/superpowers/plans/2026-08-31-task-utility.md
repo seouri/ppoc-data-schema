@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Input is only an already-generated fictional `NativeCohort`, `TaskUtilityPolicy`, and an immutable prediction tuple aligned to cohort order. No path, file, descriptor, key, report, output, model/callable, real-data, held-out, privacy, calibration, or Synthea argument is accepted.
+- Input is only an already-generated fictional `NativeCohort`, `TaskUtilityPolicy`, and an immutable prediction tuple aligned to cohort order. No path, file, descriptor, key, report, output, model/callable, real-data, held-out, privacy, calibration data, or Synthea argument is accepted. The module may use only the existing aggregate-safe-token helper from `synthetic.calibration`.
 - Latent healthy/disorder state is process-local evaluator truth. It may affect aggregate counters and statuses only; no per-member truth, IDs, predictions, scores, measurements, or raw feature tuples may enter mappings, JSON, repr, or errors.
 - Use fixed vocabulary and deterministic order for metrics, statuses, reasons, subgroup scopes, and serialized keys. Reject malformed types and hostile injected values without echoing them.
 - Missing decisions/scores are unevaluable, never zero or a negative/healthy default. Structural corruption is `FAIL`; insufficient class/support evidence is `UNEVALUABLE`; evaluated out-of-bound metrics are `FAIL`.
@@ -33,7 +33,7 @@
 
 - [ ] **Step 1: Write failing model tests**
 
-  Add tests for valid policy/prediction/cell/report construction, exact fixed registries, booleans and nonfinite-number rejection, positive/zero floor semantics, supported `sex` subgroup validation, frozen dataclasses, mapping proxies, cell/report status consistency, fixed scope/metric order, evaluator-safe `repr`, and exact canonical JSON/newline behavior. Test that unknown keys/metrics/reasons, patient-like scopes, mutable tuples/mappings, inconsistent counts, and numeric evidence on unevaluable cells fail closed.
+  Add tests for valid policy/prediction/cell/report construction, exact fixed registries, booleans and nonfinite-number rejection, positive/zero floor semantics, `minimum_evaluable_members`/`maximum_unevaluable_members`, supported `sex` subgroup validation, frozen dataclasses, mapping proxies, cell/report status consistency, fixed scope/metric order, evaluator-safe `repr`, and exact canonical JSON/newline behavior. Test that unknown keys/metrics/reasons, patient-like scopes, mutable tuples/mappings, inconsistent counts, and numeric evidence on unevaluable cells fail closed.
 
 - [ ] **Step 2: Run the model tests to verify they fail**
 
@@ -41,7 +41,7 @@
 
 - [ ] **Step 3: Implement strict frozen models**
 
-  Implement the exact spec fields and fixed registries. Enforce `[0,1]` probabilities, positive supports, nonnegative unevaluable allowance, exact `sex` subgroup tuple, immutable nested mappings, aggregate-only scope tokens, status/reason compatibility, metric-specific nullable fields, and canonical compact sorted ASCII serialization. Ensure structural fallback cells/reports redact malformed evidence and `repr()` never includes latent or prediction values.
+  Implement the exact spec fields and fixed registries, including the `require_probability_scores` switch and explicit `TaskUtilityMetric` fields. Enforce `[0,1]` probabilities, positive supports, nonnegative unevaluable allowance, exact `sex` subgroup tuple, immutable nested mappings, aggregate-only scope tokens, status/reason compatibility, metric-specific nullable fields, and canonical compact sorted ASCII serialization. Ensure structural fallback cells/reports redact malformed evidence and `repr()` never includes latent or prediction values.
 
 - [ ] **Step 4: Run model tests, lint, and commit**
 
@@ -68,7 +68,7 @@
 
 - [ ] **Step 3: Implement private metric extraction and public evaluation**
 
-  Validate exact types and prediction length before reading members. Privately classify healthy versus nonhealthy disorder kinds, accumulate confusion and score counters, compute exact rank-statistic AUROC with tied midranks, and compute Brier only when all evaluable decisions have finite scores. Apply threshold/support/unevaluable precedence from the spec and emit fixed overall cells. Never retain or serialize per-member arrays or values.
+  Validate exact types and prediction length before reading members. Privately classify healthy versus nonhealthy disorder kinds, accumulate confusion and score counters, compute exact rank-statistic AUROC with tied midranks, and compute Brier only when all evaluable decisions have finite scores. Apply threshold/support/unevaluable precedence and the optional-score switch from the spec and emit fixed overall cells. Never retain or serialize per-member arrays or values.
 
 - [ ] **Step 4: Run metrics, lint, and commit**
 
@@ -114,7 +114,7 @@
 
 - [ ] **Step 1: Write failing boundary/documentation tests**
 
-  Add AST checks over `src/synthetic/task_utility.py` rejecting `Path`, CSV, DuckDB, filesystem lifecycle, package/export/manifest, governed calibration/held-out/privacy, Synthea, and model-training imports/calls, plus public path/key/report/output/model/callable argument names. Add docs assertions for exact API, tuple alignment, fixed metrics/statuses, hidden-truth boundary, and explicit deferrals/non-claims. Add a regression test that ordinary `to_mapping()` methods remain truth-free.
+  Add AST checks over `src/synthetic/task_utility.py` rejecting `Path`, CSV, DuckDB, filesystem lifecycle, package/export/manifest, governed calibration/held-out/privacy, Synthea, and model-training imports/calls, plus public path/key/report/output/model/callable argument names. Permit only the aggregate-safe-token helper from `synthetic.calibration`. Add docs assertions for exact API, tuple alignment, fixed metrics/statuses, optional score semantics, hidden-truth boundary, and explicit deferrals/non-claims. Add a regression test that ordinary `to_mapping()` methods remain truth-free.
 
 - [ ] **Step 2: Run boundary/docs tests to verify they fail**
 

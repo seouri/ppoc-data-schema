@@ -16,7 +16,7 @@ The evaluator is deliberately a benchmark harness, not a growth-screening model,
 - The prediction tuple contains only process-local task output: an optional binary decision and an optional probability-like score. It contains no patient ID, visit ID, latent label, diagnosis code, source row, or feature vector. A prediction without a decision is unevaluable; a score is valid only in `[0, 1]`.
 - The evaluator reads `CohortMember.trajectory.disorder.kind` privately. Healthy is the negative class and every non-healthy `DisorderKind` is the positive growth-disorder class. This binary truth is never returned per member, serialized, hashed into a visible report, or included in exception text.
 - Reports contain fixed aggregate counts, bounded numeric metrics, fixed subgroup labels from the descriptor-safe sex vocabulary, statuses, and reason codes. They never contain patient/member IDs, predictions, scores, labels, raw measurements, feature tuples, row sequences, or task outputs.
-- This slice has no filesystem writer, CLI, package exporter, DuckDB dependency, calibration/held-out/privacy import, Synthea dependency, model training, hyperparameter search, or real-label comparison. Package adaptation and counterfactual task replay remain caller-side/deferred gates.
+- This slice has no filesystem writer, CLI, package exporter, DuckDB dependency, governed calibration/held-out/privacy runtime, Synthea dependency, model training, hyperparameter search, or real-label comparison. It may import only the aggregate-safe-token helper from `synthetic.calibration`; it never loads calibration data. Package adaptation and counterfactual task replay remain caller-side/deferred gates.
 - A report is development task-execution evidence only. It is not clinical validation, prevalence or demographic validation, real-data generalization, privacy/non-matchability evidence, or release authorization. Any future train-on-synthetic/test-on-real comparison requires separately governed labels, a frozen model and split, predeclared equivalence/noninferiority margins, and an approved protocol.
 
 ## Frozen policy and prediction contracts
@@ -32,6 +32,7 @@ class TaskUtilityPolicy:
     minimum_evaluable_members: int
     minimum_class_support: int
     maximum_unevaluable_members: int
+    require_probability_scores: bool
     minimum_sensitivity: float
     minimum_specificity: float
     minimum_auroc: float
@@ -44,9 +45,9 @@ class TaskPrediction:
     risk_score: float | None = None
 ```
 
-Policy identifiers are aggregate-safe tokens. Integer floors are positive except `maximum_unevaluable_members`, which is nonnegative. Sensitivity, specificity, AUROC, and the Brier bound are finite probabilities in `[0, 1]`; booleans, nonfinite values, duplicate subgroup dimensions, and unsupported dimensions are rejected. The only supported subgroup dimension in this first version is `sex`; the policy must request `("sex",)` to exercise subgroup behavior and may use `()` for an overall-only smoke test. The policy is declared before evaluation, cannot be learned from predictions, and cannot contain target values for arbitrary metrics.
+Policy identifiers are aggregate-safe tokens. Integer floors are positive except `maximum_unevaluable_members`, which is nonnegative. `minimum_evaluable_members` is the required overall count of predictions with a decision. `require_probability_scores` is a real boolean. Sensitivity, specificity, AUROC, and the Brier bound are finite probabilities in `[0, 1]`; booleans, nonfinite values, duplicate subgroup dimensions, and unsupported dimensions are rejected. The only supported subgroup dimension in this first version is `sex`; the policy must request `("sex",)` to exercise subgroup behavior and may use `()` for an overall-only smoke test. The policy is declared before evaluation, cannot be learned from predictions, and cannot contain target values for arbitrary metrics.
 
-`TaskPrediction` is frozen. `predicted_disorder` must be a boolean or `None`; `risk_score` must be finite in `[0, 1]` when present. A `None` decision must not carry a score, because an unevaluable task output must not contribute partial truth. A decision may omit a score; this supports deterministic binary screeners while allowing probability-producing pipelines to opt into ranking and calibration checks.
+`TaskPrediction` is frozen. `predicted_disorder` must be a boolean or `None`; `risk_score` must be finite in `[0, 1]` when present. A `None` decision must not carry a score, because an unevaluable task output must not contribute partial truth. A decision may omit a score; this supports deterministic binary screeners. When `require_probability_scores` is false, AUROC and Brier are optional diagnostics and missing-score cells do not block an otherwise evaluable binary report; when it is true, every evaluable decision must carry a score and missing-score evidence makes the corresponding cell `UNEVALUABLE`.
 
 ## Fixed metrics and status semantics
 
@@ -63,7 +64,7 @@ false_positive_count
 false_negative_count
 ```
 
-Overall metrics use the complete cohort. A member contributes to confusion metrics only when its prediction has a decision. `sensitivity` and `specificity` require at least `minimum_class_support` evaluable positive and negative truth members; `precision` requires at least one predicted-positive member; and `balanced_accuracy` requires both class supports. `auroc` and `brier_score` require a risk score for every evaluable member and at least one positive and one negative truth member. Missing decisions or scores are counted in aggregate as unevaluable members, never as healthy, disorder, or zero-risk values.
+Overall metrics use the complete cohort. A member contributes to confusion metrics only when its prediction has a decision. `sensitivity` and `specificity` require at least `minimum_class_support` evaluable positive and negative truth members; `precision` requires at least one predicted-positive member; and `balanced_accuracy` requires both class supports. `auroc` and `brier_score` require a risk score for every evaluable member and at least one positive and one negative truth member. Missing decisions are counted as unevaluable members; decisions without scores increment an aggregate missing-score count but remain eligible for binary metrics. Neither condition is treated as healthy, disorder, or zero-risk evidence.
 
 For evaluable cells, metrics are defined as follows:
 
@@ -75,7 +76,7 @@ For evaluable cells, metrics are defined as follows:
 - `brier_score` is the mean squared difference between each probability score and the private binary truth;
 - `false_positive_count` and `false_negative_count` are aggregate failure-mode counts.
 
-Policy thresholds apply only to sensitivity, specificity, AUROC, and Brier score. A metric passes when it meets its declared bound, fails when it is evaluable and outside the bound, and is unevaluable when its support or required score evidence is absent. `precision`, `balanced_accuracy`, and failure-mode counts are diagnostic metrics with no target bound; they pass when evaluable. Overall status precedence is `FAIL` for any evaluated threshold failure or malformed typed evidence, then `UNEVALUABLE` when a required metric/cell lacks support or the unevaluable-member count exceeds the policy allowance, otherwise `PASS`. A cohort below `minimum_cohort_size` is `UNEVALUABLE` even if all predictions happen to be present.
+Policy thresholds apply only to sensitivity, specificity, AUROC, and Brier score. A metric passes when it meets its declared bound, fails when it is evaluable and outside the bound, and is unevaluable when its support or required score evidence is absent. `precision`, `balanced_accuracy`, and failure-mode counts are diagnostic metrics with no target bound; they pass when evaluable. Overall status precedence is `FAIL` for any evaluated threshold failure or malformed typed evidence, then `UNEVALUABLE` when a required metric/cell lacks support, `require_probability_scores` is true and score evidence is missing, or the unevaluable-member count exceeds the policy allowance, otherwise `PASS`. When probability scores are optional, an `auroc`/`brier_score` metric with missing scores is reported as `UNEVALUABLE` diagnostic evidence but does not block the cell. A cohort below `minimum_cohort_size` is `UNEVALUABLE` even if all predictions happen to be present.
 
 The reason registry is closed:
 
@@ -94,16 +95,16 @@ Subgroup cells are emitted only for requested `sex` categories present in the fi
 
 ## Aggregate report contract
 
-The immutable `TaskUtilityReport` contains policy identity, cohort profile/seed/size, overall status, fixed status/metric counts, total evaluable and unevaluable counts, and a tuple of immutable `TaskUtilityCell` values. Each cell contains only its fixed `scope` (`overall` or `sex:F`, `sex:M`, `sex:U`), status/reason, aggregate support counts, confusion counts, and the fixed metric mapping. Report and cell mappings use exact keys and recursively JSON-compatible values; canonical JSON is compact, sorted ASCII without a newline, and `to_json_bytes()` adds exactly one newline. `repr()` for report, cell, and prediction is evaluator-safe and does not expose hidden values.
+The immutable `TaskUtilityMetric` contains `name`, `status`, `reason_code`, `observed`, `target`, and `support_count`. The immutable `TaskUtilityCell` contains `scope`, `status`, `reason_code`, `member_count`, `evaluable_count`, `unevaluable_count`, `missing_score_count`, `positive_count`, `negative_count`, `true_positive`, `true_negative`, `false_positive`, `false_negative`, and the fixed tuple of `TaskUtilityMetric` values. The immutable `TaskUtilityReport` contains policy identity, cohort profile/seed/size, overall status, fixed status/metric counts, total evaluable and unevaluable counts, and a tuple of immutable cells. Report and cell mappings use exact keys and recursively JSON-compatible values; canonical JSON is compact, sorted ASCII without a newline, and `to_json_bytes()` adds exactly one newline. `repr()` for report, cell, metric, and prediction is evaluator-safe and does not expose hidden values.
 
-No cell mapping contains a member ID, score, truth label, feature name, raw measurement, or arbitrary caller-provided text. Cell order is fixed (`overall`, then `sex:F`, `sex:M`, `sex:U`), and metric/status mappings use the registries above. A structural-invalid report contains no numeric cell evidence. The evaluator never mutates the cohort, policy, or prediction tuple.
+No cell mapping contains a member ID, score, truth label, feature name, raw measurement, or arbitrary caller-provided text. Cell order is fixed (`overall`, then the observed `sex:F`, `sex:M`, and `sex:U` cells in that order); absent categories have no cell. Metric order is fixed by `TASK_METRICS`, and report status/metric counts exactly equal the statuses of the returned cells/metrics. A structural-invalid report contains no numeric cell evidence. The evaluator never mutates the cohort, policy, or prediction tuple.
 
 ## Evaluation algorithm
 
 1. Validate exact `NativeCohort`, `TaskUtilityPolicy`, and tuple-of-`TaskPrediction` types, including length equality. Any malformed typed object returns one fixed structural `FAIL` report rather than echoing the offending value.
 2. For each member/prediction pair, privately derive the binary truth from `DisorderKind`, read only the visible demographic sex for subgroup assignment, and count missing decisions/scores. No per-member result is retained in the returned report.
 3. Build the overall cell and requested fixed sex cells from aggregate counters. Compute the metrics above using deterministic arithmetic, exact rank/tie handling, and explicit support floors.
-4. Apply policy bounds and status/reason precedence. A required overall threshold failure blocks the report; a requested subgroup may be unevaluable without converting an otherwise passing report to pass unless the policy's `maximum_unevaluable_members` or required-cell semantics make the report unevaluable. Subgroup threshold failures always block.
+4. Apply policy bounds and status/reason precedence. A required overall threshold failure or subgroup threshold failure blocks the report. A present subgroup with insufficient class support is `UNEVALUABLE` and makes the report `UNEVALUABLE`; an absent sex category is not emitted and does not block. Optional score metrics may be unevaluable without blocking only when `require_probability_scores` is false.
 5. Return an immutable report whose mappings contain only aggregate-safe values. Re-running with the same cohort, policy, and prediction tuple yields byte-identical JSON; changing prediction order or values changes only aggregate results and never reveals which member contributed.
 
 ## Testing and acceptance
