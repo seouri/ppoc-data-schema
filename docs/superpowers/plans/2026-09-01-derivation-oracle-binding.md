@@ -43,7 +43,7 @@
 - DerivationBinding.to_json_bytes() -> bytes returns canonical compact sorted ASCII JSON plus one newline.
 - Later tasks consume the exact nested field names and attributes specified below; do not rename them between tasks.
 
-- [ ] **Step 1: Write failing model tests**
+- [x] **Step 1: Write failing model tests**
 
 Create fictional fixtures in tests/synthetic/test_derivation_binding_models.py with the following shape. Use SHA equal to 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef and SHA2 equal to fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210.
 
@@ -99,7 +99,7 @@ Use these exact fictional values in the valid fixture:
 
 Assert that the fixture builds, is frozen, has tuple-backed categories, and round-trips through to_mapping without sharing mutable nested mappings. Assert that to_json_bytes equals compact sorted ASCII JSON plus one trailing newline. Add tests for missing/extra nested keys, duplicate JSON keys, wrong scalar types, booleans, nonfinite numbers, unsafe path/row/identifier tokens, invalid digests/timestamps/counts/statuses/categories, and the fixed redacted exception text.
 
-- [ ] **Step 2: Run the model tests and verify the expected failure**
+- [x] **Step 2: Run the model tests and verify the expected failure**
 
 Run:
 
@@ -109,7 +109,7 @@ PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests
 
 Expected: collection fails because synthetic.derivation_binding and its public models do not exist.
 
-- [ ] **Step 3: Implement the immutable nested models**
+- [x] **Step 3: Implement the immutable nested models**
 
 Use frozen dataclasses and MappingProxyType for nested mappings. Define these exact fields:
 
@@ -168,7 +168,7 @@ Validate lowercase SHA-256 digests, bounded aggregate-safe tokens, exact UTC tim
 
 from_mapping must require the exact root and nested key sets above. Reject duplicate keys when parsing JSON with an object-pairs hook. to_mapping returns fresh dictionaries and a list for covered_categories. to_json_bytes is deterministic compact sorted ASCII JSON with one newline. DerivationBindingUnavailable must always expose exactly derivation binding is unavailable and discard caller exception text.
 
-- [ ] **Step 4: Run the model tests and verify they pass**
+- [x] **Step 4: Run the model tests and verify they pass**
 
 ~~~sh
 PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_derivation_binding_models.py
@@ -176,7 +176,7 @@ PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests
 
 Expected: all model round-trip, immutability, exact-key, hostile-input, digest, timestamp, and redaction tests pass.
 
-- [ ] **Step 5: Commit the model slice**
+- [x] **Step 5: Commit the model slice**
 
 ~~~sh
 git add src/synthetic/derivation_binding.py tests/synthetic/test_derivation_binding_models.py
