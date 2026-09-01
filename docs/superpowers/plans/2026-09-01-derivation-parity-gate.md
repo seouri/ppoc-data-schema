@@ -39,7 +39,7 @@
 - Consumes: `EXPECTED_SCHEMA_FINGERPRINT`, `BASE_RESOURCES`, descriptor `resource_spec`/`field_names`, and standard-library immutable value patterns.
 - Produces: `DERIVATION_PARITY_VERSION`, `DerivationParityUnavailable`, `DerivationParityStatus`, `DerivationImplementation`, `DerivationParityPolicy`, `DerivationParityCheck`, `DerivationParityReport`, and the public evaluator signature used by later tasks.
 
-- [ ] **Step 1: Write the failing model and serialization tests.**
+- [x] **Step 1: Write the failing model and serialization tests.**
 
   Build small fictional mappings with the checked-in descriptor and assert the
   public constructors reject empty or unsafe implementation/policy tokens,
@@ -51,7 +51,7 @@
   newline, and `repr()` contains no row, identifier, source, truth, or hidden
   evaluator values.
 
-- [ ] **Step 2: Run the model tests to verify the API is absent.**
+- [x] **Step 2: Run the model tests to verify the API is absent.**
 
   Run:
 
@@ -63,7 +63,7 @@
   public models do not yet exist. Correct only fixture/import syntax before
   implementation.
 
-- [ ] **Step 3: Implement the immutable models and canonical mappings.**
+- [x] **Step 3: Implement the immutable models and canonical mappings.**
 
   Implement exact model validation and fixed status/reason tokens. Keep all
   implementation and policy identities bounded and aggregate-safe. Define the
@@ -74,7 +74,7 @@
   `DerivationParityUnavailable` public failure message; do not include input
   paths, IDs, field values, or exception details.
 
-- [ ] **Step 4: Run focused model tests, Ruff, and commit.**
+- [x] **Step 4: Run focused model tests, Ruff, and commit.**
 
   ```sh
   UV_CACHE_DIR=/tmp/ppoc-uv-cache PYTHONDONTWRITEBYTECODE=1 uv run pytest -q tests/synthetic/test_derivation_parity_models.py
@@ -110,7 +110,7 @@
   ) -> DerivationParityReport: ...
   ```
 
-- [ ] **Step 1: Write failing evaluator tests.**
+- [x] **Step 1: Write failing evaluator tests.**
 
   Use only hand-built fictional rows and a descriptor mapping. Assert a valid
   candidate/reference triple produces a deterministic `PASS`; changing a
@@ -126,7 +126,7 @@
   healthy-flag consistency. Verify all 82 augmented visit fields and all
   87 augmented patient fields participate in candidate/reference parity.
 
-- [ ] **Step 2: Run evaluator tests to verify the expected failures.**
+- [x] **Step 2: Run evaluator tests to verify the expected failures.**
 
   ```sh
   UV_CACHE_DIR=/tmp/ppoc-uv-cache PYTHONDONTWRITEBYTECODE=1 uv run pytest -q tests/synthetic/test_derivation_parity_evaluation.py
@@ -135,7 +135,7 @@
   Expected: the new tests fail because evaluation is not implemented. Fix only
   fixture construction errors before writing production logic.
 
-- [ ] **Step 3: Implement private materialization and fixed aggregate checks.**
+- [x] **Step 3: Implement private materialization and fixed aggregate checks.**
 
   Materialize each mapping exactly once into private tuples, validate exact
   resource sets and descriptor field order, canonicalize descriptor scalar
@@ -153,7 +153,7 @@
   Do not add a writer, CLI, filesystem reader, generator hook, or package
   exporter integration.
 
-- [ ] **Step 4: Run focused evaluation tests, lint, and commit.**
+- [x] **Step 4: Run focused evaluation tests, lint, and commit.**
 
   ```sh
   UV_CACHE_DIR=/tmp/ppoc-uv-cache PYTHONDONTWRITEBYTECODE=1 uv run pytest -q tests/synthetic/test_derivation_parity_evaluation.py tests/synthetic/test_derivation_parity_models.py
@@ -180,7 +180,7 @@
   proving that visible generation/export and governed evaluators remain
   isolated.
 
-- [ ] **Step 1: Write failing documentation and AST boundary tests.**
+- [x] **Step 1: Write failing documentation and AST boundary tests.**
 
   Assert the guide and README name the exact contract token, function, input
   resource sets, candidate/reference distinction, deterministic checks,
@@ -192,13 +192,13 @@
   privacy, model, network, or Synthea code. Assert the existing exporter and
   generator remain free of automatic parity-evaluator calls.
 
-- [ ] **Step 2: Run boundary tests to confirm the missing documentation/guards.**
+- [x] **Step 2: Run boundary tests to confirm the missing documentation/guards.**
 
   ```sh
   UV_CACHE_DIR=/tmp/ppoc-uv-cache PYTHONDONTWRITEBYTECODE=1 uv run pytest -q tests/synthetic/test_derivation_parity_boundaries.py
   ```
 
-- [ ] **Step 3: Implement documentation and static boundary coverage.**
+- [x] **Step 3: Implement documentation and static boundary coverage.**
 
   Add a concise Python example that receives already-loaded fictional or
   privately controlled rows, calls `validate_derivation_parity`, and inspects
@@ -208,7 +208,7 @@
   approval, or Synthea conformance. Keep the smoke CLI, package exporter, and
   governed input boundaries unchanged.
 
-- [ ] **Step 4: Run docs/boundary tests, lint, schema, lock, and commit.**
+- [x] **Step 4: Run docs/boundary tests, lint, schema, lock, and commit.**
 
   ```sh
   UV_CACHE_DIR=/tmp/ppoc-uv-cache PYTHONDONTWRITEBYTECODE=1 uv run pytest -q tests/synthetic/test_derivation_parity_boundaries.py tests/synthetic/test_derivation_parity_models.py tests/synthetic/test_derivation_parity_evaluation.py
@@ -227,7 +227,7 @@
 - Modify: this plan (checkbox/evidence metadata only)
 - Create/modify: ignored `.superpowers/sdd/2026-09-01-derivation-parity-gate/`
 
-- [ ] **Step 1: Create the SDD ledger and run fresh scoped reviews after each task.**
+- [x] **Step 1: Create the SDD ledger and run fresh scoped reviews after each task.**
 
   Record the plan identity, pre-flight conflict table, implementation
   commits, review package paths, findings, fix rounds, exact fix ranges, and
@@ -235,7 +235,7 @@
   implementer and run a scoped re-review before moving on. Record Minor
   findings and any rulings explicitly.
 
-- [ ] **Step 2: Run a fresh broad review over the complete feature range.**
+- [x] **Step 2: Run a fresh broad review over the complete feature range.**
 
   Review exact schema/key alignment, deterministic formulas, support and
   status precedence, tolerance caps, redaction, input immutability, report
@@ -243,7 +243,11 @@
   Resolve every Critical/Important finding through one consolidated fix wave
   and one scoped re-review.
 
-- [ ] **Step 3: Run final feature verification.**
+  Evidence: `broad-review.md` found 2 Critical/5 Important findings; the
+  consolidated fix wave `833890b..4c7bd85` was independently re-reviewed in
+  `broad-rereview.md` with Spec PASS, Quality PASS, and Ready Yes.
+
+- [x] **Step 3: Run final feature verification.**
 
   ```sh
   UV_CACHE_DIR=/tmp/ppoc-uv-cache PYTHONDONTWRITEBYTECODE=1 uv run pytest -q
@@ -257,6 +261,12 @@
   canonical reports and unchanged input mappings, scan all public report
   artifacts for row/identifier/truth tokens, and retain exact outputs in the
   ignored SDD evidence.
+
+  Evidence: fresh verification on the feature tip produced 2054 passing
+  tests, Ruff clean, `uv lock --check` resolved 10 packages, the schema check
+  validated 8 resources, `git diff --check bee6be0..HEAD` was clean, and the
+  repeated fictional triple produced byte-identical reports with unchanged
+  inputs and a passing redaction scan.
 
 - [ ] **Step 4: Commit plan metadata and integrate.**
 
