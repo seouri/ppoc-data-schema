@@ -14,6 +14,7 @@ from synthetic.augmenter_oracle import (
 )
 from synthetic.cdc_reference import CdcGrowthReference
 from synthetic.derivation_binding import (
+    DERIVATION_BINDING_VERSION,
     REQUIRED_GOLDEN_CATEGORIES,
     DerivationBinding,
 )
@@ -40,11 +41,18 @@ class DevelopmentRuntime:
         try:
             standard = self.derivation_binding.reference_standard
             oracle = self.derivation_binding.oracle
+            golden = self.derivation_binding.golden_evidence
+            review = self.derivation_binding.review
             matches = (
                 isinstance(self.reference, CdcGrowthReference)
                 and isinstance(self.derivation_oracle, SourceMatchedAugmenterOracle)
                 and isinstance(self.derivation_binding, DerivationBinding)
                 and self.dependency_fingerprint == UV_LOCK_SHA256
+                and self.derivation_binding.binding_version == DERIVATION_BINDING_VERSION
+                and self.derivation_binding.binding_id == _BINDING_ID
+                and self.derivation_binding.schema_fingerprint
+                == EXPECTED_SCHEMA_FINGERPRINT
+                and self.derivation_binding.test_only is True
                 and self.reference.reference_id == _REFERENCE_ID
                 and standard.standard_id == self.reference.reference_id
                 and standard.standard_fingerprint == self.reference.source_sha256
@@ -58,6 +66,24 @@ class DevelopmentRuntime:
                 and oracle.source_revision == _SOURCE_REVISION
                 and oracle.source_kind == _SOURCE_KIND
                 and oracle.dependency_fingerprint == self.dependency_fingerprint
+                and golden.manifest_id is None
+                and golden.manifest_fingerprint is None
+                and golden.parity_contract is None
+                and golden.parity_report_id is None
+                and golden.parity_report_fingerprint is None
+                and golden.parity_status == "UNEVALUABLE"
+                and golden.candidate_implementation_fingerprint is None
+                and golden.reference_implementation_fingerprint is None
+                and golden.parity_schema_fingerprint is None
+                and golden.covered_categories == REQUIRED_GOLDEN_CATEGORIES
+                and golden.bidirectional_case_count == 0
+                and golden.synthetic_fuzz_case_count == 0
+                and golden.fuzz_corpus_fingerprint is None
+                and review.review_id is None
+                and review.review_fingerprint is None
+                and review.reviewed_at is None
+                and review.reviewer_role is None
+                and review.status == "PENDING"
             )
         except Exception:  # noqa: BLE001 - expose no implementation details at this boundary.
             matches = False

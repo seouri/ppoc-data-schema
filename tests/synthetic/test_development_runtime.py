@@ -12,6 +12,7 @@ from synthetic.augmenter_oracle import (
     AUGMENTER_ORACLE_ID,
     AUGMENTER_RUNTIME_MANIFEST_SHA256,
     UV_LOCK_SHA256,
+    SourceMatchedAugmenterOracle,
     verify_source_matched_runtime,
 )
 from synthetic.derivation import DerivationResult, DerivationUnavailable
@@ -66,7 +67,14 @@ def test_source_matched_runtime_verification_accepts_checked_in_root() -> None:
 
 @pytest.mark.parametrize(
     "mutation",
-    ("lock-drift", "missing-lock", "manifest-drift", "runtime-drift", "runtime-symlink"),
+    (
+        "lock-drift",
+        "lock-symlink",
+        "missing-lock",
+        "manifest-drift",
+        "runtime-drift",
+        "runtime-symlink",
+    ),
 )
 def test_source_matched_runtime_verification_redacts_closure_drift(
     tmp_path: Path,
@@ -77,6 +85,10 @@ def test_source_matched_runtime_verification_redacts_closure_drift(
     if mutation == "lock-drift":
         lock = root / "uv.lock"
         lock.write_bytes(lock.read_bytes() + b"\n")
+    elif mutation == "lock-symlink":
+        lock = root / "uv.lock"
+        lock.unlink()
+        lock.symlink_to(ROOT / "uv.lock")
     elif mutation == "missing-lock":
         (root / "uv.lock").unlink()
     elif mutation == "manifest-drift":
@@ -91,6 +103,22 @@ def test_source_matched_runtime_verification_redacts_closure_drift(
         runtime.symlink_to(ROOT / "scripts" / "augment.py")
 
     _assert_unavailable(root)
+
+
+def test_direct_oracle_redacts_lock_drift(tmp_path: Path) -> None:
+    """Catches direct derivation bypassing the locked runtime verifier."""
+    root = _copied_runtime_root(tmp_path)
+    lock = root / "uv.lock"
+    lock.write_bytes(lock.read_bytes() + b"\n")
+
+    with pytest.raises(DerivationUnavailable) as caught:
+        SourceMatchedAugmenterOracle(root).derive(ROOT, {})
+
+    assert str(caught.value) == UNAVAILABLE_MESSAGE
+    assert caught.value.__cause__ is None
+    assert caught.value.__context__ is None
+    assert str(root) not in str(caught.value)
+    assert "subprocess" not in str(caught.value)
 
 
 def test_development_runtime_binds_reference_and_test_only_oracle() -> None:
@@ -120,7 +148,20 @@ def test_development_runtime_binds_reference_and_test_only_oracle() -> None:
 
 @pytest.mark.parametrize(
     "mismatch",
-    ("reference", "reference-id", "oracle-id", "oracle-fingerprint", "oracle-kind"),
+    (
+        "reference",
+        "reference-id",
+        "reference-version",
+        "oracle-id",
+        "oracle-fingerprint",
+        "oracle-dependency",
+        "oracle-revision",
+        "oracle-kind",
+        "runtime-dependency",
+        "binding-id",
+        "schema",
+        "test-only",
+    ),
 )
 def test_development_runtime_rejects_mismatched_composition_before_derivation(
     mismatch: str,
@@ -146,6 +187,15 @@ def test_development_runtime_rejects_mismatched_composition_before_derivation(
                 version="cdc-lms-mapping-v1",
             ),
         )
+    elif mismatch == "reference-version":
+        binding = replace(
+            binding,
+            reference_standard=DerivationReferenceStandard(
+                standard_id="cdc-lms-reference-v1",
+                standard_fingerprint=runtime.reference.source_sha256,
+                version="different-mapping-v1",
+            ),
+        )
     elif mismatch == "oracle-id":
         binding = replace(
             binding,
@@ -168,7 +218,29 @@ def test_development_runtime_rejects_mismatched_composition_before_derivation(
                 source_kind="authoritative_implementation",
             ),
         )
-    else:
+    elif mismatch == "oracle-dependency":
+        binding = replace(
+            binding,
+            oracle=DerivationBindingOracle(
+                oracle_id=AUGMENTER_ORACLE_ID,
+                implementation_fingerprint=AUGMENTER_RUNTIME_MANIFEST_SHA256,
+                source_revision="augment-runtime-v1",
+                dependency_fingerprint="4" * 64,
+                source_kind="authoritative_implementation",
+            ),
+        )
+    elif mismatch == "oracle-revision":
+        binding = replace(
+            binding,
+            oracle=DerivationBindingOracle(
+                oracle_id=AUGMENTER_ORACLE_ID,
+                implementation_fingerprint=AUGMENTER_RUNTIME_MANIFEST_SHA256,
+                source_revision="different-runtime-v1",
+                dependency_fingerprint=UV_LOCK_SHA256,
+                source_kind="authoritative_implementation",
+            ),
+        )
+    elif mismatch == "oracle-kind":
         binding = replace(
             binding,
             oracle=DerivationBindingOracle(
@@ -179,6 +251,80 @@ def test_development_runtime_rejects_mismatched_composition_before_derivation(
                 source_kind="approved_parity_harness",
             ),
         )
+    elif mismatch == "binding-id":
+        binding = replace(binding, binding_id="different-binding-v1")
+    elif mismatch == "schema":
+        binding = replace(binding, schema_fingerprint="4" * 64)
+    elif mismatch == "test-only":
+        binding = replace(binding, test_only=False)
+
+    with pytest.raises(ValueError):
+        DevelopmentRuntime(
+            runtime.reference,
+            runtime.derivation_oracle,
+            binding,
+            "5" * 64 if mismatch == "runtime-dependency" else runtime.dependency_fingerprint,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("manifest_id", "golden-evidence-v1"),
+        ("manifest_fingerprint", "4" * 64),
+        ("parity_contract", "parity-contract-v1"),
+        ("parity_report_id", "parity-report-v1"),
+        ("parity_report_fingerprint", "4" * 64),
+        ("parity_status", "PASS"),
+        ("candidate_implementation_fingerprint", "4" * 64),
+        ("reference_implementation_fingerprint", "4" * 64),
+        ("parity_schema_fingerprint", "4" * 64),
+        ("covered_categories", tuple(reversed(REQUIRED_GOLDEN_CATEGORIES))),
+        ("bidirectional_case_count", 1),
+        ("synthetic_fuzz_case_count", 1),
+        ("fuzz_corpus_fingerprint", "4" * 64),
+    ),
+)
+def test_development_runtime_rejects_every_golden_evidence_substitution(
+    field: str,
+    value: object,
+) -> None:
+    """Catches a valid evidence field changing the frozen UNEVALUABLE contract."""
+    runtime = build_development_runtime(ROOT)
+    binding = replace(
+        runtime.derivation_binding,
+        golden_evidence=replace(runtime.derivation_binding.golden_evidence, **{field: value}),
+    )
+
+    with pytest.raises(ValueError):
+        DevelopmentRuntime(
+            runtime.reference,
+            runtime.derivation_oracle,
+            binding,
+            runtime.dependency_fingerprint,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("review_id", "review-v1"),
+        ("review_fingerprint", "4" * 64),
+        ("reviewed_at", "2026-09-01T00:00:00Z"),
+        ("reviewer_role", "data-custodian"),
+        ("status", "APPROVED"),
+    ),
+)
+def test_development_runtime_rejects_every_review_substitution(
+    field: str,
+    value: object,
+) -> None:
+    """Catches a valid review field changing the frozen pending-review contract."""
+    runtime = build_development_runtime(ROOT)
+    binding = replace(
+        runtime.derivation_binding,
+        review=replace(runtime.derivation_binding.review, **{field: value}),
+    )
 
     with pytest.raises(ValueError):
         DevelopmentRuntime(
