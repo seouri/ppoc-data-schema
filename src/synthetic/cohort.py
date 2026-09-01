@@ -722,7 +722,11 @@ def _snapshot_resource_shape(shape: ResourceShape) -> ResourceShape:
         raise ValueError("bundle.shape contains invalid values") from None
 
 
-def _snapshot_visible_bundle(bundle: ObservedResourceBundle) -> ObservedResourceBundle:
+def _snapshot_visible_bundle(
+    bundle: ObservedResourceBundle,
+    *,
+    validate_semantics: bool,
+) -> ObservedResourceBundle:
     """Rebuild a bundle and enforce row order before ordinary serialization."""
 
     _require_exact_visible_bundle(bundle)
@@ -749,7 +753,7 @@ def _snapshot_visible_bundle(bundle: ObservedResourceBundle) -> ObservedResource
             )
             for item in bundle.clinical_descendants
         )
-        return ObservedResourceBundle(
+        snapshot = ObservedResourceBundle(
             bundle.patient_id,
             shape,
             rows,
@@ -758,6 +762,29 @@ def _snapshot_visible_bundle(bundle: ObservedResourceBundle) -> ObservedResource
         )
     except Exception:  # noqa: BLE001 - mutated row values must fail with fixed text
         raise ValueError("bundle.rows contain invalid values") from None
+    if validate_semantics:
+        try:
+            validation_rows = {
+                resource_name: (
+                    snapshot.rows[resource_name]
+                    if resource_name in {"patients", "visits"}
+                    else ()
+                )
+                for resource_name in BASE_RESOURCE_NAMES
+            }
+            validation_bundle = ObservedResourceBundle(
+                snapshot.patient_id,
+                snapshot.shape,
+                validation_rows,
+                snapshot.clinical_descendants,
+                snapshot.source_frame,
+            )
+            report = validate_observed_resources(validation_bundle)
+            if report.status is ResourceValidationStatus.FAIL:
+                raise ValueError
+        except Exception:  # noqa: BLE001 - validation callbacks must be redacted
+            raise ValueError("bundle.rows contain invalid visible values") from None
+    return snapshot
 
 
 def _snapshot_demographics(
@@ -780,6 +807,8 @@ def _snapshot_demographics(
 
 def _snapshot_member_contract(
     member: CohortMember,
+    *,
+    validate_visible_semantics: bool = False,
 ) -> tuple[SyntheticDemographics, ObservationFrame, ObservedResourceBundle | None]:
     """Snapshot and validate every object used by ordinary member mappings."""
 
@@ -790,7 +819,10 @@ def _snapshot_member_contract(
         raise TypeError("trajectory must be exactly an AgeRegimeDisorderTrajectory")
     frame = _snapshot_visible_frame(member.frame)
     bundle = (
-        _snapshot_visible_bundle(member.bundle)
+        _snapshot_visible_bundle(
+            member.bundle,
+            validate_semantics=validate_visible_semantics,
+        )
         if member.bundle is not None
         else None
     )
@@ -810,7 +842,10 @@ def _snapshot_member_contract(
 
 
 def _member_visible_mapping(member: CohortMember) -> dict[str, object]:
-    demographics, frame, bundle = _snapshot_member_contract(member)
+    demographics, frame, bundle = _snapshot_member_contract(
+        member,
+        validate_visible_semantics=True,
+    )
     mapping: dict[str, object] = {
         "demographics": SyntheticDemographics.to_mapping(demographics),
         "frame": ObservationFrame.to_mapping(frame),

@@ -446,6 +446,59 @@ def test_visible_mappings_retain_rows_and_exclude_evaluator_only_data() -> None:
         assert forbidden not in encoded
 
 
+def test_member_mapping_rejects_shape_preserving_sensitive_patient_value() -> None:
+    sensitive = "/governed/real-patient.csv truth_hash"
+    generated = generate_native_cohort(
+        _config(patient_count=1),
+        RegimeLinearTestReference(),
+        _calibration(),
+        modules=_modules(),
+        descriptor=_descriptor(),
+    )
+    member = generated.members[0]
+    assert member.bundle is not None
+    patient_row = member.bundle.rows["patients"][0]
+    object.__setattr__(
+        patient_row,
+        "values",
+        tuple(
+            (field_name, sensitive if field_name == "sex" else value)
+            for field_name, value in patient_row.values
+        ),
+    )
+
+    with pytest.raises((TypeError, ValueError), match="bundle.rows") as error:
+        member.to_mapping()
+    assert sensitive not in str(error.value)
+
+
+def test_member_mapping_redacts_semantic_validator_status_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sensitive = "/governed/real-patient.csv truth_hash"
+    generated = generate_native_cohort(
+        _config(patient_count=1),
+        RegimeLinearTestReference(),
+        _calibration(),
+        modules=_modules(),
+        descriptor=_descriptor(),
+    )
+
+    class SensitiveReport:
+        @property
+        def status(self) -> object:
+            raise RuntimeError(sensitive)
+
+    monkeypatch.setattr(
+        cohort_module,
+        "validate_observed_resources",
+        lambda _bundle: SensitiveReport(),
+    )
+    with pytest.raises((TypeError, ValueError), match="bundle.rows") as error:
+        generated.members[0].to_mapping()
+    assert sensitive not in str(error.value)
+
+
 def test_caller_can_export_returned_bundles_separately(tmp_path: Path) -> None:
     descriptor = _descriptor()
     cohort = generate_native_cohort(

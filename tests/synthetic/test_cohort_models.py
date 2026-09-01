@@ -115,11 +115,29 @@ def _frame(
 
 
 def _bundle(frame: ObservationFrame) -> ObservedResourceBundle:
-    shape = ResourceShape(
-        tuple(ResourceSpec(name, ("patient_id",)) for name in BASE_RESOURCE_NAMES)
+    patient_fields = (
+        "patient_id",
+        "sex",
+        "ethnicity",
+        *(f"race_{index}" for index in range(1, 9)),
     )
+    shape = ResourceShape(
+        tuple(
+            ResourceSpec(
+                name,
+                patient_fields if name == "patients" else ("patient_id",),
+            )
+            for name in BASE_RESOURCE_NAMES
+        )
+    )
+    demographics = SyntheticDemographics(frame.patient_id).to_mapping()
     rows = {
-        name: (ResourceRow(name, (("patient_id", frame.patient_id),)),)
+        name: (
+            ResourceRow(
+                name,
+                tuple((field_name, demographics[field_name]) for field_name in patient_fields),
+            ),
+        )
         if name == "patients"
         else ()
         for name in BASE_RESOURCE_NAMES
@@ -443,8 +461,9 @@ def test_member_rejects_subclassed_nested_visible_serializers() -> None:
     safe_frame = _frame(trajectory)
     bundle = _bundle(safe_frame)
     rows = dict(bundle.rows)
+    patient_values = bundle.rows["patients"][0].values
     rows["patients"] = (
-        TruthRow("patients", (("patient_id", "syn-cohort-member"),)),
+        TruthRow("patients", patient_values),
     )
     nested_row_bundle = ObservedResourceBundle(
         bundle.patient_id,
