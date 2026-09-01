@@ -22,7 +22,7 @@ BOUND_SOURCES = (
     SYNTHETIC / "generate.py",
     SYNTHETIC / "package_export.py",
 )
-FORBIDDEN_MODULE_PREFIXES = (
+FORBIDDEN_MODULES = {
     "synthetic.calibration",
     "synthetic.heldout_validate",
     "synthetic.privacy_audit",
@@ -30,29 +30,70 @@ FORBIDDEN_MODULE_PREFIXES = (
     "synthetic.temporal_drift",
     "synthetic.prevalence_evidence",
     "synthea",
-)
-FORBIDDEN_CALLS = {
+}
+FORBIDDEN_ROUTE_CALL_SUFFIXES = {
     "audit_privacy",
     "calibrate",
     "generate_native_cohort",
     "load_calibration_artifact",
     "load_heldout",
     "load_privacy_policy",
-    "run",
     "validate_heldout",
     "validate_temporal_drift",
     "write_prevalence_evidence",
 }
+FORBIDDEN_EXTERNAL_PROCESS_CALLS = {
+    "asyncio.create_subprocess_exec",
+    "asyncio.create_subprocess_shell",
+    "os.popen",
+    "os.system",
+    "subprocess.Popen",
+    "subprocess.call",
+    "subprocess.check_call",
+    "subprocess.check_output",
+    "subprocess.getoutput",
+    "subprocess.getstatusoutput",
+    "subprocess.run",
+}
 
 
-def _imports(tree: ast.AST) -> set[str]:
-    imports: set[str] = set()
+def _module_context(path: Path) -> tuple[str, bool]:
+    parts = list(path.relative_to(ROOT / "src").with_suffix("").parts)
+    is_package = parts[-1] == "__init__"
+    if is_package:
+        parts.pop()
+    return ".".join(parts), is_package
+
+
+def _import_base(
+    node: ast.ImportFrom, module_name: str, *, is_package: bool
+) -> str | None:
+    if node.level == 0:
+        return node.module
+    package = module_name.split(".") if is_package else module_name.split(".")[:-1]
+    climb = node.level - 1
+    if climb > len(package):
+        return None
+    parts = package[: len(package) - climb]
+    if node.module is not None:
+        parts.extend(node.module.split("."))
+    return ".".join(parts)
+
+
+def _bindings(
+    tree: ast.AST, module_name: str, *, is_package: bool
+) -> dict[str, str]:
+    bindings: dict[str, str] = {}
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
-            imports.update(alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module is not None:
-            imports.add(node.module)
-    return imports
+            for alias in node.names:
+                bindings[alias.asname or alias.name.split(".", maxsplit=1)[0]] = alias.name
+        elif isinstance(node, ast.ImportFrom):
+            base = _import_base(node, module_name, is_package=is_package)
+            if base is not None:
+                for alias in node.names:
+                    bindings[alias.asname or alias.name] = f"{base}.{alias.name}"
+    return bindings
 
 
 def _call_name(node: ast.expr) -> str | None:
@@ -64,13 +105,77 @@ def _call_name(node: ast.expr) -> str | None:
     return None
 
 
-def _call_suffixes(tree: ast.AST) -> set[str]:
+def _qualified_calls(
+    tree: ast.AST, module_name: str, *, is_package: bool
+) -> set[str]:
+    bindings = _bindings(tree, module_name, is_package=is_package)
+    calls: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or (name := _call_name(node.func)) is None:
+            continue
+        root, dot, suffix = name.partition(".")
+        calls.add(f"{bindings.get(root, root)}{dot}{suffix}")
+    return calls
+
+
+def _dynamic_imports(
+    tree: ast.AST, module_name: str, *, is_package: bool
+) -> set[str]:
+    bindings = _bindings(tree, module_name, is_package=is_package)
+    imports: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not node.args:
+            continue
+        name = _call_name(node.func)
+        if name is None:
+            continue
+        root, dot, suffix = name.partition(".")
+        qualified_name = f"{bindings.get(root, root)}{dot}{suffix}"
+        if qualified_name not in {"__import__", "importlib.import_module"}:
+            continue
+        argument = node.args[0]
+        if isinstance(argument, ast.Constant) and isinstance(argument.value, str):
+            imports.add(argument.value)
+    return imports
+
+
+def _imports(
+    tree: ast.AST, module_name: str, *, is_package: bool
+) -> set[str]:
+    imports: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imports.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            base = _import_base(node, module_name, is_package=is_package)
+            if base is not None:
+                imports.add(base)
+                imports.update(f"{base}.{alias.name}" for alias in node.names)
+    return imports | _dynamic_imports(tree, module_name, is_package=is_package)
+
+
+def _forbidden_imports(imports: set[str]) -> set[str]:
     return {
-        name.rsplit(".", maxsplit=1)[-1]
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        if (name := _call_name(node.func)) is not None
+        imported
+        for imported in imports
+        if any(imported == module or imported.startswith(f"{module}.") for module in FORBIDDEN_MODULES)
     }
+
+
+def _forbidden_route_calls(
+    tree: ast.AST, module_name: str, *, is_package: bool
+) -> set[str]:
+    return {
+        call
+        for call in _qualified_calls(tree, module_name, is_package=is_package)
+        if call.rsplit(".", maxsplit=1)[-1] in FORBIDDEN_ROUTE_CALL_SUFFIXES
+    }
+
+
+def _external_process_calls(
+    tree: ast.AST, module_name: str, *, is_package: bool
+) -> set[str]:
+    return _qualified_calls(tree, module_name, is_package=is_package) & FORBIDDEN_EXTERNAL_PROCESS_CALLS
 
 
 def test_production_cli_remains_fail_closed_without_an_approved_oracle(
@@ -95,18 +200,79 @@ def test_public_export_and_generator_signatures_require_an_explicit_binding() ->
         export_observed_resource_package,
         export_counterfactual_ehr_world_pair,
     ):
-        assert "derivation_binding" in inspect.signature(callable_).parameters
+        parameter = inspect.signature(callable_).parameters["derivation_binding"]
+        assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
+        assert parameter.default is inspect.Parameter.empty
 
 
 def test_binding_handoff_sources_do_not_import_or_execute_governed_or_external_routes() -> None:
     """Breaks if automatic calibration, evaluator, Synthea, or harness execution is added."""
     for path in BOUND_SOURCES:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        imports = _imports(tree)
-        calls = _call_suffixes(tree)
-        assert not {
-            imported
-            for imported in imports
-            if imported.startswith(FORBIDDEN_MODULE_PREFIXES)
-        }, path
-        assert not calls & FORBIDDEN_CALLS, path
+        module_name, is_package = _module_context(path)
+        assert not _forbidden_imports(
+            _imports(tree, module_name, is_package=is_package)
+        ), path
+        assert not _forbidden_route_calls(tree, module_name, is_package=is_package), path
+        assert not _external_process_calls(tree, module_name, is_package=is_package), path
+
+
+def test_boundary_scanner_rejects_relative_dynamic_and_external_route_evasions() -> None:
+    """Breaks if an import alias or process helper can evade the source boundary scan."""
+    cases = (
+        (
+            "from . import calibration",
+            "synthetic.generate",
+            False,
+            "synthetic.calibration",
+        ),
+        (
+            "from . import trajectory",
+            "synthetic.native.resources",
+            False,
+            "synthetic.native.trajectory",
+        ),
+        (
+            "import importlib as loader\nloader.import_module('synthetic.privacy_audit')",
+            "synthetic.generate",
+            False,
+            "synthetic.privacy_audit",
+        ),
+        (
+            "from importlib import import_module as load\nload('synthetic.prevalence_evidence')",
+            "synthetic.generate",
+            False,
+            "synthetic.prevalence_evidence",
+        ),
+        ("__import__('synthea')", "synthetic.generate", False, "synthea"),
+    )
+    for source, module_name, is_package, forbidden_module in cases:
+        tree = ast.parse(source)
+        assert _forbidden_imports(
+            _imports(tree, module_name, is_package=is_package)
+        ) == {forbidden_module}
+
+    external_cases = (
+        ("import os\nos.system('fictional')", "os.system"),
+        ("import subprocess\nsubprocess.run(['fictional'])", "subprocess.run"),
+        ("import subprocess\nsubprocess.call(['fictional'])", "subprocess.call"),
+        (
+            "import subprocess\nsubprocess.check_call(['fictional'])",
+            "subprocess.check_call",
+        ),
+        (
+            "import subprocess as process\nprocess.check_output(['fictional'])",
+            "subprocess.check_output",
+        ),
+        (
+            "from subprocess import Popen as launch\nlaunch(['fictional'])",
+            "subprocess.Popen",
+        ),
+    )
+    for source, expected_call in external_cases:
+        tree = ast.parse(source)
+        assert expected_call in _external_process_calls(
+            tree,
+            "synthetic.generate",
+            is_package=False,
+        )
