@@ -296,6 +296,30 @@ def test_underpowered_support_is_unevaluable():
     assert check(report, "support").status is DerivationParityStatus.UNEVALUABLE
 
 
+def test_blank_diagnosis_slots_do_not_create_diagnosis_age_summaries():
+    package, base, candidate_rows, reference_rows = fixtures()
+    for rows in (base["visits"], candidate_rows["visits_augmented"], reference_rows["visits_augmented"]):
+        rows[0]["enc_diag_1"] = ""
+    for rows in (candidate_rows["patients_augmented"], reference_rows["patients_augmented"]):
+        rows[0].update(
+            {
+                "healthy_flag": 1,
+                "growth_dx_flag": 0,
+                "visits_count_pre_dx": 2,
+                "dx_age_years": "",
+                "dx_age_years_e10": "",
+            }
+        )
+    assert evaluate(package, base, candidate_rows, reference_rows).status is DerivationParityStatus.PASS
+
+
+def test_bmi_gating_uses_base_age_not_candidate_age_conversion():
+    package, base, candidate_rows, reference_rows = fixtures()
+    candidate_rows["visits_augmented"][1].update({"age_in_months": 0, "bmi": ""})
+    report = evaluate(package, base, candidate_rows, reference_rows)
+    assert check(report, "deterministic_bmi").status is DerivationParityStatus.FAIL
+
+
 @pytest.mark.parametrize(
     "mutate",
     [

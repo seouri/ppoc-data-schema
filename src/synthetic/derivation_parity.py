@@ -537,7 +537,7 @@ def _evaluate(base_rows: Mapping[str, Iterable[Mapping[str, object]]],
     checks.append(_check("deterministic_age_conversion", *age))
     units = _unit_check(visits, candidate_visits, reference_visits, policy.deterministic_tolerance)
     checks.append(_check("deterministic_unit_conversion", *units))
-    bmi = _bmi_check(candidate_visits, reference_visits, policy.deterministic_tolerance)
+    bmi = _bmi_check(visits, candidate_visits, reference_visits, policy.deterministic_tolerance)
     checks.append(_check("deterministic_bmi", *bmi))
     summaries = _summary_check(patients, visits, candidate_patients, reference_patients, candidate_visits, reference_visits, policy.deterministic_tolerance)
     checks.append(_check("deterministic_patient_summaries", *summaries))
@@ -655,19 +655,19 @@ def _unit_check(base: Mapping[str, Mapping[str, object]], candidate: Mapping[str
     return failed, unevaluable, compared, mismatches, maximum
 
 
-def _bmi_check(candidate: Mapping[str, Mapping[str, object]], reference: Mapping[str, Mapping[str, object]],
+def _bmi_check(base: Mapping[str, Mapping[str, object]], candidate: Mapping[str, Mapping[str, object]], reference: Mapping[str, Mapping[str, object]],
                tolerance: float) -> tuple[bool, bool, int, int, float]:
     failed = unevaluable = False
     compared = mismatches = 0
     maximum = 0.0
     for outputs in (candidate, reference):
-        for item in outputs.values():
-            age = item["age_in_months"]
+        for identity, item in outputs.items():
+            age = base.get(identity, {}).get("age_in_days")
             if age is None:
                 unevaluable = True
                 continue
             weight, height = item["weight_kg"], item["height_cm"]
-            expected = None if age < 24 or weight is None or height is None or weight <= 0 or height <= 0 else weight / (height / 100) ** 2
+            expected = None if age / 30.4375 < 24 or weight is None or height is None or weight <= 0 or height <= 0 else weight / (height / 100) ** 2
             compared += 1
             matched, difference = _match(item["bmi"], expected, tolerance)
             maximum = max(maximum, difference)
