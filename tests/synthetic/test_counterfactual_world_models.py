@@ -54,6 +54,8 @@ def test_world_report_is_immutable_canonical_and_aggregate_only() -> None:
         report.status = CounterfactualWorldValidationStatus.PASS  # type: ignore[misc]
     with pytest.raises(TypeError):
         report.check_counts["PASS"] = 0  # type: ignore[index]
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        checks[0].name = "pair_binding"  # type: ignore[misc]
 
 
 def test_world_report_rejects_incomplete_or_status_incompatible_checks() -> None:

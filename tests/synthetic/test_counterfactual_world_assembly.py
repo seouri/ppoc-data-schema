@@ -15,10 +15,14 @@ from synthetic.native.clinical_modules import (
     FamilialShortStatureModule,
     GrowthHormoneDeficiencyConfig,
     GrowthHormoneDeficiencyModule,
+    HealthyGrowthModule,
 )
 from synthetic.native.counterfactual import (
+    CounterfactualContext,
+    CounterfactualPair,
     CounterfactualValidationStatus,
     InterventionKind,
+    default_change_matrix,
     generate_counterfactual_pair,
     validate_counterfactual_pair,
 )
@@ -28,7 +32,12 @@ from synthetic.native.counterfactual_worlds import (
     assemble_counterfactual_ehr_worlds,
 )
 from synthetic.native.observations import ObservationPolicy
-from synthetic.native.resources import BASE_RESOURCE_NAMES, SyntheticDemographics
+from synthetic.native.resources import (
+    BASE_RESOURCE_NAMES,
+    ResourceShape,
+    ResourceSpec,
+    SyntheticDemographics,
+)
 from tests.synthetic.fakes import RegimeLinearTestReference
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -70,7 +79,6 @@ def _pair(intervention: InterventionKind):
 
 def _pair_from(kernel: AgeRegimeDisorderKernel, intervention: InterventionKind):
     pair = generate_counterfactual_pair(kernel, PATIENT, AGES, 20260831, 11, intervention)
-    assert validate_counterfactual_pair(pair).status is CounterfactualValidationStatus.PASS
     return pair
 
 
@@ -88,6 +96,34 @@ def _familial_kernel() -> AgeRegimeDisorderKernel:
             )
         ),
     )
+
+
+def _healthy_pair() -> CounterfactualPair:
+    matrix = default_change_matrix(InterventionKind.PHYSIOLOGY_SEVERITY)
+    baseline_context = CounterfactualContext(PATIENT, 20260831, 11, "baseline", matrix)
+    intervention_context = CounterfactualContext(PATIENT, 20260831, 11, "intervention", matrix)
+    baseline = AgeRegimeDisorderKernel(
+        AgeRegimeTrajectoryKernel(RegimeLinearTestReference()), HealthyGrowthModule()
+    ).generate(PATIENT, AGES, baseline_context)
+    points = tuple(
+        dataclasses.replace(
+            point,
+            length_cm=point.length_cm * 1.01 if point.length_cm is not None else None,
+            height_cm=point.height_cm * 1.01 if point.height_cm is not None else None,
+            weight_kg=point.weight_kg * 1.01**2 if point.height_cm is not None else point.weight_kg,
+            length_z=point.length_z + 0.5 if point.length_z is not None else None,
+            height_z=point.height_z + 0.5 if point.height_z is not None else None,
+        )
+        for point in baseline.physiology.points
+    )
+    intervention = dataclasses.replace(
+        baseline,
+        physiology=dataclasses.replace(baseline.physiology, points=points),
+    )
+    pair = CounterfactualPair(
+        baseline, intervention, baseline_context, intervention_context, matrix
+    )
+    return pair
 
 
 def _policy() -> ObservationPolicy:
@@ -123,10 +159,18 @@ def test_assemble_replays_one_shared_observation_process_into_fresh_six_resource
     pair = _pair(intervention)
     demographics = SyntheticDemographics(PATIENT.patient_id, "F")
     descriptor = _descriptor()
-    before = (pair, demographics, _policy(), json.loads(json.dumps(descriptor)))
+    policy = _policy()
+    ancillary_policy = _ancillary_policy()
+    before = (
+        pair,
+        demographics,
+        policy.to_mapping(),
+        (ancillary_policy.policy_id, ancillary_policy.policy_version, ancillary_policy.result_delay_days),
+        json.loads(json.dumps(descriptor)),
+    )
 
     worlds = assemble_counterfactual_ehr_worlds(
-        pair, demographics, _policy(), descriptor, _ancillary_policy()
+        pair, demographics, policy, descriptor, ancillary_policy
     )
     replay = assemble_counterfactual_ehr_worlds(
         pair, demographics, _policy(), descriptor, _ancillary_policy()
@@ -145,7 +189,9 @@ def test_assemble_replays_one_shared_observation_process_into_fresh_six_resource
     assert worlds.intervention.bundle.shape == worlds.shape  # type: ignore[union-attr]
     assert pair == before[0]
     assert demographics == before[1]
-    assert descriptor == before[3]
+    assert policy.to_mapping() == before[2]
+    assert (ancillary_policy.policy_id, ancillary_policy.policy_version, ancillary_policy.result_delay_days) == before[3]
+    assert descriptor == before[4]
     assert repr(worlds) == "CounterfactualEhrWorldPair(<evaluator-only>)"
     rendered = repr(worlds) + json.dumps(worlds.to_mapping(), sort_keys=True)
     assert "truth" not in rendered
@@ -194,6 +240,93 @@ def test_assemble_preserves_empty_ancillary_resources_for_unrecognized_and_non_g
     for worlds in (unrecognized, non_ghd):
         for member in (worlds.baseline, worlds.intervention):
             assert all(not member.bundle.rows[name] for name in GHD_ANCILLARY_RESOURCE_NAMES)  # type: ignore[union-attr]
+
+
+def test_assemble_fails_closed_for_a_healthy_pair_without_the_required_onset_evidence() -> None:
+    healthy_pair = _healthy_pair()
+    assert validate_counterfactual_pair(healthy_pair).status is CounterfactualValidationStatus.UNEVALUABLE
+
+    with pytest.raises(
+        CounterfactualWorldUnavailable, match=r"^counterfactual EHR worlds unavailable$"
+    ):
+        assemble_counterfactual_ehr_worlds(
+            healthy_pair,
+            SyntheticDemographics(PATIENT.patient_id, "F"),
+            _policy(),
+            _descriptor(),
+            _ancillary_policy(),
+        )
+
+
+def test_world_pair_constructor_rejects_mismatched_policy_ancillary_shape_frame_and_context() -> None:
+    worlds = assemble_counterfactual_ehr_worlds(
+        _pair(InterventionKind.TREATMENT_ADHERENCE),
+        SyntheticDemographics(PATIENT.patient_id, "F"),
+        _policy(),
+        _descriptor(),
+        _ancillary_policy(),
+    )
+    replacement_policy = dataclasses.replace(worlds.observation_policy, height_error_sd_cm=0.1)
+    replacement_ancillary_policy = dataclasses.replace(worlds._ancillary_policy, result_delay_days=8)
+    unbound_pair = _pair(InterventionKind.TREATMENT_ADHERENCE)
+    mismatched_context_pair = dataclasses.replace(
+        worlds._pair,
+        baseline_context=dataclasses.replace(worlds._pair.baseline_context),
+        intervention_context=dataclasses.replace(worlds._pair.intervention_context),
+    )
+    object.__setattr__(mismatched_context_pair.baseline_context, "run_seed", 99)
+    mismatched_frame = dataclasses.replace(
+        worlds.intervention,
+        frame=worlds.baseline.frame,
+    )
+    mismatched_shape = ResourceShape(
+        tuple(
+            ResourceSpec(spec.name, (*spec.field_names, "unused_field"))
+            for spec in worlds.shape.resources
+        )
+    )
+
+    candidates = (
+        (worlds.baseline, worlds.intervention, replacement_policy, worlds.shape, worlds._pair, worlds._ancillary_policy),
+        (worlds.baseline, worlds.intervention, worlds.observation_policy, worlds.shape, worlds._pair, replacement_ancillary_policy),
+        (worlds.baseline, worlds.intervention, worlds.observation_policy, worlds.shape, unbound_pair, worlds._ancillary_policy),
+        (worlds.baseline, worlds.intervention, worlds.observation_policy, worlds.shape, mismatched_context_pair, worlds._ancillary_policy),
+        (worlds.baseline, worlds.intervention, worlds.observation_policy, mismatched_shape, worlds._pair, worlds._ancillary_policy),
+        (worlds.baseline, mismatched_frame, worlds.observation_policy, worlds.shape, worlds._pair, worlds._ancillary_policy),
+    )
+    for baseline, intervention, policy, shape, pair, ancillary_policy in candidates:
+        with pytest.raises((TypeError, ValueError)):
+            CounterfactualEhrWorldPair(
+                baseline,
+                intervention,
+                worlds.matrix,
+                policy,
+                shape,
+                pair,
+                ancillary_policy,
+                worlds._observation_stream_identities,
+                worlds._observation_stream_seed,
+                worlds._observation_stream_patient_index,
+            )
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        worlds.shape = worlds.shape  # type: ignore[misc]
+
+
+@pytest.mark.parametrize("slot", ("pair", "demographics", "observation_policy", "descriptor", "ancillary_policy"))
+def test_assemble_rejects_every_untyped_input_at_the_fixed_redacted_boundary(slot: str) -> None:
+    inputs: dict[str, object] = {
+        "pair": _pair(InterventionKind.PHYSIOLOGY_SEVERITY),
+        "demographics": SyntheticDemographics(PATIENT.patient_id, "F"),
+        "observation_policy": _policy(),
+        "descriptor": _descriptor(),
+        "ancillary_policy": _ancillary_policy(),
+    }
+    inputs[slot] = object()
+
+    with pytest.raises(
+        CounterfactualWorldUnavailable, match=r"^counterfactual EHR worlds unavailable$"
+    ):
+        assemble_counterfactual_ehr_worlds(**inputs)  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize(

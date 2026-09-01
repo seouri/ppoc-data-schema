@@ -195,6 +195,8 @@ class CounterfactualEhrWorldPair:
     _pair: CounterfactualPair = field(repr=False)
     _ancillary_policy: GhdAncillaryPolicy = field(repr=False)
     _observation_stream_identities: tuple[str, ...] = field(repr=False)
+    _observation_stream_seed: int = field(repr=False)
+    _observation_stream_patient_index: int = field(repr=False)
 
     def __post_init__(self) -> None:
         if not isinstance(self.baseline, CohortMember) or not isinstance(self.intervention, CohortMember):
@@ -221,10 +223,32 @@ class CounterfactualEhrWorldPair:
             or self.baseline.demographics.patient_id != self._pair.baseline_context.patient.patient_id
         ):
             raise ValueError("worlds must retain one paired synthetic identity")
+        pair_report = validate_counterfactual_pair(self._pair)
+        contexts = (self._pair.baseline_context, self._pair.intervention_context)
+        if (
+            pair_report.status is not CounterfactualValidationStatus.PASS
+            or contexts[0].world != "baseline"
+            or contexts[1].world != "intervention"
+            or contexts[0].matrix != self.matrix
+            or contexts[1].matrix != self.matrix
+            or contexts[0].patient != contexts[1].patient
+            or contexts[0].run_seed != contexts[1].run_seed
+            or contexts[0].patient_index != contexts[1].patient_index
+            or self._observation_stream_seed != contexts[0].run_seed
+            or self._observation_stream_patient_index != contexts[0].patient_index
+        ):
+            raise ValueError("worlds must retain one valid paired stream configuration")
         for member in (self.baseline, self.intervention):
             if member.bundle is None or member.bundle.shape != self.shape or member.bundle.source_frame is not member.frame:
                 raise ValueError("world members must bind one exact resource bundle to each frame")
-            if member.frame.policy_version != self.observation_policy.policy_version:
+            if (
+                member.frame.policy_version != self.observation_policy.policy_version
+                or member.frame.truth.policy != self.observation_policy
+                or validate_observation_frame(member.frame).status is not ObservationValidationStatus.PASS
+                or validate_ghd_ancillary_bundle(
+                    member.bundle, member, self._ancillary_policy
+                ).status is not AncillaryBundleValidationStatus.PASS
+            ):
                 raise ValueError("world frames must use the shared observation policy")
 
     def to_mapping(self) -> dict[str, object]:
@@ -340,6 +364,8 @@ def assemble_counterfactual_ehr_worlds(
             pair,
             ancillary_policy,
             tuple(observation_stream_identity(name) for name in OBSERVATION_STREAM_NAMES),
+            run_seed,
+            patient_index,
         )
     except Exception:  # noqa: BLE001 - fixed redacted evaluator boundary
         raise CounterfactualWorldUnavailable("counterfactual EHR worlds unavailable") from None
