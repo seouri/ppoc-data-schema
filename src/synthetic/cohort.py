@@ -28,6 +28,10 @@ from synthetic.calibration_targets import (
 from synthetic.models import AgeRegimeDisorderTrajectory, DisorderKind, PatientState
 from synthetic.native.age_regime_disorder import AgeRegimeDisorderKernel
 from synthetic.native.age_regimes import AgeRegimeConfig, AgeRegimeTrajectoryKernel
+from synthetic.native.ancillary_contract import (
+    GHD_ANCILLARY_RESOURCE_NAMES,
+    ghd_ancillary_rows_are_valid,
+)
 from synthetic.native.clinical_modules import GrowthDisorderModule
 from synthetic.native.observations import (
     MeasurementObservation,
@@ -781,6 +785,20 @@ def _snapshot_visible_bundle(
             )
             report = validate_observed_resources(validation_bundle)
             if report.status is ResourceValidationStatus.FAIL:
+                raise ValueError
+            visit_ids = frozenset(
+                dict(row.values)["visit_id"] for row in snapshot.rows["visits"]
+            )
+            ancillary_rows = {
+                resource_name: snapshot.rows[resource_name]
+                for resource_name in GHD_ANCILLARY_RESOURCE_NAMES
+            }
+            if not ghd_ancillary_rows_are_valid(
+                snapshot.patient_id,
+                snapshot.shape,
+                ancillary_rows,
+                visit_ids,
+            ):
                 raise ValueError
         except Exception:  # noqa: BLE001 - validation callbacks must be redacted
             raise ValueError("bundle.rows contain invalid visible values") from None

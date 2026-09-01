@@ -20,6 +20,7 @@ VISIBLE_NATIVE_GENERATION = (
     COHORT,
     ROOT / "src" / "synthetic" / "native" / "age_regime_disorder.py",
     ROOT / "src" / "synthetic" / "native" / "age_regimes.py",
+    ROOT / "src" / "synthetic" / "native" / "ancillary_contract.py",
     ROOT / "src" / "synthetic" / "native" / "clinical_modules.py",
     ROOT / "src" / "synthetic" / "native" / "healthy.py",
     ROOT / "src" / "synthetic" / "native" / "observations.py",

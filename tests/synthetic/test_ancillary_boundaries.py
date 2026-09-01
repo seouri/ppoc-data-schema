@@ -11,6 +11,19 @@ _ALLOWED_REPOSITORY_SYMBOLS = {
     "synthetic.models": frozenset(
         {"AgeRegimeDisorderTrajectory", "ClinicalEvent", "DisorderKind"}
     ),
+    "synthetic.native.ancillary_contract": frozenset(
+        {
+            "GHD_ANCILLARY_RESOURCE_NAMES",
+            "GHD_DIAGNOSIS_CODE",
+            "GHD_IGF1_COMPONENT",
+            "GHD_LAB_COMPONENT_NAMES",
+            "GHD_LAB_RESULT_FLAG",
+            "GHD_MEDICATION_NAME",
+            "GHD_MEDICATION_RECORD_TYPE",
+            "GHD_REFERRAL_SPECIALTY",
+            "GHD_STIM_COMPONENT",
+        }
+    ),
     "synthetic.native.observations": frozenset(
         {"ObservationValidationStatus", "RecordedEvent", "RecordedEventKind", "validate_observation_frame"}
     ),
