@@ -158,6 +158,7 @@ def test_development_runtime_binds_reference_and_test_only_oracle() -> None:
         "oracle-revision",
         "oracle-kind",
         "runtime-dependency",
+        "binding-version",
         "binding-id",
         "schema",
         "test-only",
@@ -253,6 +254,9 @@ def test_development_runtime_rejects_mismatched_composition_before_derivation(
         )
     elif mismatch == "binding-id":
         binding = replace(binding, binding_id="different-binding-v1")
+    elif mismatch == "binding-version":
+        binding = replace(binding)
+        object.__setattr__(binding, "binding_version", "different-binding-v1")
     elif mismatch == "schema":
         binding = replace(binding, schema_fingerprint="4" * 64)
     elif mismatch == "test-only":
