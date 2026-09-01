@@ -155,6 +155,54 @@ def test_full_bundle_validator_keeps_visible_base_failures_above_malformed_priva
     assert _check(report, "base_resources") == ("FAIL", "BASE_RESOURCES_INVALID")
 
 
+def test_full_bundle_validator_keeps_visible_identity_failure_above_malformed_private_evidence() -> None:
+    member, base, projection = _merge_inputs()
+    from synthetic.native.ancillary_bundle import merge_ghd_ancillary_resources
+
+    merged = merge_ghd_ancillary_resources(base, member, projection, _policy())
+    patient = merged.rows["patients"][0]
+    object.__setattr__(
+        patient,
+        "values",
+        tuple((name, "M" if name == "sex" else value) for name, value in patient.values),
+    )
+    opaque_frame = object()
+    object.__setattr__(member, "frame", opaque_frame)
+    object.__setattr__(merged, "source_frame", opaque_frame)
+
+    report = validate_ghd_ancillary_bundle(merged, member, _policy())
+
+    assert report.status is AncillaryBundleValidationStatus.FAIL
+    assert _check(report, "bundle_identity") == ("FAIL", "BUNDLE_IDENTITY_INVALID")
+
+
+def test_full_bundle_validator_keeps_visible_ancillary_link_failure_above_malformed_private_evidence() -> None:
+    member, base, projection = _merge_inputs()
+    from synthetic.native.ancillary_bundle import merge_ghd_ancillary_resources
+
+    merged = merge_ghd_ancillary_resources(base, member, projection, _policy())
+    missing_visit_id = "syn-00000000000000000000000000000000"
+    for resource_name in ("labs", "medications", "referrals"):
+        for row in merged.rows[resource_name]:
+            object.__setattr__(
+                row,
+                "values",
+                tuple(
+                    (name, missing_visit_id if name == "visit_id" else value)
+                    for name, value in row.values
+                ),
+            )
+    opaque_frame = object()
+    object.__setattr__(member, "frame", opaque_frame)
+    object.__setattr__(merged, "source_frame", opaque_frame)
+
+    report = validate_ghd_ancillary_bundle(merged, member, _policy())
+
+    assert report.status is AncillaryBundleValidationStatus.FAIL
+    assert _check(report, "ancillary_resources") == ("FAIL", "ANCILLARY_RESOURCES_INVALID")
+    assert missing_visit_id not in repr(report) + json.dumps(report.to_mapping(), sort_keys=True)
+
+
 def test_full_bundle_validator_rejects_nested_private_values_without_rendering_them() -> None:
     member, base, projection = _merge_inputs()
     from synthetic.native.ancillary_bundle import merge_ghd_ancillary_resources
@@ -174,6 +222,52 @@ def test_full_bundle_validator_rejects_nested_private_values_without_rendering_t
     rendered = repr(report) + json.dumps(report.to_mapping(), sort_keys=True)
     assert "ObservationFrame" not in rendered
     assert member.demographics.patient_id not in rendered
+
+
+def test_full_bundle_validator_rejects_nested_hidden_event_mapping_without_rendering_it() -> None:
+    member, base, projection = _merge_inputs()
+    from synthetic.native.ancillary_bundle import merge_ghd_ancillary_resources
+
+    merged = merge_ghd_ancillary_resources(base, member, projection, _policy())
+    hidden_event = {"event_type": "treatment_response", "age_days": 1900}
+    lab = merged.rows["labs"][0]
+    object.__setattr__(
+        lab,
+        "values",
+        tuple((name, hidden_event if name == "result_value" else value) for name, value in lab.values),
+    )
+
+    report = validate_ghd_ancillary_bundle(merged, member, _policy())
+
+    assert report.status is AncillaryBundleValidationStatus.FAIL
+    assert _check(report, "truth_boundary") == ("FAIL", "TRUTH_BOUNDARY_INVALID")
+    rendered = repr(report) + json.dumps(report.to_mapping(), sort_keys=True)
+    assert "treatment_response" not in rendered
+    assert "1900" not in rendered
+
+
+def test_full_bundle_validator_rejects_marker_containing_leaky_bundle_repr() -> None:
+    member, base, projection = _merge_inputs()
+    from synthetic.native.ancillary_bundle import merge_ghd_ancillary_resources
+
+    merged = merge_ghd_ancillary_resources(base, member, projection, _policy())
+
+    class LeakyBundle(ObservedResourceBundle):
+        def __repr__(self) -> str:
+            return "ObservedResourceBundle(<evaluator-only>) hidden_event_age=1900"
+
+    leaky = LeakyBundle(
+        merged.patient_id,
+        merged.shape,
+        merged.rows,
+        merged.clinical_descendants,
+        merged.source_frame,
+    )
+    report = validate_ghd_ancillary_bundle(leaky, member, _policy())
+
+    assert report.status is AncillaryBundleValidationStatus.FAIL
+    assert _check(report, "truth_boundary") == ("FAIL", "TRUTH_BOUNDARY_INVALID")
+    assert "hidden_event_age" not in repr(report) + json.dumps(report.to_mapping(), sort_keys=True)
 
 
 def test_full_bundle_validator_returns_redacted_unevaluable_report_for_malformed_typed_input() -> None:

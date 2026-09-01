@@ -12,6 +12,7 @@ from collections.abc import Mapping
 from copy import copy
 from dataclasses import dataclass
 from enum import Enum
+from math import isfinite
 from types import MappingProxyType
 from typing import ClassVar
 
@@ -25,6 +26,7 @@ from synthetic.native.ancillary import (
 )
 from synthetic.native.observations import ObservationFrame
 from synthetic.native.resources import (
+    BASE_RESOURCE_NAMES,
     ObservedResourceBundle,
     ResourceRow,
     ResourceValidationStatus,
@@ -254,18 +256,19 @@ def _bundle_identity_state(
     if not isinstance(bundle, ObservedResourceBundle) or not isinstance(member, CohortMember):
         return AncillaryBundleValidationStatus.UNEVALUABLE, "MALFORMED_BUNDLE"
     try:
+        if (
+            bundle.patient_id != member.demographics.patient_id
+            or not _patient_row_matches_member(bundle, member)
+        ):
+            return AncillaryBundleValidationStatus.FAIL, "BUNDLE_IDENTITY_INVALID"
         if not isinstance(bundle.source_frame, ObservationFrame) or not isinstance(
             member.frame, ObservationFrame
         ):
             return AncillaryBundleValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
-        if (
-            bundle.patient_id != member.demographics.patient_id
-            or bundle.source_frame is not member.frame
-            or not _patient_row_matches_member(bundle, member)
-        ):
+        if bundle.source_frame is not member.frame:
             return AncillaryBundleValidationStatus.FAIL, "BUNDLE_IDENTITY_INVALID"
-    except Exception:  # noqa: BLE001 - typed-object corruption stays redacted
-        return AncillaryBundleValidationStatus.UNEVALUABLE, "MALFORMED_BUNDLE"
+    except Exception:  # noqa: BLE001 - malformed visible identity is a fixed failure
+        return AncillaryBundleValidationStatus.FAIL, "BUNDLE_IDENTITY_INVALID"
     return AncillaryBundleValidationStatus.PASS, "OK"
 
 
@@ -304,11 +307,9 @@ def _ancillary_resources_state(
             bundle.shape,
             {name: bundle.rows[name] for name in GHD_ANCILLARY_RESOURCE_NAMES},
         )
-        status = validate_ghd_ancillary_resources(member, projection, policy).status
-        if status is AncillaryValidationStatus.PASS and not _projection_visits_resolve(
-            _zeroed_base(bundle), projection
-        ):
+        if not _projection_visits_resolve(_zeroed_base_validation_view(bundle), projection):
             return AncillaryBundleValidationStatus.FAIL, "ANCILLARY_RESOURCES_INVALID"
+        status = validate_ghd_ancillary_resources(member, projection, policy).status
     except Exception:  # noqa: BLE001 - malformed rows cannot escape the boundary
         return AncillaryBundleValidationStatus.FAIL, "ANCILLARY_RESOURCES_INVALID"
     if status is AncillaryValidationStatus.PASS:
@@ -328,29 +329,55 @@ def _truth_boundary_state(
         expected_keys = {"contract", "patient_id", "resources", "clinical_descendants"}
         if not isinstance(mapping, Mapping) or set(mapping) != expected_keys:
             return AncillaryBundleValidationStatus.FAIL, "TRUTH_BOUNDARY_INVALID"
-        if not _visible_mapping_is_safe(mapping):
+        if not _visible_mapping_is_safe(bundle, mapping):
             return AncillaryBundleValidationStatus.FAIL, "TRUTH_BOUNDARY_INVALID"
-        if "<evaluator-only>" not in repr(bundle):
+        if repr(bundle) != "ObservedResourceBundle(<evaluator-only>)":
             return AncillaryBundleValidationStatus.FAIL, "TRUTH_BOUNDARY_INVALID"
     except Exception:  # noqa: BLE001 - malformed wrappers are not rendered to callers
         return AncillaryBundleValidationStatus.UNEVALUABLE, "MALFORMED_BUNDLE"
     return AncillaryBundleValidationStatus.PASS, "OK"
 
 
-def _visible_mapping_is_safe(value: object) -> bool:
-    if value is None or isinstance(value, (str, int, float, bool)):
-        return True
-    if isinstance(value, Mapping):
-        forbidden_keys = {"source_frame", "truth", "latent_trajectory", "hidden_events"}
+def _visible_scalar_is_safe(value: object) -> bool:
+    return isinstance(value, str) or (
+        isinstance(value, int) and not isinstance(value, bool)
+    ) or (isinstance(value, float) and isfinite(value))
+
+
+def _visible_mapping_is_safe(bundle: ObservedResourceBundle, mapping: Mapping[object, object]) -> bool:
+    if (
+        mapping.get("contract") != "observed-resource-bundle-v1"
+        or not _visible_scalar_is_safe(mapping.get("patient_id"))
+    ):
+        return False
+    resources = mapping.get("resources")
+    if not isinstance(resources, Mapping) or tuple(resources) != BASE_RESOURCE_NAMES:
+        return False
+    try:
+        for resource_name in BASE_RESOURCE_NAMES:
+            rows = resources[resource_name]
+            fields = bundle.shape.field_names(resource_name)
+            if not isinstance(rows, list):
+                return False
+            for row in rows:
+                if (
+                    not isinstance(row, Mapping)
+                    or tuple(row) != fields
+                    or not all(_visible_scalar_is_safe(value) for value in row.values())
+                ):
+                    return False
+        descendants = mapping.get("clinical_descendants")
+        descendant_fields = ("patient_id", "visit_id", "age_days", "event_kind", "code")
+        if not isinstance(descendants, list):
+            return False
         return all(
-            isinstance(key, str)
-            and key not in forbidden_keys
-            and _visible_mapping_is_safe(nested)
-            for key, nested in value.items()
+            isinstance(descendant, Mapping)
+            and tuple(descendant) == descendant_fields
+            and all(_visible_scalar_is_safe(value) for value in descendant.values())
+            for descendant in descendants
         )
-    if isinstance(value, (list, tuple)):
-        return all(_visible_mapping_is_safe(nested) for nested in value)
-    return False
+    except Exception:  # noqa: BLE001 - never render malformed public values
+        return False
 
 
 def validate_ghd_ancillary_bundle(
