@@ -417,6 +417,6 @@ Package the complete feature diff and dispatch a final reviewer on the most capa
 
 Confirm the feature worktree is clean except ignored SDD evidence, inspect staged names/stat/whitespace, verify git log contains only scoped commits after 603b874, and run git rev-parse HEAD. Do not remove unrelated caches or existing worktrees.
 
-- [ ] **Step 5: Merge and push only after review and verification**
+- [x] **Step 5: Merge and push only after review and verification**
 
 From the main checkout, fast-forward main to the reviewed feature tip, push origin main, fetch origin main, and verify git rev-parse HEAD equals git rev-parse origin/main. Preserve pre-existing untracked __pycache__ directories. Record the final hash and verification outputs in the completion evidence.
