@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import inspect
 import json
+import traceback
 from pathlib import Path
 
 import pytest
@@ -19,6 +20,7 @@ from synthetic.models import LatentPoint, PatientState
 from synthetic.package_export import (
     PackageExportMetadata,
     PackageExportUnavailable,
+    export_counterfactual_ehr_world_pair,
     export_exact_schema_package,
     export_observed_resource_package,
 )
@@ -176,6 +178,38 @@ def test_bound_oracle_discards_underlying_failure_text(tmp_path: Path) -> None:
     assert error.value.__cause__ is None
 
 
+def test_bound_oracle_discards_cause_from_underlying_unavailable(tmp_path: Path) -> None:
+    secret = "confidential chained oracle detail"
+
+    class LeakyUnavailableOracle(CountingOracle):
+        def derive(self, package_root: Path, descriptor: dict) -> object:
+            del package_root, descriptor
+            self.calls += 1
+            try:
+                raise RuntimeError(secret)
+            except RuntimeError as cause:
+                raise DerivationBindingUnavailable() from cause
+
+    oracle = LeakyUnavailableOracle()
+    bound = BoundDerivationOracle(oracle, test_derivation_binding())
+
+    with pytest.raises(DerivationBindingUnavailable) as error:
+        bound.derive(tmp_path, {})
+
+    rendered = "".join(
+        traceback.format_exception(
+            type(error.value),
+            error.value,
+            error.value.__traceback__,
+        )
+    )
+    assert str(error.value) == "derivation binding is unavailable"
+    assert error.value.args == ("derivation binding is unavailable",)
+    assert error.value.__cause__ is None
+    assert error.value.__context__ is None
+    assert secret not in rendered
+
+
 def test_incomplete_non_test_binding_is_rejected_before_oracle_or_output(tmp_path: Path) -> None:
     value = test_derivation_binding().to_mapping()
     value["test_only"] = False
@@ -302,6 +336,7 @@ def test_binding_integration_has_no_reader_network_synthea_or_implicit_call_path
     for function in (
         export_exact_schema_package,
         export_observed_resource_package,
+        export_counterfactual_ehr_world_pair,
         generate_smoke,
     ):
         parameter = inspect.signature(function).parameters["derivation_binding"]

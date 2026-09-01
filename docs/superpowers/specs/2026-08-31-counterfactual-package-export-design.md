@@ -41,8 +41,7 @@ def export_counterfactual_ehr_world_pair(
     *,
     metadata: PackageExportMetadata,
     derivation_oracle: DerivationOracle,
-    trusted_derivation_fingerprint: str,
-    trusted_derivation_test_only: bool,
+    derivation_binding: DerivationBinding,
 ) -> Path: ...
 ```
 

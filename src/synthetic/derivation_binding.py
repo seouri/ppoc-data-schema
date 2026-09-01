@@ -630,15 +630,15 @@ class BoundDerivationOracle:
                 or not callable(derive)
             ):
                 raise DerivationBindingUnavailable()
-        except DerivationBindingUnavailable:
-            raise
-        except Exception:  # noqa: BLE001 - adapter failures are deliberately redacted.
-            raise DerivationBindingUnavailable() from None
-
-        self.oracle_id = oracle_id
-        self._oracle = oracle
-        self._derive = derive
-        self._binding = binding
+        except Exception:  # noqa: BLE001,S110 - adapter failures are deliberately redacted.
+            pass
+        else:
+            self.oracle_id = oracle_id
+            self._oracle = oracle
+            self._derive = derive
+            self._binding = binding
+            return
+        raise DerivationBindingUnavailable() from None
 
     def derive(
         self,
@@ -658,8 +658,8 @@ class BoundDerivationOracle:
                 or result.test_only is not self._binding.test_only
             ):
                 raise DerivationBindingUnavailable()
+        except Exception:  # noqa: BLE001,S110 - adapter failures are deliberately redacted.
+            pass
+        else:
             return result
-        except DerivationBindingUnavailable:
-            raise
-        except Exception:  # noqa: BLE001 - adapter failures are deliberately redacted.
-            raise DerivationBindingUnavailable() from None
+        raise DerivationBindingUnavailable() from None

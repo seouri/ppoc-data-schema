@@ -48,8 +48,7 @@ def export_exact_schema_package(
     *,
     metadata: PackageExportMetadata,
     derivation_oracle: DerivationOracle,
-    trusted_derivation_fingerprint: str,
-    trusted_derivation_test_only: bool,
+    derivation_binding: DerivationBinding,
 ) -> Path: ...
 
 
@@ -60,8 +59,7 @@ def export_observed_resource_package(
     *,
     metadata: PackageExportMetadata,
     derivation_oracle: DerivationOracle,
-    trusted_derivation_fingerprint: str,
-    trusted_derivation_test_only: bool,
+    derivation_binding: DerivationBinding,
 ) -> Path: ...
 ```
 
