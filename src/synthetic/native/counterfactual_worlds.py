@@ -31,6 +31,7 @@ from synthetic.native.observations import (
     OBSERVATION_STREAM_NAMES,
     ObservationFrame,
     ObservationPolicy,
+    ObservationTruth,
     ObservationValidationStatus,
     generate_observation_frame,
     observation_stream_identity,
@@ -441,6 +442,20 @@ def _check_pair_binding(worlds: CounterfactualEhrWorldPair) -> CounterfactualWor
         or pair.intervention_context.world != "intervention"
     ):
         return CounterfactualWorldValidationStatus.FAIL
+    for member in (baseline, intervention):
+        if not isinstance(member.frame, ObservationFrame) or not isinstance(
+            member.bundle, ObservedResourceBundle
+        ):
+            return CounterfactualWorldValidationStatus.UNEVALUABLE
+        if member.bundle.source_frame is not member.frame:
+            return CounterfactualWorldValidationStatus.FAIL
+        truth = member.frame.truth
+        if not isinstance(truth, ObservationTruth) or truth.latent_trajectory is None:
+            return CounterfactualWorldValidationStatus.UNEVALUABLE
+        if not isinstance(truth.latent_trajectory, type(member.trajectory)):
+            return CounterfactualWorldValidationStatus.UNEVALUABLE
+        if truth.latent_trajectory is not member.trajectory:
+            return CounterfactualWorldValidationStatus.FAIL
     return _report_status(validate_counterfactual_pair(pair), CounterfactualValidationStatus)
 
 

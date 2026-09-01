@@ -4,18 +4,21 @@ import dataclasses
 
 import pytest
 
-from synthetic.native.counterfactual import InterventionKind
+from synthetic.native.counterfactual import InterventionKind, generate_counterfactual_pair
 from synthetic.native.counterfactual_worlds import (
     CounterfactualWorldValidationStatus,
     assemble_counterfactual_ehr_worlds,
     validate_counterfactual_ehr_worlds,
 )
-from synthetic.native.resources import SyntheticDemographics
+from synthetic.native.observations import MeasurementAvailability
+from synthetic.native.resources import ResourceShape, ResourceSpec, SyntheticDemographics
 from tests.synthetic.test_counterfactual_world_assembly import (
+    AGES,
     PATIENT,
     _ancillary_policy,
     _descriptor,
     _familial_kernel,
+    _kernel,
     _pair,
     _pair_from,
     _policy,
@@ -189,6 +192,140 @@ def test_validator_marks_malformed_hidden_pair_binding_unevaluable_when_visible_
 
     assert report.status is CounterfactualWorldValidationStatus.UNEVALUABLE
     assert next(check for check in report.checks if check.name == "pair_binding").status is CounterfactualWorldValidationStatus.UNEVALUABLE
+
+
+def test_validator_rejects_cross_pair_frame_and_bundle_splice_with_typed_but_wrong_provenance() -> None:
+    worlds = _worlds(InterventionKind.EARLIER_RECOGNITION)
+    other = assemble_counterfactual_ehr_worlds(
+        generate_counterfactual_pair(
+            _kernel(), PATIENT, AGES, 20260901, 12, InterventionKind.EARLIER_RECOGNITION
+        ),
+        SyntheticDemographics(PATIENT.patient_id, "F"),
+        _policy(),
+        _descriptor(),
+        _ancillary_policy(),
+    )
+    assert worlds._pair.baseline_context.run_seed != other._pair.baseline_context.run_seed
+    object.__setattr__(worlds.intervention, "frame", other.intervention.frame)
+    object.__setattr__(worlds.intervention, "bundle", other.intervention.bundle)
+
+    report = validate_counterfactual_ehr_worlds(worlds)
+
+    assert report.status is CounterfactualWorldValidationStatus.FAIL
+    assert next(check for check in report.checks if check.name == "pair_binding").status is CounterfactualWorldValidationStatus.FAIL
+
+
+def test_validator_detects_changed_demographics_and_patient_row_at_the_shared_demographics_check() -> None:
+    worlds = _worlds(InterventionKind.PHYSIOLOGY_SEVERITY)
+    object.__setattr__(worlds.intervention, "demographics", SyntheticDemographics(PATIENT.patient_id, "M"))
+
+    demographics_report = validate_counterfactual_ehr_worlds(worlds)
+
+    assert demographics_report.status is CounterfactualWorldValidationStatus.FAIL
+    assert next(check for check in demographics_report.checks if check.name == "shared_demographics").status is CounterfactualWorldValidationStatus.FAIL
+    assert PATIENT.patient_id not in repr(demographics_report)
+
+    worlds = _worlds(InterventionKind.PHYSIOLOGY_SEVERITY)
+    patient = worlds.intervention.bundle.rows["patients"][0]  # type: ignore[union-attr]
+    object.__setattr__(
+        patient,
+        "values",
+        tuple((name, "M" if name == "sex" else value) for name, value in patient.values),
+    )
+
+    patient_row_report = validate_counterfactual_ehr_worlds(worlds)
+
+    assert patient_row_report.status is CounterfactualWorldValidationStatus.FAIL
+    assert next(check for check in patient_row_report.checks if check.name == "shared_demographics").status is CounterfactualWorldValidationStatus.FAIL
+
+
+@pytest.mark.parametrize(
+    ("field_name", "replacement"),
+    (("age_in_days", 1), ("visit_id", "syn-unlinked")),
+)
+def test_validator_detects_visit_age_and_identifier_tampering_independently(
+    field_name: str, replacement: object
+) -> None:
+    worlds = _worlds(InterventionKind.PHYSIOLOGY_SEVERITY)
+    visit = worlds.intervention.bundle.rows["visits"][0]  # type: ignore[union-attr]
+    object.__setattr__(
+        visit,
+        "values",
+        tuple((name, replacement if name == field_name else value) for name, value in visit.values),
+    )
+
+    report = validate_counterfactual_ehr_worlds(worlds)
+
+    assert report.status is CounterfactualWorldValidationStatus.FAIL
+    assert next(check for check in report.checks if check.name == "resource_invariants").status is CounterfactualWorldValidationStatus.FAIL
+    assert str(replacement) not in repr(report)
+
+
+def test_validator_detects_measurement_availability_and_clinical_descendant_tampering() -> None:
+    worlds = _worlds(InterventionKind.PHYSIOLOGY_SEVERITY)
+    measurement = next(
+        item
+        for item in worlds.intervention.frame.visits[0].measurements
+        if item.recorded_value is not None
+    )
+    object.__setattr__(measurement, "availability", MeasurementAvailability.MISSING)
+
+    availability_report = validate_counterfactual_ehr_worlds(worlds)
+
+    assert availability_report.status is CounterfactualWorldValidationStatus.FAIL
+    assert next(check for check in availability_report.checks if check.name == "observation_invariants").status is CounterfactualWorldValidationStatus.FAIL
+
+    worlds = _worlds(InterventionKind.PHYSIOLOGY_SEVERITY)
+    descendant = worlds.intervention.bundle.clinical_descendants[0]  # type: ignore[union-attr]
+    object.__setattr__(descendant, "code", "SYN-TAMPERED")
+
+    descendant_report = validate_counterfactual_ehr_worlds(worlds)
+
+    assert descendant_report.status is CounterfactualWorldValidationStatus.FAIL
+    assert next(check for check in descendant_report.checks if check.name == "resource_invariants").status is CounterfactualWorldValidationStatus.FAIL
+    assert "SYN-TAMPERED" not in repr(descendant_report)
+
+
+def test_validator_detects_non_link_ancillary_values_and_descriptor_shape_order_tampering() -> None:
+    worlds = _worlds(InterventionKind.PHYSIOLOGY_SEVERITY)
+    lab = worlds.intervention.bundle.rows["labs"][0]  # type: ignore[union-attr]
+    object.__setattr__(
+        lab,
+        "values",
+        tuple((name, "SYN-ALTERED" if name == "result_component_name" else value) for name, value in lab.values),
+    )
+
+    ancillary_report = validate_counterfactual_ehr_worlds(worlds)
+
+    assert ancillary_report.status is CounterfactualWorldValidationStatus.FAIL
+    assert next(check for check in ancillary_report.checks if check.name == "resource_invariants").status is CounterfactualWorldValidationStatus.FAIL
+    assert "SYN-ALTERED" not in repr(ancillary_report)
+
+    worlds = _worlds(InterventionKind.PHYSIOLOGY_SEVERITY)
+    tampered_shape = ResourceShape(
+        tuple(
+            ResourceSpec(spec.name, tuple(reversed(spec.field_names)))
+            if spec.name == "labs"
+            else spec
+            for spec in worlds.shape.resources
+        )
+    )
+    object.__setattr__(worlds, "shape", tampered_shape)
+
+    shape_report = validate_counterfactual_ehr_worlds(worlds)
+
+    assert shape_report.status is CounterfactualWorldValidationStatus.FAIL
+    assert next(check for check in shape_report.checks if check.name == "resource_invariants").status is CounterfactualWorldValidationStatus.FAIL
+
+
+def test_validator_detects_bundle_source_frame_binding_tampering() -> None:
+    worlds = _worlds(InterventionKind.PHYSIOLOGY_SEVERITY)
+    object.__setattr__(worlds.intervention.bundle, "source_frame", worlds.baseline.frame)  # type: ignore[arg-type]
+
+    report = validate_counterfactual_ehr_worlds(worlds)
+
+    assert report.status is CounterfactualWorldValidationStatus.FAIL
+    assert next(check for check in report.checks if check.name == "pair_binding").status is CounterfactualWorldValidationStatus.FAIL
 
 
 def test_validator_returns_only_unevaluable_checks_for_an_untyped_world_container() -> None:
