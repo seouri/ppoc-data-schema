@@ -656,6 +656,85 @@ def evaluate_loaded_rows(
 
 A passing comparison binds the supplied candidate and reference implementations; it does not make either clinically authoritative. An independently reviewed reference implementation, reference standard, code-set decision, fixed reference fixture, and data-custodian approval are prerequisites for using a passing report in a release decision. CI fixtures are wholly fictional. In governed use, a separately controlled process privately loads both candidate and reference inputs under required review controls before passing the already-loaded rows to this evaluator. Task utility is a separate non-authority evidence boundary governed by its own approved policy. This evaluator-only parity gate does not establish clinical validity, real-population prevalence, privacy/non-matchability, release approval, or Synthea conformance; those require separate approved evidence and governance.
 
+## Authoritative derivation binding
+
+`DERIVATION_BINDING_VERSION = "derivation-binding-v1"` identifies the immutable `DerivationBinding` supplied alongside every injected derivation oracle. It is a binding record, not an oracle result: the caller loads it before export, passes it explicitly as `derivation_binding`, and the exporter verifies that its oracle identity, implementation fingerprint, schema fingerprint, and `test_only` classification match. The binding records aggregate-safe identities and digests only. Its required golden categories are exactly `filter_order`, `age_boundaries`, `missingness`, `harrall_outlier`, `biv_filtering`, `velocity_variants`, and `rounding`.
+
+The fictional example below is explicitly test-only. It contains no real paths, rows, review prose, or production secrets; a pending review is represented only by empty fields. It is suitable for wholly fictional tests because incomplete golden, fuzz, parity, and review evidence stays `UNEVALUABLE`, not passing evidence.
+
+```python
+from synthetic.derivation_binding import DerivationBinding
+from synthetic.package_export import export_observed_resource_package
+from synthetic.schema_contract import EXPECTED_SCHEMA_FINGERPRINT
+from tests.synthetic.fakes import IdentityPreservingTestDerivationOracle
+
+test_binding = DerivationBinding.from_mapping(
+    {
+        "binding_version": "derivation-binding-v1",
+        "binding_id": "fictional-test-binding-v1",
+        "schema_fingerprint": EXPECTED_SCHEMA_FINGERPRINT,
+        "oracle": {
+            "oracle_id": "identity-preserving-test-oracle-v1",
+            "implementation_fingerprint": "0123456789abcdef" * 4,
+            "source_revision": "fictional-revision-v1",
+            "dependency_fingerprint": "a" * 64,
+            "source_kind": "approved_parity_harness",
+        },
+        "reference_standard": {
+            "standard_id": "fictional-standard-v1",
+            "standard_fingerprint": "b" * 64,
+            "version": "fictional-standard-v1",
+        },
+        "golden_evidence": {
+            "manifest_id": None,
+            "manifest_fingerprint": None,
+            "parity_contract": None,
+            "parity_report_id": None,
+            "parity_report_fingerprint": None,
+            "parity_status": "UNEVALUABLE",
+            "candidate_implementation_fingerprint": None,
+            "reference_implementation_fingerprint": None,
+            "parity_schema_fingerprint": None,
+            "covered_categories": [
+                "filter_order",
+                "age_boundaries",
+                "missingness",
+                "harrall_outlier",
+                "biv_filtering",
+                "velocity_variants",
+                "rounding",
+            ],
+            "bidirectional_case_count": 0,
+            "synthetic_fuzz_case_count": 0,
+            "fuzz_corpus_fingerprint": None,
+        },
+        "review": {
+            "review_id": None,
+            "review_fingerprint": None,
+            "reviewed_at": None,
+            "reviewer_role": None,
+            "status": "PENDING",
+        },
+        "test_only": True,
+    }
+)
+
+exported = export_observed_resource_package(
+    fictional_bundles,
+    fictional_descriptor_mapping,
+    fictional_destination,
+    metadata=fictional_metadata,
+    derivation_oracle=IdentityPreservingTestDerivationOracle(),
+    derivation_binding=test_binding,
+)
+```
+
+`IdentityPreservingTestDerivationOracle` is explicitly test-only: it copies fictional visible identity fields and is not an authoritative clinical derivation implementation. A test-only binding can support fictional testing only; it cannot become an approved non-test binding by changing the caller or oracle result. An approved non-test binding has `test_only=False`, complete matching golden, parity, fuzz, schema, oracle, reference-standard, and approved-review evidence, and a `PASS` report. Status precedence is `FAIL > UNEVALUABLE > PASS`; missing evidence is never converted to zero or `PASS`.
+
+The binding evaluator is aggregate-only and serializes no rows, paths, or secrets. It does not execute an external harness, calibration, held-out, privacy, native-trajectory, temporal, prevalence, or Synthea route. A data custodian retains golden inputs/outputs, fuzz rows, and parity report bytes; only safe IDs/digests are recorded in the repository. The production command-line interface still fails closed with `No production growth reference or authoritative derivation oracle is configured` because this repository does not ship an approved oracle.
+
+Software validation of a binding is not clinical validity, privacy validation, prevalence validation, Synthea conformance, or release authorization. An approved binding is necessary but not sufficient for clinical or release claims; those need their own approved evidence and governance. Synthea remains an optional later engine-conformance route.
+
 ## Exact-schema observed-resource package export
 
 `export_observed_resource_package` is the development-only bridge from one or more passing in-memory observed-resource bundles to an exact-schema, synthetic-only package. The caller supplies an already-loaded descriptor mapping; the exporter does not accept a descriptor path, a real-data root, a calibration input, a held-out report, a privacy policy, or a Synthea input. Every bundle must already validate as `PASS`. The exporter checks each bundle against the supplied descriptor shape, rejects duplicate synthetic patient and visit identifiers, then sorts bundles deterministically by synthetic patient ID before it writes the shared exact-schema lifecycle.
