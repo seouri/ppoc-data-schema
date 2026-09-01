@@ -32,6 +32,30 @@ _EXPECTED_MANIFEST_COUNT = 14
 _EXPECTED_TABLE_PATHS = {f"data/{name}" for name in _TABLE_NAMES}
 _REQUIRED_COLUMNS = ("Sex", "Agemos", "L", "M", "S")
 
+_LmsCoreSeries = tuple[
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+]
+_LmsBoundedSeries = tuple[
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+]
+_LmsSeries = _LmsCoreSeries | _LmsBoundedSeries
+_NormalizedLmsSeries = tuple[
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray | None,
+    np.ndarray | None,
+]
+
 
 @dataclass(frozen=True)
 class _LmsRow:
@@ -192,20 +216,20 @@ def _manifest(root: Path) -> dict[str, tuple[str, int]]:
 class CdcGrowthReference:
     def __init__(
         self,
-        series: dict[
-            tuple[str, str],
-            tuple[
-                np.ndarray,
-                np.ndarray,
-                np.ndarray,
-                np.ndarray,
-                np.ndarray,
-                np.ndarray,
-            ],
-        ],
+        series: dict[tuple[str, str], _LmsSeries],
         source_sha256: str,
     ) -> None:
-        self._series = series
+        normalized: dict[tuple[str, str], _NormalizedLmsSeries] = {}
+        for key, values in series.items():
+            if len(values) == 4:
+                ages, ls, ms, ss = values
+                p3s = p97s = None
+            elif len(values) == 6:
+                ages, ls, ms, ss, p3s, p97s = values
+            else:
+                raise ValueError("CDC series must contain four or six arrays")
+            normalized[key] = (ages, ls, ms, ss, p3s, p97s)
+        self._series = normalized
         self._source_sha256 = source_sha256
 
     @classmethod
@@ -230,17 +254,7 @@ class CdcGrowthReference:
             if any(row.p3 is None or row.p97 is None for row in table_rows):
                 raise ValueError("CDC table generation bounds are incomplete")
             parsed[table] = table_rows
-        series: dict[
-            tuple[str, str],
-            tuple[
-                np.ndarray,
-                np.ndarray,
-                np.ndarray,
-                np.ndarray,
-                np.ndarray,
-                np.ndarray,
-            ],
-        ] = {}
+        series: dict[tuple[str, str], _LmsBoundedSeries] = {}
         for metric, table in _TABLES.items():
             for sex in ("M", "F"):
                 rows = tuple(row for row in parsed[table] if row.sex == sex)
@@ -301,9 +315,12 @@ class CdcGrowthReference:
         if months < ages[0] or months > ages[-1]:
             raise ValueError("age_days is outside the domain")
         values = tuple(float(np.interp(months, ages, values)) for values in (ls, ms, ss))
-        bounds = tuple(
-            float(np.interp(months, ages, values)) for values in (p3s, p97s)
-        )
+        if p3s is None or p97s is None:
+            bounds = (None, None)
+        else:
+            bounds = tuple(
+                float(np.interp(months, ages, values)) for values in (p3s, p97s)
+            )
         return (*values, *bounds)
 
     def value(self, metric: str, age_days: int, reference_sex: str, z: float) -> float:

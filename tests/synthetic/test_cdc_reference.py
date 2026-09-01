@@ -77,6 +77,24 @@ def test_generation_z_score_clamps_to_source_bounds_while_value_stays_strict() -
     assert reference.generation_z_score("bmi", 7305, "F", -invalid_z) < -1.8
 
 
+def test_constructor_accepts_legacy_four_array_series_without_generation_bounds() -> None:
+    reference = CdcGrowthReference(
+        {
+            ("bmi", "M"): (
+                np.array([24.0]),
+                np.array([1.0]),
+                np.array([16.0]),
+                np.array([0.1]),
+            )
+        },
+        "legacy-constructor",
+    )
+
+    assert reference.value("bmi", 730, "M", 0.0) == 16.0
+    with pytest.raises(ValueError, match="bounds are unavailable"):
+        reference.generation_z_score("bmi", 730, "M", 0.0)
+
+
 @pytest.mark.parametrize(
     ("metric", "age", "sex", "z", "error"),
     [("unknown", 0, "M", 0.0, KeyError), ("length_cm", -1, "M", 0.0, ValueError),
