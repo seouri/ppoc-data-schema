@@ -102,6 +102,7 @@ RANDOMNESS_IMPORTERS = {
     ROOT / "src" / "synthetic" / "native" / "age_regimes.py",
     ROOT / "src" / "synthetic" / "native" / "clinical_modules.py",
     ROOT / "src" / "synthetic" / "native" / "counterfactual.py",
+    ROOT / "src" / "synthetic" / "native" / "counterfactual_worlds.py",
     ROOT / "src" / "synthetic" / "native" / "healthy.py",
     ROOT / "src" / "synthetic" / "native" / "observations.py",
     ROOT / "src" / "synthetic" / "native" / "trajectories.py",
