@@ -11,6 +11,12 @@ from enum import Enum
 from types import MappingProxyType
 
 from synthetic.calibration import require_aggregate_safe_token
+from synthetic.cohort import CalibrationSamplingProfile, CohortMember, NativeCohort
+from synthetic.models import (
+    AgeRegimeDisorderTrajectory,
+    DisorderKind,
+    LatentDisorderState,
+)
 
 TASK_UTILITY_REPORT_VERSION = "task-utility-report-v1"
 
@@ -626,21 +632,27 @@ class TaskUtilityReport:
                     "PASS report may contain only allowed missing-output cells"
                 )
         elif reason != "COHORT_TOO_SMALL":
-            evidenced_reason = next(
-                (
-                    candidate
-                    for candidate in (
-                        "MISSING_PREDICTION",
-                        "MISSING_SCORE",
-                        "INSUFFICIENT_SUPPORT",
-                    )
-                    if any(
-                        cell.reason_code == candidate
-                        for cell in unevaluable_cells
-                    )
-                ),
-                None,
+            cell_reasons = frozenset(
+                cell.reason_code for cell in unevaluable_cells
             )
+            metric_reasons = frozenset(
+                metric.reason_code
+                for cell in unevaluable_cells
+                for metric in cell.metrics
+                if metric.status is TaskUtilityStatus.UNEVALUABLE
+            )
+            if "MISSING_SCORE" in cell_reasons:
+                evidenced_reason = "MISSING_SCORE"
+            elif "INSUFFICIENT_SUPPORT" in cell_reasons:
+                evidenced_reason = "INSUFFICIENT_SUPPORT"
+            elif "MISSING_PREDICTION" in cell_reasons:
+                evidenced_reason = (
+                    reason
+                    if reason in metric_reasons
+                    else "MISSING_PREDICTION"
+                )
+            else:
+                evidenced_reason = None
             if (
                 reason != evidenced_reason
                 or (
@@ -687,6 +699,390 @@ class TaskUtilityReport:
 
     def __repr__(self) -> str:
         return "TaskUtilityReport(<aggregate-only>)"
+
+
+def _unevaluable_metric(name: str, reason_code: str) -> TaskUtilityMetric:
+    return TaskUtilityMetric(
+        name=name,
+        status=TaskUtilityStatus.UNEVALUABLE,
+        reason_code=reason_code,
+        observed=None,
+        target=None,
+        support_count=None,
+    )
+
+
+def _evaluated_metric(
+    name: str,
+    observed: float,
+    target: float | None,
+    support_count: int,
+) -> TaskUtilityMetric:
+    if target is None:
+        status = TaskUtilityStatus.PASS
+        reason_code = "OK"
+    else:
+        within_bound = _bound_is_satisfied(name, float(observed), target)
+        status = TaskUtilityStatus.PASS if within_bound else TaskUtilityStatus.FAIL
+        reason_code = "WITHIN_BOUND" if within_bound else "OUTSIDE_BOUND"
+    return TaskUtilityMetric(
+        name=name,
+        status=status,
+        reason_code=reason_code,
+        observed=observed,
+        target=target,
+        support_count=support_count,
+    )
+
+
+def _score_metrics(
+    scored_truth: list[tuple[float, bool]],
+    *,
+    evaluable_count: int,
+    positive_count: int,
+    negative_count: int,
+    missing_score_count: int,
+    policy: TaskUtilityPolicy,
+) -> tuple[TaskUtilityMetric, TaskUtilityMetric]:
+    if missing_score_count:
+        return (
+            _unevaluable_metric("auroc", "MISSING_SCORE"),
+            _unevaluable_metric("brier_score", "MISSING_SCORE"),
+        )
+    if not positive_count or not negative_count:
+        return (
+            _unevaluable_metric("auroc", "INSUFFICIENT_SUPPORT"),
+            _unevaluable_metric("brier_score", "INSUFFICIENT_SUPPORT"),
+        )
+
+    ordered = sorted(scored_truth, key=lambda item: item[0])
+    positive_rank_sum = 0.0
+    lower = 0
+    while lower < evaluable_count:
+        upper = lower + 1
+        while upper < evaluable_count and ordered[upper][0] == ordered[lower][0]:
+            upper += 1
+        midrank = ((lower + 1) + upper) / 2
+        positive_rank_sum += midrank * sum(
+            truth for _, truth in ordered[lower:upper]
+        )
+        lower = upper
+    auroc = (
+        positive_rank_sum - positive_count * (positive_count + 1) / 2
+    ) / (positive_count * negative_count)
+    brier_score = sum(
+        (score - int(truth)) ** 2 for score, truth in scored_truth
+    ) / evaluable_count
+    return (
+        _evaluated_metric(
+            "auroc",
+            auroc,
+            policy.minimum_auroc,
+            evaluable_count,
+        ),
+        _evaluated_metric(
+            "brier_score",
+            brier_score,
+            policy.maximum_brier_score,
+            evaluable_count,
+        ),
+    )
+
+
+def _overall_cell(
+    members: tuple[CohortMember, ...],
+    predictions: tuple[TaskPrediction, ...],
+    policy: TaskUtilityPolicy,
+) -> TaskUtilityCell:
+    evaluable_count = 0
+    missing_score_count = 0
+    positive_count = 0
+    negative_count = 0
+    true_positive = 0
+    true_negative = 0
+    false_positive = 0
+    false_negative = 0
+    scored_truth: list[tuple[float, bool]] = []
+
+    for member, prediction in zip(members, predictions, strict=True):
+        if type(member) is not CohortMember:
+            raise TypeError("cohort contains malformed typed evidence")
+        trajectory = member.trajectory
+        if type(trajectory) is not AgeRegimeDisorderTrajectory:
+            raise TypeError("cohort contains malformed typed evidence")
+        disorder = trajectory.disorder
+        if (
+            type(disorder) is not LatentDisorderState
+            or type(disorder.kind) is not DisorderKind
+        ):
+            raise TypeError("cohort contains malformed typed evidence")
+        truth = disorder.kind is not DisorderKind.HEALTHY
+        decision = prediction.predicted_disorder
+        if decision is None:
+            continue
+        evaluable_count += 1
+        if truth:
+            positive_count += 1
+            if decision:
+                true_positive += 1
+            else:
+                false_negative += 1
+        else:
+            negative_count += 1
+            if decision:
+                false_positive += 1
+            else:
+                true_negative += 1
+        if prediction.risk_score is None:
+            missing_score_count += 1
+        else:
+            scored_truth.append((prediction.risk_score, truth))
+
+    unevaluable_count = len(members) - evaluable_count
+    minimum_support = policy.minimum_class_support
+    if positive_count >= minimum_support:
+        sensitivity = _evaluated_metric(
+            "sensitivity",
+            true_positive / positive_count,
+            policy.minimum_sensitivity,
+            positive_count,
+        )
+    else:
+        sensitivity = _unevaluable_metric(
+            "sensitivity", "INSUFFICIENT_SUPPORT"
+        )
+    if negative_count >= minimum_support:
+        specificity = _evaluated_metric(
+            "specificity",
+            true_negative / negative_count,
+            policy.minimum_specificity,
+            negative_count,
+        )
+    else:
+        specificity = _unevaluable_metric(
+            "specificity", "INSUFFICIENT_SUPPORT"
+        )
+    predicted_positive_count = true_positive + false_positive
+    if predicted_positive_count:
+        precision = _evaluated_metric(
+            "precision",
+            true_positive / predicted_positive_count,
+            None,
+            predicted_positive_count,
+        )
+    else:
+        precision = _unevaluable_metric("precision", "INSUFFICIENT_SUPPORT")
+    if positive_count >= minimum_support and negative_count >= minimum_support:
+        balanced_accuracy = _evaluated_metric(
+            "balanced_accuracy",
+            (
+                true_positive / positive_count
+                + true_negative / negative_count
+            )
+            / 2,
+            None,
+            evaluable_count,
+        )
+    else:
+        balanced_accuracy = _unevaluable_metric(
+            "balanced_accuracy", "INSUFFICIENT_SUPPORT"
+        )
+    auroc, brier_score = _score_metrics(
+        scored_truth,
+        evaluable_count=evaluable_count,
+        positive_count=positive_count,
+        negative_count=negative_count,
+        missing_score_count=missing_score_count,
+        policy=policy,
+    )
+    if evaluable_count:
+        false_positive_metric = _evaluated_metric(
+            "false_positive_count", false_positive, None, evaluable_count
+        )
+        false_negative_metric = _evaluated_metric(
+            "false_negative_count", false_negative, None, evaluable_count
+        )
+    else:
+        false_positive_metric = _unevaluable_metric(
+            "false_positive_count", "INSUFFICIENT_SUPPORT"
+        )
+        false_negative_metric = _unevaluable_metric(
+            "false_negative_count", "INSUFFICIENT_SUPPORT"
+        )
+    metrics = (
+        sensitivity,
+        specificity,
+        precision,
+        balanced_accuracy,
+        auroc,
+        brier_score,
+        false_positive_metric,
+        false_negative_metric,
+    )
+
+    failed_metrics = tuple(
+        metric for metric in metrics if metric.status is TaskUtilityStatus.FAIL
+    )
+    blocking_unevaluable_metrics = tuple(
+        metric
+        for metric in metrics
+        if metric.status is TaskUtilityStatus.UNEVALUABLE
+        and not (
+            not policy.require_probability_scores
+            and metric.name in {"auroc", "brier_score"}
+            and metric.reason_code == "MISSING_SCORE"
+        )
+    )
+    if failed_metrics:
+        status = TaskUtilityStatus.FAIL
+        reason_code = "OUTSIDE_BOUND"
+    elif unevaluable_count:
+        status = TaskUtilityStatus.UNEVALUABLE
+        reason_code = "MISSING_PREDICTION"
+    elif policy.require_probability_scores and missing_score_count:
+        status = TaskUtilityStatus.UNEVALUABLE
+        reason_code = "MISSING_SCORE"
+    elif blocking_unevaluable_metrics:
+        status = TaskUtilityStatus.UNEVALUABLE
+        reason_code = (
+            "MISSING_SCORE"
+            if any(
+                metric.reason_code == "MISSING_SCORE"
+                for metric in blocking_unevaluable_metrics
+            )
+            else "INSUFFICIENT_SUPPORT"
+        )
+    else:
+        status = TaskUtilityStatus.PASS
+        reason_code = "WITHIN_BOUND"
+
+    suppress_truth_counts = status is TaskUtilityStatus.UNEVALUABLE
+    return TaskUtilityCell(
+        scope="overall",
+        status=status,
+        reason_code=reason_code,
+        member_count=len(members),
+        evaluable_count=evaluable_count,
+        unevaluable_count=unevaluable_count,
+        missing_score_count=missing_score_count,
+        positive_count=None if suppress_truth_counts else positive_count,
+        negative_count=None if suppress_truth_counts else negative_count,
+        true_positive=None if suppress_truth_counts else true_positive,
+        true_negative=None if suppress_truth_counts else true_negative,
+        false_positive=None if suppress_truth_counts else false_positive,
+        false_negative=None if suppress_truth_counts else false_negative,
+        metrics=metrics,
+    )
+
+
+def _validated_policy(policy: TaskUtilityPolicy) -> TaskUtilityPolicy:
+    return TaskUtilityPolicy(
+        policy_id=policy.policy_id,
+        policy_version=policy.policy_version,
+        minimum_cohort_size=policy.minimum_cohort_size,
+        minimum_evaluable_members=policy.minimum_evaluable_members,
+        minimum_class_support=policy.minimum_class_support,
+        maximum_unevaluable_members=policy.maximum_unevaluable_members,
+        require_probability_scores=policy.require_probability_scores,
+        minimum_sensitivity=policy.minimum_sensitivity,
+        minimum_specificity=policy.minimum_specificity,
+        minimum_auroc=policy.minimum_auroc,
+        maximum_brier_score=policy.maximum_brier_score,
+        subgroup_dimensions=policy.subgroup_dimensions,
+    )
+
+
+def evaluate_task_utility(
+    cohort: NativeCohort,
+    predictions: tuple[TaskPrediction, ...],
+    policy: TaskUtilityPolicy,
+) -> TaskUtilityReport:
+    """Evaluate ordered fictional predictions against private aggregate truth."""
+
+    try:
+        if (
+            type(cohort) is not NativeCohort
+            or type(policy) is not TaskUtilityPolicy
+            or type(predictions) is not tuple
+        ):
+            return _structural_fallback_report()
+        members = cohort.members
+        if (
+            type(members) is not tuple
+            or len(predictions) != len(members)
+            or not all(type(item) is TaskPrediction for item in predictions)
+            or not all(type(member) is CohortMember for member in members)
+            or type(cohort.calibration) is not CalibrationSamplingProfile
+        ):
+            return _structural_fallback_report()
+        validated_predictions = tuple(
+            TaskPrediction(item.predicted_disorder, item.risk_score)
+            for item in predictions
+        )
+        validated_policy = _validated_policy(policy)
+        cell = _overall_cell(members, validated_predictions, validated_policy)
+
+        if cell.status is TaskUtilityStatus.FAIL:
+            status = TaskUtilityStatus.FAIL
+            reason_code = "OUTSIDE_BOUND"
+        elif (
+            len(members) < validated_policy.minimum_cohort_size
+            or cell.evaluable_count < validated_policy.minimum_evaluable_members
+        ):
+            status = TaskUtilityStatus.UNEVALUABLE
+            reason_code = "COHORT_TOO_SMALL"
+        elif cell.unevaluable_count > validated_policy.maximum_unevaluable_members:
+            status = TaskUtilityStatus.UNEVALUABLE
+            reason_code = "MISSING_PREDICTION"
+        elif (
+            validated_policy.require_probability_scores
+            and cell.missing_score_count
+        ):
+            status = TaskUtilityStatus.UNEVALUABLE
+            reason_code = "MISSING_SCORE"
+        else:
+            blocking_reasons = tuple(
+                metric.reason_code
+                for metric in cell.metrics
+                if metric.status is TaskUtilityStatus.UNEVALUABLE
+                and not (
+                    not validated_policy.require_probability_scores
+                    and metric.name in {"auroc", "brier_score"}
+                    and metric.reason_code == "MISSING_SCORE"
+                )
+            )
+            if blocking_reasons:
+                status = TaskUtilityStatus.UNEVALUABLE
+                reason_code = (
+                    "MISSING_SCORE"
+                    if "MISSING_SCORE" in blocking_reasons
+                    else "INSUFFICIENT_SUPPORT"
+                )
+            else:
+                status = TaskUtilityStatus.PASS
+                reason_code = "WITHIN_BOUND"
+
+        return TaskUtilityReport(
+            report_version=TASK_UTILITY_REPORT_VERSION,
+            policy_id=validated_policy.policy_id,
+            policy_version=validated_policy.policy_version,
+            cohort_profile=cohort.profile,
+            cohort_seed=cohort.seed,
+            cohort_size=len(members),
+            status=status,
+            reason_code=reason_code,
+            status_counts={
+                "PASS": int(cell.status is TaskUtilityStatus.PASS),
+                "FAIL": int(cell.status is TaskUtilityStatus.FAIL),
+                "UNEVALUABLE": int(cell.status is TaskUtilityStatus.UNEVALUABLE),
+            },
+            metric_counts={name: 1 for name in TASK_METRICS},
+            evaluable_count=cell.evaluable_count,
+            unevaluable_count=cell.unevaluable_count,
+            cells=(cell,),
+        )
+    except Exception:  # noqa: BLE001 - malformed evidence must fail closed
+        return _structural_fallback_report()
 
 
 def _structural_fallback_report() -> TaskUtilityReport:
@@ -744,4 +1140,5 @@ __all__ = [
     "TaskUtilityPolicy",
     "TaskUtilityReport",
     "TaskUtilityStatus",
+    "evaluate_task_utility",
 ]
