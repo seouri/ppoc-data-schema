@@ -14,11 +14,11 @@
 
 - Accept only a typed `CounterfactualEhrWorldPair`, an already-loaded descriptor mapping, a new output `Path`, explicit `PackageExportMetadata`, and explicit derivation-oracle trust values; never accept a descriptor path, real/governed data root, calibration, held-out, privacy, model, Synthea, or network input.
 - Require `validate_counterfactual_ehr_worlds(worlds).status is PASS` before creating any caller-visible target, partial path, failed path, or pair manifest.
-- Project only visible six-resource row mappings from the baseline/intervention bundles; never pass pair objects, frames, truth, trajectories, reports, source objects, seeds/indexes, stream identities, or descriptors to the oracle or visible pair manifest.
+- Project only visible six-resource row mappings from the baseline/intervention bundles; for serialization, map only the exact GHD evaluator marker `labs.result_flag="Synthetic"` on GHD component rows to the descriptor missing-value sentinel `""` under fixed projection token `ghd-result-flag-empty-v1`; never mutate worlds or silently normalize any other value. Never pass pair objects, frames, truth, trajectories, reports, source objects, seeds/indexes, stream identities, or descriptors to the oracle or visible pair manifest.
 - Do not call `export_observed_resource_package`; valid counterfactual bundles may contain nonempty GHD ancillary rows that its generic validator rejects. Reuse `export_exact_schema_package` so the six visible rows and the two oracle-owned augmented resources use the existing exact-schema lifecycle.
 - Public output is exactly `pair-manifest.json`, `baseline/`, and `intervention/`; each child contains the existing eight descriptor-named CSVs plus `datapackage.json`, `validation-report.json`, and `manifest.json`.
 - Use one outer no-replace `RunDirectory`; private child staging is temporary and removed automatically. Post-creation failures use fixed redacted `counterfactual package export failed` content and never overwrite an existing target.
-- Pair manifests contain only fixed contract/matrix/aggregate status, visible caller metadata, relative child paths, and child manifest SHA-256 digests. No patient/visit IDs, row values, ages, latent states, event payloads, truth hashes, or evaluator representations may appear.
+- Pair manifests contain only fixed contract/matrix/serialization-projection/aggregate status, visible caller metadata, relative child paths, and child manifest SHA-256 digests. No patient/visit IDs, row values, ages, latent states, event payloads, truth hashes, or evaluator representations may appear.
 - The exporter performs no random draws, leaves the existing smoke/observed exporters and generic validators behaviorally unchanged, and makes no prevalence, clinical, privacy, non-matchability, release, or Synthea claim.
 - Controller edits only this plan/spec and ignored SDD evidence; all source, test, and user-facing documentation edits are delegated.
 
@@ -60,7 +60,8 @@
   `intervention/`; each child contains the exact eleven existing package
   files; both children pass `validate_structure`; and the pair manifest has
   the fixed contract token, exact schema fingerprint, matrix/intervention,
-  `PASS` aggregate status/counts, visible metadata, fixed child paths, and
+  `PASS` aggregate status/counts, the fixed GHD serialization projection,
+  visible metadata, fixed child paths, and
   child manifest digests. Export the same pair to two fresh destinations and
   compare every byte recursively.
 
@@ -96,7 +97,8 @@
   preserves `FileExistsError` for the final target and deterministic partial/
   failed collisions while redacting all other lifecycle errors. Require a
   typed pair and aggregate `PASS`, extract only
-  `member.bundle.rows[name]` mappings for each name in `BASE_RESOURCES`, and
+  `member.bundle.rows[name]` mappings for each name in `BASE_RESOURCES`, apply
+  only the fixed GHD evaluator-marker-to-missing serialization projection, and
   derive a stable outer run token from the visible metadata and matrix
   version/intervention. Do not read hidden pair seed/index values.
 
@@ -175,8 +177,9 @@
 
   Ensure pair preflight rejects non-PASS aggregate validation before any
   public lifecycle path, maps each visible `ResourceRow.to_mapping()` in
-  descriptor/base order, and passes all six resources—including nonempty GHD
-  ancillary rows—through `export_exact_schema_package`. Keep the child oracle
+  descriptor/base order, applies only the fixed GHD evaluator-marker-to-missing
+  projection, and passes all six resources—including nonempty GHD ancillary
+  rows—through `export_exact_schema_package`. Keep the child oracle
   boundary and child structural validation delegated to the existing
   lifecycle. Scan copied child trees for symlinks, special files, missing
   resources, or arbitrary entries before writing the pair manifest. Preserve

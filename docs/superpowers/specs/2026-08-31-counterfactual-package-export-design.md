@@ -72,9 +72,17 @@ text is echoed.
    partial path, failed path, or pair manifest.
 2. It obtains only the two visible `ObservedResourceBundle` values from the
    pair. The aggregate world validator already re-runs the integrated GHD
-   ancillary and isolated-base checks; the exporter then passes only the six
-   visible resource-row mappings from each bundle to the existing
-   `export_exact_schema_package` lifecycle. It deliberately does not call
+   ancillary and isolated-base checks; the exporter then copies only the six
+   visible resource-row mappings from each bundle for serialization. The
+   in-memory GHD projection intentionally uses the evaluator marker
+   `labs.result_flag="Synthetic"`, which is not a value in the unchanged real
+   descriptor enum. Immediately before pair serialization, and only for a row
+   whose `result_component_name` is one of the two GHD components and whose
+   flag is exactly that evaluator marker, the pair exporter writes the
+   descriptor's missing-value sentinel `""`. This is an explicit
+   `ghd-result-flag-empty-v1` serialization projection, not a mutation or
+   repair of the world; every other field and row is preserved, and any other
+   enum-invalid flag is rejected. It deliberately does not call
    `export_observed_resource_package`, whose generic bundle validator rejects
    the nonempty GHD ancillary rows that this pair contract has already
    validated. The exact-schema child lifecycle still rejects malformed rows,
@@ -108,6 +116,8 @@ The pair exporter is all-or-nothing at the public output boundary:
    - contract token `counterfactual-ehr-package-pair-v1`;
    - exact schema fingerprint;
    - matrix version and intervention token;
+   - serialization projection token
+     `ghd-result-flag-empty-v1`;
    - aggregate world-validation status and fixed status counts;
    - the caller-supplied visible profile/reference/configuration/software
      metadata, excluding hidden pair context; and
@@ -141,11 +151,12 @@ across fresh output locations. The envelope always uses the fixed child order
 
 The child package manifests retain the existing package-export metadata and
 structural row/file hashes. The pair manifest binds those manifests by hash
-and identifies the causal matrix, but it does not claim that the two packages
-are clinically valid, prevalence-calibrated, private, non-matchable, or
-release-ready. Visible differences remain governed solely by the already
-validated resource-level counterfactual matrix; this exporter never repairs,
-augments, or broadens permitted changes.
+and identifies the causal matrix and fixed serialization projection, but it
+does not claim that the two packages are clinically valid,
+prevalence-calibrated, private, non-matchable, or release-ready. Visible
+differences remain governed solely by the already validated resource-level
+counterfactual matrix; the exporter performs no clinical repair, augmentation,
+or broadening of permitted changes.
 
 ## Testing and boundary requirements
 
@@ -156,7 +167,8 @@ derivation oracle. They must cover:
   matrices, with each child passing `validate_structure` and containing the
   exact eleven package files;
 - exact top-level inventory, fixed child paths, pair-manifest fields,
-  manifest-digest binding, and absence of hidden truth/evaluator tokens;
+  manifest-digest binding, the explicit GHD serialization projection, and
+  absence of hidden truth/evaluator tokens;
 - deterministic byte equality across two fresh destinations and stable
   child ordering;
 - exactly two oracle calls receiving child staging roots and no pair/hidden
@@ -167,7 +179,9 @@ derivation oracle. They must cover:
 - redacted post-creation failure archival, no target overwrite, and no
   arbitrary child or pair artifacts;
 - ordinary child packages remaining compatible with the existing structural
-  validator and package-export boundary tests; and
+  validator and package-export boundary tests; source-world GHD evaluator
+  markers remain unchanged while serialized child flags are blank and
+  schema-valid; and
 - recursive AST/import/public-signature checks preventing real/governed data,
   calibration, held-out, privacy, Synthea, model, network, or new filesystem
   readers from entering the pair API, while allowing the existing lifecycle
