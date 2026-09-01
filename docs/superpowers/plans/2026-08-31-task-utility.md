@@ -6,7 +6,7 @@
 
 **Architecture:** Build a standalone `synthetic.task_utility` module over `NativeCohort`, `CohortMember`, `AgeRegimeDisorderTrajectory`, and `SyntheticDemographics`. A frozen policy and prediction tuple feed private binary truth extraction. Immutable aggregate cells and a report expose only fixed metrics, counts, statuses, reasons, and safe subgroup scopes. The visible generator, exact-schema exporters, calibrator, held-out validator, privacy auditor, counterfactual trajectory layer, and smoke CLI remain unchanged.
 
-**Tech Stack:** Python 3.13+, standard-library `dataclasses`, `enum`, `json`, `math`, `collections`, existing cohort/model/resource types, pytest, Ruff, and AST boundary tests.
+**Tech Stack:** Python 3.12+, standard-library `dataclasses`, `enum`, `json`, `math`, `collections`, existing cohort/model/resource types, pytest, Ruff, and AST boundary tests.
 
 **Spec:** `docs/superpowers/specs/2026-08-31-task-utility-design.md`
 
@@ -33,7 +33,7 @@
 
 - [ ] **Step 1: Write failing model tests**
 
-  Add tests for valid policy/prediction/cell/report construction, exact fixed registries, booleans and nonfinite-number rejection, positive/zero floor semantics, `minimum_evaluable_members`/`maximum_unevaluable_members`, supported `sex` subgroup validation, frozen dataclasses, mapping proxies, cell/report status consistency, fixed scope/metric order, evaluator-safe `repr`, and exact canonical JSON/newline behavior. Test that unknown keys/metrics/reasons, patient-like scopes, mutable tuples/mappings, inconsistent counts, and numeric evidence on unevaluable cells fail closed.
+  Add tests for valid policy/prediction/cell/report construction, exact fixed registries, booleans and nonfinite-number rejection, positive/zero floor semantics, `minimum_evaluable_members`/`maximum_unevaluable_members`, supported `sex` subgroup validation, frozen dataclasses, mapping proxies, explicit metric target/support/null rules, cell/report status consistency, fixed scope/metric order, evaluator-safe `repr`, and exact canonical JSON/newline behavior. Test that unknown keys/metrics/reasons, patient-like scopes, mutable tuples/mappings, inconsistent counts, and numeric evidence on unevaluable metrics fail closed.
 
 - [ ] **Step 2: Run the model tests to verify they fail**
 
@@ -41,7 +41,7 @@
 
 - [ ] **Step 3: Implement strict frozen models**
 
-  Implement the exact spec fields and fixed registries, including the `require_probability_scores` switch and explicit `TaskUtilityMetric` fields. Enforce `[0,1]` probabilities, positive supports, nonnegative unevaluable allowance, exact `sex` subgroup tuple, immutable nested mappings, aggregate-only scope tokens, status/reason compatibility, metric-specific nullable fields, and canonical compact sorted ASCII serialization. Ensure structural fallback cells/reports redact malformed evidence and `repr()` never includes latent or prediction values.
+  Implement the exact spec fields and fixed registries, including the `require_probability_scores` switch and explicit `TaskUtilityMetric`/`TaskUtilityCell` fields. Enforce `[0,1]` probabilities, positive supports, nonnegative unevaluable allowance, exact `sex` subgroup tuple, immutable nested mappings, aggregate-only scope tokens, status/reason compatibility, metric-specific target/support/null fields, and canonical compact sorted ASCII serialization. Ensure invalid public inputs return the static `unavailable` structural fallback report without echoing values, and `repr()` never includes latent or prediction values.
 
 - [ ] **Step 4: Run model tests, lint, and commit**
 
@@ -82,11 +82,11 @@
 
 **Interfaces:**
 - Consumes: Task 2 evaluator and `SyntheticDemographics.sex` only for fixed subgroup assignment.
-- Produces: deterministic `sex:F`, `sex:M`, and `sex:U` cells in policy order, aggregate false-positive/false-negative counts, and overall status aggregation.
+- Produces: deterministic cells for observed `sex:F`, `sex:M`, and `sex:U` categories in that order, aggregate false-positive/false-negative counts, and overall status aggregation. Categories absent from the cohort are omitted.
 
 - [ ] **Step 1: Write failing subgroup/status tests**
 
-  Test requested versus empty subgroup policies, fixed category order, minimum class support, subgroup threshold failure, missing predictions by subgroup, aggregate failure-mode counts, and precedence where one subgroup fails or is unevaluable. Assert subgroup scopes cannot be caller-defined and no demographics beyond fixed sex are accepted.
+  Test requested versus empty subgroup policies, fixed category order, minimum class support, subgroup threshold failure, missing predictions by subgroup, aggregate failure-mode counts, and precedence where one subgroup fails or is unevaluable. Assert subgroup scopes cannot be caller-defined, absent categories are omitted, and no demographics beyond fixed sex are accepted.
 
 - [ ] **Step 2: Run subgroup tests to verify they fail**
 
@@ -94,7 +94,7 @@
 
 - [ ] **Step 3: Implement fixed subgroup cells and report invariants**
 
-  Partition only by the closed `F/M/U` values, compute each cell with the same private metric path, sort scopes deterministically, and ensure report status/counts exactly match cell statuses. Treat malformed demographic values or latent state as structural failure without echoing values. Keep subgroup labels aggregate-safe and never include patient IDs.
+  Partition only by the closed `F/M/U` values, compute each observed category cell with the same private metric path, sort scopes deterministically, and ensure report status/counts exactly match cell statuses. Treat malformed demographic values or latent state as structural failure without echoing values. Keep subgroup labels aggregate-safe and never include patient IDs.
 
 - [ ] **Step 4: Run subgroup tests, all task tests, lint, and commit**
 
