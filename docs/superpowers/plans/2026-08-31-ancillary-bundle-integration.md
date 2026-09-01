@@ -15,6 +15,7 @@
 - Accept only typed in-memory `ObservedResourceBundle`, `CohortMember`, `AncillaryResourceProjection`, and `GhdAncillaryPolicy` values.
 - Preserve exact `BASE_RESOURCE_NAMES`, descriptor field order, immutable tuples/mappings, and the existing generic validator's rejection of nonempty ancillary rows.
 - Merge only an empty-ancillary base bundle and a passing pathway projection; never overwrite or silently repair rows.
+- Re-run validators internally rather than trusting caller reports; require exact shape, one patient identity, base-patient demographics equality, object-bound source frame, and ancillary visit links resolving to base visits.
 - Keep source frames, latent trajectories, hidden events, identifiers, row values, and policy internals out of reports, reprs, exceptions, and ordinary mappings.
 - Use fixed `PASS`, `FAIL`, and `UNEVALUABLE` statuses/reasons with aggregate-only output; no public path, output, key, report, model, callable, real-data, governed, package, manifest, or Synthea boundary.
 - Controller may edit only this plan/spec and ignored SDD evidence; implementation and test changes are delegated to subagents.
@@ -30,7 +31,7 @@
 
 - [ ] Write failing tests for fixed statuses/reasons/check order, immutable reports, valid/invalid typed inputs, exact six-resource rows, empty-ancillary precondition, same patient/shape/frame binding, fresh bundle identity, no mutation, and deterministic mappings.
 - [ ] Run focused tests to confirm collection/behavior failures.
-- [ ] Implement the redacted merge seam and frozen aggregate models. Isolate ancillary rows before the generic validator; call the existing GHD validator before composing the fresh `ObservedResourceBundle`.
+- [ ] Implement the redacted merge seam and frozen aggregate models. Isolate ancillary rows before the generic validator; call the existing GHD validator before composing the fresh `ObservedResourceBundle`; reject double merges and fail atomically.
 - [ ] Run focused tests, Ruff, and `git diff --check`; commit `feat: merge GHD ancillary rows into observed bundles`.
 
 ### Task 2: Add full-bundle validation and adversarial boundaries
