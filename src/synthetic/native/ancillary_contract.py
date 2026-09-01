@@ -112,8 +112,11 @@ def _row_values(row: ResourceRow) -> dict[str, object]:
 def _row_types_are_valid(values: Mapping[str, object]) -> bool:
     for field_name, value in values.items():
         if field_name in _ANCILLARY_INTEGER_FIELDS:
-            if value == "":
-                if field_name not in _ANCILLARY_OPTIONAL_INTEGER_FIELDS:
+            if type(value) is str:
+                if (
+                    field_name not in _ANCILLARY_OPTIONAL_INTEGER_FIELDS
+                    or value != ""
+                ):
                     return False
             elif type(value) is not int or value < 0:
                 return False
@@ -205,13 +208,17 @@ def ghd_ancillary_rows_are_valid(
             or _SYNTHETIC_PATIENT_TOKEN.fullmatch(patient_id) is None
             or type(shape) is not ResourceShape
             or not isinstance(rows, Mapping)
-            or tuple(rows) != GHD_ANCILLARY_RESOURCE_NAMES
             or type(visit_ids) is not frozenset
             or not all(
                 type(visit_id) is str
                 and _SYNTHETIC_VISIT_TOKEN.fullmatch(visit_id) is not None
                 for visit_id in visit_ids
             )
+        ):
+            return False
+        row_names = tuple(rows)
+        if not all(type(name) is str for name in row_names) or (
+            row_names != GHD_ANCILLARY_RESOURCE_NAMES
         ):
             return False
         for resource_name in GHD_ANCILLARY_RESOURCE_NAMES:

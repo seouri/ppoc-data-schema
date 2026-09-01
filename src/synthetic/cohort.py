@@ -726,6 +726,11 @@ def _require_exact_visible_bundle(bundle: ObservedResourceBundle) -> None:
     if type(bundle.rows) is not MappingProxyType:
         raise TypeError("bundle.rows must be exactly an immutable mapping")
     try:
+        row_names = tuple(bundle.rows)
+        if not all(type(name) is str for name in row_names) or (
+            row_names != BASE_RESOURCE_NAMES
+        ):
+            raise TypeError
         for resource_name in BASE_RESOURCE_NAMES:
             resource_rows = bundle.rows[resource_name]
             if type(resource_rows) is not tuple or not all(
