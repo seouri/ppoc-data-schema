@@ -66,13 +66,39 @@ def test_candidate_guide_keeps_test_only_safety_and_evidence_limits_explicit() -
 
 
 def test_candidate_guide_is_linked_without_enabling_the_production_cli() -> None:
-    """Breaks if handoff docs lose the candidate guide or imply production authority."""
+    """Breaks if explicit development composition is presented as production authority."""
     readme = README.read_text(encoding="utf-8")
     synthetic_guide = SYNTHETIC_GUIDE.read_text(encoding="utf-8")
     combined = f"{readme}\n{synthetic_guide}"
 
     assert "[synthetic generator guide](docs/synthetic-generator.md)" in readme
     assert "[candidate augmenter-oracle guide](augmenter-oracle.md)" in synthetic_guide
-    assert "production command has no configured authoritative oracle" in combined
+    assert "Only explicit development profiles compose the candidate" in combined
     assert "No production growth reference or authoritative derivation oracle is configured" in combined
     assert "synthetic.generate" in combined
+
+
+def test_synthetic_generator_guide_documents_explicit_development_profiles() -> None:
+    """Breaks if a runnable development route loses its fixed safety contract."""
+    guide = SYNTHETIC_GUIDE.read_text(encoding="utf-8")
+
+    for required in (
+        "uv run python -m synthetic.generate --profile development-smoke --output /tmp/ppoc-development-smoke --patients 1000 --seed 20260901",
+        "uv run python -m synthetic.generate --profile development-cohort --output /tmp/ppoc-development-cohort --patients 1000 --seed 20260901",
+        "development-authoritative",
+        "cdc-lms-reference-v1",
+        "test_only_derivation=true",
+        "(0, 365, 730, 1460, 2190, 3650, 4380, 5114, 5475, 6200, 7305)",
+        "CDC tables contain only M/F rows",
+        "BMI at exactly 730 days uses the CDC 24-month boundary row",
+        "exactly eight descriptor-named CSV resources",
+        "No production growth reference or authoritative derivation oracle is configured",
+        "no real or governed patient inputs",
+        "clinical validity",
+        "prevalence validation",
+        "privacy/non-matchability",
+        "held-out validation",
+        "Synthea",
+        "release authorization",
+    ):
+        assert required in guide

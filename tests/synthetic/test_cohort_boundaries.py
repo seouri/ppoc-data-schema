@@ -14,6 +14,7 @@ from synthetic.cohort_validation import validate_native_cohort
 ROOT = Path(__file__).resolve().parents[2]
 COHORT = ROOT / "src" / "synthetic" / "cohort.py"
 COHORT_VALIDATION = ROOT / "src" / "synthetic" / "cohort_validation.py"
+EXPLICIT_DEVELOPMENT_RUNTIME = ROOT / "src" / "synthetic" / "development_runtime.py"
 GUIDE = ROOT / "docs" / "synthetic-generator.md"
 README = ROOT / "README.md"
 VISIBLE_NATIVE_GENERATION = (
@@ -359,6 +360,28 @@ def test_visible_native_generation_has_no_governed_or_package_lifecycle_dependen
 
         assert _forbidden_modules(imports) == set(), path
         assert _forbidden_calls(calls) == set(), path
+
+
+def test_explicit_development_runtime_is_the_only_allowed_package_composition_module() -> None:
+    """Documents the narrow exception to the in-memory native cohort boundary."""
+    imports, calls, _arguments = _scan(
+        EXPLICIT_DEVELOPMENT_RUNTIME.read_text(encoding="utf-8"),
+        "synthetic.development_runtime",
+    )
+
+    assert _forbidden_modules(imports) == {
+        "pathlib",
+        "pathlib.Path",
+        "synthetic.package_export",
+        "synthetic.package_export.PackageExportMetadata",
+        "synthetic.package_export.PackageExportUnavailable",
+        "synthetic.package_export._require_output_available",
+        "synthetic.package_export.export_exact_schema_package",
+    }
+    assert _forbidden_calls(calls) == {
+        "synthetic.schema_contract.load_descriptor",
+        "synthetic.package_export.export_exact_schema_package"
+    }
 
 
 def test_cohort_boundary_scanner_detects_aliases_and_lifecycle_calls() -> None:

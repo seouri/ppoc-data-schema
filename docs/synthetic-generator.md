@@ -8,13 +8,34 @@ The approved system design is documented in the [synthetic growth fixture specif
 
 The exact-schema smoke slice generates healthy patients aged two years and older. It produces three deterministic measurement visits per patient at ages 730, 1095, and 1460 days. Height and BMI are the two generated anthropometric dimensions; weight is derived from them. The smoke profile alternates recorded/reference sex across patients only to exercise the schema. It does not model growth-disorder states, disorder prevalence, calibrated demographics, infancy, puberty, or clinical events. The separate native cohort API below composes completely fictional healthy-plus-disorder trajectories in memory; it does not change this visible smoke contract.
 
-The native generator reads `datapackage.json` as schema metadata only. It does not read the repository's real CSV snapshots or any patient records. Its production command-line entry point intentionally fails closed because no production growth reference or authoritative derivation oracle is configured. The repository separately ships a source-matched growth augmenter as a development derivation candidate for wholly synthetic inputs; it is not bound as authoritative. Its setup, input contract, outputs, and manifest verification are in [the imported augmenter guide](augment-import.md), and its explicit test-only package-export use is in the [candidate augmenter-oracle guide](augmenter-oracle.md). This adapter does not change `synthetic.generate`: the production command has no configured authoritative oracle and still fails with `No production growth reference or authoritative derivation oracle is configured`.
+The native generator reads `datapackage.json` as schema metadata only. It does not read the repository's real CSV snapshots or any patient records. The default/no-profile command-line invocation intentionally remains fail-closed with `No production growth reference or authoritative derivation oracle is configured`. The repository separately ships a source-matched growth augmenter as a development derivation candidate for wholly synthetic inputs; its setup, input contract, outputs, and manifest verification are in [the imported augmenter guide](augment-import.md), and its explicit test-only package-export use is in the [candidate augmenter-oracle guide](augmenter-oracle.md). Only explicit development profiles compose the candidate; that reproducible development composition does not establish production authority.
 
 The native generator remains the release-one route. The [optional Synthea engine-conformance guide](synthea-conformance.md) defines a future, development-only aggregate declaration plus the externally pinned engine, module, growth-extension, adapter, exporter, configuration, license-review, derivation-binding, and evidence prerequisites for any later comparison. This contract is not imported automatically by generation, export, or evaluator code and supplies no Synthea implementation, Java runtime, conformance result, patient data, network access, or release authorization. It does not change the production command, which remains fail closed with `No production growth reference or authoritative derivation oracle is configured`.
 
 The evaluator-only [golden trajectory guide](golden-trajectories.md) provides a copy-pasteable fictional-reference run over four deterministic forced-coverage cases and all five native pediatric age regimes. The suite keeps hidden trajectory state out of its aggregate-only report, creates no package or output path, and does not establish prevalence, demographic fidelity, clinical validity, task utility, privacy/non-matchability, held-out, scale, Synthea, or release evidence. The native generator remains the release-one route, the optional Synthea contract remains external and downstream, and the production command remains fail closed with `No production growth reference or authoritative derivation oracle is configured`.
 
 The visible smoke example remains the healthy age-730+ profile: three visits at ages 730, 1095, and 1460 days. It does not export latent age-regime state, puberty state, or any other evaluator-only trajectory state. The broader age-regime behavior below is a development-only injected-reference example, not a change to that visible smoke contract.
+
+## Explicit development CLI profiles
+
+Run these commands from the repository root after `uv sync`. Each command creates a new package only when its output path does not already exist:
+
+```sh
+uv run python -m synthetic.generate --profile development-smoke --output /tmp/ppoc-development-smoke --patients 1000 --seed 20260901
+uv run python -m synthetic.generate --profile development-cohort --output /tmp/ppoc-development-cohort --patients 1000 --seed 20260901
+```
+
+`development-smoke` preserves the visible three-visit healthy smoke contract at ages 730, 1095, and 1460 days. `development-cohort` emits a fixed, full-age, healthy-plus-growth-hormone-deficiency (GHD) development profile. Its age schedule is `(0, 365, 730, 1460, 2190, 3650, 4380, 5114, 5475, 6200, 7305)` days; its module prior is healthy/GHD `0.50/0.50`; and every scheduled visit has observed height, weight, and head circumference, with no observed length, measurement error, rounding, recognition, or diagnosis. BMI at exactly 730 days uses the CDC 24-month boundary row; day 729 remains outside the BMI source domain.
+
+The cohort's F/M/U weights are `0.50/0.50/0.00`. The zero U sampling weight is deliberate because the CDC tables contain only M/F rows, while the F/M/U recorded-to-reference mapping remains structurally complete for the native contract. Its versioned demographic weights are fixed development configuration, not a calibration result or a real-population claim. Visible packages contain exactly eight descriptor-named CSV resources: the six base resources plus `patients_augmented` and `visits_augmented`. The ancillary base resources remain descriptor-shaped and empty for this profile. Latent disorder identity, severity, trajectory state, observation truth, source paths, and patient-level diagnostics are never exported.
+
+Both profiles load the repository `datapackage.json` by default and default `--reference-time` to `2026-09-01T00:00:00Z` and `--software-revision` to `development-generator-v1`; callers may override those metadata values for reproducibility experiments. They use the pinned `cdc-lms-reference-v1` CDC LMS adapter and the `development-augmenter-v1` source-matched binding. Before generation, the runtime verifies the manifest-listed 14-file augmenter closure and the pinned `uv.lock` dependency bytes. A successful manifest identifies the profile, schema/reference/derivation fingerprints, configuration hash, and `test_only_derivation=true`.
+
+In this guide, `development-authoritative` means that the selected, byte-pinned reference and oracle are authoritative only for reproducibility within these explicit development commands. Every output remains test-only. The command rejects existing, partial, or unsafe output paths and does not overwrite them. To check deterministic behavior, rerun an identical command into two distinct new output roots and compare non-manifest file hashes; do not rerun into the same output root.
+
+These profiles accept no real or governed patient inputs, real-data root, calibration artifact or path, held-out report, privacy input, network address, Synthea checkout, model, or arbitrary diagnosis payload. The default/no-profile invocation, and an unknown profile, still fail closed with `No production growth reference or authoritative derivation oracle is configured` before runtime construction or output-path checks.
+
+Successful local packages do not establish clinical validity, prevalence validation, demographic fidelity, privacy/non-matchability, patient-disjoint held-out validation, task utility, a non-test derivation binding, Synthea conformance, or release authorization. Clinical and reference review, governed prevalence/demographic calibration, held-out evidence, qualified privacy evaluation and non-matchability review, optional Synthea conformance, and release authorization remain separate deferred gates.
 
 ## Scheduled development scale profile
 
@@ -1092,13 +1113,13 @@ For a generated package, inspect `manifest.json` and `validation-report.json`, t
 
 ## The command-line entry point
 
-This command currently exits with an explicit unavailable-oracle message after parsing its basic arguments:
+The default/no-profile invocation intentionally exits with the fixed unavailable-oracle message after parsing its basic arguments:
 
 ```sh
 uv run python -m synthetic.generate --output /tmp/ppoc-smoke --patients 10 --seed 20260830
 ```
 
-That behavior is intentional. Do not treat a command-line failure as a missing flag or bypass the injected-reference/oracle boundary. Wire a reviewed production reference and authoritative oracle through an explicit API/CLI design before enabling it.
+That behavior is intentional. Do not treat a command-line failure as a missing flag or bypass the injected-reference/oracle boundary. The two explicit development profiles are documented above; they use the pinned source-matched runtime for test-only reproducibility and do not enable a production route. Wire a reviewed production reference and authoritative oracle through an explicit API/CLI design before enabling it.
 
 ## Claims and non-claims
 
