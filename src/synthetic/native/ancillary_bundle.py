@@ -7,7 +7,9 @@ and a typed GHD projection separately before returning a fresh combined bundle.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
+from copy import copy
 from dataclasses import dataclass
 from enum import Enum
 from types import MappingProxyType
@@ -35,6 +37,7 @@ ANCILLARY_BUNDLE_CHECK_NAMES = (
     "ancillary_resources",
     "truth_boundary",
 )
+_NATIVE_VISIT_ID = re.compile(r"^syn-[0-9a-f]{32}$")
 
 class AncillaryBundleValidationStatus(str, Enum):
     """Closed aggregate status for the integrated evaluator contract."""
@@ -173,6 +176,35 @@ def _zeroed_base(bundle: ObservedResourceBundle) -> ObservedResourceBundle:
     )
 
 
+def _zeroed_base_validation_view(bundle: ObservedResourceBundle) -> ObservedResourceBundle:
+    """Return a non-mutating base view even when private evidence is malformed."""
+
+    if isinstance(bundle.source_frame, ObservationFrame):
+        return _zeroed_base(bundle)
+    rows = dict(bundle.rows)
+    for resource_name in GHD_ANCILLARY_RESOURCE_NAMES:
+        rows[resource_name] = ()
+    view = copy(bundle)
+    object.__setattr__(view, "rows", MappingProxyType(rows))
+    return view
+
+
+def _has_independent_visible_base_failure(bundle: ObservedResourceBundle) -> bool:
+    """Check visible base rows that remain decidable without source evidence."""
+
+    view = _zeroed_base_validation_view(bundle)
+    if validate_observed_resources(view).status is ResourceValidationStatus.FAIL:
+        return True
+    try:
+        return any(
+            not isinstance(row, ResourceRow)
+            or _NATIVE_VISIT_ID.fullmatch(row.to_mapping().get("visit_id", "")) is None
+            for row in view.rows["visits"]
+        )
+    except Exception:  # noqa: BLE001 - malformed visible rows are failures
+        return True
+
+
 def _patient_row_matches_member(bundle: ObservedResourceBundle, member: CohortMember) -> bool:
     patient_rows = bundle.rows["patients"]
     if len(patient_rows) != 1:
@@ -242,10 +274,10 @@ def _base_resources_state(
 ) -> tuple[AncillaryBundleValidationStatus, str]:
     if not isinstance(bundle, ObservedResourceBundle):
         return AncillaryBundleValidationStatus.UNEVALUABLE, "MALFORMED_BUNDLE"
-    if not isinstance(bundle.source_frame, ObservationFrame):
-        return AncillaryBundleValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
     try:
-        status = validate_observed_resources(_zeroed_base(bundle)).status
+        if _has_independent_visible_base_failure(bundle):
+            return AncillaryBundleValidationStatus.FAIL, "BASE_RESOURCES_INVALID"
+        status = validate_observed_resources(_zeroed_base_validation_view(bundle)).status
     except Exception:  # noqa: BLE001 - malformed visible rows are a fixed failure
         return AncillaryBundleValidationStatus.FAIL, "BASE_RESOURCES_INVALID"
     if status is ResourceValidationStatus.PASS:

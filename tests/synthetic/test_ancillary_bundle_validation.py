@@ -133,6 +133,28 @@ def test_full_bundle_validator_marks_a_shared_malformed_private_frame_unevaluabl
     assert _check(report, "base_resources") == ("UNEVALUABLE", "INSUFFICIENT_EVIDENCE")
 
 
+def test_full_bundle_validator_keeps_visible_base_failures_above_malformed_private_evidence() -> None:
+    member, base, projection = _merge_inputs()
+    from synthetic.native.ancillary_bundle import merge_ghd_ancillary_resources
+
+    merged = merge_ghd_ancillary_resources(base, member, projection, _policy())
+    visit = merged.rows["visits"][0]
+    object.__setattr__(
+        visit,
+        "values",
+        tuple((name, "syn-unlinked" if name == "visit_id" else value) for name, value in visit.values),
+    )
+    opaque_frame = object()
+    object.__setattr__(member, "frame", opaque_frame)
+    object.__setattr__(merged, "source_frame", opaque_frame)
+
+    report = validate_ghd_ancillary_bundle(merged, member, _policy())
+
+    assert report.status is AncillaryBundleValidationStatus.FAIL
+    assert _check(report, "bundle_identity") == ("UNEVALUABLE", "INSUFFICIENT_EVIDENCE")
+    assert _check(report, "base_resources") == ("FAIL", "BASE_RESOURCES_INVALID")
+
+
 def test_full_bundle_validator_rejects_nested_private_values_without_rendering_them() -> None:
     member, base, projection = _merge_inputs()
     from synthetic.native.ancillary_bundle import merge_ghd_ancillary_resources
