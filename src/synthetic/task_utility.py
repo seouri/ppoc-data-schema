@@ -21,8 +21,27 @@ from synthetic.models import (
     DisorderKind,
     LatentDisorderState,
 )
-from synthetic.native.observations import ObservationFrame
-from synthetic.native.resources import ObservedResourceBundle, SyntheticDemographics
+from synthetic.native.observations import (
+    EventRecordingDecision,
+    MeasurementObservation,
+    MeasurementTruth,
+    ObservationFrame,
+    ObservationPolicy,
+    ObservationTruth,
+    ObservationWindow,
+    ObservedVisit,
+    RecordedEvent,
+    VisitOpportunity,
+)
+from synthetic.native.resources import (
+    BASE_RESOURCE_NAMES,
+    ClinicalDescendant,
+    ObservedResourceBundle,
+    ResourceRow,
+    ResourceShape,
+    ResourceSpec,
+    SyntheticDemographics,
+)
 
 TASK_UTILITY_REPORT_VERSION = "task-utility-report-v1"
 
@@ -1069,26 +1088,270 @@ def _validated_event(value: object) -> ClinicalEvent:
     )
 
 
-def _validated_member(value: object) -> CohortMember:
-    if type(value) is not CohortMember:
+def _validated_trajectory(value: object) -> AgeRegimeDisorderTrajectory:
+    if type(value) is not AgeRegimeDisorderTrajectory:
         raise TypeError("cohort contains malformed typed evidence")
-    trajectory = value.trajectory
-    if type(trajectory) is not AgeRegimeDisorderTrajectory:
-        raise TypeError("cohort contains malformed typed evidence")
-    physiology = trajectory.physiology
+    physiology = value.physiology
     if type(physiology) is not AgeRegimeTrajectory or type(physiology.points) is not tuple:
         raise TypeError("cohort contains malformed typed evidence")
     validated_physiology = AgeRegimeTrajectory(
         tuple(_validated_age_point(point) for point in physiology.points),
         _validated_age_state(physiology.state),
     )
-    if type(trajectory.events) is not tuple:
+    if type(value.events) is not tuple:
         raise TypeError("cohort contains malformed typed evidence")
-    validated_trajectory = AgeRegimeDisorderTrajectory(
+    return AgeRegimeDisorderTrajectory(
         validated_physiology,
-        _validated_disorder(trajectory.disorder),
-        tuple(_validated_event(event) for event in trajectory.events),
+        _validated_disorder(value.disorder),
+        tuple(_validated_event(event) for event in value.events),
     )
+
+
+def _validated_observation_window(value: object) -> ObservationWindow:
+    if type(value) is not ObservationWindow:
+        raise TypeError("cohort contains malformed typed evidence")
+    return ObservationWindow(
+        start_age_days=value.start_age_days,
+        effective_end_age_days=value.effective_end_age_days,
+        administrative_end_age_days=value.administrative_end_age_days,
+        censoring_mode=value.censoring_mode,
+    )
+
+
+def _validated_measurement(value: object) -> MeasurementObservation:
+    if type(value) is not MeasurementObservation:
+        raise TypeError("cohort contains malformed typed evidence")
+    return MeasurementObservation(
+        channel=value.channel,
+        availability=value.availability,
+        recorded_value=value.recorded_value,
+    )
+
+
+def _validated_visit(value: object) -> ObservedVisit:
+    if type(value) is not ObservedVisit or type(value.measurements) is not tuple:
+        raise TypeError("cohort contains malformed typed evidence")
+    return ObservedVisit(
+        patient_id=value.patient_id,
+        visit_id=value.visit_id,
+        age_days=value.age_days,
+        encounter_type=value.encounter_type,
+        measurements=tuple(
+            _validated_measurement(measurement)
+            for measurement in value.measurements
+        ),
+    )
+
+
+def _validated_recorded_event(value: object) -> RecordedEvent:
+    if type(value) is not RecordedEvent:
+        raise TypeError("cohort contains malformed typed evidence")
+    return RecordedEvent(
+        patient_id=value.patient_id,
+        age_days=value.age_days,
+        event_kind=value.event_kind,
+        code=value.code,
+        opportunity_index=value.opportunity_index,
+    )
+
+
+def _validated_opportunity(value: object) -> VisitOpportunity:
+    if type(value) is not VisitOpportunity:
+        raise TypeError("cohort contains malformed typed evidence")
+    return VisitOpportunity(
+        source_point_index=value.source_point_index,
+        age_days=value.age_days,
+        encounter_type=value.encounter_type,
+        realized=value.realized,
+    )
+
+
+def _validated_measurement_truth(value: object) -> MeasurementTruth:
+    if type(value) is not MeasurementTruth:
+        raise TypeError("cohort contains malformed typed evidence")
+    return MeasurementTruth(
+        source_point_index=value.source_point_index,
+        channel=value.channel,
+        availability=value.availability,
+        latent_value=value.latent_value,
+        error_delta=value.error_delta,
+    )
+
+
+def _validated_event_decision(value: object) -> EventRecordingDecision:
+    if type(value) is not EventRecordingDecision:
+        raise TypeError("cohort contains malformed typed evidence")
+    return EventRecordingDecision(
+        source_event_index=value.source_event_index,
+        recorded=value.recorded,
+        opportunity_index=value.opportunity_index,
+    )
+
+
+def _validated_observation_policy(value: object) -> ObservationPolicy:
+    if type(value) is not ObservationPolicy:
+        raise TypeError("cohort contains malformed typed evidence")
+    return ObservationPolicy(
+        policy_version=value.policy_version,
+        window_start_age_days=value.window_start_age_days,
+        window_end_age_days=value.window_end_age_days,
+        censoring_mode=value.censoring_mode,
+        censor_age_days=value.censor_age_days,
+        visit_probability=value.visit_probability,
+        length_availability_probability=value.length_availability_probability,
+        height_availability_probability=value.height_availability_probability,
+        weight_availability_probability=value.weight_availability_probability,
+        head_circumference_availability_probability=(
+            value.head_circumference_availability_probability
+        ),
+        length_error_sd_cm=value.length_error_sd_cm,
+        height_error_sd_cm=value.height_error_sd_cm,
+        weight_error_sd_kg=value.weight_error_sd_kg,
+        head_circumference_error_sd_cm=value.head_circumference_error_sd_cm,
+        rounding_digits=value.rounding_digits,
+        recognition_probability=value.recognition_probability,
+        diagnosis_probability=value.diagnosis_probability,
+        recognition_delay_days=value.recognition_delay_days,
+    )
+
+
+def _validated_observation_truth(value: object) -> ObservationTruth:
+    if type(value) is not ObservationTruth:
+        raise TypeError("cohort contains malformed typed evidence")
+    for nested_tuple in (
+        value.opportunities,
+        value.measurement_truth,
+        value.event_decisions,
+        value.source_events,
+    ):
+        if type(nested_tuple) is not tuple:
+            raise TypeError("cohort contains malformed typed evidence")
+    return ObservationTruth(
+        patient_id=value.patient_id,
+        window=_validated_observation_window(value.window),
+        opportunities=tuple(
+            _validated_opportunity(item) for item in value.opportunities
+        ),
+        measurement_truth=tuple(
+            _validated_measurement_truth(item) for item in value.measurement_truth
+        ),
+        event_decisions=tuple(
+            _validated_event_decision(item) for item in value.event_decisions
+        ),
+        source_events=tuple(
+            _validated_event(item) for item in value.source_events
+        ),
+        latent_trajectory_hash=value.latent_trajectory_hash,
+        truth_hash=value.truth_hash,
+        policy=(
+            None
+            if value.policy is None
+            else _validated_observation_policy(value.policy)
+        ),
+        latent_trajectory=(
+            None
+            if value.latent_trajectory is None
+            else _validated_trajectory(value.latent_trajectory)
+        ),
+    )
+
+
+def _validated_observation_frame(value: object) -> ObservationFrame:
+    if (
+        type(value) is not ObservationFrame
+        or type(value.visits) is not tuple
+        or type(value.events) is not tuple
+    ):
+        raise TypeError("cohort contains malformed typed evidence")
+    return ObservationFrame(
+        patient_id=value.patient_id,
+        policy_version=value.policy_version,
+        window=_validated_observation_window(value.window),
+        visits=tuple(_validated_visit(visit) for visit in value.visits),
+        events=tuple(
+            _validated_recorded_event(event) for event in value.events
+        ),
+        truth=_validated_observation_truth(value.truth),
+    )
+
+
+def _validated_resource_spec(value: object) -> ResourceSpec:
+    if type(value) is not ResourceSpec or type(value.field_names) is not tuple:
+        raise TypeError("cohort contains malformed typed evidence")
+    return ResourceSpec(name=value.name, field_names=value.field_names)
+
+
+def _validated_resource_shape(value: object) -> ResourceShape:
+    if type(value) is not ResourceShape or type(value.resources) is not tuple:
+        raise TypeError("cohort contains malformed typed evidence")
+    return ResourceShape(
+        tuple(_validated_resource_spec(item) for item in value.resources)
+    )
+
+
+def _validated_resource_row(value: object) -> ResourceRow:
+    if (
+        type(value) is not ResourceRow
+        or type(value.values) is not tuple
+        or any(type(pair) is not tuple for pair in value.values)
+    ):
+        raise TypeError("cohort contains malformed typed evidence")
+    return ResourceRow(resource_name=value.resource_name, values=value.values)
+
+
+def _validated_clinical_descendant(value: object) -> ClinicalDescendant:
+    if type(value) is not ClinicalDescendant:
+        raise TypeError("cohort contains malformed typed evidence")
+    return ClinicalDescendant(
+        patient_id=value.patient_id,
+        visit_id=value.visit_id,
+        age_days=value.age_days,
+        event_kind=value.event_kind,
+        code=value.code,
+    )
+
+
+def _validated_resource_bundle(value: object) -> ObservedResourceBundle:
+    if (
+        type(value) is not ObservedResourceBundle
+        or type(value.rows) is not MappingProxyType
+        or type(value.clinical_descendants) is not tuple
+    ):
+        raise TypeError("cohort contains malformed typed evidence")
+    validated_rows = {
+        resource_name: tuple(
+            _validated_resource_row(row) for row in value.rows[resource_name]
+        )
+        for resource_name in BASE_RESOURCE_NAMES
+        if type(value.rows[resource_name]) is tuple
+    }
+    if len(validated_rows) != len(BASE_RESOURCE_NAMES):
+        raise TypeError("cohort contains malformed typed evidence")
+    validated_bundle = ObservedResourceBundle(
+        patient_id=value.patient_id,
+        shape=_validated_resource_shape(value.shape),
+        rows=validated_rows,
+        clinical_descendants=tuple(
+            _validated_clinical_descendant(item)
+            for item in value.clinical_descendants
+        ),
+        source_frame=_validated_observation_frame(value.source_frame),
+    )
+    for rows in validated_bundle.rows.values():
+        for row in rows:
+            row_values = dict(row.values)
+            if (
+                "patient_id" in row_values
+                and row_values["patient_id"] != validated_bundle.patient_id
+            ):
+                raise ValueError("cohort contains malformed typed evidence")
+    return validated_bundle
+
+
+def _validated_member(value: object) -> CohortMember:
+    if type(value) is not CohortMember:
+        raise TypeError("cohort contains malformed typed evidence")
+    validated_trajectory = _validated_trajectory(value.trajectory)
     if type(value.demographics) is not SyntheticDemographics:
         raise TypeError("cohort contains malformed typed evidence")
     validated_demographics = SyntheticDemographics(
@@ -1097,23 +1360,27 @@ def _validated_member(value: object) -> CohortMember:
         ethnicity=value.demographics.ethnicity,
         races=value.demographics.races,
     )
-    if type(value.frame) is not ObservationFrame:
-        raise TypeError("cohort contains malformed typed evidence")
-    validated_frame = ObservationFrame(
-        patient_id=value.frame.patient_id,
-        policy_version=value.frame.policy_version,
-        window=value.frame.window,
-        visits=value.frame.visits,
-        events=value.frame.events,
-        truth=value.frame.truth,
+    validated_frame = _validated_observation_frame(value.frame)
+    validated_bundle = (
+        None
+        if value.bundle is None
+        else _validated_resource_bundle(value.bundle)
     )
-    if value.bundle is not None and type(value.bundle) is not ObservedResourceBundle:
-        raise TypeError("cohort contains malformed typed evidence")
+    if (
+        validated_frame.truth.latent_trajectory is not None
+        and validated_frame.truth.latent_trajectory != validated_trajectory
+    ):
+        raise ValueError("cohort contains malformed typed evidence")
+    if (
+        validated_bundle is not None
+        and validated_bundle.source_frame != validated_frame
+    ):
+        raise ValueError("cohort contains malformed typed evidence")
     return CohortMember(
         demographics=validated_demographics,
         trajectory=validated_trajectory,
         frame=validated_frame,
-        bundle=value.bundle,
+        bundle=validated_bundle,
     )
 
 
@@ -1132,13 +1399,16 @@ def _validated_calibration(value: object) -> CalibrationSamplingProfile:
     )
 
 
-def _validated_cohort(value: object) -> NativeCohort:
-    if type(value) is not NativeCohort or type(value.members) is not tuple:
+def _validated_cohort(
+    value: object,
+    members: tuple[CohortMember, ...],
+) -> NativeCohort:
+    if type(value) is not NativeCohort:
         raise TypeError("cohort contains malformed typed evidence")
     return NativeCohort(
         profile=value.profile,
         seed=value.seed,
-        members=tuple(_validated_member(member) for member in value.members),
+        members=tuple(_validated_member(member) for member in members),
         calibration=_validated_calibration(value.calibration),
     )
 
@@ -1223,10 +1493,10 @@ def evaluate_task_utility(
             or type(predictions) is not tuple
         ):
             return _structural_fallback_report()
-        validated_cohort = _validated_cohort(cohort)
-        members = validated_cohort.members
+        members = cohort.members
         if (
-            len(predictions) != len(members)
+            type(members) is not tuple
+            or len(predictions) != len(members)
             or not all(type(item) is TaskPrediction for item in predictions)
         ):
             return _structural_fallback_report()
@@ -1235,6 +1505,8 @@ def evaluate_task_utility(
             for item in predictions
         )
         validated_policy = _validated_policy(policy)
+        validated_cohort = _validated_cohort(cohort, members)
+        members = validated_cohort.members
         cell = _overall_cell(members, validated_predictions, validated_policy)
 
         if cell.status is TaskUtilityStatus.FAIL:

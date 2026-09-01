@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import dataclasses
+
 from synthetic.cohort import CalibrationSamplingProfile, CohortMember, NativeCohort
 from synthetic.models import (
     AgeRegimeDisorderTrajectory,
@@ -22,8 +24,17 @@ from synthetic.native.observations import (
     ObservationTruth,
     ObservationWindow,
     ObservedVisit,
+    RecordedEventKind,
 )
-from synthetic.native.resources import SyntheticDemographics
+from synthetic.native.resources import (
+    BASE_RESOURCE_NAMES,
+    ClinicalDescendant,
+    ObservedResourceBundle,
+    ResourceRow,
+    ResourceShape,
+    ResourceSpec,
+    SyntheticDemographics,
+)
 from synthetic.task_utility import TaskPrediction, TaskUtilityPolicy
 from tests.synthetic.cohort_fixtures import aggregate_calibration_artifact
 
@@ -131,6 +142,38 @@ def task_cohort(*members: CohortMember) -> NativeCohort:
         aggregate_calibration_artifact()
     )
     return NativeCohort("development-v1", 7, tuple(members), calibration)
+
+
+def task_member_with_bundle(member_number: int, kind: DisorderKind) -> CohortMember:
+    member = task_member(member_number, kind)
+    shape = ResourceShape(
+        tuple(ResourceSpec(name, ("patient_id",)) for name in BASE_RESOURCE_NAMES)
+    )
+    rows = {
+        name: (ResourceRow(name, (("patient_id", member.demographics.patient_id),)),)
+        for name in BASE_RESOURCE_NAMES
+    }
+    source_frame = dataclasses.replace(member.frame)
+    descendant = ClinicalDescendant(
+        patient_id=member.demographics.patient_id,
+        visit_id=member.frame.visits[0].visit_id,
+        age_days=member.frame.visits[0].age_days,
+        event_kind=RecordedEventKind.RECOGNITION,
+        code="SYN-GROWTH-RECOGNITION",
+    )
+    bundle = ObservedResourceBundle(
+        patient_id=member.demographics.patient_id,
+        shape=shape,
+        rows=rows,
+        clinical_descendants=(descendant,),
+        source_frame=source_frame,
+    )
+    return CohortMember(
+        demographics=member.demographics,
+        trajectory=member.trajectory,
+        frame=member.frame,
+        bundle=bundle,
+    )
 
 
 def scored_task_predictions() -> tuple[TaskPrediction, ...]:
