@@ -506,6 +506,31 @@ clinical review, task utility, release approval, and Synthea conformance are
 unchanged and deferred. The production CLI remains fail-closed, and existing
 empty-ancillary base-resource contracts remain in force.
 
+### In-memory GHD ancillary bundle integration
+
+`merge_ghd_ancillary_resources(bundle, member, projection, policy)` composes the evaluator-only GHD projection with one typed in-memory `ObservedResourceBundle`; it accepts only the same fictional `CohortMember`, exact `AncillaryResourceProjection` shape, and `GhdAncillaryPolicy` used by the prior synthetic generation step. The base bundle must have empty `labs`, `medications`, `problem_list`, and `referrals` tuples, its patient row and source frame must bind to the member, and every ancillary visit link must resolve to a base visit. A passing merge returns a fresh immutable six-resource `ObservedResourceBundle` without mutating the base bundle or projection.
+
+```python
+from synthetic.native.ancillary_bundle import (
+    AncillaryBundleValidationStatus,
+    merge_ghd_ancillary_resources,
+    validate_ghd_ancillary_bundle,
+)
+from synthetic.native.resources import ResourceValidationStatus, validate_observed_resources
+
+# base_bundle, member, projection, and policy are prior typed in-memory synthetic values.
+enriched_bundle = merge_ghd_ancillary_resources(base_bundle, member, projection, policy)
+report = validate_ghd_ancillary_bundle(enriched_bundle, member, policy)
+assert report.status is AncillaryBundleValidationStatus.PASS
+
+# The legacy generic validator intentionally rejects nonempty ancillary rows.
+assert validate_observed_resources(enriched_bundle).status is ResourceValidationStatus.FAIL
+```
+
+`validate_ghd_ancillary_bundle` returns a separate aggregate-only `AncillaryBundleValidationReport` with fixed `bundle_identity`, `base_resources`, `ancillary_resources`, and `truth_boundary` checks. It re-runs the current validators against a zeroed base view and an extracted ancillary projection; `FAIL` wins over `UNEVALUABLE`, which wins over `PASS`. A typed visible row, identity, shape, link, causal-timing, or nested truth-boundary violation is `FAIL`; absent or malformed private source evidence is `UNEVALUABLE` only when no independently visible violation is demonstrable. The report contains fixed statuses, reason codes, and counts only: no rows, IDs, source frame, latent trajectory, hidden event, or truth payload is serialized or rendered.
+
+This synthetic-only, evaluator-only seam is in-memory only: there is no file input, package/file export, manifest, descriptor mutation, or CLI. It does not implement augmented derivation or paired counterfactual worlds, and it is not evidence of prevalence or demographic calibration, held-out validation, clinical review, task utility, privacy or non-matchability, release approval, other disorders, or Synthea conformance. Those remain separately governed roadmap gates.
+
 ## Exact-schema observed-resource package export
 
 `export_observed_resource_package` is the development-only bridge from one or more passing in-memory observed-resource bundles to an exact-schema, synthetic-only package. The caller supplies an already-loaded descriptor mapping; the exporter does not accept a descriptor path, a real-data root, a calibration input, a held-out report, a privacy policy, or a Synthea input. Every bundle must already validate as `PASS`. The exporter checks each bundle against the supplied descriptor shape, rejects duplicate synthetic patient and visit identifiers, then sorts bundles deterministically by synthetic patient ID before it writes the shared exact-schema lifecycle.

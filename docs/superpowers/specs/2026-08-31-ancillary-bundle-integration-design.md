@@ -83,6 +83,14 @@ not echo identifiers, ages, values, source objects, paths, or truth terms.
    The merge does not allocate rows, draw randomness, alter event schedules, or
    infer latent disease from recorded outcomes.
 
+The merge re-runs the validators internally; a caller-supplied prior report is
+never trusted because typed values can be mutated after a report was produced.
+The member and bundle source frame must be the same object, the base patient row
+must equal the member demographics, and every ancillary `visit_id` must resolve
+to a visible base visit. A malformed or non-passing input fails atomically with
+one fixed redacted integration exception. A second merge into an already
+enriched bundle is rejected rather than overwritten.
+
 ## Full-bundle validation
 
 `validate_ghd_ancillary_bundle` returns exactly these checks in order:
@@ -95,6 +103,13 @@ not echo identifiers, ages, values, source objects, paths, or truth terms.
    GHD validator; and
 4. `truth_boundary` — ordinary serialization and representation contain no
    private source frame, latent trajectory, hidden event, or truth payload.
+
+The base-resource check is performed against a fresh base view whose ancillary
+tuples are empty; the ancillary check is performed against a fresh projection
+view extracted from the merged rows. The generic
+`validate_observed_resources` function therefore continues to reject nonempty
+ancillary rows, and the native cohort/package-export paths remain unchanged and
+continue to accept only legacy base bundles.
 
 `FAIL` means a typed row, shape, identity, causal, link, or boundary violation.
 `UNEVALUABLE` means required private source evidence is absent or malformed and
