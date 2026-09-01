@@ -15,7 +15,7 @@ from typing import Any, NoReturn
 from synthetic.derivation import DerivationResult, DerivationUnavailable
 from synthetic.schema_contract import resource_spec
 
-AUGMENTER_ORACLE_ID = "growth-augmenter-cli-v1"
+AUGMENTER_ORACLE_ID = "augmenter-cli-v1"
 AUGMENTER_RUNTIME_MANIFEST_SHA256 = (
     "b50afc36eca61684380154129cdacf484e62d56fa6da55914adab18c2d94d1d6"
 )

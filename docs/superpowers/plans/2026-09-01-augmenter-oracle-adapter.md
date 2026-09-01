@@ -34,7 +34,7 @@
 **Interfaces:**
 
 - Consumes: `data/augment-runtime-manifest.json`, the checked-in runtime closure, `synthetic.derivation.DerivationResult`, and descriptor `resource_spec` values.
-- Produces: `AUGMENTER_ORACLE_ID = "growth-augmenter-cli-v1"`, `AUGMENTER_RUNTIME_MANIFEST_SHA256 = "b50afc36eca61684380154129cdacf484e62d56fa6da55914adab18c2d94d1d6"`, and `SourceMatchedAugmenterOracle(repository_root: Path | None = None, *, timeout_seconds: float = 300.0)` with `oracle_id`, `implementation_fingerprint`, and `derive(package_root: Path, descriptor: dict[str, Any]) -> DerivationResult`.
+- Produces: `AUGMENTER_ORACLE_ID = "augmenter-cli-v1"`, `AUGMENTER_RUNTIME_MANIFEST_SHA256 = "b50afc36eca61684380154129cdacf484e62d56fa6da55914adab18c2d94d1d6"`, and `SourceMatchedAugmenterOracle(repository_root: Path | None = None, *, timeout_seconds: float = 300.0)` with `oracle_id`, `implementation_fingerprint`, and `derive(package_root: Path, descriptor: dict[str, Any]) -> DerivationResult`.
 
 - [ ] **Step 1: Write the failing synthetic oracle tests.**
 

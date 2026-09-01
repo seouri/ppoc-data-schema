@@ -41,7 +41,7 @@ class SourceMatchedAugmenterOracle:
 The default repository root is the checkout containing the adapter. An
 explicit root is useful for tests and local checkouts, but it is a runtime
 code root, not a patient-data or governed-data input. The adapter's stable
-oracle identity is `growth-augmenter-cli-v1`; its implementation fingerprint
+oracle identity is `augmenter-cli-v1`; its implementation fingerprint
 is the pinned SHA-256 of `data/augment-runtime-manifest.json`. It always
 returns `DerivationResult(..., test_only=True)`.
 

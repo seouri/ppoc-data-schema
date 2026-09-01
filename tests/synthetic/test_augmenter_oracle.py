@@ -17,7 +17,9 @@ from synthetic.augmenter_oracle import (
     SourceMatchedAugmenterOracle,
 )
 from synthetic.derivation import DerivationUnavailable
+from synthetic.derivation_binding import BoundDerivationOracle, DerivationBinding
 from synthetic.schema_contract import resource_spec
+from tests.synthetic.fakes import test_derivation_binding
 
 ROOT = Path(__file__).resolve().parents[2]
 UNAVAILABLE_MESSAGE = "source-matched augmenter unavailable"
@@ -162,7 +164,7 @@ def test_real_cli_derives_descriptor_outputs_without_mutating_base_files(
 
     result = SourceMatchedAugmenterOracle().derive(tmp_path, descriptor)
 
-    assert result.oracle_id == AUGMENTER_ORACLE_ID == "growth-augmenter-cli-v1"
+    assert result.oracle_id == AUGMENTER_ORACLE_ID == "augmenter-cli-v1"
     assert (
         result.implementation_fingerprint
         == AUGMENTER_RUNTIME_MANIFEST_SHA256
@@ -187,6 +189,22 @@ def test_real_cli_derives_descriptor_outputs_without_mutating_base_files(
     }
     timestamped_outputs = set(tmp_path.glob("*_augmented-[0-9]*.csv"))
     assert timestamped_outputs <= descriptor_outputs
+
+
+def test_candidate_identity_constructs_a_matching_test_only_bound_oracle() -> None:
+    """Catches a documented candidate identity rejected by binding token safety."""
+    mapping = test_derivation_binding().to_mapping()
+    oracle_mapping = mapping["oracle"]
+    assert isinstance(oracle_mapping, dict)
+    oracle_mapping["oracle_id"] = AUGMENTER_ORACLE_ID
+    oracle_mapping["implementation_fingerprint"] = AUGMENTER_RUNTIME_MANIFEST_SHA256
+
+    candidate_test_binding = DerivationBinding.from_mapping(mapping)
+    candidate_oracle = SourceMatchedAugmenterOracle()
+    bound = BoundDerivationOracle(candidate_oracle, candidate_test_binding)
+
+    assert candidate_test_binding.test_only is True
+    assert bound.oracle_id == AUGMENTER_ORACLE_ID == "augmenter-cli-v1"
 
 
 def test_subprocess_uses_isolated_snapshot_and_fixed_csv_command(

@@ -103,7 +103,7 @@ The binding is deliberately incomplete and `UNEVALUABLE`; its `approved_parity_h
 
 ## Runtime and output contract
 
-The fixed oracle identity is `growth-augmenter-cli-v1`. Its implementation fingerprint is the pinned runtime-manifest SHA-256 `b50afc36eca61684380154129cdacf484e62d56fa6da55914adab18c2d94d1d6`. Before each call, the adapter verifies `data/augment-runtime-manifest.json` and its exact 14-file closure as regular, non-symlink files with matching byte counts and hashes.
+The fixed oracle identity is `augmenter-cli-v1`. Its implementation fingerprint is the pinned runtime-manifest SHA-256 `b50afc36eca61684380154129cdacf484e62d56fa6da55914adab18c2d94d1d6`. The identity is a bounded aggregate-safe token accepted by the derivation-binding parser. Before each call, the adapter verifies `data/augment-runtime-manifest.json` and its exact 14-file closure as regular, non-symlink files with matching byte counts and hashes.
 
 After verification, the adapter copies that closure into a private temporary runtime snapshot, verifies the copied bytes again, and executes only that snapshot. It invokes the current Python interpreter without a shell, with `-E -s`, the private runtime as the working directory, the exporter's staged package as the only input directory, a separate private output directory, and `--output_format csv`. The candidate accepts CSV only.
 

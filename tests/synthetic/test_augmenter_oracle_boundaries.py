@@ -4,6 +4,8 @@ import ast
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 SYNTHETIC_ROOT = ROOT / "src" / "synthetic"
 ADAPTER = SYNTHETIC_ROOT / "augmenter_oracle.py"
@@ -25,15 +27,21 @@ def _imports(path: Path) -> set[str]:
             imports.update(alias.name for alias in node.names)
         elif isinstance(node, ast.ImportFrom):
             if node.level:
-                imports.add("." * node.level + (node.module or ""))
+                base = "." * node.level + (node.module or "")
             elif node.module:
-                imports.add(node.module)
+                base = node.module
+            else:
+                continue
+            imports.add(base)
+            separator = "" if base.endswith(".") else "."
+            imports.update(f"{base}{separator}{alias.name}" for alias in node.names)
     return imports
 
 
 def _absolute_module(imported: str) -> str:
     if imported.startswith("."):
-        return f"synthetic.{imported.lstrip('.')}"
+        suffix = imported.lstrip(".")
+        return f"synthetic.{suffix}" if suffix else "synthetic"
     return imported
 
 
@@ -45,7 +53,10 @@ def test_adapter_imports_only_stdlib_and_narrow_synthetic_contracts() -> None:
         absolute = _absolute_module(imported)
         root = absolute.split(".", maxsplit=1)[0]
         assert (
-            absolute in ADAPTER_ALLOWED_PROJECT_IMPORTS
+            any(
+                absolute == allowed or absolute.startswith(f"{allowed}.")
+                for allowed in ADAPTER_ALLOWED_PROJECT_IMPORTS
+            )
             or root in sys.stdlib_module_names
             or absolute == "__future__"
         ), absolute
@@ -62,6 +73,30 @@ def test_visible_and_evaluator_modules_do_not_import_candidate_adapter() -> None
             or imported.startswith("synthetic.augmenter_oracle.")
             for imported in imports
         ), path.relative_to(ROOT)
+
+
+@pytest.mark.parametrize(
+    "source",
+    (
+        "import synthetic.augmenter_oracle",
+        "import synthetic.augmenter_oracle as candidate",
+        "from synthetic import augmenter_oracle",
+        "from synthetic import augmenter_oracle as candidate",
+        "from . import augmenter_oracle",
+        "from . import augmenter_oracle as candidate",
+    ),
+)
+def test_import_scanner_records_alias_qualified_candidate_imports(
+    tmp_path: Path,
+    source: str,
+) -> None:
+    """Catches import-from aliases disappearing from the visible-module scan."""
+    module = tmp_path / "visible.py"
+    module.write_text(source, encoding="utf-8")
+
+    imports = {_absolute_module(imported) for imported in _imports(module)}
+
+    assert "synthetic.augmenter_oracle" in imports
 
 
 def test_production_cli_failure_text_remains_fixed() -> None:
