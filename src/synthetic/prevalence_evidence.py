@@ -17,9 +17,16 @@ import tempfile
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
+from dataclasses import field as dataclass_field
 from pathlib import Path
 
-from synthetic.calibration_targets import is_registered_target_key
+from synthetic.calibration_targets import (
+    ETHNICITY_CATEGORY_SLUGS,
+    RACE_CATEGORY_SLUGS,
+    RECORDED_FLAGS,
+    SEX_CATEGORY_SLUGS,
+    is_registered_target_key,
+)
 from synthetic.heldout_validate import (
     HeldoutComparison,
     HeldoutRunConfig,
@@ -33,6 +40,7 @@ PREVALENCE_EVIDENCE_REPORT_VERSION = "prevalence-evidence-report-v1"
 PACKAGE_MANIFEST_MAX_BYTES = 1024 * 1024
 V1_TARGET_FAMILIES = frozenset({"demographics", "recorded_outcome"})
 _EVIDENCE_STATUSES = ("PASS", "FAIL", "UNEVALUABLE")
+_OBSERVED_OUTCOME_LAYER = "outcome_layer=observed"
 
 _FAILURE_REASON = "prevalence evidence package is unavailable"
 _SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
@@ -72,6 +80,38 @@ _RESOURCE_NAMES = (
 )
 _DIRECTORY_OPEN_FLAGS = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
 _FILE_OPEN_FLAGS = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_NOFOLLOW", 0)
+
+_TargetKey = tuple[str, str, str, str, str, float | None]
+V1_REQUIRED_TARGET_KEYS: tuple[_TargetKey, ...] = tuple(
+    sorted(
+        (
+            *(
+                (_OBSERVED_OUTCOME_LAYER, f"sex_{slug}", "demographics", "proportion", "proportion", None)
+                for slug in SEX_CATEGORY_SLUGS.values()
+            ),
+            (_OBSERVED_OUTCOME_LAYER, "race_multiselect", "demographics", "proportion", "proportion", None),
+            *(
+                (
+                    _OBSERVED_OUTCOME_LAYER,
+                    f"ethnicity_{slug}",
+                    "demographics",
+                    "proportion",
+                    "proportion",
+                    None,
+                )
+                for slug in ETHNICITY_CATEGORY_SLUGS.values()
+            ),
+            *(
+                (_OBSERVED_OUTCOME_LAYER, f"race_{slug}", "demographics", "proportion", "proportion", None)
+                for slug in RACE_CATEGORY_SLUGS.values()
+            ),
+            *(
+                (_OBSERVED_OUTCOME_LAYER, flag, "recorded_outcome", "proportion", "proportion", None)
+                for flag in RECORDED_FLAGS.values()
+            ),
+        )
+    )
+)
 
 
 class PrevalenceEvidenceUnavailable(ValueError):
@@ -496,9 +536,6 @@ class PrevalenceRunEvidence:
             raise TypeError("identity must be a PackageIdentity")
 
 
-_TargetKey = tuple[str, str, str, str, str, float | None]
-
-
 def _comparison_key(comparison: HeldoutComparison) -> _TargetKey:
     return (
         comparison.stratum_id,
@@ -512,13 +549,15 @@ def _comparison_key(comparison: HeldoutComparison) -> _TargetKey:
 
 def _is_v1_comparison(comparison: HeldoutComparison) -> bool:
     return (
-        comparison.stratum_id == "outcome_layer=observed"
+        comparison.stratum_id == _OBSERVED_OUTCOME_LAYER
         and comparison.family in V1_TARGET_FAMILIES
         and is_registered_target_key(*_comparison_key(comparison))
     )
 
 
 def _aggregate_status(statuses: tuple[str, ...]) -> str:
+    if not statuses:
+        return "UNEVALUABLE"
     if "FAIL" in statuses:
         return "FAIL"
     if "UNEVALUABLE" in statuses:
@@ -673,7 +712,11 @@ class PrevalenceRunResult:
         object.__setattr__(self, "comparisons", sorted_comparisons)
 
     def to_mapping(self) -> dict[str, object]:
-        return {"identity": self.identity.to_mapping(), "status": self.status}
+        return {
+            "identity": self.identity.to_mapping(),
+            "status": self.status,
+            "comparisons": [comparison.to_mapping() for comparison in self.comparisons],
+        }
 
 
 @dataclass(frozen=True)
@@ -684,8 +727,8 @@ class _HeldoutIdentity:
     partition_policy: tuple[tuple[str, object], ...]
     disclosure_policy: tuple[tuple[str, object], ...]
     fidelity_policy: tuple[tuple[str, object], ...]
-    heldout_aggregate_sha256: str
-    synthetic_aggregate_sha256: str
+    heldout_aggregate_sha256: str = dataclass_field(repr=False)
+    synthetic_aggregate_sha256: str = dataclass_field(repr=False)
 
     @classmethod
     def from_report(cls, report: HeldoutValidationReport) -> _HeldoutIdentity:
@@ -708,8 +751,6 @@ class _HeldoutIdentity:
             "partition_policy": dict(self.partition_policy),
             "disclosure_policy": dict(self.disclosure_policy),
             "fidelity_policy": dict(self.fidelity_policy),
-            "heldout_aggregate_sha256": self.heldout_aggregate_sha256,
-            "synthetic_aggregate_sha256": self.synthetic_aggregate_sha256,
         }
 
 
@@ -753,19 +794,15 @@ class PrevalenceEvidenceReport:
         ):
             raise TypeError("comparisons must be a tuple of PrevalenceComparison values")
         sorted_runs = tuple(sorted(self.runs, key=lambda run: run.identity.seed))
-        sorted_comparisons = tuple(sorted(self.comparisons, key=lambda item: item.canonical_key))
-        if len({item.canonical_key for item in sorted_comparisons}) != len(sorted_comparisons):
-            raise ValueError("comparisons must not contain duplicate canonical keys")
-        statuses = tuple(item.status for item in sorted_comparisons)
-        if not statuses or {item.family for item in sorted_comparisons} != V1_TARGET_FAMILIES:
-            expected_status = "UNEVALUABLE"
-        else:
-            expected_status = _aggregate_status(statuses)
+        recomputed_comparisons = _aggregate_comparisons(sorted_runs)
+        if self.comparisons != recomputed_comparisons:
+            raise ValueError("comparisons must exactly match canonical run evidence")
+        expected_status = _aggregate_status(tuple(item.status for item in recomputed_comparisons))
         if self.status != expected_status:
             raise ValueError("status must match v1 aggregate comparisons")
         object.__setattr__(self, "generation_identity", dict(expected_generation_identity))
         object.__setattr__(self, "runs", sorted_runs)
-        object.__setattr__(self, "comparisons", sorted_comparisons)
+        object.__setattr__(self, "comparisons", recomputed_comparisons)
 
     def to_mapping(self) -> dict[str, object]:
         return {
@@ -816,12 +853,25 @@ def _staged_verified_package(spec: PrevalenceRunSpec, identity: PackageIdentity)
                 target = stage_root / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(_read_regular_at(descriptor_fd, relative))
-                os.chmod(target, 0o600)
+                os.chmod(target, 0o400)
             _require_directory_identity(spec.package_root, root_identity)
             staged_identity = verify_package_identity(PrevalenceRunSpec(stage_root, spec.expected_seed))
             if staged_identity != identity:
                 raise _unavailable()
-            yield stage_root
+            directories = sorted(
+                (path for path in stage_root.rglob("*") if path.is_dir()),
+                key=lambda path: len(path.parts),
+                reverse=True,
+            )
+            try:
+                for directory in directories:
+                    os.chmod(directory, 0o500)
+                os.chmod(stage_root, 0o500)
+                yield stage_root
+            finally:
+                os.chmod(stage_root, 0o700)
+                for directory in reversed(directories):
+                    os.chmod(directory, 0o700)
     except PrevalenceEvidenceUnavailable:
         raise
     except Exception:  # noqa: BLE001 - all package-boundary failures stay fixed and redacted.
@@ -833,7 +883,7 @@ def _staged_verified_package(spec: PrevalenceRunSpec, identity: PackageIdentity)
 
 def _aggregate_comparisons(runs: tuple[PrevalenceRunResult, ...]) -> tuple[PrevalenceComparison, ...]:
     indexed_runs = [{_comparison_key(item): item for item in run.comparisons} for run in runs]
-    keys = sorted({key for indexed in indexed_runs for key in indexed})
+    keys = sorted({key for indexed in indexed_runs for key in indexed} | set(V1_REQUIRED_TARGET_KEYS))
     aggregate: list[PrevalenceComparison] = []
     for key in keys:
         entries = tuple(indexed.get(key) for indexed in indexed_runs)
@@ -924,11 +974,7 @@ def evaluate_prevalence_evidence(config: PrevalenceEvidenceConfig) -> Prevalence
         assert heldout_identity is not None
         sorted_runs = tuple(sorted(run_results, key=lambda run: run.identity.seed))
         comparisons = _aggregate_comparisons(sorted_runs)
-        status = (
-            "UNEVALUABLE"
-            if not comparisons or {item.family for item in comparisons} != V1_TARGET_FAMILIES
-            else _aggregate_status(tuple(item.status for item in comparisons))
-        )
+        status = _aggregate_status(tuple(item.status for item in comparisons))
         return PrevalenceEvidenceReport(
             report_version=PREVALENCE_EVIDENCE_REPORT_VERSION,
             status=status,
@@ -993,6 +1039,7 @@ def verify_package_identity(spec: PrevalenceRunSpec) -> PackageIdentity:
 __all__ = [
     "PACKAGE_MANIFEST_MAX_BYTES",
     "PREVALENCE_EVIDENCE_REPORT_VERSION",
+    "V1_REQUIRED_TARGET_KEYS",
     "V1_TARGET_FAMILIES",
     "PackageIdentity",
     "PrevalenceComparison",

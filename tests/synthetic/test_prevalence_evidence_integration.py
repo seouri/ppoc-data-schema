@@ -5,6 +5,7 @@ import hashlib
 import json
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -16,12 +17,20 @@ from synthetic.calibrate import (
     write_calibration_result,
 )
 from synthetic.calibration import CalibrationDisclosurePolicy
-from synthetic.calibration_targets import TARGET_REGISTRY_VERSION
-from synthetic.heldout_validate import FidelityPolicy, HeldoutRunConfig
+from synthetic.calibration_targets import (
+    ETHNICITY_CATEGORY_SLUGS,
+    RACE_CATEGORY_SLUGS,
+    RECORDED_FLAGS,
+    SEX_CATEGORY_SLUGS,
+    TARGET_REGISTRY_VERSION,
+)
+from synthetic.heldout_validate import FidelityPolicy, HeldoutComparison, HeldoutRunConfig
 from synthetic.manifest import RunManifest
 from synthetic.prevalence_evidence import (
     PrevalenceEvidenceConfig,
+    PrevalenceEvidenceReport,
     PrevalenceEvidenceUnavailable,
+    PrevalenceRunResult,
     PrevalenceRunSpec,
     evaluate_prevalence_evidence,
 )
@@ -33,6 +42,87 @@ from tests.synthetic.prevalence_evidence_fixtures import write_prevalence_packag
 
 ROOT = Path(__file__).resolve().parents[2]
 PARTITION_KEY = b"0123456789abcdef"
+
+
+def _required_v1_keys() -> tuple[tuple[str, str, str, str, str, None], ...]:
+    dimensions = "outcome_layer=observed"
+    return tuple(
+        sorted(
+            (
+                *(
+                    (dimensions, f"sex_{slug}", "demographics", "proportion", "proportion", None)
+                    for slug in SEX_CATEGORY_SLUGS.values()
+                ),
+                (dimensions, "race_multiselect", "demographics", "proportion", "proportion", None),
+                *(
+                    (dimensions, f"ethnicity_{slug}", "demographics", "proportion", "proportion", None)
+                    for slug in ETHNICITY_CATEGORY_SLUGS.values()
+                ),
+                *(
+                    (dimensions, f"race_{slug}", "demographics", "proportion", "proportion", None)
+                    for slug in RACE_CATEGORY_SLUGS.values()
+                ),
+                *(
+                    (dimensions, flag, "recorded_outcome", "proportion", "proportion", None)
+                    for flag in RECORDED_FLAGS.values()
+                ),
+            )
+        )
+    )
+
+
+def _passing_comparison(key: tuple[str, str, str, str, str, None]) -> HeldoutComparison:
+    return HeldoutComparison(*key, "PASS", 0.5, 0.5, 0.0, 1.0)
+
+
+def _controlled_heldout_result(
+    template: HeldoutRunConfig,
+    *,
+    omit: tuple[str, str, str, str, str, None] | None = None,
+    include_diagnostics: bool = False,
+) -> SimpleNamespace:
+    comparisons = tuple(key for key in _required_v1_keys() if key != omit)
+    heldout_comparisons = tuple(_passing_comparison(key) for key in comparisons)
+    if include_diagnostics:
+        heldout_comparisons += (
+            HeldoutComparison(
+                "age_regime=infant",
+                "weight_available",
+                "observation",
+                "proportion",
+                "proportion",
+                None,
+                "FAIL",
+                0.0,
+                1.0,
+                1.0,
+                0.0,
+            ),
+            SimpleNamespace(
+                stratum_id="outcome_layer=latent",
+                target_name="synthetic_label",
+                family="recorded_outcome",
+                statistic="proportion",
+                unit="proportion",
+                quantile_level=None,
+                status="FAIL",
+            ),
+        )
+    report = SimpleNamespace(
+        source_snapshot=template.source_snapshot,
+        synthetic_artifact_id="synthetic-v1",
+        schema_fingerprint="f" * 64,
+        partition_policy=template.partition_policy.to_report_mapping(),
+        disclosure_policy={
+            "policy_id": template.disclosure_policy.policy_id,
+            "policy_version": template.disclosure_policy.policy_version,
+        },
+        fidelity_policy=template.fidelity_policy,
+        heldout_aggregate_sha256="a" * 64,
+        synthetic_aggregate_sha256="b" * 64,
+        comparisons=heldout_comparisons,
+    )
+    return SimpleNamespace(report=report)
 
 
 def _partition_policy() -> PartitionPolicy:
@@ -175,6 +265,9 @@ def test_evidence_evaluates_only_observed_demographic_and_recorded_outcome_targe
     assert [run["identity"]["package_sha256"] for run in public_report["runs"]] == [
         run.identity.package_sha256 for run in report.runs
     ]
+    assert all(run["comparisons"] for run in public_report["runs"])
+    assert "support" not in json.dumps(public_report, sort_keys=True)
+    assert "denominator" not in json.dumps(public_report, sort_keys=True)
 
 
 def test_evidence_uses_fail_over_unevaluable_over_pass_across_runs(tmp_path: Path) -> None:
@@ -209,10 +302,127 @@ def test_evidence_aggregation_is_independent_of_predeclared_run_order(tmp_path: 
     assert reverse.to_mapping() == forward.to_mapping()
 
 
+def test_evidence_can_report_an_all_pass_complete_v1_fixture(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Treating an all-pass complete run set as unevaluable would break gate promotion."""
+    config = _config(tmp_path)
+    module = __import__("synthetic.prevalence_evidence", fromlist=["validate_heldout"])
+    controlled = _controlled_heldout_result(config.heldout_template)
+    monkeypatch.setattr(module, "validate_heldout", lambda _config: controlled)
+
+    report = evaluate_prevalence_evidence(config)
+
+    assert report.status == "PASS"
+    assert len(report.comparisons) == len(_required_v1_keys())
+    assert {comparison.status for comparison in report.comparisons} == {"PASS"}
+
+
+def test_evidence_injects_a_globally_absent_required_v1_key_as_unevaluable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Dropping a registered key from every run must not produce an all-pass report."""
+    config = _config(tmp_path)
+    module = __import__("synthetic.prevalence_evidence", fromlist=["validate_heldout"])
+    omitted = _required_v1_keys()[0]
+    controlled = _controlled_heldout_result(config.heldout_template, omit=omitted)
+    monkeypatch.setattr(module, "validate_heldout", lambda _config: controlled)
+
+    report = evaluate_prevalence_evidence(config)
+
+    assert report.status == "UNEVALUABLE"
+    comparison = next(item for item in report.comparisons if item.canonical_key == omitted)
+    assert comparison.status == "UNEVALUABLE"
+    assert comparison.evaluable_count == 0
+
+
+def test_evidence_ignores_latent_and_observable_comparisons_from_a_controlled_heldout_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Letting non-observed diagnostics enter the report would make them gate prevalence."""
+    config = _config(tmp_path)
+    module = __import__("synthetic.prevalence_evidence", fromlist=["validate_heldout"])
+    controlled = _controlled_heldout_result(config.heldout_template, include_diagnostics=True)
+    monkeypatch.setattr(module, "validate_heldout", lambda _config: controlled)
+
+    report = evaluate_prevalence_evidence(config)
+
+    assert report.status == "PASS"
+    assert all(item.family in {"demographics", "recorded_outcome"} for item in report.comparisons)
+
+
+def test_report_rejects_aggregate_comparisons_that_do_not_match_run_evidence(tmp_path: Path) -> None:
+    """Accepting supplied all-pass aggregates would hide a failing run-level comparison."""
+    evaluated = evaluate_prevalence_evidence(_config(tmp_path))
+    run = evaluated.runs[0]
+    original = next(item for item in run.comparisons if item.status == "PASS")
+    key = (
+        original.stratum_id,
+        original.target_name,
+        original.family,
+        original.statistic,
+        original.unit,
+        original.quantile_level,
+    )
+    assert original.heldout_value is not None
+    synthetic_value = 0.0 if original.heldout_value else 1.0
+    difference = abs(float(original.heldout_value) - synthetic_value)
+    failing = HeldoutComparison(*key, "FAIL", original.heldout_value, synthetic_value, difference, 0.0)
+    mismatched_run = replace(
+        run,
+        status="FAIL",
+        comparisons=tuple(
+            failing
+            if (item.stratum_id, item.target_name, item.family, item.statistic, item.unit, item.quantile_level)
+            == key
+            else item
+            for item in run.comparisons
+        ),
+    )
+
+    with pytest.raises(ValueError, match="comparisons"):
+        PrevalenceEvidenceReport(
+            report_version=evaluated.report_version,
+            status=evaluated.status,
+            generation_identity=evaluated.generation_identity,
+            heldout_identity=evaluated.heldout_identity,
+            runs=(mismatched_run, *evaluated.runs[1:]),
+            comparisons=evaluated.comparisons,
+        )
+
+
+def test_run_with_no_v1_comparisons_is_unevaluable(tmp_path: Path) -> None:
+    """Treating an empty run comparison set as PASS would bypass the required-cell gate."""
+    identity = evaluate_prevalence_evidence(_config(tmp_path)).runs[0].identity
+
+    with pytest.raises(ValueError, match="status"):
+        PrevalenceRunResult(identity=identity, status="PASS", comparisons=())
+
+
+def test_public_mapping_excludes_heldout_truth_hashes(tmp_path: Path) -> None:
+    """Serializing held-out aggregate hashes would disclose prohibited truth identifiers."""
+    report = evaluate_prevalence_evidence(_config(tmp_path))
+    mapping = report.to_mapping()
+    serialized = json.dumps(mapping, sort_keys=True)
+    representation = repr(report)
+
+    assert "heldout_aggregate_sha256" not in serialized
+    assert "synthetic_aggregate_sha256" not in serialized
+    assert report.heldout_identity.heldout_aggregate_sha256 not in serialized
+    assert report.heldout_identity.synthetic_aggregate_sha256 not in serialized
+    assert "heldout_aggregate_sha256" not in representation
+    assert "synthetic_aggregate_sha256" not in representation
+    assert report.heldout_identity.heldout_aggregate_sha256 not in representation
+    assert report.heldout_identity.synthetic_aggregate_sha256 not in representation
+
+
 @pytest.mark.parametrize(
     "attribute",
     (
         "profile",
+        "engine",
+        "reference_time",
+        "reference_id",
         "configuration_sha256",
         "reference_sha256",
         "software_revision",
@@ -259,3 +469,30 @@ def test_evidence_rejects_a_source_package_replaced_during_heldout_evaluation(
 
     with pytest.raises(PrevalenceEvidenceUnavailable, match="unavailable"):
         evaluate_prevalence_evidence(config)
+
+
+def test_staged_package_rejects_mutation_and_restore_before_evaluation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Writable staged bytes would let an evaluator alter a package then restore it undetected."""
+    config = _config(tmp_path)
+    module = __import__("synthetic.prevalence_evidence", fromlist=["validate_heldout"])
+    real_validate = module.validate_heldout
+
+    def mutation_attempt(heldout_config: HeldoutRunConfig) -> object:
+        staged_patient_file = heldout_config.synthetic_root / "patients.csv"
+        original = staged_patient_file.read_bytes()
+        try:
+            staged_patient_file.write_bytes(original.replace(b",F,", b",M,"))
+        except PermissionError:
+            pass
+        else:
+            staged_patient_file.write_bytes(original)
+            pytest.fail("staged package was writable during held-out evaluation")
+        return real_validate(heldout_config)
+
+    monkeypatch.setattr(module, "validate_heldout", mutation_attempt)
+
+    report = evaluate_prevalence_evidence(config)
+
+    assert report.status == "UNEVALUABLE"
