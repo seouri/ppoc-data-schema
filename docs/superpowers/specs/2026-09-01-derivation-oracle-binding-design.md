@@ -188,8 +188,16 @@ relationship but does not open or execute those bytes.
 The module exposes:
 
 ```python
-validate_derivation_binding(binding: DerivationBinding) -> DerivationBindingReport
-require_approved_derivation_binding(binding: DerivationBinding) -> None
+validate_derivation_binding(
+    binding: DerivationBinding,
+    *,
+    expected_schema_fingerprint: str,
+) -> DerivationBindingReport
+require_approved_derivation_binding(
+    binding: DerivationBinding,
+    *,
+    expected_schema_fingerprint: str,
+) -> None
 ```
 
 The report has a fixed ordered check universe:

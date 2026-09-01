@@ -1,4 +1,6 @@
 import json
+import traceback
+from collections.abc import Iterator, Mapping
 from dataclasses import FrozenInstanceError, is_dataclass
 
 import pytest
@@ -13,6 +15,22 @@ from synthetic.derivation_binding import (
 
 SHA = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 SHA2 = "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+ZERO_SHA = "0" * 64
+
+
+class HostileMapping(Mapping[str, object]):
+    def __init__(self, message: str) -> None:
+        self.message = message
+
+    def __getitem__(self, key: str) -> object:
+        del key
+        raise RuntimeError(self.message)
+
+    def __iter__(self) -> Iterator[str]:
+        raise RuntimeError(self.message)
+
+    def __len__(self) -> int:
+        return 1
 
 
 def fixture() -> dict[str, object]:
@@ -67,17 +85,17 @@ def test_canonical_json_is_sorted_compact_ascii_and_newline_terminated():
 def test_rejects_missing_and_extra_nested_keys(where):
     value = fixture()
     value[where].pop(next(iter(value[where])))
-    with pytest.raises((TypeError, ValueError)):
+    with pytest.raises(DerivationBindingUnavailable, match="^derivation binding is unavailable$"):
         DerivationBinding.from_mapping(value)
     value = fixture()
     value[where]["extra"] = "nope"
-    with pytest.raises((TypeError, ValueError)):
+    with pytest.raises(DerivationBindingUnavailable, match="^derivation binding is unavailable$"):
         DerivationBinding.from_mapping(value)
 
 
 def test_rejects_duplicate_json_keys():
     text = json.dumps(fixture(), separators=(",", ":"))[:-1] + ',"binding_id":"duplicate"}'
-    with pytest.raises(ValueError, match="duplicate"):
+    with pytest.raises(DerivationBindingUnavailable, match="^derivation binding is unavailable$"):
         DerivationBinding.from_json_bytes(text.encode())
 
 
@@ -88,7 +106,7 @@ def test_rejects_duplicate_json_keys():
 def test_rejects_wrong_scalar_types(field, value):
     data = fixture()
     data[field] = value
-    with pytest.raises((TypeError, ValueError)):
+    with pytest.raises(DerivationBindingUnavailable, match="^derivation binding is unavailable$"):
         DerivationBinding.from_mapping(data)
 
 
@@ -97,7 +115,33 @@ def test_rejects_wrong_scalar_types(field, value):
 def test_rejects_invalid_tokens_and_digests(field, value):
     data = fixture()
     data[field] = value
-    with pytest.raises((TypeError, ValueError)):
+    with pytest.raises(DerivationBindingUnavailable, match="^derivation binding is unavailable$"):
+        DerivationBinding.from_mapping(data)
+
+
+@pytest.mark.parametrize(
+    ("section", "field"),
+    [
+        (None, "schema_fingerprint"),
+        ("oracle", "implementation_fingerprint"),
+        ("oracle", "dependency_fingerprint"),
+        ("reference_standard", "standard_fingerprint"),
+        ("golden_evidence", "manifest_fingerprint"),
+        ("golden_evidence", "parity_report_fingerprint"),
+        ("golden_evidence", "candidate_implementation_fingerprint"),
+        ("golden_evidence", "reference_implementation_fingerprint"),
+        ("golden_evidence", "parity_schema_fingerprint"),
+        ("golden_evidence", "fuzz_corpus_fingerprint"),
+        ("review", "review_fingerprint"),
+    ],
+)
+def test_loader_rejects_all_zero_non_null_digests(section, field):
+    data = fixture()
+    target = data if section is None else data[section]
+    assert isinstance(target, dict)
+    target[field] = ZERO_SHA
+
+    with pytest.raises(DerivationBindingUnavailable, match="^derivation binding is unavailable$"):
         DerivationBinding.from_mapping(data)
 
 
@@ -112,7 +156,7 @@ def test_rejects_invalid_timestamps_counts_and_statuses(field, value):
         data["review"][field] = value
     else:
         data["review"][field] = value
-    with pytest.raises((TypeError, ValueError)):
+    with pytest.raises(DerivationBindingUnavailable, match="^derivation binding is unavailable$"):
         DerivationBinding.from_mapping(data)
 
 
@@ -120,15 +164,62 @@ def test_rejects_invalid_timestamps_counts_and_statuses(field, value):
 def test_rejects_duplicate_or_unknown_categories(categories):
     data = fixture()
     data["golden_evidence"]["covered_categories"] = categories
-    with pytest.raises((TypeError, ValueError)):
+    with pytest.raises(DerivationBindingUnavailable, match="^derivation binding is unavailable$"):
         DerivationBinding.from_mapping(data)
 
 
 def test_rejects_nonfinite_count():
     data = fixture()
     data["golden_evidence"]["bidirectional_case_count"] = float("nan")
-    with pytest.raises((TypeError, ValueError)):
+    with pytest.raises(DerivationBindingUnavailable, match="^derivation binding is unavailable$"):
         DerivationBinding.from_mapping(data)
+
+
+def test_mapping_loader_discards_hostile_iteration_failure_details():
+    secret = "/private/governed/patient-secret.json"
+
+    with pytest.raises(DerivationBindingUnavailable) as error:
+        DerivationBinding.from_mapping(HostileMapping(secret))
+
+    rendered = "".join(
+        traceback.format_exception(
+            type(error.value),
+            error.value,
+            error.value.__traceback__,
+        )
+    )
+    assert str(error.value) == "derivation binding is unavailable"
+    assert repr(error.value) == "DerivationBindingUnavailable('derivation binding is unavailable')"
+    assert error.value.__cause__ is None
+    assert error.value.__context__ is None
+    assert secret not in rendered
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        b"{malformed-json",
+        b'{"binding_id":"first","binding_id":"/private/secret"}',
+        b"\xff/private/governed/secret.json",
+        "not-bytes",
+    ],
+)
+def test_json_loader_normalizes_invalid_inputs(value):
+    with pytest.raises(DerivationBindingUnavailable) as error:
+        DerivationBinding.from_json_bytes(value)
+
+    rendered = "".join(
+        traceback.format_exception(
+            type(error.value),
+            error.value,
+            error.value.__traceback__,
+        )
+    )
+    assert str(error.value) == "derivation binding is unavailable"
+    assert error.value.__cause__ is None
+    assert error.value.__context__ is None
+    for forbidden in ("private", "secret", "duplicate", "malformed"):
+        assert forbidden not in rendered.lower()
 
 
 def test_unavailable_error_is_fixed_and_redacted():

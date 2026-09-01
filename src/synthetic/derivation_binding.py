@@ -33,6 +33,7 @@ REQUIRED_GOLDEN_CATEGORIES = (
 )
 _TOKEN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
 _SHA = re.compile(r"[0-9a-f]{64}\Z")
+_ZERO_SHA = "0" * 64
 _UTC = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z\Z")
 _UNSAFE = ("patient", "visit", "row", "record", "path", "source", "raw", "table", "column",
            "truth", "hidden", "internal", "secret", "private")
@@ -86,7 +87,7 @@ def _token(value: object, field: str) -> str:
 def _digest(value: object, field: str, nullable: bool = False) -> str | None:
     if nullable and value is None:
         return None
-    if not isinstance(value, str) or _SHA.fullmatch(value) is None:
+    if not isinstance(value, str) or _SHA.fullmatch(value) is None or value == _ZERO_SHA:
         raise ValueError(f"{field} must be lowercase SHA-256 hex")
     return value
 
@@ -219,23 +220,29 @@ class DerivationBinding:
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, object]) -> DerivationBinding:
-        root = _mapping(value, "binding")
-        _keys(root, {"binding_version", "binding_id", "schema_fingerprint", "oracle", "reference_standard", "golden_evidence", "review", "test_only"}, "binding")
-        oracle = _mapping(root["oracle"], "oracle")
-        _keys(oracle, {"oracle_id", "implementation_fingerprint", "source_revision", "dependency_fingerprint", "source_kind"}, "oracle")
-        standard = _mapping(root["reference_standard"], "reference_standard")
-        _keys(standard, {"standard_id", "standard_fingerprint", "version"}, "reference_standard")
-        golden = _mapping(root["golden_evidence"], "golden_evidence")
-        _keys(golden, {"manifest_id", "manifest_fingerprint", "parity_contract", "parity_report_id", "parity_report_fingerprint", "parity_status", "candidate_implementation_fingerprint", "reference_implementation_fingerprint", "parity_schema_fingerprint", "covered_categories", "bidirectional_case_count", "synthetic_fuzz_case_count", "fuzz_corpus_fingerprint"}, "golden_evidence")
-        review = _mapping(root["review"], "review")
-        _keys(review, {"review_id", "review_fingerprint", "reviewed_at", "reviewer_role", "status"}, "review")
-        categories = golden["covered_categories"]
-        if not isinstance(categories, (list, tuple)):
-            raise TypeError("covered_categories must be a sequence")
-        return cls(root["binding_version"], root["binding_id"], root["schema_fingerprint"],
-                   DerivationBindingOracle(**dict(oracle)), DerivationReferenceStandard(**dict(standard)),
-                   DerivationGoldenEvidence(**{**dict(golden), "parity_status": _status(golden["parity_status"], {"PASS", "FAIL", "UNEVALUABLE"}, "parity_status"), "covered_categories": tuple(categories)}),
-                   DerivationReview(**{**dict(review), "status": _status(review["status"], {"PENDING", "APPROVED", "REJECTED"}, "status")}), root["test_only"])
+        try:
+            root = _mapping(value, "binding")
+            _keys(root, {"binding_version", "binding_id", "schema_fingerprint", "oracle", "reference_standard", "golden_evidence", "review", "test_only"}, "binding")
+            oracle = _mapping(root["oracle"], "oracle")
+            _keys(oracle, {"oracle_id", "implementation_fingerprint", "source_revision", "dependency_fingerprint", "source_kind"}, "oracle")
+            standard = _mapping(root["reference_standard"], "reference_standard")
+            _keys(standard, {"standard_id", "standard_fingerprint", "version"}, "reference_standard")
+            golden = _mapping(root["golden_evidence"], "golden_evidence")
+            _keys(golden, {"manifest_id", "manifest_fingerprint", "parity_contract", "parity_report_id", "parity_report_fingerprint", "parity_status", "candidate_implementation_fingerprint", "reference_implementation_fingerprint", "parity_schema_fingerprint", "covered_categories", "bidirectional_case_count", "synthetic_fuzz_case_count", "fuzz_corpus_fingerprint"}, "golden_evidence")
+            review = _mapping(root["review"], "review")
+            _keys(review, {"review_id", "review_fingerprint", "reviewed_at", "reviewer_role", "status"}, "review")
+            categories = golden["covered_categories"]
+            if not isinstance(categories, (list, tuple)):
+                raise TypeError("covered_categories must be a sequence")
+            binding = cls(root["binding_version"], root["binding_id"], root["schema_fingerprint"],
+                          DerivationBindingOracle(**dict(oracle)), DerivationReferenceStandard(**dict(standard)),
+                          DerivationGoldenEvidence(**{**dict(golden), "parity_status": _status(golden["parity_status"], {"PASS", "FAIL", "UNEVALUABLE"}, "parity_status"), "covered_categories": tuple(categories)}),
+                          DerivationReview(**{**dict(review), "status": _status(review["status"], {"PENDING", "APPROVED", "REJECTED"}, "status")}), root["test_only"])
+        except Exception:  # noqa: BLE001,S110 - public loader failures are deliberately redacted.
+            pass
+        else:
+            return binding
+        raise DerivationBindingUnavailable() from None
 
     @classmethod
     def from_json_bytes(cls, value: bytes) -> DerivationBinding:
@@ -250,8 +257,14 @@ class DerivationBinding:
         def reject_constant(value: str) -> None:
             raise ValueError("nonfinite JSON number")
 
-        parsed = json.loads(value.decode("ascii"), object_pairs_hook=reject_duplicates, parse_constant=reject_constant)
-        return cls.from_mapping(parsed)
+        try:
+            parsed = json.loads(value.decode("ascii"), object_pairs_hook=reject_duplicates, parse_constant=reject_constant)
+            binding = cls.from_mapping(parsed)
+        except Exception:  # noqa: BLE001,S110 - public loader failures are deliberately redacted.
+            pass
+        else:
+            return binding
+        raise DerivationBindingUnavailable() from None
 
     def to_mapping(self) -> dict[str, object]:
         def values(obj: object) -> dict[str, object]:
@@ -275,7 +288,7 @@ def _is_token(value: object) -> bool:
 
 
 def _is_digest(value: object) -> bool:
-    return isinstance(value, str) and _SHA.fullmatch(value) is not None
+    return isinstance(value, str) and _SHA.fullmatch(value) is not None and value != _ZERO_SHA
 
 
 def _is_timestamp(value: object) -> bool:
@@ -569,7 +582,7 @@ def validate_derivation_binding(
     return DerivationBindingReport(
         DERIVATION_BINDING_VERSION,
         binding.binding_id,
-        binding.schema_fingerprint,
+        expected_schema_fingerprint,
         _safe_token_or_none(oracle_values[0]) if oracle_identity.status is not DerivationBindingStatus.UNEVALUABLE else None,
         _safe_token_or_none(standard_values[0]) if reference_standard.status is not DerivationBindingStatus.UNEVALUABLE else None,
         _safe_token_or_none(parity_values[1]) if parity_evidence.status is not DerivationBindingStatus.UNEVALUABLE else None,

@@ -17,6 +17,7 @@ from synthetic.derivation_binding import (
 SHA = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 SHA2 = "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
 SHA3 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+ZERO_SHA = "0" * 64
 
 
 def fixture(*, test_only: bool = False) -> dict[str, object]:
@@ -83,8 +84,68 @@ def test_complete_approved_binding_has_nine_passing_checks_and_is_approvable():
     assert tuple(check.name for check in report.checks) == DERIVATION_BINDING_CHECK_NAMES
     assert [check.status for check in report.checks] == [DerivationBindingStatus.PASS] * 9
     assert report.status is DerivationBindingStatus.PASS
+    assert report.schema_fingerprint == SHA
     assert report.status_counts == {"PASS": 9, "FAIL": 0, "UNEVALUABLE": 0}
     assert require_approved_derivation_binding(value, expected_schema_fingerprint=SHA) is None
+
+
+def test_schema_mismatch_report_identifies_explicit_expected_schema():
+    value = binding()
+
+    report = validate_derivation_binding(value, expected_schema_fingerprint=SHA3)
+
+    assert report.schema_fingerprint == SHA3
+    assert value.schema_fingerprint == SHA
+    assert by_name(report)["schema_contract"].status is DerivationBindingStatus.FAIL
+
+
+@pytest.mark.parametrize(
+    ("owner", "field", "check"),
+    [
+        ("binding", "schema_fingerprint", "schema_contract"),
+        ("oracle", "dependency_fingerprint", "oracle_identity"),
+        ("reference_standard", "standard_fingerprint", "reference_standard"),
+        ("golden_evidence", "manifest_fingerprint", "golden_coverage"),
+        ("golden_evidence", "parity_report_fingerprint", "parity_evidence"),
+        ("golden_evidence", "reference_implementation_fingerprint", "parity_evidence"),
+        ("golden_evidence", "fuzz_corpus_fingerprint", "synthetic_fuzz_evidence"),
+        ("review", "review_fingerprint", "review"),
+    ],
+)
+def test_forged_all_zero_digest_fails_evaluation_and_approval(owner, field, check):
+    value = binding()
+    target = value if owner == "binding" else getattr(value, owner)
+    corrupt(target, **{field: ZERO_SHA})
+
+    report = validate_derivation_binding(value, expected_schema_fingerprint=SHA)
+
+    assert by_name(report)[check].status is DerivationBindingStatus.FAIL
+    with pytest.raises(DerivationBindingUnavailable, match="^derivation binding is unavailable$"):
+        require_approved_derivation_binding(value, expected_schema_fingerprint=SHA)
+
+
+def test_matching_all_zero_implementation_fingerprints_cannot_pass_evaluation():
+    value = binding()
+    corrupt(value.oracle, implementation_fingerprint=ZERO_SHA)
+    corrupt(value.golden_evidence, candidate_implementation_fingerprint=ZERO_SHA)
+
+    report = validate_derivation_binding(value, expected_schema_fingerprint=SHA)
+
+    assert by_name(report)["oracle_identity"].status is DerivationBindingStatus.FAIL
+    assert by_name(report)["parity_evidence"].status is DerivationBindingStatus.FAIL
+    with pytest.raises(DerivationBindingUnavailable, match="^derivation binding is unavailable$"):
+        require_approved_derivation_binding(value, expected_schema_fingerprint=SHA)
+
+
+def test_all_zero_expected_and_submitted_schema_fingerprints_are_invalid():
+    value = binding()
+    corrupt(value, schema_fingerprint=ZERO_SHA)
+    corrupt(value.golden_evidence, parity_schema_fingerprint=ZERO_SHA)
+
+    with pytest.raises(ValueError, match="expected_schema_fingerprint"):
+        validate_derivation_binding(value, expected_schema_fingerprint=ZERO_SHA)
+    with pytest.raises(ValueError, match="expected_schema_fingerprint"):
+        require_approved_derivation_binding(value, expected_schema_fingerprint=ZERO_SHA)
 
 
 def test_test_only_pending_binding_keeps_absent_evidence_unevaluable_and_is_not_approvable():
