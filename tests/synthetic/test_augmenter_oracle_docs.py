@@ -91,6 +91,8 @@ def test_synthetic_generator_guide_documents_explicit_development_profiles() -> 
         "(0, 365, 730, 1460, 2190, 3650, 4380, 5114, 5475, 6200, 7305)",
         "CDC tables contain only M/F rows",
         "BMI at exactly 730 days uses the CDC 24-month boundary row",
+        "weight is observed at every scheduled visit",
+        "height and head circumference have `1.0` availability whenever their age-regime channel is structurally applicable",
         "exactly eight descriptor-named CSV resources",
         "No production growth reference or authoritative derivation oracle is configured",
         "no real or governed patient inputs",

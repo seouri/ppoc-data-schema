@@ -33,15 +33,42 @@ _DEVELOPMENT_RUNTIME_FORBIDDEN_IMPORT_PREFIXES = (
     "synthetic.realdata",
     "synthetic.synthea",
 )
-_NETWORK_OR_PROCESS_IMPORTS = {
-    "asyncio.subprocess",
+_NETWORK_OR_PROCESS_IMPORT_PREFIXES = {
+    "asyncio",
+    "ftplib",
     "http",
     "http.client",
+    "importlib",
+    "multiprocessing",
     "requests",
+    "smtplib",
     "socket",
     "subprocess",
+    "telnetlib",
     "urllib",
     "webbrowser",
+    "xmlrpc",
+}
+_PROCESS_CALL_PREFIXES = (
+    "asyncio.create_subprocess",
+    "os.exec",
+    "os.popen",
+    "os.spawn",
+    "os.system",
+    "subprocess",
+)
+_DYNAMIC_IMPORT_CALLS = {"__import__", "importlib.import_module"}
+_DIRECT_FILE_CALL_LEAVES = {
+    "mkdir",
+    "open",
+    "read_bytes",
+    "read_text",
+    "rename",
+    "replace",
+    "rmdir",
+    "unlink",
+    "write_bytes",
+    "write_text",
 }
 _DEVELOPMENT_RUNTIME_FORBIDDEN_ARGUMENTS = {
     "calibration_path",
@@ -61,6 +88,20 @@ _DEVELOPMENT_RUNTIME_ALLOWED_READS = {
 _DEVELOPMENT_RUNTIME_ALLOWED_PACKAGE_CALLS = {
     "synthetic.package_export._require_output_available",
     "synthetic.package_export.export_exact_schema_package",
+}
+_GOVERNED_CLI_OPTION_PREFIXES = (
+    "--real-root",
+    "--calibration",
+    "--heldout",
+    "--privacy",
+    "--synthea",
+)
+_MODEL_OR_DIAGNOSIS_OPTION_COMPONENTS = {
+    "diagnosis",
+    "dx",
+    "llm",
+    "model",
+    "payload",
 }
 
 
@@ -155,33 +196,58 @@ def test_explicit_runtime_has_only_development_safe_input_and_lifecycle_seams() 
         for imported in imports
         for forbidden in _DEVELOPMENT_RUNTIME_FORBIDDEN_IMPORT_PREFIXES
     )
-    assert imports.isdisjoint(_NETWORK_OR_PROCESS_IMPORTS)
+    assert not _prefixed_matches(imports, _NETWORK_OR_PROCESS_IMPORT_PREFIXES)
     assert arguments.isdisjoint(_DEVELOPMENT_RUNTIME_FORBIDDEN_ARGUMENTS)
     assert _DEVELOPMENT_RUNTIME_ALLOWED_READS <= calls
     assert _DEVELOPMENT_RUNTIME_ALLOWED_PACKAGE_CALLS <= calls
-    assert not {
-        "open",
-        "read_bytes",
-        "read_text",
-        "subprocess.run",
-        "subprocess.Popen",
-        "os.system",
-    } & calls
+    assert not _direct_file_calls(calls)
+    assert not _forbidden_process_calls(calls)
+    assert not _DYNAMIC_IMPORT_CALLS & calls
 
 
 def test_cli_exposes_no_governed_or_model_options() -> None:
     """Catches the explicit profiles accepting real, governed, or model inputs."""
-    source = PRODUCTION_CLI.read_text(encoding="utf-8")
+    options = _cli_options(PRODUCTION_CLI.read_text(encoding="utf-8"))
 
-    for forbidden in (
-        "--real-root",
-        "--calibration",
-        "--heldout",
-        "--privacy",
-        "--synthea",
-        "--model",
-    ):
-        assert forbidden not in source
+    assert not _forbidden_cli_options(options)
+
+
+def test_runtime_boundary_scanner_detects_network_submodule_import() -> None:
+    """Catches a network import hidden below a forbidden module root."""
+    imports = _imports_from_tree(ast.parse("import urllib.request"))
+
+    assert _prefixed_matches(imports, _NETWORK_OR_PROCESS_IMPORT_PREFIXES) == {
+        "urllib.request"
+    }
+
+
+def test_runtime_boundary_scanner_detects_os_process_escape() -> None:
+    """Catches process creation through a standard-library module alias."""
+    calls = _qualified_calls(ast.parse("import os\nos.popen('ignored')"))
+
+    assert _forbidden_process_calls(calls) == {"os.popen"}
+
+
+def test_runtime_boundary_scanner_detects_direct_file_read() -> None:
+    """Catches a composition-layer path read outside the declared adapters."""
+    calls = _qualified_calls(ast.parse("from pathlib import Path\nPath('ignored').read_text()"))
+
+    assert _direct_file_calls(calls) == {"pathlib.Path.read_text"}
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    (
+        ("parser.add_argument('--diagnosis-model')", {"--diagnosis-model"}),
+        ("parser.add_argument('--llm')", {"--llm"}),
+    ),
+)
+def test_cli_option_scanner_detects_model_and_diagnosis_payload_options(
+    source: str,
+    expected: set[str],
+) -> None:
+    """Catches model or diagnosis payload options that evade exact-string checks."""
+    assert _forbidden_cli_options(_cli_options(source)) == expected
 
 
 @pytest.mark.parametrize(
@@ -229,6 +295,72 @@ def _call_name(node: ast.expr) -> str | None:
     if isinstance(node, ast.Call):
         return _call_name(node.func)
     return None
+
+
+def _imports_from_tree(tree: ast.AST) -> set[str]:
+    imports: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imports.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            if node.level:
+                base = "." * node.level + (node.module or "")
+            elif node.module:
+                base = node.module
+            else:
+                continue
+            imports.add(base)
+            separator = "" if base.endswith(".") else "."
+            imports.update(f"{base}{separator}{alias.name}" for alias in node.names)
+    return imports
+
+
+def _prefixed_matches(names: set[str], prefixes: set[str] | tuple[str, ...]) -> set[str]:
+    return {
+        name
+        for name in names
+        if any(name == prefix or name.startswith(f"{prefix}.") for prefix in prefixes)
+    }
+
+
+def _forbidden_process_calls(calls: set[str]) -> set[str]:
+    return _prefixed_matches(calls, _PROCESS_CALL_PREFIXES)
+
+
+def _direct_file_calls(calls: set[str]) -> set[str]:
+    return {
+        name
+        for name in calls
+        if name.rsplit(".", maxsplit=1)[-1] in _DIRECT_FILE_CALL_LEAVES
+    }
+
+
+def _cli_options(source: str) -> set[str]:
+    tree = ast.parse(source)
+    return {
+        argument.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "add_argument"
+        for argument in node.args
+        if isinstance(argument, ast.Constant) and isinstance(argument.value, str)
+    }
+
+
+def _forbidden_cli_options(options: set[str]) -> set[str]:
+    return {
+        option
+        for option in options
+        if any(
+            option == prefix or option.startswith(f"{prefix}-")
+            for prefix in _GOVERNED_CLI_OPTION_PREFIXES
+        )
+        or bool(
+            _MODEL_OR_DIAGNOSIS_OPTION_COMPONENTS
+            & set(option.removeprefix("--").lower().replace("_", "-").split("-"))
+        )
+    }
 
 
 def _qualified_calls(tree: ast.AST) -> set[str]:
