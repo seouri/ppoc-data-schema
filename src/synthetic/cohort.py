@@ -34,6 +34,10 @@ from synthetic.native.ancillary_contract import (
 )
 from synthetic.native.clinical_modules import GrowthDisorderModule
 from synthetic.native.observations import (
+    CensoringMode,
+    EncounterType,
+    MeasurementAvailability,
+    MeasurementChannel,
     MeasurementObservation,
     ObservationFrame,
     ObservationPolicy,
@@ -42,6 +46,7 @@ from synthetic.native.observations import (
     ObservationWindow,
     ObservedVisit,
     RecordedEvent,
+    RecordedEventKind,
     generate_observation_frame,
     validate_observation_frame,
 )
@@ -561,6 +566,36 @@ def _snapshot_calibration_profile(
     if type(profile) is not CalibrationSamplingProfile:
         raise TypeError("calibration must be exactly a CalibrationSamplingProfile")
     try:
+        if (
+            type(profile.artifact_id) is not str
+            or type(profile.target_registry_version) is not str
+        ):
+            raise TypeError
+        for weights in (
+            profile.sex_weights,
+            profile.ethnicity_weights,
+            profile.race_weights,
+        ):
+            if type(weights) is not tuple:
+                raise TypeError
+            for pair in weights:
+                if (
+                    type(pair) is not tuple
+                    or len(pair) != 2
+                    or type(pair[0]) is not str
+                    or type(pair[1]) is not float
+                    or not math.isfinite(pair[1])
+                ):
+                    raise TypeError
+        if not all(
+            type(value) is float and math.isfinite(value)
+            for value in (
+                profile.race_multiselect_probability,
+                profile.recorded_healthy_probability,
+                profile.recorded_growth_dx_probability,
+            )
+        ):
+            raise TypeError
         return CalibrationSamplingProfile(
             artifact_id=profile.artifact_id,
             target_registry_version=profile.target_registry_version,
@@ -623,6 +658,61 @@ def _require_exact_visible_frame(frame: ObservationFrame) -> None:
         raise TypeError("frame.events must contain exact RecordedEvent values")
 
 
+def _require_exact_visible_scalar(value: object) -> None:
+    """Reject scalar subclasses before equality or ordinary serialization."""
+
+    if type(value) is str or type(value) is int:
+        return
+    if type(value) is float and math.isfinite(value):
+        return
+    raise TypeError("visible values must use exact finite primitive types")
+
+
+def _require_exact_frame_primitives(frame: ObservationFrame) -> None:
+    if type(frame.patient_id) is not str or type(frame.policy_version) is not str:
+        raise TypeError("frame identifiers must be exact strings")
+    if (
+        type(frame.window.start_age_days) is not int
+        or type(frame.window.effective_end_age_days) is not int
+        or type(frame.window.administrative_end_age_days) is not int
+        or type(frame.window.censoring_mode) is not CensoringMode
+    ):
+        raise TypeError("frame window must use exact primitive values")
+    for visit in frame.visits:
+        if (
+            type(visit.patient_id) is not str
+            or type(visit.visit_id) is not str
+            or type(visit.age_days) is not int
+            or type(visit.encounter_type) is not EncounterType
+        ):
+            raise TypeError("frame visits must use exact primitive values")
+        for measurement in visit.measurements:
+            if (
+                type(measurement.channel) is not MeasurementChannel
+                or type(measurement.availability) is not MeasurementAvailability
+                or (
+                    measurement.recorded_value is not None
+                    and (
+                        type(measurement.recorded_value) is not float
+                        or not math.isfinite(measurement.recorded_value)
+                    )
+                )
+            ):
+                raise TypeError("frame measurements must use exact primitive values")
+    for event in frame.events:
+        if (
+            type(event.patient_id) is not str
+            or type(event.age_days) is not int
+            or type(event.event_kind) is not RecordedEventKind
+            or type(event.code) is not str
+            or (
+                event.opportunity_index is not None
+                and type(event.opportunity_index) is not int
+            )
+        ):
+            raise TypeError("frame events must use exact primitive values")
+
+
 def _require_exact_visible_bundle(bundle: ObservedResourceBundle) -> None:
     """Reject subtype-expanded serializers in one visible resource graph."""
 
@@ -657,6 +747,7 @@ def _snapshot_visible_frame(frame: ObservationFrame) -> ObservationFrame:
 
     _require_exact_visible_frame(frame)
     try:
+        _require_exact_frame_primitives(frame)
         window = ObservationWindow(
             frame.window.start_age_days,
             frame.window.effective_end_age_days,
@@ -718,7 +809,12 @@ def _snapshot_resource_shape(shape: ResourceShape) -> ResourceShape:
     try:
         resources: list[ResourceSpec] = []
         for resource in shape.resources:
-            if type(resource) is not ResourceSpec or type(resource.field_names) is not tuple:
+            if (
+                type(resource) is not ResourceSpec
+                or type(resource.name) is not str
+                or type(resource.field_names) is not tuple
+                or not all(type(field_name) is str for field_name in resource.field_names)
+            ):
                 raise TypeError
             resources.append(ResourceSpec(resource.name, tuple(resource.field_names)))
         return ResourceShape(tuple(resources))
@@ -737,6 +833,8 @@ def _snapshot_visible_bundle(
     shape = _snapshot_resource_shape(bundle.shape)
     source_frame = _snapshot_visible_frame(bundle.source_frame)
     try:
+        if type(bundle.patient_id) is not str:
+            raise TypeError
         rows: dict[str, tuple[ResourceRow, ...]] = {}
         for resource_name in BASE_RESOURCE_NAMES:
             copied_rows: list[ResourceRow] = []
@@ -745,8 +843,23 @@ def _snapshot_visible_bundle(
                     type(pair) is tuple and len(pair) == 2 for pair in row.values
                 ):
                     raise TypeError
+                if type(row.resource_name) is not str:
+                    raise TypeError
+                for field_name, value in row.values:
+                    if type(field_name) is not str:
+                        raise TypeError
+                    _require_exact_visible_scalar(value)
                 copied_rows.append(ResourceRow(row.resource_name, tuple(row.values)))
             rows[resource_name] = tuple(copied_rows)
+        if not all(
+            type(item.patient_id) is str
+            and type(item.visit_id) is str
+            and type(item.age_days) is int
+            and type(item.event_kind) is RecordedEventKind
+            and type(item.code) is str
+            for item in bundle.clinical_descendants
+        ):
+            raise TypeError
         descendants = tuple(
             ClinicalDescendant(
                 item.patient_id,
@@ -811,7 +924,13 @@ def _snapshot_demographics(
     if type(demographics) is not SyntheticDemographics:
         raise TypeError("demographics must be exactly SyntheticDemographics")
     try:
-        if type(demographics.races) is not tuple:
+        if (
+            type(demographics.patient_id) is not str
+            or type(demographics.sex) is not str
+            or type(demographics.ethnicity) is not str
+            or type(demographics.races) is not tuple
+            or not all(type(race) is str for race in demographics.races)
+        ):
             raise TypeError
         return SyntheticDemographics(
             demographics.patient_id,
