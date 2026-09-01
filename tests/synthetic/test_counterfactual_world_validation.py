@@ -95,6 +95,19 @@ def test_validator_marks_only_malformed_private_evidence_unevaluable() -> None:
     assert not any(check.status is CounterfactualWorldValidationStatus.FAIL for check in report.checks)
 
 
+def test_shared_observation_marks_redacted_private_replay_evidence_unevaluable() -> None:
+    worlds = _worlds(InterventionKind.PHYSIOLOGY_SEVERITY)
+    object.__setattr__(worlds.intervention.frame.truth, "truth_hash", None)
+
+    report = validate_counterfactual_ehr_worlds(worlds)
+
+    check = next(item for item in report.checks if item.name == "shared_observation")
+    assert report.status is CounterfactualWorldValidationStatus.UNEVALUABLE
+    assert check.status is CounterfactualWorldValidationStatus.UNEVALUABLE
+    assert check.reason_code == "INSUFFICIENT_EVIDENCE"
+    assert not any(item.status is CounterfactualWorldValidationStatus.FAIL for item in report.checks)
+
+
 def test_validator_rejects_recognition_measurement_and_physiology_event_changes() -> None:
     recognition = _worlds(InterventionKind.EARLIER_RECOGNITION)
     recognition_bundle = recognition.intervention.bundle

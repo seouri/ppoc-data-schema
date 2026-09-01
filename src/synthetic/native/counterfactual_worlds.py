@@ -581,6 +581,14 @@ def _check_shared_observation(worlds: CounterfactualEhrWorldPair) -> Counterfact
             if not isinstance(frame.truth, ObservationTruth):
                 evidence_missing = True
                 continue
+            frame_status = _report_status(
+                validate_observation_frame(frame), ObservationValidationStatus
+            )
+            if frame_status is CounterfactualWorldValidationStatus.UNEVALUABLE:
+                evidence_missing = True
+                continue
+            if frame_status is CounterfactualWorldValidationStatus.FAIL:
+                return CounterfactualWorldValidationStatus.FAIL
             if frame.truth.policy != worlds.observation_policy:
                 return CounterfactualWorldValidationStatus.FAIL
             if frame != replayed:
