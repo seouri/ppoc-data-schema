@@ -128,3 +128,15 @@ def test_reference_rejects_symlinked_data_directory(tmp_path: Path) -> None:
     (tmp_path / "data").symlink_to(ROOT / "data", target_is_directory=True)
     with pytest.raises(ValueError):
         CdcGrowthReference.from_repository(tmp_path)
+
+
+def test_reference_rejects_symlinked_table_without_leaking_path(tmp_path: Path) -> None:
+    repository = _minimal_repository(tmp_path)
+    table = repository / "data/statage_combined.csv"
+    replacement = repository / "replacement.csv"
+    replacement.write_bytes(table.read_bytes())
+    table.unlink()
+    table.symlink_to(replacement)
+    with pytest.raises(ValueError) as caught:
+        CdcGrowthReference.from_repository(repository)
+    assert str(repository) not in str(caught.value)
