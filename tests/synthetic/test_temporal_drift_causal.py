@@ -370,6 +370,95 @@ def test_missing_truth_does_not_mask_truth_independent_structural_corruption(
     assert "987654" not in encoded
 
 
+@pytest.mark.parametrize(
+    "corruption",
+    (
+        "visible-latent-onset",
+        "nonboolean-hidden",
+        "non-null-code",
+        "unknown-phase",
+        "reversed-phase",
+        "decreasing-age",
+        "treatment-start-without-outcome",
+        "orphan-treatment-outcome",
+        "dual-treatment-outcomes",
+    ),
+)
+def test_missing_truth_does_not_mask_source_event_semantic_corruption(
+    corruption: str,
+) -> None:
+    member = _valid_member(1)
+    trajectory = member.trajectory
+    patient_id = member.demographics.patient_id
+    if corruption == "visible-latent-onset":
+        object.__setattr__(trajectory.events[0], "hidden", False)
+    elif corruption == "nonboolean-hidden":
+        object.__setattr__(trajectory.events[0], "hidden", 1)
+    elif corruption == "non-null-code":
+        object.__setattr__(
+            trajectory.events[0], "code", "syn-secret-source-code"
+        )
+    elif corruption == "unknown-phase":
+        object.__setattr__(
+            trajectory.events[0], "event_type", "syn-secret-source-phase"
+        )
+    elif corruption == "reversed-phase":
+        object.__setattr__(
+            trajectory,
+            "events",
+            _events(patient_id, ("observable_phenotype", "latent_onset")),
+        )
+    elif corruption == "decreasing-age":
+        object.__setattr__(trajectory.events[1], "age_days", 5)
+    elif corruption == "treatment-start-without-outcome":
+        object.__setattr__(
+            trajectory,
+            "events",
+            _events(patient_id, ("latent_onset", "treatment_start")),
+        )
+    elif corruption == "orphan-treatment-outcome":
+        object.__setattr__(
+            trajectory,
+            "events",
+            _events(patient_id, ("latent_onset", "treatment_response")),
+        )
+    elif corruption == "dual-treatment-outcomes":
+        object.__setattr__(
+            trajectory,
+            "events",
+            _events(
+                patient_id,
+                (
+                    "latent_onset",
+                    "treatment_start",
+                    "treatment_response",
+                    "treatment_nonresponse",
+                ),
+            ),
+        )
+    else:  # pragma: no cover - the parametrization is closed above
+        raise AssertionError("unknown fictional source-event corruption")
+    object.__setattr__(member.frame, "truth", None)
+    policy = dataclasses.replace(
+        temporal_policy(), maximum_unevaluable_checks=99
+    )
+
+    report = validate_temporal_drift(
+        temporal_cohort(member, _valid_member(2)), policy
+    )
+    encoded = json.dumps(report.to_mapping(), sort_keys=True)
+
+    assert report.status is TemporalDriftStatus.FAIL
+    for metric in ("causal_event_order", "causal_event_timing"):
+        comparison = _comparison(report, metric)
+        assert (comparison.status, comparison.reason_code) == (
+            TemporalDriftStatus.FAIL,
+            "STRUCTURAL_INVALID",
+        )
+    assert "syn-secret-source-code" not in encoded
+    assert "syn-secret-source-phase" not in encoded
+
+
 class _ExplodingFrame:
     @property
     def visits(self) -> object:

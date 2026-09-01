@@ -988,6 +988,8 @@ def _truth_independent_member_invariants_are_valid(member: object) -> bool:
         for event in trajectory_events
     ):
         return False
+    if not _source_event_order_is_valid(member, trajectory_events):
+        return False
     frame = member.frame
     if type(frame) is not ObservationFrame or frame.patient_id != patient_id:
         return False
