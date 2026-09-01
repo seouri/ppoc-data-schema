@@ -58,6 +58,7 @@ ALLOWED_PACKAGE_IMPORTS = {
     "collections.abc",
     "dataclasses",
     "hashlib",
+    "importlib",
     "json",
     "math",
     "os",
@@ -71,8 +72,6 @@ ALLOWED_PACKAGE_IMPORTS = {
     "synthetic.csv_package",
     "synthetic.derivation",
     "synthetic.manifest",
-    "synthetic.native.ancillary",
-    "synthetic.native.counterfactual_worlds",
     "synthetic.native.resources",
     "synthetic.run_directory",
     "synthetic.schema_contract",
@@ -188,6 +187,30 @@ def test_pair_export_module_uses_only_allowed_dependencies() -> None:
     tree = ast.parse(PACKAGE_EXPORT.read_text(encoding="utf-8"))
     assert _imports(tree) <= ALLOWED_PACKAGE_IMPORTS
     assert not _imports(tree) & FORBIDDEN_MODULES
+
+
+def test_pair_world_contract_is_resolved_lazily_without_direct_native_imports() -> None:
+    tree = ast.parse(PACKAGE_EXPORT.read_text(encoding="utf-8"))
+    imports = _imports(tree)
+    assert "importlib" in imports
+    assert "synthetic.native.ancillary" not in imports
+    assert "synthetic.native.counterfactual_worlds" not in imports
+
+    import_calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "import_module"
+    ]
+    assert {
+        node.args[0].value
+        for node in import_calls
+        if node.args and isinstance(node.args[0], ast.Constant)
+    } == {
+        "synthetic.native.ancillary",
+        "synthetic.native.counterfactual_worlds",
+    }
 
 
 def test_pair_export_has_no_generic_observed_export_or_new_reader_boundary() -> None:

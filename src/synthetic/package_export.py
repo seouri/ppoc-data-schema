@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import hashlib
+import importlib
 import json
 import math
 import os
@@ -18,12 +19,6 @@ from synthetic.base_resources import BASE_RESOURCES
 from synthetic.csv_package import write_resource, write_synthetic_descriptor
 from synthetic.derivation import DerivationOracle, DerivationUnavailable
 from synthetic.manifest import RunManifest
-from synthetic.native.ancillary import GHD_LAB_COMPONENT_NAMES, GHD_LAB_RESULT_FLAG
-from synthetic.native.counterfactual_worlds import (
-    CounterfactualEhrWorldPair,
-    CounterfactualWorldValidationStatus,
-    validate_counterfactual_ehr_worlds,
-)
 from synthetic.native.resources import (
     ObservedResourceBundle,
     ResourceShape,
@@ -368,7 +363,10 @@ def _write_canonical_json(path: Path, payload: object) -> None:
         handle.write(json.dumps(payload, sort_keys=True, indent=2, ensure_ascii=False) + "\n")
 
 
-def _pair_run_id(metadata: PackageExportMetadata, worlds: CounterfactualEhrWorldPair) -> str:
+def _pair_run_id(
+    metadata: PackageExportMetadata,
+    worlds: CounterfactualEhrWorldPair,  # noqa: F821 - pair type is resolved lazily.
+) -> str:
     payload = {
         "metadata": dataclasses.asdict(metadata),
         "matrix_version": worlds.matrix.version,
@@ -379,8 +377,28 @@ def _pair_run_id(metadata: PackageExportMetadata, worlds: CounterfactualEhrWorld
     ).hexdigest()[:12]
 
 
+def _resolve_pair_contract() -> tuple[
+    type[Any], type[Any], Callable[[Any], Any], frozenset[str], str
+]:
+    """Resolve pair-only in-memory contracts without widening package imports."""
+    ancillary = importlib.import_module("synthetic.native.ancillary")
+    worlds = importlib.import_module("synthetic.native.counterfactual_worlds")
+    return (
+        worlds.CounterfactualEhrWorldPair,
+        worlds.CounterfactualWorldValidationStatus,
+        worlds.validate_counterfactual_ehr_worlds,
+        frozenset(ancillary.GHD_LAB_COMPONENT_NAMES),
+        ancillary.GHD_LAB_RESULT_FLAG,
+    )
+
+
 def _pair_base_rows(
-    worlds: CounterfactualEhrWorldPair, descriptor: dict[str, Any]
+    worlds: CounterfactualEhrWorldPair,  # noqa: F821 - see _resolve_pair_contract.
+    descriptor: dict[str, Any],
+    *,
+    bundle_type: type[Any],
+    ghd_components: frozenset[str],
+    ghd_result_flag: str,
 ) -> tuple[
     dict[str, list[dict[str, object]]], dict[str, list[dict[str, object]]]
 ]:
@@ -391,15 +409,15 @@ def _pair_base_rows(
     allowed_lab_flags = {str(value) for value in result_flag.get("constraints", {}).get("enum", [])}
     rows: list[dict[str, list[dict[str, object]]]] = []
     for member in (worlds.baseline, worlds.intervention):
-        if not isinstance(member.bundle, ObservedResourceBundle):
+        if not isinstance(member.bundle, bundle_type):
             raise TypeError("counterfactual world is missing its resource bundle")
         member_rows = {
             name: [row.to_mapping() for row in member.bundle.rows[name]] for name in BASE_RESOURCES
         }
         for row in member_rows["labs"]:
             if (
-                row["result_component_name"] in GHD_LAB_COMPONENT_NAMES
-                and row["result_flag"] == GHD_LAB_RESULT_FLAG
+                row["result_component_name"] in ghd_components
+                and row["result_flag"] == ghd_result_flag
             ):
                 row["result_flag"] = ""
             elif row["result_flag"] not in {"", *allowed_lab_flags}:
@@ -498,10 +516,11 @@ def _remove_empty_pair_partial_tree(partial_path: Path) -> None:
 
 
 def _pair_manifest(
-    worlds: CounterfactualEhrWorldPair,
+    worlds: CounterfactualEhrWorldPair,  # noqa: F821 - see _resolve_pair_contract.
     metadata: PackageExportMetadata,
     report: object,
     child_manifest_sha256: Mapping[str, str],
+    validation_status_type: type[Any],
 ) -> dict[str, object]:
     check_counts = getattr(report, "check_counts", None)
     if not isinstance(check_counts, Mapping):
@@ -512,7 +531,7 @@ def _pair_manifest(
         "serialization_projection": "ghd-result-flag-empty-v1",
         "matrix_version": worlds.matrix.version,
         "intervention": worlds.matrix.intervention.value,
-        "validation_status": CounterfactualWorldValidationStatus.PASS.value,
+        "validation_status": validation_status_type.PASS.value,
         "validation_check_counts": dict(check_counts),
         "metadata": dataclasses.asdict(metadata),
         "children": {
@@ -523,7 +542,7 @@ def _pair_manifest(
 
 
 def export_counterfactual_ehr_world_pair(
-    worlds: CounterfactualEhrWorldPair,
+    worlds: CounterfactualEhrWorldPair,  # noqa: F821 - see _resolve_pair_contract.
     descriptor: Mapping[str, object],
     output: Path,
     *,
@@ -541,13 +560,26 @@ def export_counterfactual_ehr_world_pair(
         raise CounterfactualPackageExportUnavailable(_PAIR_FAILURE_REASON) from None
 
     try:
-        if not isinstance(worlds, CounterfactualEhrWorldPair):
+        (
+            pair_type,
+            validation_status_type,
+            validate_pair,
+            ghd_components,
+            ghd_result_flag,
+        ) = _resolve_pair_contract()
+        if not isinstance(worlds, pair_type):
             raise TypeError("worlds must be a CounterfactualEhrWorldPair")
-        report = validate_counterfactual_ehr_worlds(worlds)
-        if report.status is not CounterfactualWorldValidationStatus.PASS:
+        report = validate_pair(worlds)
+        if report.status is not validation_status_type.PASS:
             raise ValueError("counterfactual world validation did not pass")
         copied_descriptor = _copy_descriptor(descriptor)
-        baseline_rows, intervention_rows = _pair_base_rows(worlds, copied_descriptor)
+        baseline_rows, intervention_rows = _pair_base_rows(
+            worlds,
+            copied_descriptor,
+            bundle_type=ObservedResourceBundle,
+            ghd_components=ghd_components,
+            ghd_result_flag=ghd_result_flag,
+        )
         run_id = _pair_run_id(metadata, worlds)
         if _is_run_lifecycle_collision(output, run_id):
             raise FileExistsError("run directory lifecycle path already exists")
@@ -591,7 +623,13 @@ def export_counterfactual_ehr_world_pair(
                 }
                 _write_canonical_json(
                     run.partial_path / "pair-manifest.json",
-                    _pair_manifest(worlds, metadata, report, child_manifest_sha256),
+                    _pair_manifest(
+                        worlds,
+                        metadata,
+                        report,
+                        child_manifest_sha256,
+                        validation_status_type,
+                    ),
                 )
                 allowed_files, allowed_dirs = _pair_allowed_tree(copied_descriptor)
                 _scan_exact_tree(run.partial_path, allowed_files, allowed_dirs)
