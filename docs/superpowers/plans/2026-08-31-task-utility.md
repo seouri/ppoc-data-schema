@@ -29,11 +29,11 @@
 
 **Interfaces:**
 - Consumes: `require_aggregate_safe_token` and type-only existing cohort/resource/model values.
-- Produces: `TASK_UTILITY_REPORT_VERSION`, `TASK_METRICS`, `TASK_REASON_CODES`, `TaskUtilityStatus`, `TaskUtilityPolicy`, `TaskPrediction`, `TaskUtilityCell`, and `TaskUtilityReport` with frozen validation and canonical serialization.
+- Produces: `TASK_UTILITY_REPORT_VERSION`, `TASK_METRICS`, `TASK_REASON_CODES`, `TaskUtilityStatus`, `TaskUtilityPolicy`, `TaskPrediction`, `TaskUtilityMetric`, `TaskUtilityCell`, and `TaskUtilityReport` with frozen validation and canonical serialization.
 
 - [ ] **Step 1: Write failing model tests**
 
-  Add tests for valid policy/prediction/cell/report construction, exact fixed registries, booleans and nonfinite-number rejection, positive/zero floor semantics, `minimum_evaluable_members`/`maximum_unevaluable_members`, supported `sex` subgroup validation, frozen dataclasses, mapping proxies, explicit metric target/support/null rules, exact `member_count`/`evaluable_count`/`unevaluable_count` field names, truth-dependent count suppression on unevaluable cells, cell/report status/reason precedence, fixed scope/metric/status-count order, evaluator-safe `repr`, and exact canonical JSON/newline behavior. Test that unknown keys/metrics/reasons, patient-like scopes, mutable tuples/mappings, inconsistent counts, and numeric evidence on unevaluable metrics fail closed.
+  Add tests for valid policy/prediction/cell/report construction, exact fixed registries, booleans and nonfinite-number rejection, positive/zero floor semantics, `minimum_evaluable_members`/`maximum_unevaluable_members`, supported `sex` subgroup validation, frozen dataclasses, mapping proxies, explicit metric target/support/null rules, exact `member_count`/`evaluable_count`/`unevaluable_count` field names, truth-dependent count suppression on unevaluable cells, report `reason_code`, cell/report status/reason precedence including the allowed missing-output pass, fixed scope/metric/status-count order, evaluator-safe `repr`, and exact canonical JSON/newline behavior. Test that unknown keys/metrics/reasons, patient-like scopes, mutable tuples/mappings, inconsistent counts, and numeric evidence on unevaluable metrics fail closed.
 
 - [ ] **Step 2: Run the model tests to verify they fail**
 
@@ -41,7 +41,7 @@
 
 - [ ] **Step 3: Implement strict frozen models**
 
-  Implement the exact spec fields and fixed registries, including the `require_probability_scores` switch and explicit `TaskUtilityMetric`/`TaskUtilityCell` fields. Enforce `[0,1]` probabilities, positive supports, nonnegative unevaluable allowance, exact `sex` subgroup tuple, immutable nested mappings, aggregate-only scope tokens, status/reason compatibility, metric-specific target/support/null fields, and suppression of truth-dependent counts on unevaluable cells. Implement exact status/reason precedence and canonical compact sorted ASCII serialization. Ensure invalid public inputs return the static `unavailable` structural fallback report without echoing values, and `repr()` never includes latent or prediction values.
+  Implement the exact spec fields and fixed registries, including the `require_probability_scores` switch, report `reason_code`, and explicit `TaskUtilityMetric`/`TaskUtilityCell` fields. Enforce `[0,1]` probabilities, positive supports, nonnegative unevaluable allowance, exact `sex` subgroup tuple, immutable nested mappings, aggregate-only scope tokens, status/reason compatibility, metric-specific target/support/null fields, and suppression of truth-dependent counts on unevaluable cells. Implement exact cell/report status-reason precedence, including the bounded missing-output allowance, and canonical compact sorted ASCII serialization. Ensure invalid public inputs return the static `unavailable` structural fallback report without echoing values, and `repr()` never includes latent or prediction values.
 
 - [ ] **Step 4: Run model tests, lint, and commit**
 
