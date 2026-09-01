@@ -189,14 +189,24 @@ def test_export_pair_creates_two_exact_schema_packages_and_a_deterministic_aggre
 def test_export_pair_archives_only_fixed_failure_content_after_copy_failure(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    original_copytree = package_export.shutil.copytree
+    original_copy = package_export._copy_pair_child_at
 
-    def copy_then_fail(source: Path, destination: Path, *args: object, **kwargs: object) -> Path:
-        original_copytree(source, destination, *args, **kwargs)
-        (destination / "arbitrary-token.txt").write_text("raw-copy-failure-token", encoding="utf-8")
+    def copy_then_fail(
+        source: Path,
+        directory_descriptor: int,
+        child_name: str,
+        files: set[str],
+        dirs: set[str],
+    ) -> None:
+        original_copy(source, directory_descriptor, child_name, files, dirs)
+        package_export._write_regular_at(
+            directory_descriptor,
+            f"{child_name}/arbitrary-token.txt",
+            b"raw-copy-failure-token",
+        )
         raise RuntimeError("raw-copy-failure-token")
 
-    monkeypatch.setattr(package_export.shutil, "copytree", copy_then_fail)
+    monkeypatch.setattr(package_export, "_copy_pair_child_at", copy_then_fail)
 
     with pytest.raises(
         CounterfactualPackageExportUnavailable, match="counterfactual package export failed"
@@ -227,16 +237,26 @@ def test_export_pair_archives_only_fixed_failure_content_after_copy_failure(
 def test_export_pair_clears_a_restrictive_copied_child_before_archiving_failure(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    original_copytree = package_export.shutil.copytree
+    original_copy = package_export._copy_pair_child_at
 
     def copy_restrict_then_fail(
-        source: Path, destination: Path, *args: object, **kwargs: object
-    ) -> Path:
-        original_copytree(source, destination, *args, **kwargs)
-        destination.chmod(0o555)
+        source: Path,
+        directory_descriptor: int,
+        child_name: str,
+        files: set[str],
+        dirs: set[str],
+    ) -> None:
+        original_copy(source, directory_descriptor, child_name, files, dirs)
+        child_descriptor = package_export._open_relative_directory_at(
+            directory_descriptor, child_name
+        )
+        try:
+            os.fchmod(child_descriptor, 0o555)
+        finally:
+            os.close(child_descriptor)
         raise RuntimeError("raw-restrictive-copy-failure-token")
 
-    monkeypatch.setattr(package_export.shutil, "copytree", copy_restrict_then_fail)
+    monkeypatch.setattr(package_export, "_copy_pair_child_at", copy_restrict_then_fail)
 
     with pytest.raises(
         CounterfactualPackageExportUnavailable, match="counterfactual package export failed"
@@ -266,17 +286,26 @@ def test_export_pair_clears_a_restrictive_copied_child_before_archiving_failure(
 def test_export_pair_removes_the_empty_partial_when_failure_archiving_fails(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    original_copytree = package_export.shutil.copytree
+    original_copy = package_export._copy_pair_child_at
+    original_rename = package_export._rename_pair_directory_at
 
-    def copy_then_fail(source: Path, destination: Path, *args: object, **kwargs: object) -> Path:
-        original_copytree(source, destination, *args, **kwargs)
+    def copy_then_fail(
+        source: Path,
+        directory_descriptor: int,
+        child_name: str,
+        files: set[str],
+        dirs: set[str],
+    ) -> None:
+        original_copy(source, directory_descriptor, child_name, files, dirs)
         raise RuntimeError("raw-copy-failure-token")
 
-    def fail_archiving(*args: object, **kwargs: object) -> Path:
-        raise OSError("raw-failure-archive-token")
+    def fail_archiving(parent_descriptor: int, source: str, target: str) -> None:
+        if target.endswith(".failed"):
+            raise OSError("raw-failure-archive-token")
+        original_rename(parent_descriptor, source, target)
 
-    monkeypatch.setattr(package_export.shutil, "copytree", copy_then_fail)
-    monkeypatch.setattr(package_export.RunDirectory, "fail", fail_archiving)
+    monkeypatch.setattr(package_export, "_copy_pair_child_at", copy_then_fail)
+    monkeypatch.setattr(package_export, "_rename_pair_directory_at", fail_archiving)
 
     with pytest.raises(
         CounterfactualPackageExportUnavailable, match="counterfactual package export failed"
@@ -299,16 +328,20 @@ def test_export_pair_removes_the_empty_partial_when_failure_archiving_fails(
 def test_export_pair_clears_a_restrictive_partial_root_before_archiving_failure(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    original_copytree = package_export.shutil.copytree
+    original_copy = package_export._copy_pair_child_at
 
     def copy_restrict_root_then_fail(
-        source: Path, destination: Path, *args: object, **kwargs: object
-    ) -> Path:
-        original_copytree(source, destination, *args, **kwargs)
-        destination.parent.chmod(0o555)
+        source: Path,
+        directory_descriptor: int,
+        child_name: str,
+        files: set[str],
+        dirs: set[str],
+    ) -> None:
+        original_copy(source, directory_descriptor, child_name, files, dirs)
+        os.fchmod(directory_descriptor, 0o555)
         raise RuntimeError("raw-restrictive-root-copy-failure-token")
 
-    monkeypatch.setattr(package_export.shutil, "copytree", copy_restrict_root_then_fail)
+    monkeypatch.setattr(package_export, "_copy_pair_child_at", copy_restrict_root_then_fail)
 
     with pytest.raises(
         CounterfactualPackageExportUnavailable, match="counterfactual package export failed"
@@ -547,25 +580,44 @@ def test_export_pair_archives_only_fixed_failure_content_after_copied_tree_rejec
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, tree_change: str
 ) -> None:
     """Catch a copied tree that is not the exact regular-file pair inventory."""
-    original_copytree = package_export.shutil.copytree
+    original_copy = package_export._copy_pair_child_at
     copy_count = 0
 
-    def copy_then_poison(source: Path, destination: Path, *args: object, **kwargs: object) -> Path:
+    def copy_then_poison(
+        source: Path,
+        directory_descriptor: int,
+        child_name: str,
+        files: set[str],
+        dirs: set[str],
+    ) -> None:
         nonlocal copy_count
-        copied = original_copytree(source, destination, *args, **kwargs)
+        original_copy(source, directory_descriptor, child_name, files, dirs)
         copy_count += 1
         if copy_count == 2:
             if tree_change == "extra":
-                (destination.parent / "unapproved-token.txt").write_text("hidden-tree-token", encoding="utf-8")
+                package_export._write_regular_at(
+                    directory_descriptor,
+                    "unapproved-token.txt",
+                    b"hidden-tree-token",
+                )
             elif tree_change == "symlink":
-                (destination.parent / "unapproved-link").symlink_to(destination / "patients.csv")
+                os.symlink(
+                    f"{child_name}/patients.csv",
+                    "unapproved-link",
+                    dir_fd=directory_descriptor,
+                )
             elif tree_change == "special":
-                os.mkfifo(destination.parent / "unapproved-fifo")
+                os.mkfifo("unapproved-fifo", dir_fd=directory_descriptor)
             else:
-                (destination / "patients.csv").unlink()
-        return copied
+                child_descriptor = package_export._open_relative_directory_at(
+                    directory_descriptor, child_name
+                )
+                try:
+                    os.unlink("patients.csv", dir_fd=child_descriptor)
+                finally:
+                    os.close(child_descriptor)
 
-    monkeypatch.setattr(package_export.shutil, "copytree", copy_then_poison)
+    monkeypatch.setattr(package_export, "_copy_pair_child_at", copy_then_poison)
     output = tmp_path / "pair"
     with pytest.raises(
         CounterfactualPackageExportUnavailable, match="counterfactual package export failed"
@@ -610,3 +662,224 @@ def test_export_pair_redacts_post_creation_pair_manifest_failure(
 
     assert raw_token not in str(error.value)
     _assert_failure_only(tmp_path, output, raw_token)
+
+
+def test_export_pair_rejects_a_manifest_replaced_after_the_path_scan(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Catch a post-scan replacement that would publish an out-of-envelope symlink."""
+    original_scan = package_export._scan_exact_tree
+    outside = tmp_path / "outside.txt"
+    outside.write_text("outside-envelope-token", encoding="utf-8")
+
+    def scan_then_replace(root: Path, files: set[str], dirs: set[str]) -> None:
+        original_scan(root, files, dirs)
+        manifest = root / "pair-manifest.json"
+        manifest.unlink()
+        manifest.symlink_to(outside)
+
+    monkeypatch.setattr(package_export, "_scan_exact_tree", scan_then_replace)
+    output = tmp_path / "pair"
+
+    with pytest.raises(
+        CounterfactualPackageExportUnavailable, match="counterfactual package export failed"
+    ):
+        export_counterfactual_ehr_world_pair(
+            _worlds(InterventionKind.PHYSIOLOGY_SEVERITY),
+            _descriptor(),
+            output,
+            metadata=_metadata(),
+            derivation_oracle=IdentityPreservingTestDerivationOracle(),
+            trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
+            trusted_derivation_test_only=True,
+        )
+
+    assert not output.exists()
+    assert outside.read_text(encoding="utf-8") == "outside-envelope-token"
+    assert not any(path.is_symlink() for path in _lifecycle_paths(tmp_path, output))
+
+
+def test_export_pair_cleans_the_original_partial_inode_after_name_replacement(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Catch cleanup reopening a replacement while the original child package remains."""
+    original_scan = package_export._scan_exact_tree
+    moved = tmp_path / "moved-original"
+
+    def scan_then_move_and_fail(root: Path, files: set[str], dirs: set[str]) -> None:
+        original_scan(root, files, dirs)
+        root.rename(moved)
+        root.mkdir()
+        raise RuntimeError("moved-partial-token")
+
+    monkeypatch.setattr(package_export, "_scan_exact_tree", scan_then_move_and_fail)
+    output = tmp_path / "pair"
+
+    with pytest.raises(
+        CounterfactualPackageExportUnavailable, match="counterfactual package export failed"
+    ):
+        export_counterfactual_ehr_world_pair(
+            _worlds(InterventionKind.PHYSIOLOGY_SEVERITY),
+            _descriptor(),
+            output,
+            metadata=_metadata(),
+            derivation_oracle=IdentityPreservingTestDerivationOracle(),
+            trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
+            trusted_derivation_test_only=True,
+        )
+
+    assert not output.exists()
+    assert not moved.exists()
+    assert _lifecycle_paths(tmp_path, output) == []
+
+
+def test_export_pair_never_follows_a_failure_file_injected_after_cleanup(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Catch failure archival following a same-name symlink outside the lifecycle tree."""
+    original_scan = package_export._scan_exact_tree
+    original_clear = package_export._clear_pair_partial_tree
+    external = tmp_path / "external.txt"
+    external.write_text("external-file-token", encoding="utf-8")
+    injected = False
+
+    def scan_then_fail(root: Path, files: set[str], dirs: set[str]) -> None:
+        original_scan(root, files, dirs)
+        raise RuntimeError("trigger-failure-archive")
+
+    def clear_then_inject(path: Path, *args: object) -> None:
+        nonlocal injected
+        original_clear(path, *args)
+        if not injected:
+            (path / "failure.json").symlink_to(external)
+            injected = True
+
+    monkeypatch.setattr(package_export, "_scan_exact_tree", scan_then_fail)
+    monkeypatch.setattr(package_export, "_clear_pair_partial_tree", clear_then_inject)
+    output = tmp_path / "pair"
+
+    with pytest.raises(
+        CounterfactualPackageExportUnavailable, match="counterfactual package export failed"
+    ):
+        export_counterfactual_ehr_world_pair(
+            _worlds(InterventionKind.PHYSIOLOGY_SEVERITY),
+            _descriptor(),
+            output,
+            metadata=_metadata(),
+            derivation_oracle=IdentityPreservingTestDerivationOracle(),
+            trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
+            trusted_derivation_test_only=True,
+        )
+
+    assert injected
+    assert external.read_text(encoding="utf-8") == "external-file-token"
+    assert not output.exists()
+    for lifecycle in _lifecycle_paths(tmp_path, output):
+        assert not (lifecycle / "failure.json").is_symlink()
+
+
+def test_export_pair_completes_private_staging_cleanup_before_promotion(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Catch a private cleanup failure being reported after a public target was promoted."""
+    original_temporary_directory = package_export.tempfile.TemporaryDirectory
+
+    class CleanupFailure:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            self._wrapped = original_temporary_directory(*args, **kwargs)
+            self._fail = kwargs.get("prefix") == "counterfactual-package-export-"
+
+        def __enter__(self) -> str:
+            return self._wrapped.__enter__()
+
+        def __exit__(self, *args: object) -> bool | None:
+            result = self._wrapped.__exit__(*args)
+            if self._fail:
+                raise OSError("private-cleanup-token")
+            return result
+
+    monkeypatch.setattr(package_export.tempfile, "TemporaryDirectory", CleanupFailure)
+    output = tmp_path / "pair"
+
+    with pytest.raises(
+        CounterfactualPackageExportUnavailable, match="counterfactual package export failed"
+    ):
+        export_counterfactual_ehr_world_pair(
+            _worlds(InterventionKind.PHYSIOLOGY_SEVERITY),
+            _descriptor(),
+            output,
+            metadata=_metadata(),
+            derivation_oracle=IdentityPreservingTestDerivationOracle(),
+            trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
+            trusted_derivation_test_only=True,
+        )
+
+    assert not output.exists()
+
+
+def test_export_pair_metadata_subclass_cannot_expand_visible_metadata(
+    tmp_path: Path,
+) -> None:
+    """Catch dataclass subclass fields entering the run token or public manifest."""
+
+    @dataclasses.dataclass(frozen=True)
+    class ExtendedMetadata(PackageExportMetadata):
+        truth: str = "hidden-patient-truth-token"
+
+    base = _metadata()
+    metadata = ExtendedMetadata(**dataclasses.asdict(base))
+    worlds = _worlds(InterventionKind.PHYSIOLOGY_SEVERITY)
+    assert package_export._pair_run_id(metadata, worlds) == package_export._pair_run_id(base, worlds)
+
+    result = export_counterfactual_ehr_world_pair(
+        worlds,
+        _descriptor(),
+        tmp_path / "pair",
+        metadata=metadata,
+        derivation_oracle=IdentityPreservingTestDerivationOracle(),
+        trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
+        trusted_derivation_test_only=True,
+    )
+
+    manifest = json.loads((result / "pair-manifest.json").read_text(encoding="utf-8"))
+    assert manifest["metadata"] == dataclasses.asdict(base)
+    assert "hidden-patient-truth-token" not in (result / "pair-manifest.json").read_text(
+        encoding="utf-8"
+    )
+
+
+def test_export_pair_start_race_raises_a_path_free_collision(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Catch the check/mkdir race leaking the absolute partial path."""
+    original_mkdir = Path.mkdir
+    injected = False
+
+    def mkdir_with_competitor(path: Path, *args: object, **kwargs: object) -> None:
+        nonlocal injected
+        if (
+            path.parent == tmp_path
+            and path.name.startswith(".pair.")
+            and path.name.endswith(".partial")
+            and not injected
+        ):
+            original_mkdir(path, *args, **kwargs)
+            injected = True
+        original_mkdir(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", mkdir_with_competitor)
+
+    with pytest.raises(FileExistsError) as error:
+        export_counterfactual_ehr_world_pair(
+            _worlds(InterventionKind.PHYSIOLOGY_SEVERITY),
+            _descriptor(),
+            tmp_path / "pair",
+            metadata=_metadata(),
+            derivation_oracle=IdentityPreservingTestDerivationOracle(),
+            trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
+            trusted_derivation_test_only=True,
+        )
+
+    assert injected
+    assert str(tmp_path) not in str(error.value)
+    assert str(error.value) == "run directory lifecycle path already exists"

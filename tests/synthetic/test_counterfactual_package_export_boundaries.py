@@ -56,7 +56,9 @@ HIDDEN_IDENTIFIERS = {
 ALLOWED_PACKAGE_IMPORTS = {
     "__future__",
     "collections.abc",
+    "ctypes",
     "dataclasses",
+    "errno",
     "hashlib",
     "importlib",
     "json",
@@ -66,6 +68,7 @@ ALLOWED_PACKAGE_IMPORTS = {
     "re",
     "shutil",
     "stat",
+    "sys",
     "tempfile",
     "typing",
     "synthetic.base_resources",
@@ -192,6 +195,11 @@ def test_pair_export_module_uses_only_allowed_dependencies() -> None:
 
 def test_pair_world_contract_is_resolved_lazily_without_direct_native_imports() -> None:
     tree = ast.parse(PACKAGE_EXPORT.read_text(encoding="utf-8"))
+    parents = {
+        child: parent
+        for parent in ast.walk(tree)
+        for child in ast.iter_child_nodes(parent)
+    }
     imports = _imports(tree)
     assert "importlib" in imports
     assert "synthetic.native.ancillary" not in imports
@@ -204,13 +212,34 @@ def test_pair_world_contract_is_resolved_lazily_without_direct_native_imports() 
         and isinstance(node.func, ast.Attribute)
         and node.func.attr == "import_module"
     ]
-    assert {
-        node.args[0].value
+    assert len(import_calls) == 2
+    assert all(
+        isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "importlib"
+        and len(node.args) == 1
+        and not node.keywords
+        and isinstance(node.args[0], ast.Constant)
+        and isinstance(node.args[0].value, str)
         for node in import_calls
-        if node.args and isinstance(node.args[0], ast.Constant)
-    } == {
+    )
+    assert {node.args[0].value for node in import_calls} == {
         "synthetic.native.ancillary",
         "synthetic.native.counterfactual_worlds",
+    }
+    importlib_names = [
+        node for node in ast.walk(tree) if isinstance(node, ast.Name) and node.id == "importlib"
+    ]
+    assert len(importlib_names) == 2
+    assert all(
+        isinstance(parents[node], ast.Attribute)
+        and parents[node].value is node
+        and parents[node].attr == "import_module"
+        for node in importlib_names
+    )
+    assert not {
+        node.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Name) and node.id in {"__import__", "eval", "exec"}
     }
 
 

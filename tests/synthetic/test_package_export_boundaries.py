@@ -60,7 +60,9 @@ FORBIDDEN_CALL_SYMBOLS = {
 PACKAGE_EXPORT_IMPORTS = {
     "__future__",
     "collections.abc",
+    "ctypes",
     "dataclasses",
+    "errno",
     "hashlib",
     "importlib",
     "json",
@@ -70,6 +72,7 @@ PACKAGE_EXPORT_IMPORTS = {
     "re",
     "shutil",
     "stat",
+    "sys",
     "tempfile",
     "typing",
     "synthetic.base_resources",
