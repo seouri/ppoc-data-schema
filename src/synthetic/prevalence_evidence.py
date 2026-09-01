@@ -682,12 +682,16 @@ class PrevalenceComparison:
             assert self.maximum_tolerance_exceedance is not None
             if self.generated_minimum > self.generated_maximum:
                 raise ValueError("generated range must be ordered")
+            if self.evaluable_count == 1 and self.generated_minimum != self.generated_maximum:
+                raise ValueError("one evaluable run must have identical generated extrema")
             expected_difference = max(
                 abs(float(self.heldout_value) - float(self.generated_minimum)),
                 abs(float(self.heldout_value) - float(self.generated_maximum)),
             )
             if self.maximum_absolute_difference != expected_difference:
                 raise ValueError("aggregate difference must match the disclosed range")
+            if self.maximum_tolerance_exceedance > self.maximum_absolute_difference:
+                raise ValueError("tolerance exceedance cannot exceed the maximum difference")
             if self.fail_count and self.maximum_tolerance_exceedance <= 0:
                 raise ValueError("failed comparisons require a positive tolerance exceedance")
             if not self.fail_count and self.maximum_tolerance_exceedance > 0:

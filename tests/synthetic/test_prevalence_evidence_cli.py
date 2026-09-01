@@ -179,6 +179,8 @@ def test_result_canonical_report_and_summary_round_trip_without_governed_details
         "too-many-failures-for-failed-runs",
         "too-many-missing-for-nonpass-runs",
         "too-few-passes-for-passing-runs",
+        "singleton-unequal-range",
+        "exceedance-greater-than-maximum-difference",
     ),
 )
 def test_strict_report_parser_rejects_cross_field_invalid_public_evidence(
@@ -238,7 +240,7 @@ def test_strict_report_parser_rejects_cross_field_invalid_public_evidence(
         comparison["evaluable_count"] = 1
         comparison["pass_count"] = 1
         mapping["status"] = "UNEVALUABLE"
-    else:
+    elif mutation == "too-few-passes-for-passing-runs":
         runs[1]["status"] = "FAIL"
         runs[2]["status"] = "UNEVALUABLE"
         comparison["status"] = "FAIL"
@@ -246,6 +248,24 @@ def test_strict_report_parser_rejects_cross_field_invalid_public_evidence(
         comparison["pass_count"] = 0
         comparison["fail_count"] = 1
         comparison["maximum_tolerance_exceedance"] = 0.01
+        mapping["status"] = "FAIL"
+    elif mutation == "singleton-unequal-range":
+        runs[1]["status"] = "UNEVALUABLE"
+        runs[2]["status"] = "UNEVALUABLE"
+        comparison["status"] = "UNEVALUABLE"
+        comparison["evaluable_count"] = 1
+        comparison["pass_count"] = 1
+        comparison["generated_minimum"] = 0.0
+        comparison["maximum_absolute_difference"] = 0.5
+        mapping["status"] = "UNEVALUABLE"
+    else:
+        run["status"] = "FAIL"
+        comparison["status"] = "FAIL"
+        comparison["pass_count"] = 2
+        comparison["fail_count"] = 1
+        comparison["generated_minimum"] = 0.0
+        comparison["maximum_absolute_difference"] = 0.5
+        comparison["maximum_tolerance_exceedance"] = 0.6
         mapping["status"] = "FAIL"
 
     with pytest.raises(ValueError, match="report is invalid"):
