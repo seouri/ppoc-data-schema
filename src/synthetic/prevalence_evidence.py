@@ -670,6 +670,11 @@ class PrevalenceComparison:
                 value = getattr(self, field)
                 if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
                     raise ValueError(f"{field} must be a finite aggregate value")
+            for field in ("heldout_value", "generated_minimum", "generated_maximum"):
+                value = getattr(self, field)
+                assert isinstance(value, (int, float)) and not isinstance(value, bool)
+                if not 0 <= value <= 1:
+                    raise ValueError(f"{field} must be a proportion in [0, 1]")
             assert self.heldout_value is not None
             assert self.generated_minimum is not None
             assert self.generated_maximum is not None

@@ -252,6 +252,41 @@ def test_strict_report_parser_rejects_cross_field_invalid_public_evidence(
         module._parse_prevalence_evidence_report(mapping)
 
 
+@pytest.mark.parametrize(
+    ("field", "value", "companion_field", "maximum_difference"),
+    (
+        ("heldout_value", -0.1, None, 0.6),
+        ("heldout_value", 1.1, None, 0.6000000000000001),
+        ("generated_minimum", -0.1, None, 0.6),
+        ("generated_minimum", 1.1, "generated_maximum", 0.6000000000000001),
+        ("generated_maximum", -0.1, "generated_minimum", 0.6),
+        ("generated_maximum", 1.1, None, 0.6000000000000001),
+    ),
+)
+def test_strict_report_parser_rejects_out_of_range_proportion_values(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    value: float,
+    companion_field: str | None,
+    maximum_difference: float,
+) -> None:
+    """Accepting a negative or above-one v1 value would violate the proportion target contract."""
+    result, module = _passing_result(tmp_path, monkeypatch)
+    mapping = deepcopy(result.report.to_mapping())
+    comparisons = mapping["comparisons"]
+    assert isinstance(comparisons, list)
+    comparison = comparisons[0]
+    assert isinstance(comparison, dict)
+    comparison[field] = value
+    if companion_field is not None:
+        comparison[companion_field] = value
+    comparison["maximum_absolute_difference"] = maximum_difference
+
+    with pytest.raises(ValueError, match="report is invalid"):
+        module._parse_prevalence_evidence_report(mapping)
+
+
 def test_writer_promotes_only_reparsed_canonical_aggregate_output(tmp_path: Path) -> None:
     """Skipping output reparse could promote a corrupted report or summary."""
     result = _result(tmp_path)

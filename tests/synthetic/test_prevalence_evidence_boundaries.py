@@ -110,7 +110,7 @@ def _resolve_dynamic_name(name: str, package: str | None) -> str | None:
 
 
 def _dynamic_module_literals(path: Path) -> set[str]:
-    """Return literal dynamic edges; computed module/package names are intentionally out of scope."""
+    """Return literal importlib/__import__ edges; aliases and computed names are out of scope."""
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     names = {
         node.value
@@ -122,7 +122,7 @@ def _dynamic_module_literals(path: Path) -> set[str]:
     module, is_package = _module_context(path)
     current_package = module if is_package else module.rpartition(".")[0]
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Call) or not node.args:
+        if not isinstance(node, ast.Call):
             continue
         importlib_call = (
             isinstance(node.func, ast.Attribute)
@@ -133,7 +133,11 @@ def _dynamic_module_literals(path: Path) -> set[str]:
         dunder_call = isinstance(node.func, ast.Name) and node.func.id == "__import__"
         if not importlib_call and not dunder_call:
             continue
-        name = _literal_string(node.args[0])
+        name_node = node.args[0] if node.args else next(
+            (keyword.value for keyword in node.keywords if keyword.arg == "name"),
+            None,
+        )
+        name = _literal_string(name_node)
         if name is None:
             continue
         package: str | None = None
@@ -355,6 +359,26 @@ def test_dynamic_import_scan_normalizes_relative_dunder_import(
     monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
 
     assert "synthetic.support" in _dynamic_module_literals(module)
+
+
+def test_dynamic_import_scan_normalizes_and_follows_keyword_relative_imports(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "src" / "synthetic"
+    root.mkdir(parents=True)
+    generate = root / "generate.py"
+    generate.write_text(
+        'importlib.import_module(name=".support", package="synthetic")\n',
+        encoding="utf-8",
+    )
+    (root / "support.py").write_text(
+        'importlib.import_module(name=".prevalence_evidence", package="synthetic")\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
+
+    assert "synthetic.support" in _dynamic_module_literals(generate)
+    assert GOVERNED_IMPORT in _transitive_imports((generate,))
 
 
 @pytest.mark.parametrize(
