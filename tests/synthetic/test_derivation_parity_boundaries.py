@@ -335,6 +335,21 @@ def test_documentation_states_the_complete_parity_contract_and_safe_usage() -> N
     assert "deterministic_tolerance" in guide
     assert "reference_tolerance" in guide
     assert "FAIL > UNEVALUABLE > PASS" in guide
+    assert (
+        "Identifiers, strings, flags/enums, copied identity fields, and null state are exact."
+    ) in guide
+    assert (
+        "Only eligible finite numeric reference-dependent fields use `reference_tolerance`."
+    ) in guide
+    assert "Deterministic formulas use `deterministic_tolerance`." in guide
+    assert (
+        "Formula semantics are bound by `DERIVATION_PARITY_VERSION` and the checked-in evaluator "
+        "implementation, not caller-mutated derivation annotations."
+    ) in guide
+    assert "The report's policy controls are public policy identity, not secret inputs." in guide
+    assert (
+        "Task utility is a separate non-authority evidence boundary governed by its own approved policy."
+    ) in guide
     for field in (*REPORT_FIELDS, *CHECK_FIELDS):
         assert field in guide
     assert "fixed redacted" in combined
