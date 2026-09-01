@@ -348,11 +348,11 @@ git commit -m "feat: enforce derivation binding at export"
 - Consumes the final model, evaluator, and explicit exporter signatures from Tasks 1–3.
 - Produces user-facing instructions for supplying an already-loaded binding and a boundary test proving the production CLI remains unavailable without an approved oracle.
 
-- [ ] **Step 1: Write failing documentation and boundary tests**
+- [x] **Step 1: Write failing documentation and boundary tests**
 
 Assert that the guide and README state the binding version, all seven required categories, test-only versus approved non-test behavior, aggregate-only/no-row/no-path/no-secret serialization, FAIL > UNEVALUABLE > PASS, the explicit derivation_binding argument, no external harness execution, continued CLI fail-closed behavior, and the fact that software validation is not clinical, privacy, prevalence, Synthea, or release authorization. Add source scans rejecting imports or calls from calibration, held-out, privacy, native trajectory, temporal, prevalence, or Synthea modules except through the explicit exporter/generator parameter path.
 
-- [ ] **Step 2: Run documentation tests and verify expected failure**
+- [x] **Step 2: Run documentation tests and verify expected failure**
 
 ~~~sh
 PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_derivation_binding_docs.py tests/synthetic/test_derivation_binding_boundaries.py
@@ -360,13 +360,13 @@ PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests
 
 Expected: assertions fail because the guide and README do not yet describe the binding contract.
 
-- [ ] **Step 3: Update the guide and README**
+- [x] **Step 3: Update the guide and README**
 
 Add an authoritative derivation binding section immediately after the parity section. Show a fictional test-only DerivationBinding.from_mapping example and an explicit exporter call, but no real paths, rows, review prose, or production secrets. Explain that the custodian retains golden inputs/outputs, fuzz rows, and parity report bytes; only safe IDs/digests are recorded in the repository. State that an approved binding is necessary but not sufficient for clinical or release claims and that Synthea remains an optional later engine-conformance route.
 
 Replace every old example passing trusted_derivation_fingerprint or trusted_derivation_test_only with derivation_binding=. Keep IdentityPreservingTestDerivationOracle explicitly test-only and keep the command-line failure text unchanged.
 
-- [ ] **Step 4: Run docs/boundary tests and lint**
+- [x] **Step 4: Run docs/boundary tests and lint**
 
 ~~~sh
 PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_derivation_binding_docs.py tests/synthetic/test_derivation_binding_boundaries.py
@@ -375,7 +375,7 @@ UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run ruff check src tests
 
 Expected: all documentation/boundary tests pass and Ruff reports All checks passed!
 
-- [ ] **Step 5: Commit documentation and boundary coverage**
+- [x] **Step 5: Commit documentation and boundary coverage**
 
 ~~~sh
 git add README.md docs/synthetic-generator.md tests/synthetic/test_derivation_binding_boundaries.py tests/synthetic/test_derivation_binding_docs.py
