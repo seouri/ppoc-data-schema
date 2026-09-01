@@ -174,3 +174,75 @@ def test_export_pair_archives_only_fixed_failure_content_after_copy_failure(
         "status": "FAILED",
     }
     assert b"raw-copy-failure-token" not in _tree_bytes(failed[0]).get("failure.json", b"")
+
+
+def test_export_pair_clears_a_restrictive_copied_child_before_archiving_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    original_copytree = package_export.shutil.copytree
+
+    def copy_restrict_then_fail(
+        source: Path, destination: Path, *args: object, **kwargs: object
+    ) -> Path:
+        original_copytree(source, destination, *args, **kwargs)
+        destination.chmod(0o555)
+        raise RuntimeError("raw-restrictive-copy-failure-token")
+
+    monkeypatch.setattr(package_export.shutil, "copytree", copy_restrict_then_fail)
+
+    with pytest.raises(
+        CounterfactualPackageExportUnavailable, match="counterfactual package export failed"
+    ):
+        export_counterfactual_ehr_world_pair(
+            _worlds(InterventionKind.PHYSIOLOGY_SEVERITY),
+            _descriptor(),
+            tmp_path / "pair",
+            metadata=_metadata(),
+            derivation_oracle=IdentityPreservingTestDerivationOracle(),
+            trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
+            trusted_derivation_test_only=True,
+        )
+
+    assert not (tmp_path / "pair").exists()
+    assert not list(tmp_path.glob(".pair.*.partial"))
+    failed = list(tmp_path.glob(".pair.*.failed"))
+    assert len(failed) == 1
+    assert [path.relative_to(failed[0]).as_posix() for path in failed[0].rglob("*")] == [
+        "failure.json"
+    ]
+    assert b"raw-restrictive-copy-failure-token" not in _tree_bytes(failed[0]).get(
+        "failure.json", b""
+    )
+
+
+def test_export_pair_removes_the_empty_partial_when_failure_archiving_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    original_copytree = package_export.shutil.copytree
+
+    def copy_then_fail(source: Path, destination: Path, *args: object, **kwargs: object) -> Path:
+        original_copytree(source, destination, *args, **kwargs)
+        raise RuntimeError("raw-copy-failure-token")
+
+    def fail_archiving(*args: object, **kwargs: object) -> Path:
+        raise OSError("raw-failure-archive-token")
+
+    monkeypatch.setattr(package_export.shutil, "copytree", copy_then_fail)
+    monkeypatch.setattr(package_export.RunDirectory, "fail", fail_archiving)
+
+    with pytest.raises(
+        CounterfactualPackageExportUnavailable, match="counterfactual package export failed"
+    ):
+        export_counterfactual_ehr_world_pair(
+            _worlds(InterventionKind.PHYSIOLOGY_SEVERITY),
+            _descriptor(),
+            tmp_path / "pair",
+            metadata=_metadata(),
+            derivation_oracle=IdentityPreservingTestDerivationOracle(),
+            trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
+            trusted_derivation_test_only=True,
+        )
+
+    assert not (tmp_path / "pair").exists()
+    assert not list(tmp_path.glob(".pair.*.partial"))
+    assert not list(tmp_path.glob(".pair.*.failed"))

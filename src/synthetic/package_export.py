@@ -448,8 +448,14 @@ def _remove_tree_entry_at(directory_descriptor: int, name: str) -> None:
     if stat.S_ISDIR(status.st_mode):
         child_descriptor = os.open(name, _DIRECTORY_OPEN_FLAGS, dir_fd=directory_descriptor)
         try:
-            for child in os.scandir(child_descriptor):
-                _remove_tree_entry_at(child_descriptor, child.name)
+            child_status = os.fstat(child_descriptor)
+            os.fchmod(
+                child_descriptor,
+                stat.S_IMODE(child_status.st_mode) | stat.S_IWUSR | stat.S_IXUSR,
+            )
+            with os.scandir(child_descriptor) as children:
+                for child in children:
+                    _remove_tree_entry_at(child_descriptor, child.name)
         finally:
             os.close(child_descriptor)
         os.rmdir(name, dir_fd=directory_descriptor)
@@ -460,11 +466,30 @@ def _remove_tree_entry_at(directory_descriptor: int, name: str) -> None:
 def _clear_pair_partial_tree(partial_path: Path) -> None:
     directory_descriptor, identity = _open_pinned_directory(partial_path)
     try:
-        for entry in os.scandir(directory_descriptor):
-            _remove_tree_entry_at(directory_descriptor, entry.name)
+        with os.scandir(directory_descriptor) as entries:
+            for entry in entries:
+                _remove_tree_entry_at(directory_descriptor, entry.name)
         _require_directory_identity(partial_path, identity)
     finally:
         os.close(directory_descriptor)
+
+
+def _remove_empty_pair_partial_tree(partial_path: Path) -> None:
+    directory_descriptor, identity = _open_pinned_directory(partial_path)
+    try:
+        with os.scandir(directory_descriptor) as entries:
+            if next(entries, None) is not None:
+                raise DerivationUnavailable("pair partial tree is not empty")
+    finally:
+        os.close(directory_descriptor)
+    parent_descriptor = os.open(partial_path.parent, _DIRECTORY_OPEN_FLAGS)
+    try:
+        current = os.stat(partial_path.name, dir_fd=parent_descriptor, follow_symlinks=False)
+        if not stat.S_ISDIR(current.st_mode) or (current.st_dev, current.st_ino) != identity:
+            raise DerivationUnavailable("pair partial tree was replaced")
+        os.rmdir(partial_path.name, dir_fd=parent_descriptor)
+    finally:
+        os.close(parent_descriptor)
 
 
 def _pair_manifest(
@@ -566,6 +591,11 @@ def export_counterfactual_ehr_world_pair(
                     _clear_pair_partial_tree(run.partial_path)
                     run.fail(_PAIR_FAILURE_REASON)
                 except Exception:  # noqa: BLE001 - retain the redacted public failure if archival fails.
+                    try:
+                        _clear_pair_partial_tree(run.partial_path)
+                        _remove_empty_pair_partial_tree(run.partial_path)
+                    except Exception:  # noqa: BLE001 - do not leak cleanup failures at the public boundary.
+                        raise CounterfactualPackageExportUnavailable(_PAIR_FAILURE_REASON) from None
                     raise CounterfactualPackageExportUnavailable(_PAIR_FAILURE_REASON) from None
                 raise CounterfactualPackageExportUnavailable(_PAIR_FAILURE_REASON) from None
     except (FileExistsError, CounterfactualPackageExportUnavailable):
