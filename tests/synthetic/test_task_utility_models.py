@@ -376,6 +376,40 @@ def test_null_evidence_statuses_reject_numeric_metric_values(
 
 
 @pytest.mark.parametrize(
+    ("name", "reason_code"),
+    (
+        ("false_positive_count", "COHORT_TOO_SMALL"),
+        ("sensitivity", "MISSING_SCORE"),
+        ("false_negative_count", "MISSING_SCORE"),
+    ),
+)
+def test_unevaluable_metric_reason_must_apply_to_the_metric(
+    name: str, reason_code: str
+) -> None:
+    with pytest.raises(ValueError, match="reason_code"):
+        _unevaluable_metric(name, reason_code)
+
+
+def test_missing_score_cell_rejects_all_metrics_as_missing_score() -> None:
+    with pytest.raises(ValueError, match="reason_code"):
+        _cell(
+            status=TaskUtilityStatus.UNEVALUABLE,
+            reason_code="MISSING_SCORE",
+            missing_score_count=4,
+            positive_count=None,
+            negative_count=None,
+            true_positive=None,
+            true_negative=None,
+            false_positive=None,
+            false_negative=None,
+            metrics=tuple(
+                _unevaluable_metric(name, "MISSING_SCORE")
+                for name in TASK_METRICS
+            ),
+        )
+
+
+@pytest.mark.parametrize(
     ("name", "changes", "message"),
     (
         ("invented", {}, "name"),
@@ -667,6 +701,26 @@ def test_report_permits_the_explicit_bounded_missing_output_pass() -> None:
     assert report.reason_code == "WITHIN_BOUND"
     assert report.cells[0].status is TaskUtilityStatus.UNEVALUABLE
     assert report.cells[0].reason_code == "MISSING_PREDICTION"
+
+
+def test_unevaluable_report_rejects_reason_below_cell_precedence() -> None:
+    with pytest.raises(ValueError, match="reason_code"):
+        _report(
+            status=TaskUtilityStatus.UNEVALUABLE,
+            reason_code="MISSING_SCORE",
+            status_counts={"PASS": 0, "FAIL": 0, "UNEVALUABLE": 1},
+            evaluable_count=3,
+            unevaluable_count=1,
+            cells=(_missing_prediction_cell(),),
+        )
+
+
+def test_unevaluable_report_requires_evidence_for_missing_prediction() -> None:
+    with pytest.raises(ValueError, match="reason_code"):
+        _report(
+            status=TaskUtilityStatus.UNEVALUABLE,
+            reason_code="MISSING_PREDICTION",
+        )
 
 
 @pytest.mark.parametrize(

@@ -205,6 +205,16 @@ class TaskUtilityMetric:
             raise ValueError("name must belong to the fixed task metric registry")
         status = _require_status(self.status)
         reason = _require_reason(status, self.reason_code)
+        if status is TaskUtilityStatus.UNEVALUABLE:
+            if reason == "COHORT_TOO_SMALL":
+                raise ValueError("COHORT_TOO_SMALL is a report-level reason_code")
+            if reason == "MISSING_SCORE" and self.name not in {
+                "auroc",
+                "brier_score",
+            }:
+                raise ValueError(
+                    "MISSING_SCORE reason_code applies only to score metrics"
+                )
         if status is TaskUtilityStatus.UNEVALUABLE or reason == "STRUCTURAL_INVALID":
             if any(
                 value is not None
@@ -615,13 +625,32 @@ class TaskUtilityReport:
                 raise ValueError(
                     "PASS report may contain only allowed missing-output cells"
                 )
-        elif not unevaluable_cells and reason not in {
-            "COHORT_TOO_SMALL",
-            "MISSING_PREDICTION",
-        }:
-            raise ValueError(
-                "UNEVALUABLE report requires a blocking cell or aggregate floor"
+        elif reason != "COHORT_TOO_SMALL":
+            evidenced_reason = next(
+                (
+                    candidate
+                    for candidate in (
+                        "MISSING_PREDICTION",
+                        "MISSING_SCORE",
+                        "INSUFFICIENT_SUPPORT",
+                    )
+                    if any(
+                        cell.reason_code == candidate
+                        for cell in unevaluable_cells
+                    )
+                ),
+                None,
             )
+            if (
+                reason != evidenced_reason
+                or (
+                    reason == "MISSING_PREDICTION"
+                    and not unevaluable_count
+                )
+            ):
+                raise ValueError(
+                    "UNEVALUABLE report reason_code must match blocking evidence"
+                )
 
         object.__setattr__(self, "status_counts", status_counts)
         object.__setattr__(self, "metric_counts", metric_counts)
