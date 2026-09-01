@@ -126,7 +126,7 @@
 
 - [ ] **Step 4: Run focused suite, Ruff, schema, and commit**
 
-  Run the task utility suite, full Ruff, `uv lock --check`, `uv run python schema/build.py --check`, and `git diff --check`. Commit `docs: document synthetic task utility evaluator`.
+  Run the task utility suite, full Ruff (`uv run ruff check src tests`; the current baseline is clean), `uv lock --check`, `uv run python schema/build.py --check`, and `git diff --check`. If an unrelated baseline finding appears, record its exact pre-existing path/rule and keep the touched-file Ruff gate separate rather than editing unrelated schema files. Commit `docs: document synthetic task utility evaluator`.
 
 ### Task 5: Review, verify, and hand off
 
@@ -148,7 +148,7 @@
 
 - [ ] **Step 3: Verify and update plan metadata**
 
-  Run full pytest with `PYTHONDONTWRITEBYTECODE=1`, Ruff, `uv lock --check`, schema check, and `git diff --check`. Update only checkbox metadata and evidence references in this plan/ledger; commit plan metadata separately.
+  Run full pytest with `PYTHONDONTWRITEBYTECODE=1`, full Ruff plus a touched-file Ruff check if a recorded unrelated baseline exists, `uv lock --check`, schema check, and `git diff --check`. Update only checkbox metadata and evidence references in this plan/ledger; commit plan metadata separately.
 
 - [ ] **Step 4: Merge and push**
 
