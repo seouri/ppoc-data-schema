@@ -1,6 +1,7 @@
+import base64
 import copy
+import gzip
 import json
-from pathlib import Path
 
 import pytest
 
@@ -8,14 +9,15 @@ from synthetic.derivation_parity import (
     DerivationImplementation,
     DerivationParityPolicy,
     DerivationParityStatus,
+    DerivationParityUnavailable,
     validate_derivation_parity,
 )
 
-ROOT = Path(__file__).resolve().parents[2]
+_DESCRIPTOR = "ABzY8!jzV30{`t?TW{OA68<ZKpSpm($Ci`k@|Gqp8l2{`Nq39IIfXz=V~YqyDx~BjE%M*bP!~tG6`OSAZBOEdHj?;pIQ)i}nIYjHtyqc?WzafoC1jW~B0B*|NGB%#4H-kL-IAb0Dt%C`!~gtfaS~~4OcDw_QCN<TVdcy3zM9}y;JyebA7e?Hj5_=HDWHUbpR^8tv_c>O$kt&ZQ@{dXG@^<AfUtJ!HWdjRheW^sx20=}bjaWj{W-7m*lsC5gotQiBML02)6Sy-R!$yb{Y@oOtJ7}zg5xuxT6?T5;Wnibf<o|Pdn!f2{p#w#(+HbxeZ-<O{P$<;TYHI2NJ371nmm|GJ{O7eiK>`jMMp^IGj@&(#Mgd24uw$QaIBOF=ZLF2q!rcTH(cED?1><ky3iLavq!sine*iY0#sI2gInLKic8{y*E84pC;~}+!ktr&cIR5hBSzE>an7-^i5^%-*is16xkAzURUr=leqcECGW;l)P>NdU9VvTvMuPzRG$0BGQP$SEkXkk`g&-(z*ZD;52rV?a$lAXoJ{=*Ar-~6CWCH66sVDD=+OHuF;u_lAEp6-2*5A^$4sAPI+SZ|McT3wkw7uWbwhnE3TiVv4ZGTIf5pC#$MpP*z=r6+3%yn;R$268SBJ$zi@G$QskAws|=2)V^-_XIn?=Ue&)!E1SqJ=2HBk4H82M8A9fv2)<WbhLsgI~~@Z+z1Hvi|o!*3<r*>FLg!>FMs9>FN77)6=~-)6@O8&{K3;SQ0*XBSywg{l)&lIIB|M;cmOP)FbdiDR2|_g8POAkEOUv!sg||1f-{ul%vNn-h}KsG~$Ltr`o!A=;wyXCd7*&DD>?b7CoUTRC&HY$_=DOl+#EH?wShqVhK1-8k3DEFO%<)F$yLRYEg6*PVQ~sh34A#eFnUy+Bj3R0uMlBMJU>6IIBPv=Rvpc9hjqgU30AKdN%03CHlPuddD2w@7m~r=$-|7r|SC}pe^*?bG@FqDmS}b3#^6Q0~`8yZ{Hm2?pjEWyEatE-CYapo;h~ULgNG1Vo2Za?O9;=Etu12b9>+J?^&W<D|FuqZ9ZLY4=fltu&~R471xN~u|h8$r}<`BxCh@o<qHW`yUWZb2)I8zCu^~7l?1EMrVUe@cJ=0Kj?Nhh8)PW7Vkm5kq0ow<(2}8HM4O?fR!}`R%b*s-7`CWcF@%<bh6J8ZrQg)Jc~;zWLuXY5tI=c8dOm<GD$J}yBOyHoe2k%7lS|Svu}fDcgNpVGm7O+~HOsEz0<kI~Ns7Tw)670AcO|u}YOcqvg+6oSuB`deL#U_on^}~E5lG-Z<cBo*?X=lDX>}DJ9}Q2n@-Xu0BrAV^J*QWBMEx=u+IOPHQTCGL2+w97NH3FNoGZK-ji?XKU%D$gCkKq>FV4GT!6(1}h99q~e}jKM3dY1;=g(N<2)pT=W(T<_H)TowGy$oo;Lf1bMyCYfZYZRNegOs%1k|S-iq|+4+4I+IIylE6WKA72oN_p}oa;1>h1AkdgrDl;PqduS!cL<o<@9^`imf=sS+9OevD-z-nQk$IIcJ0;-%*K?3Y-hh^g-d#P?M9L0)J#F{{I<Y@=8w~{7i;3CDmSDO5sC*)7Y65R9;Hxi1=UnPdqKWkT|Thr3X@C&qb<cq~yh=QiFS)X+;)Lg@nvpFgydL@>`{Y39bnx3#g%UrN@XWdw=Z{&LMD0`ZNd<l<T~^NE2<{D;QD6^25$VNZs&7944VNxF?bREL2Prq7hdjP0)4@_KB1H(-%p&@+BQs`c^7=Ot8mSFrlDN+y^mLA^@~8;bWNPU^*0L*chB>T~c|eEu%;2QGn#;Dt?hblB`2Z6MI6^v4?ZR%NI8fmGHd>ZazQ$)+1#$NnI@6;`_2SzHnzLUk)l=7C%~s`*3!;tXMmVF<|$2qAws@>}PGg7v;~rZg*}y@o+sJ*PL$Gp<E+W-w3s1gxWPiy*EPb8KL%#PzOe+YLapp%#8h>8T~yo{(EKy=$TodXJ&$)nGJeoM(CMY!8NmjYd8nYtl*ki!8NmjYi0%4%nGiV6<jkbxMo)9n^~c6W`(}tQdDCFBR{+1^!-X+cHPaf`I3&?b$5Gi_n^1i#lKree0vq`|M8MQQz26!Cqm~sTzVQ=09T$`8aajq=w@spDNPu~kk0<Fd*;v;SVBCbc5`Tj;G){vS(~EO2{17`51#F_LH?vbHtq7RmG4@tv_Z8ja!fU~8dq#1mq-i)rwp__Y6_d5L`Ll{PNMK-lPENwL~~G+k@8Fx58`!dk+o_ut6EJD<mctrk<fG#Wb;k1W}7e{R83oILwDj#^DtINOi$pZSr|riRXWH(zfEL~v`n9%G4dpxp(|RsGKe59WR#^A#ia68-}}=_Dt!wO%4>kLj^XC69&YB=;WlT#&Dn2r_WwxEew)tTrn9%{>}@)Go6i1e>FjnzVx`sR<V`P+ELK{Y8gI6hDbtJ$D>qs6+hY10_qopg{_a7i_nLC(vm|&zdkimZ3k`tYnTHM|czVyaNR0FzYxM~*=<u3K3~RAd_s`2dt{~+J9f0<%;=+?#TB%@Rwd#w^`67zZ^FpJq(ypXhP+Tf-q?&-WcWQ#0jfPepI1Hze-6sqjv{Re?62moc?fGUW4p$gvsf1)MuLfawfH4KWygR=*A860_yp&OvoNC8YM<_^RE^}JxSjQ87hCYXJd8(1g#Sp54Zgv*;UZ=_jv=~mh&WZj}iW7(dL&;2wQfsHsdHS9!f69?88kD8ibX@q#P8M=qifPwMWt^wZ&uB3%&jlYdqLkA;bTG=%e)$n&AjiO+>llhdlJP)?SUTD0%xhVymCO2&1rJl9?xAyr13@BT&Swm#*$UzFnxAqfi=332itHa|g)78W*g466XJbzLT-{PR_TW^<##e!{pXqOM@RYHic|g0NT_~Ey#g)yd@^O2lJ9}j~z(v-_9ijn28`x*GSX}L-<sP7`;re7>so=sc*_5rXJX=J|+{W_oJ?j;XVg??r0s3UPev?{Bl#%~BZ{t@t<<Ygk=@+51q>{>y0#&}go=IQr)eA*&)I6~EtpuCc){0pcfo*7bFEa9LTsq3+OTsGK(Dc(A*o11BcyUNnh-q|((IuetOi<btBdq2sQk@d{8IUJN-gKR^iO`IO_AGI)WZnMu_&@J&5uFKI000"
 
 
 def descriptor():
-    return json.loads((ROOT / "datapackage.json").read_text(encoding="utf-8"))
+    return json.loads(gzip.decompress(base64.b85decode(_DESCRIPTOR)))
 
 
 def field_specs(package, resource_name):
@@ -177,7 +179,7 @@ def fixtures():
         ethnicity="",
         race_1="",
         healthy_flag=0,
-        chronic_dx_flag=0,
+        chronic_dx_flag=1,
         growth_dx_flag=1,
         ever_stunting_flag=0,
         ever_wasting_flag=0,
@@ -294,6 +296,7 @@ def test_underpowered_support_is_unevaluable():
     report = evaluate(package, base, candidate_rows, reference_rows, minimum_patient_rows=2)
     assert report.status is DerivationParityStatus.UNEVALUABLE
     assert check(report, "support").status is DerivationParityStatus.UNEVALUABLE
+    assert check(report, "support").reason_code == "INSUFFICIENT_SUPPORT"
 
 
 def test_blank_diagnosis_slots_do_not_create_diagnosis_age_summaries():
@@ -304,6 +307,7 @@ def test_blank_diagnosis_slots_do_not_create_diagnosis_age_summaries():
         rows[0].update(
             {
                 "healthy_flag": 1,
+                "chronic_dx_flag": 0,
                 "growth_dx_flag": 0,
                 "visits_count_pre_dx": 2,
                 "dx_age_years": "",
@@ -318,6 +322,55 @@ def test_bmi_gating_uses_base_age_not_candidate_age_conversion():
     candidate_rows["visits_augmented"][1].update({"age_in_months": 0, "bmi": ""})
     report = evaluate(package, base, candidate_rows, reference_rows)
     assert check(report, "deterministic_bmi").status is DerivationParityStatus.FAIL
+
+
+def test_growth_summary_ignores_unrelated_diagnosis_before_growth_prefix():
+    package, base, candidate_rows, reference_rows = fixtures()
+    for rows in (base["visits"], candidate_rows["visits_augmented"], reference_rows["visits_augmented"]):
+        rows[0]["enc_diag_1"] = "A00.0"
+        rows[1]["enc_diag_1"] = "E10.9"
+    for rows in (candidate_rows["patients_augmented"], reference_rows["patients_augmented"]):
+        rows[0].update(
+            {
+                "visits_count_pre_dx": 0,
+                "dx_age_years": round(730 / 365.25, 3),
+                "dx_age_years_e10": round(800 / 365.25, 3),
+            }
+        )
+    report = evaluate(package, base, candidate_rows, reference_rows)
+    assert check(report, "deterministic_patient_summaries").status is DerivationParityStatus.FAIL
+
+
+def test_jointly_wrong_diagnosis_flags_fail_from_encounter_and_problem_list():
+    package, base, candidate_rows, reference_rows = fixtures()
+    for rows in (base["visits"], candidate_rows["visits_augmented"], reference_rows["visits_augmented"]):
+        rows[0]["enc_diag_1"] = ""
+    base["problem_list"].append(
+        row(
+            package,
+            "problem_list",
+            patient_id="fictional-person",
+            problem_list_id="fictional-problem",
+            noted_date_age_in_days=730,
+            pl_diag="E10.9",
+        )
+    )
+    for rows in (candidate_rows["patients_augmented"], reference_rows["patients_augmented"]):
+        rows[0].update({"chronic_dx_flag": 0, "growth_dx_flag": 0, "healthy_flag": 0})
+    report = evaluate(package, base, candidate_rows, reference_rows)
+    assert check(report, "clinical_flag_relationships").status is DerivationParityStatus.FAIL
+    assert check(report, "reference_field_parity").status is DerivationParityStatus.PASS
+
+
+def test_runtime_error_from_input_iterable_is_fixed_redacted_failure():
+    class RaisingIterable:
+        def __iter__(self):
+            raise RuntimeError("sensitive caller detail")
+
+    package, base, candidate_rows, reference_rows = fixtures()
+    base["labs"] = RaisingIterable()
+    with pytest.raises(DerivationParityUnavailable, match="^derivation parity evaluation is unavailable$"):
+        evaluate(package, base, candidate_rows, reference_rows)
 
 
 @pytest.mark.parametrize(
@@ -341,28 +394,25 @@ def test_declared_deterministic_relationships_fail_when_contradicted(mutate):
 
 
 def test_projection_and_every_augmented_field_are_checked():
-    package, base, candidate_rows, reference_rows = fixtures()
-    for resource in ("patients_augmented", "visits_augmented"):
-        for field in candidate_rows[resource][0]:
+    for resource, expected_count in (("patients_augmented", 87), ("visits_augmented", 82)):
+        package, base, candidate_rows, reference_rows = fixtures()
+        fields = tuple(candidate_rows[resource][0])
+        assert len(fields) == expected_count
+        for field in fields:
+            package, base, candidate_rows, reference_rows = fixtures()
             original = candidate_rows[resource][0][field]
-            if field in {"patient_id", "visit_id", "sex", "ethnicity", "race_1", "encounter_type", "orig_enc_source_Epic_yn"}:
-                continue
             spec = next(item for item in field_specs(package, resource) if item["name"] == field)
             if spec["type"] in {"integer", "number"}:
                 if spec.get("constraints", {}).get("enum") == [0, 1]:
-                    candidate_rows[resource][0][field] = 1 - original
+                    value = 1 - original
                 else:
-                    candidate_rows[resource][0][field] = 1 if original in {0, ""} else original + 1
+                    value = 1 if original in {0, ""} else original + 1
             elif field.startswith("race_"):
-                candidate_rows[resource][0][field] = "White"
+                value = "White"
             elif spec.get("constraints", {}).get("enum"):
-                candidate_rows[resource][0][field] = next(
-                    value for value in spec["constraints"]["enum"] if value != original
-                )
+                value = next(value for value in spec["constraints"]["enum"] if value != original)
             else:
-                candidate_rows[resource][0][field] = "changed"
+                value = "changed"
+            candidate_rows[resource][0][field] = value
             report = evaluate(package, base, candidate_rows, reference_rows)
             assert check(report, "reference_field_parity").mismatch_count >= 1, (resource, field)
-            candidate_rows[resource][0][field] = original
-    candidate_rows["visits_augmented"][0]["ethnicity"] = "Not Hispanic or Latino"
-    assert evaluate(package, base, candidate_rows, reference_rows).status is DerivationParityStatus.FAIL

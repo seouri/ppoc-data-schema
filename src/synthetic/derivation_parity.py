@@ -254,7 +254,7 @@ def validate_derivation_parity(
         return _evaluate(base_rows, candidate_rows, reference_rows, descriptor, candidate, reference, policy)
     except DerivationParityUnavailable:
         raise
-    except (ArithmeticError, KeyError, TypeError, ValueError):
+    except Exception:  # noqa: BLE001 - public boundary must redact ordinary caller failures
         raise DerivationParityUnavailable() from None
 
 
@@ -275,6 +275,13 @@ _ADVERSE_PATIENT_FLAGS = (
 )
 _INFORMATIVE_ETHNICITY = frozenset({"Not Hispanic or Latino", "Hispanic or Latino"})
 _NONRESPONSE_RACE = frozenset({"Choose not to answer", "Patient does not know", "Unable to collect", "Unknown"})
+_GROWTH_PREFIXES = (
+    "E03.9", "E10", "E22.0", "E23.0", "E23.6", "E24", "E30.0", "E30.1", "E34.3", "E34.4",
+    "E72.11", "K50", "K51", "K90.0", "N18", "N25.0", "P04.3", "P05", "P07", "P70", "P92.6",
+    "Q77", "Q78.0", "Q78.1", "Q87.1", "Q87.2", "Q87.3", "Q87.4", "Q90", "Q96", "Q98.0",
+    "Q98.4", "Q98.5",
+)
+_CHRONIC_PREFIXES = ("E10",)
 
 
 @dataclass(frozen=True)
@@ -293,10 +300,10 @@ def _status(failed: bool, unevaluable: bool) -> DerivationParityStatus:
 
 
 def _check(name: str, failed: bool = False, unevaluable: bool = False, compared: int = 0,
-           mismatches: int = 0, difference: float = 0.0) -> DerivationParityCheck:
+           mismatches: int = 0, difference: float = 0.0, reason: str = "MISSING_EVIDENCE") -> DerivationParityCheck:
     status = _status(failed, unevaluable)
     if status is DerivationParityStatus.UNEVALUABLE:
-        return DerivationParityCheck(name, status, "MISSING_EVIDENCE", None, None, None)
+        return DerivationParityCheck(name, status, reason, None, None, None)
     return DerivationParityCheck(
         name, status, "STRUCTURAL_INVALID" if failed and mismatches == 0 else
         "OUTSIDE_TOLERANCE" if failed else "OK", compared, mismatches, difference,
@@ -427,25 +434,36 @@ def _prefix(field: str) -> str:
     return field.removeprefix("dx_age_years_").replace("_", ".").upper()
 
 
-def _diagnosis_ages(visits: Iterable[Mapping[str, object]], prefix: str | None = None) -> list[int]:
+def _diagnosis_ages(visits: Iterable[Mapping[str, object]], prefixes: tuple[str, ...]) -> list[int]:
     ages: list[int] = []
     for visit in visits:
         age = visit["age_in_days"]
         if age is None:
             continue
         diagnoses = (visit[f"enc_diag_{index}"] for index in range(1, 34))
-        if any(isinstance(code, str) and code.startswith(prefix or "") for code in diagnoses if code is not None):
+        if any(isinstance(code, str) and code and code.startswith(prefixes) for code in diagnoses):
             ages.append(age)
     return ages
 
 
-def _expected_patient_values(patient: object, visits: Iterable[Mapping[str, object]]) -> tuple[dict[str, object], bool]:
+def _problem_diagnosis_ages(problems: Iterable[Mapping[str, object]], prefixes: tuple[str, ...]) -> list[int]:
+    return [
+        int(item["noted_date_age_in_days"])
+        for item in problems
+        if item["noted_date_age_in_days"] is not None
+        and isinstance(item["pl_diag"], str)
+        and item["pl_diag"]
+        and item["pl_diag"].startswith(prefixes)
+    ]
+
+
+def _expected_patient_values(visits: Iterable[Mapping[str, object]], problems: Iterable[Mapping[str, object]]) -> tuple[dict[str, object], bool]:
     items = tuple(visits)
     ages = [item["age_in_days"] for item in items]
     if any(age is None for age in ages):
         return {}, True
     visit_ages = [int(age) for age in ages]
-    diagnosis_ages = _diagnosis_ages(items)
+    diagnosis_ages = _diagnosis_ages(items, _GROWTH_PREFIXES) + _problem_diagnosis_ages(problems, _GROWTH_PREFIXES)
     values: dict[str, object] = {
         "visits_count": len(items),
         "visits_count_pre_dx": sum(age < min(diagnosis_ages) for age in visit_ages) if diagnosis_ages else len(items),
@@ -470,9 +488,8 @@ def _expected_patient_values(patient: object, visits: Iterable[Mapping[str, obje
         "p70", "p92_6", "q77", "q78_0", "q78_1", "q87_1", "q87_2", "q87_3", "q87_4",
         "q90", "q96", "q98_0", "q98_4", "q98_5",
     )):
-        matching = _diagnosis_ages(items, _prefix(field))
+        matching = _diagnosis_ages(items, (_prefix(field),)) + _problem_diagnosis_ages(problems, (_prefix(field),))
         values[field] = round(min(matching) / 365.25, 3) if matching else None
-    del patient
     return values, False
 
 
@@ -480,8 +497,9 @@ def _parity(candidate: tuple[Mapping[str, object], ...], reference: tuple[Mappin
             resource: _Resource, tolerance: float) -> tuple[bool, int, int, float]:
     candidate_by_key = _by_key(candidate, resource.primary_key or "")
     reference_by_key = _by_key(reference, resource.primary_key or "")
-    failed = set(candidate_by_key) != set(reference_by_key)
-    compared = mismatches = 0
+    missing = set(candidate_by_key) ^ set(reference_by_key)
+    failed = bool(missing)
+    compared = mismatches = len(missing)
     maximum = 0.0
     for identity in set(candidate_by_key) & set(reference_by_key):
         for field in resource.fields:
@@ -539,9 +557,9 @@ def _evaluate(base_rows: Mapping[str, Iterable[Mapping[str, object]]],
     checks.append(_check("deterministic_unit_conversion", *units))
     bmi = _bmi_check(visits, candidate_visits, reference_visits, policy.deterministic_tolerance)
     checks.append(_check("deterministic_bmi", *bmi))
-    summaries = _summary_check(patients, visits, candidate_patients, reference_patients, candidate_visits, reference_visits, policy.deterministic_tolerance)
+    summaries = _summary_check(patients, visits, base["problem_list"], candidate_patients, reference_patients, candidate_visits, reference_visits, policy.deterministic_tolerance)
     checks.append(_check("deterministic_patient_summaries", *summaries))
-    flags = _flag_check(candidate_patients, reference_patients, candidate_visits, reference_visits)
+    flags = _flag_check(visits, base["problem_list"], candidate_patients, reference_patients, candidate_visits, reference_visits)
     checks.append(_check("clinical_flag_relationships", *flags))
     parity_patient = _parity(output_candidate["patients_augmented"], output_reference["patients_augmented"], resources["patients_augmented"], policy.reference_tolerance)
     parity_visit = _parity(output_candidate["visits_augmented"], output_reference["visits_augmented"], resources["visits_augmented"], policy.reference_tolerance)
@@ -549,7 +567,7 @@ def _evaluate(base_rows: Mapping[str, Iterable[Mapping[str, object]]],
                          compared=parity_patient[1] + parity_visit[1], mismatches=parity_patient[2] + parity_visit[2],
                          difference=max(parity_patient[3], parity_visit[3])))
     underpowered = len(output_candidate["patients_augmented"]) < policy.minimum_patient_rows or len(output_reference["patients_augmented"]) < policy.minimum_patient_rows or len(output_candidate["visits_augmented"]) < policy.minimum_visit_rows or len(output_reference["visits_augmented"]) < policy.minimum_visit_rows
-    checks.append(_check("support", unevaluable=underpowered, compared=2, difference=0.0))
+    checks.append(_check("support", unevaluable=underpowered, compared=2, difference=0.0, reason="INSUFFICIENT_SUPPORT"))
     return _report(candidate, reference, policy, len(output_candidate["patients_augmented"]), len(output_candidate["visits_augmented"]), tuple(checks))
 
 
@@ -677,7 +695,7 @@ def _bmi_check(base: Mapping[str, Mapping[str, object]], candidate: Mapping[str,
     return failed, unevaluable, compared, mismatches, maximum
 
 
-def _summary_check(patients: Mapping[str, Mapping[str, object]], visits: Mapping[str, Mapping[str, object]],
+def _summary_check(patients: Mapping[str, Mapping[str, object]], visits: Mapping[str, Mapping[str, object]], problems: Iterable[Mapping[str, object]],
                    candidate_patients: Mapping[str, Mapping[str, object]], reference_patients: Mapping[str, Mapping[str, object]],
                    candidate_visits: Mapping[str, Mapping[str, object]], reference_visits: Mapping[str, Mapping[str, object]],
                    tolerance: float) -> tuple[bool, bool, int, int, float]:
@@ -685,15 +703,17 @@ def _summary_check(patients: Mapping[str, Mapping[str, object]], visits: Mapping
     failed = unevaluable = False
     compared = mismatches = 0
     maximum = 0.0
+    problem_items = tuple(problems)
     for outputs, augmented_visits in ((candidate_patients, candidate_visits), (reference_patients, reference_visits)):
         for identity, item in outputs.items():
             related_base = [visit for visit in visits.values() if visit["patient_id"] == identity]
             related_augmented = [visit for visit in augmented_visits.values() if visit["patient_id"] == identity]
-            expected, missing = _expected_patient_values(identity, related_base)
+            related_problems = [problem for problem in problem_items if problem["patient_id"] == identity]
+            expected, missing = _expected_patient_values(related_base, related_problems)
             if missing:
                 unevaluable = True
                 continue
-            augmented_expected, missing = _expected_patient_values(identity, related_augmented)
+            augmented_expected, missing = _expected_patient_values(related_augmented, ())
             if missing:
                 unevaluable = True
                 continue
@@ -709,10 +729,11 @@ def _summary_check(patients: Mapping[str, Mapping[str, object]], visits: Mapping
     return failed, unevaluable, compared, mismatches, maximum
 
 
-def _flag_check(candidate_patients: Mapping[str, Mapping[str, object]], reference_patients: Mapping[str, Mapping[str, object]],
+def _flag_check(visits: Mapping[str, Mapping[str, object]], problems: Iterable[Mapping[str, object]], candidate_patients: Mapping[str, Mapping[str, object]], reference_patients: Mapping[str, Mapping[str, object]],
                 candidate_visits: Mapping[str, Mapping[str, object]], reference_visits: Mapping[str, Mapping[str, object]]) -> tuple[bool, bool, int, int, float]:
     failed = False
     compared = mismatches = 0
+    problem_items = tuple(problems)
     for outputs, patient_outputs in ((candidate_visits, candidate_patients), (reference_visits, reference_patients)):
         by_patient: dict[object, list[Mapping[str, object]]] = {}
         for item in outputs.values():
@@ -729,6 +750,23 @@ def _flag_check(candidate_patients: Mapping[str, Mapping[str, object]], referenc
                     mismatches += 1
         for identity, item in patient_outputs.items():
             related = by_patient.get(identity, [])
+            base_diagnoses = [
+                code
+                for visit in visits.values()
+                if visit["patient_id"] == identity
+                for code in (visit[f"enc_diag_{index}"] for index in range(1, 34))
+                if isinstance(code, str) and code
+            ] + [
+                problem["pl_diag"]
+                for problem in problem_items
+                if problem["patient_id"] == identity and isinstance(problem["pl_diag"], str) and problem["pl_diag"]
+            ]
+            for field, prefixes in (("growth_dx_flag", _GROWTH_PREFIXES), ("chronic_dx_flag", _CHRONIC_PREFIXES)):
+                compared += 1
+                expected = int(any(code.startswith(prefixes) for code in base_diagnoses))
+                if item[field] != expected:
+                    failed = True
+                    mismatches += 1
             expected_flags = {"ever_stunting_flag": "stunting_flag", "ever_wasting_flag": "wasting_flag", "ever_underweight_flag": "underweight_flag", "ever_obesity_flag": "obesity_flag"}
             for field, visit_flag in expected_flags.items():
                 compared += 1
@@ -737,7 +775,8 @@ def _flag_check(candidate_patients: Mapping[str, Mapping[str, object]], referenc
                     failed = True
                     mismatches += 1
             compared += 1
-            if item["healthy_flag"] == 1 and any(item[field] != 0 for field in _ADVERSE_PATIENT_FLAGS):
+            expected = int(all(item[field] == 0 for field in _ADVERSE_PATIENT_FLAGS))
+            if item["healthy_flag"] != expected:
                 failed = True
                 mismatches += 1
     return failed, False, compared, mismatches, 0.0
