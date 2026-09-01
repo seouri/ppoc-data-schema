@@ -72,7 +72,7 @@
 - [x] Run the SDD package script and a fresh scoped review after each implementation task; route every finding to the implementer and re-review the exact fix range until PASS.
 - [x] Run a fresh broad review across the complete feature range for matrix correctness, visible-resource comparisons, hidden-truth non-disclosure, deterministic stream reuse, exact shape, failure redaction, unchanged generic validators, docs, and prohibited boundaries.
 - [x] Run full pytest with bytecode disabled, full Ruff, `uv lock --check`, schema validation, and `git diff --check`; record exact outputs in ignored SDD evidence and update only metadata here.
-- [ ] Merge the reviewed feature branch to `main` with `--no-ff`, push, verify `HEAD == origin/main`, and retain the feature worktree and SDD evidence for auditability.
+- [x] Merge the reviewed feature branch to `main` with `--no-ff`, push, verify `HEAD == origin/main`, and retain the feature worktree and SDD evidence for auditability.
 
 ## Evidence template
 
@@ -80,7 +80,7 @@
 - Scoped review/fix/re-review: PASS for Tasks 1–3; broad fix re-review PASS; follow-up private-evidence re-review PASS; full-gate allowlist re-review PASS.
 - Broad review: PASS after consolidated fix `958c1c0` and follow-up `1641f14`; reports retained in ignored SDD evidence.
 - Full verification: `1798 passed`; `uv run ruff check src tests` passed; `uv lock --check` passed; `python3 schema/build.py --check` validated 8 resources; `git diff --check` passed. Repository-wide Ruff retains six pre-existing findings in `schema/build.py` and `schema/profile.py` (EXE001/I001/PLW1510), outside this feature range.
-- Merge/push parity: pending.
+- Merge/push parity: no-fast-forward merge `94d13f4`; pushed to `origin/main`; verified local `HEAD == origin/main == 94d13f4`.
 
 ## Deferred roadmap gates
 
