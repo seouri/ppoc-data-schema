@@ -443,6 +443,30 @@ def _scan_exact_tree(root: Path, files: set[str], dirs: set[str]) -> None:
         raise DerivationUnavailable("pair export tree inventory does not match")
 
 
+def _remove_tree_entry_at(directory_descriptor: int, name: str) -> None:
+    status = os.stat(name, dir_fd=directory_descriptor, follow_symlinks=False)
+    if stat.S_ISDIR(status.st_mode):
+        child_descriptor = os.open(name, _DIRECTORY_OPEN_FLAGS, dir_fd=directory_descriptor)
+        try:
+            for child in os.scandir(child_descriptor):
+                _remove_tree_entry_at(child_descriptor, child.name)
+        finally:
+            os.close(child_descriptor)
+        os.rmdir(name, dir_fd=directory_descriptor)
+    else:
+        os.unlink(name, dir_fd=directory_descriptor)
+
+
+def _clear_pair_partial_tree(partial_path: Path) -> None:
+    directory_descriptor, identity = _open_pinned_directory(partial_path)
+    try:
+        for entry in os.scandir(directory_descriptor):
+            _remove_tree_entry_at(directory_descriptor, entry.name)
+        _require_directory_identity(partial_path, identity)
+    finally:
+        os.close(directory_descriptor)
+
+
 def _pair_manifest(
     worlds: CounterfactualEhrWorldPair,
     metadata: PackageExportMetadata,
@@ -455,6 +479,7 @@ def _pair_manifest(
     return {
         "contract": "counterfactual-ehr-package-pair-v1",
         "schema_fingerprint": EXPECTED_SCHEMA_FINGERPRINT,
+        "serialization_projection": "ghd-result-flag-empty-v1",
         "matrix_version": worlds.matrix.version,
         "intervention": worlds.matrix.intervention.value,
         "validation_status": CounterfactualWorldValidationStatus.PASS.value,
@@ -538,6 +563,7 @@ def export_counterfactual_ehr_world_pair(
                 return run.promote()
             except Exception:  # noqa: BLE001 - archive every post-creation failure safely.
                 try:
+                    _clear_pair_partial_tree(run.partial_path)
                     run.fail(_PAIR_FAILURE_REASON)
                 except Exception:  # noqa: BLE001 - retain the redacted public failure if archival fails.
                     raise CounterfactualPackageExportUnavailable(_PAIR_FAILURE_REASON) from None

@@ -6,6 +6,9 @@ import hashlib
 import json
 from pathlib import Path
 
+import pytest
+
+from synthetic import package_export
 from synthetic.native.counterfactual import InterventionKind
 from synthetic.native.counterfactual_worlds import (
     CounterfactualWorldValidationStatus,
@@ -127,8 +130,47 @@ def test_export_pair_creates_two_exact_schema_packages_and_a_deterministic_aggre
         "matrix_version": worlds.matrix.version,
         "metadata": dataclasses.asdict(metadata),
         "schema_fingerprint": EXPECTED_SCHEMA_FINGERPRINT,
+        "serialization_projection": "ghd-result-flag-empty-v1",
         "validation_check_counts": {"FAIL": 0, "PASS": 7, "UNEVALUABLE": 0},
         "validation_status": CounterfactualWorldValidationStatus.PASS.value,
     }
     assert report.status is CounterfactualWorldValidationStatus.PASS
     assert _tree_bytes(result) == _tree_bytes(replay)
+
+
+def test_export_pair_archives_only_fixed_failure_content_after_copy_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    original_copytree = package_export.shutil.copytree
+
+    def copy_then_fail(source: Path, destination: Path, *args: object, **kwargs: object) -> Path:
+        original_copytree(source, destination, *args, **kwargs)
+        (destination / "arbitrary-token.txt").write_text("raw-copy-failure-token", encoding="utf-8")
+        raise RuntimeError("raw-copy-failure-token")
+
+    monkeypatch.setattr(package_export.shutil, "copytree", copy_then_fail)
+
+    with pytest.raises(
+        CounterfactualPackageExportUnavailable, match="counterfactual package export failed"
+    ):
+        export_counterfactual_ehr_world_pair(
+            _worlds(InterventionKind.PHYSIOLOGY_SEVERITY),
+            _descriptor(),
+            tmp_path / "pair",
+            metadata=_metadata(),
+            derivation_oracle=IdentityPreservingTestDerivationOracle(),
+            trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
+            trusted_derivation_test_only=True,
+        )
+
+    assert not (tmp_path / "pair").exists()
+    failed = list(tmp_path.glob(".pair.*.failed"))
+    assert len(failed) == 1
+    assert [path.relative_to(failed[0]).as_posix() for path in failed[0].rglob("*")] == [
+        "failure.json"
+    ]
+    assert json.loads((failed[0] / "failure.json").read_text(encoding="utf-8")) == {
+        "reason": "counterfactual package export failed",
+        "status": "FAILED",
+    }
+    assert b"raw-copy-failure-token" not in _tree_bytes(failed[0]).get("failure.json", b"")
