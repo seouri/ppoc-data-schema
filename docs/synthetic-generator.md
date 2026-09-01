@@ -641,6 +641,55 @@ The two augmented resources are oracle-owned. Empty ancillary base resources rem
 
 The exporter refuses an existing target and redacts bundle or lifecycle failures as `observed package export failed`; a failed lifecycle is retained only as an unvalidated sibling failure archive. A successful package is a synthetic-only development artifact. Its structural success is not privacy/non-matchability or prevalence evidence, and it is not evidence of demographic calibration, other ancillary clinical pathways, held-out validation, task utility, clinical validity, release readiness, or Synthea conformance. Those remain separate deferred gates with their own approved evidence and governance.
 
+## Pair-aware exact-schema counterfactual package export
+
+`export_counterfactual_ehr_world_pair` is the development-only bridge from one previously assembled, validated fictional `CounterfactualEhrWorldPair` to two exact-schema child packages. The caller supplies the typed in-memory pair, a caller-loaded descriptor mapping, explicit metadata (`PackageExportMetadata`), and an explicit test-only derivation oracle; the exporter accepts no descriptor path, real-data or governed-data input, calibration or held-out artifact, privacy policy, model, network, or Synthea dependency. `CounterfactualPackageExportUnavailable` is the fixed redacted failure type.
+
+The pair API has one stable call shape. `worlds` and `descriptor_mapping` are already assembled in memory, while `output` is the new destination chosen by the caller; `metadata` and the trusted test-only oracle contract are explicit rather than inferred from pair context:
+
+```python
+from pathlib import Path
+
+from synthetic.package_export import (
+    PackageExportMetadata,
+    export_counterfactual_ehr_world_pair,
+)
+from synthetic.schema_contract import load_descriptor
+from synthetic.validate import validate_structure
+from tests.synthetic.fakes import IdentityPreservingTestDerivationOracle
+
+# `worlds` is a previously assembled and PASS-validated fictional pair.
+descriptor_mapping = load_descriptor(Path("datapackage.json"))
+metadata = PackageExportMetadata(
+    profile="counterfactual-development",
+    seed=20260831,
+    reference_time="2026-08-31T00:00:00Z",
+    reference_id="fictional-counterfactual-reference-v1",
+    software_revision="development-example",
+    configuration_sha256="a" * 64,
+    reference_sha256="b" * 64,
+)
+output = export_counterfactual_ehr_world_pair(
+    worlds,
+    descriptor_mapping,
+    Path("counterfactual-pair"),
+    metadata=metadata,
+    derivation_oracle=IdentityPreservingTestDerivationOracle(),
+    trusted_derivation_fingerprint="0123456789abcdef" * 4,
+    trusted_derivation_test_only=True,
+)
+
+# Existing package tooling receives an ordinary child, never the envelope.
+validate_structure(output / "baseline", descriptor_mapping)
+validate_structure(output / "intervention", descriptor_mapping)
+```
+
+The promoted output is one atomic envelope containing exactly `baseline/`, `intervention/`, and `pair-manifest.json`. The top-level envelope is not a PPOC package; pass `output / "baseline"` or `output / "intervention"` to ordinary structural/package tooling. Each child remains an exact eleven-file package: the eight descriptor-named CSVs (`patients.csv`, `patients_augmented.csv`, `visits.csv`, `visits_augmented-20251209150512.csv`, `labs.csv`, `medications.csv`, `problem_list.csv`, and `referrals.csv`), `datapackage.json`, `validation-report.json`, and `manifest.json`. The child packages use the unchanged exact descriptor and augmented-resource lifecycle, and the explicit test-only oracle owns the two augmented rows.
+
+The pair manifest is aggregate-only and is not a truth manifest. Its fixed fields are `contract`, `schema_fingerprint`, `matrix_version`, `intervention`, `serialization_projection`, `validation_status`, `validation_check_counts`, visible `metadata`, and `children` entries containing only relative `path` values and child `manifest_sha256` digests. `serialization_projection` is always `ghd-result-flag-empty-v1`: source-world GHD rows whose evaluator-only `labs.result_flag="Synthetic"` marker is copied for serialization as the exact descriptor missing-value sentinel `""`; the in-memory worlds are never mutated, and no other value is normalized. The manifest contains no patient or visit identifiers, row values, ages, latent states, event payloads, hidden truth, trajectories, source objects, evaluator representations, descriptor contents, seeds or indexes from pair context, or temporary paths.
+
+The exporter revalidates the pair and requires aggregate `PASS` before creating any public lifecycle path, calls the existing exact-schema child exporter exactly twice in fixed baseline/intervention order, and promotes only after an exact recursive inventory check. Invalid worlds, malformed descriptors or oracle contracts, output collisions, and post-creation failures are redacted as `counterfactual package export failed`; failed archives contain only fixed failure content. Successful structure is development evidence only: it is not prevalence or demographic calibration, held-out validation, temporal drift, task utility, clinical validity, privacy or non-matchability evidence, release approval, or Synthea conformance. Authoritative augmentation, cohort-scale generation, clinical review, privacy evaluation, non-matchability proof, release approval, and an optional later Synthea adapter remain separate deferred gates.
+
 ### Development-only age-regime smoke example
 
 When exercising the latent trajectory layer with an injected reference, cover the five `GrowthRegime` classifier regimes: infancy, transition, childhood, puberty, and adolescence. Infancy runs before the configured transition window; transition spans the configured 24-month window (700–760 days by default, so day 730 is transition); childhood follows that window until the injected puberty schedule; puberty follows onset for its configured tempo; and adolescence continues through the maximum age (including 7305). At every age, generate only two independent anthropometric dimensions: length plus weight before transition, and height plus BMI after transition, with the applicable third value derived explicitly. Do not generate height/length, weight, and BMI as three independent states.

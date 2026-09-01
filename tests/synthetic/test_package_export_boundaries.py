@@ -75,6 +75,8 @@ PACKAGE_EXPORT_IMPORTS = {
     "synthetic.csv_package",
     "synthetic.derivation",
     "synthetic.manifest",
+    "synthetic.native.ancillary",
+    "synthetic.native.counterfactual_worlds",
     "synthetic.native.resources",
     "synthetic.run_directory",
     "synthetic.schema_contract",
