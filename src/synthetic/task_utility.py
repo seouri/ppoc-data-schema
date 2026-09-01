@@ -1315,6 +1315,7 @@ def _validated_resource_bundle(value: object) -> ObservedResourceBundle:
     if (
         type(value) is not ObservedResourceBundle
         or type(value.rows) is not MappingProxyType
+        or set(value.rows) != set(BASE_RESOURCE_NAMES)
         or type(value.clinical_descendants) is not tuple
     ):
         raise TypeError("cohort contains malformed typed evidence")

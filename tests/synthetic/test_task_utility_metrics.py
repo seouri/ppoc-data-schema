@@ -4,6 +4,7 @@ import ast
 import dataclasses
 import inspect
 from collections.abc import Mapping, Sequence
+from types import MappingProxyType
 
 import pytest
 
@@ -628,6 +629,35 @@ def test_corrupted_resource_bundle_child_returns_static_fallback(
     )
 
     _assert_static_fallback(report, hostile_value)
+
+
+def test_resource_bundle_with_extra_rows_key_returns_static_fallback() -> None:
+    member = task_member_with_bundle(10, DisorderKind.HEALTHY)
+    assert member.bundle is not None
+    hostile_key = "ancillary-secret"
+    rows = MappingProxyType(
+        {
+            **dict(member.bundle.rows),
+            hostile_key: (),
+        }
+    )
+    object.__setattr__(member.bundle, "rows", rows)
+    cohort = task_cohort(member)
+
+    report = evaluate_task_utility(
+        cohort,
+        (TaskPrediction(False, 0.25),),
+        task_policy(
+            minimum_cohort_size=1,
+            minimum_evaluable_members=1,
+            minimum_sensitivity=0.0,
+            minimum_specificity=0.0,
+            minimum_auroc=0.0,
+            maximum_brier_score=1.0,
+        ),
+    )
+
+    _assert_static_fallback(report, hostile_key)
 
 
 def test_wrong_prediction_length_stops_before_deep_member_read() -> None:
