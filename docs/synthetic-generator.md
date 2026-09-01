@@ -225,6 +225,58 @@ The fixed visible metrics are `growth_window_coverage`, `visible_visit_coverage`
 
 This report diagnoses development sequence behavior only. It does not establish real-data temporal fidelity, growth-disorder prevalence, clinical validity, privacy/non-matchability, task utility, release readiness, or Synthea conformance; each remains a separate deferred evidence and governance gate.
 
+## Evaluator-only synthetic task-utility evaluation
+
+`evaluate_task_utility` evaluates task outputs for one previously generated, completely fictional `NativeCohort` entirely in memory. The caller builds an immutable ordered tuple of `TaskPrediction` values from its visible pipeline in the cohort's stable cohort order, declares all support and performance thresholds in a frozen `TaskUtilityPolicy`, and passes no model, callable, path, key, report, or output destination to the evaluator.
+
+```python
+from synthetic.task_utility import (
+    TaskPrediction,
+    TaskUtilityPolicy,
+    TaskUtilityStatus,
+    evaluate_task_utility,
+)
+
+
+def prediction_from_visible_member(member):
+    visible = member.to_mapping()
+    pipeline_output = run_visible_growth_pipeline(visible)
+    return TaskPrediction(
+        predicted_disorder=pipeline_output.predicted_disorder,
+        risk_score=pipeline_output.risk_score,
+    )
+
+
+predictions = tuple(
+    prediction_from_visible_member(member)
+    for member in cohort.members
+)
+policy = TaskUtilityPolicy(
+    policy_id="task-utility-v1",
+    policy_version="1",
+    minimum_cohort_size=50,
+    minimum_evaluable_members=45,
+    minimum_class_support=5,
+    maximum_unevaluable_members=5,
+    require_probability_scores=False,
+    minimum_sensitivity=0.80,
+    minimum_specificity=0.80,
+    minimum_auroc=0.75,
+    maximum_brier_score=0.20,
+    subgroup_dimensions=("sex",),
+)
+report = evaluate_task_utility(cohort, predictions, policy)
+assert isinstance(report.status, TaskUtilityStatus)
+```
+
+The fixed metrics are `sensitivity`, `specificity`, `precision`, `balanced_accuracy`, `auroc`, `brier_score`, `false_positive_count`, and `false_negative_count`. The evaluator always produces the `overall` cell and, when `subgroup_dimensions=("sex",)`, produces the observed fixed scopes `sex:F`, `sex:M`, and `sex:U` in that order after `overall`; absent categories are omitted, and caller-defined subgroup dimensions or demographic labels are rejected.
+
+`PASS` means every evaluable bounded metric meets its declared threshold and all cohort, evaluable-member, class-support, missing-prediction, and requested subgroup gates are satisfied. `FAIL` means an evaluable bounded metric is outside its threshold or the evidence is structurally invalid. `UNEVALUABLE` means a required support or evidence gate is not satisfied; missing evidence never becomes zero or a pass, and any ordinary unevaluable cell suppresses truth-derived metrics and confusion counts. When `require_probability_scores=False`, missing scores do not block otherwise eligible decision-based diagnostics: `auroc` and `brier_score` alone remain `UNEVALUABLE/MISSING_SCORE`; when scores are required, missing score evidence blocks the report according to the frozen policy semantics.
+
+The disorder label is hidden truth used only inside the evaluator to accumulate aggregate confusion and score bins. The aggregate-only report contains fixed metric, status, reason, scope, and count fields; it contains no member identifiers, ordered predictions, individual scores, raw observations, latent trajectories, disorder labels, or private traces, and ordinary cohort, member, frame, and report mappings remain truth-free.
+
+This synthetic development diagnostic does not establish clinical utility, real-data performance or generalization, prevalence evidence, privacy/non-matchability, release readiness, or Synthea conformance; each remains a separate deferred evidence and governance gate.
+
 ## Patient-disjoint held-out validation
 
 An authorized operator may run the standalone held-out validator only inside the governed environment. It derives the real-data partition privately from the keyed partition policy, compares disclosed aggregate targets from the real `held_out` partition with the complete generated package, and applies a frozen fidelity policy; it does not expose patient rows, identifiers, sequences, or the partition key.
