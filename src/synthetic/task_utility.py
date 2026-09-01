@@ -650,7 +650,8 @@ class TaskUtilityReport:
             if reason not in {"OK", "WITHIN_BOUND"}:
                 raise ValueError("PASS report reason_code must be nonblocking")
             if any(
-                cell.reason_code != "MISSING_PREDICTION"
+                cell.scope != "overall"
+                or cell.reason_code != "MISSING_PREDICTION"
                 for cell in unevaluable_cells
             ):
                 raise ValueError(
@@ -666,7 +667,13 @@ class TaskUtilityReport:
                 for metric in cell.metrics
                 if metric.status is TaskUtilityStatus.UNEVALUABLE
             )
-            if "MISSING_SCORE" in metric_reasons:
+            if any(
+                cell.scope != "overall"
+                and cell.reason_code == "MISSING_PREDICTION"
+                for cell in unevaluable_cells
+            ):
+                evidenced_reason = "MISSING_PREDICTION"
+            elif "MISSING_SCORE" in metric_reasons:
                 evidenced_reason = "MISSING_SCORE"
             elif "INSUFFICIENT_SUPPORT" in metric_reasons:
                 evidenced_reason = "INSUFFICIENT_SUPPORT"
@@ -816,7 +823,8 @@ def _score_metrics(
     )
 
 
-def _overall_cell(
+def _task_cell(
+    scope: str,
     members: tuple[CohortMember, ...],
     predictions: tuple[TaskPrediction, ...],
     policy: TaskUtilityPolicy,
@@ -996,7 +1004,7 @@ def _overall_cell(
 
     suppress_truth_counts = status is TaskUtilityStatus.UNEVALUABLE
     return TaskUtilityCell(
-        scope="overall",
+        scope=scope,
         status=status,
         reason_code=reason_code,
         member_count=len(members),
@@ -1508,35 +1516,74 @@ def evaluate_task_utility(
         validated_policy = _validated_policy(policy)
         validated_cohort = _validated_cohort(cohort, members)
         members = validated_cohort.members
-        cell = _overall_cell(members, validated_predictions, validated_policy)
+        raw_cells = [
+            _task_cell(
+                "overall",
+                members,
+                validated_predictions,
+                validated_policy,
+            )
+        ]
+        if validated_policy.subgroup_dimensions == ("sex",):
+            for sex in ("F", "M", "U"):
+                selected_indices = tuple(
+                    index
+                    for index, member in enumerate(members)
+                    if member.demographics.sex == sex
+                )
+                if selected_indices:
+                    raw_cells.append(
+                        _task_cell(
+                            f"sex:{sex}",
+                            tuple(members[index] for index in selected_indices),
+                            tuple(
+                                validated_predictions[index]
+                                for index in selected_indices
+                            ),
+                            validated_policy,
+                        )
+                    )
+        overall = raw_cells[0]
 
-        if cell.status is TaskUtilityStatus.FAIL:
+        if any(cell.status is TaskUtilityStatus.FAIL for cell in raw_cells):
             status = TaskUtilityStatus.FAIL
             reason_code = "OUTSIDE_BOUND"
         elif (
             len(members) < validated_policy.minimum_cohort_size
-            or cell.evaluable_count < validated_policy.minimum_evaluable_members
+            or overall.evaluable_count
+            < validated_policy.minimum_evaluable_members
         ):
             status = TaskUtilityStatus.UNEVALUABLE
             reason_code = "COHORT_TOO_SMALL"
-        elif cell.unevaluable_count > validated_policy.maximum_unevaluable_members:
+        elif (
+            overall.unevaluable_count
+            > validated_policy.maximum_unevaluable_members
+            or any(
+                cell.scope != "overall"
+                and cell.reason_code == "MISSING_PREDICTION"
+                for cell in raw_cells
+            )
+        ):
             status = TaskUtilityStatus.UNEVALUABLE
             reason_code = "MISSING_PREDICTION"
         elif (
             validated_policy.require_probability_scores
-            and cell.missing_score_count
+            and any(cell.missing_score_count for cell in raw_cells)
         ):
             status = TaskUtilityStatus.UNEVALUABLE
             reason_code = "MISSING_SCORE"
         else:
             blocking_reasons = tuple(
                 metric.reason_code
+                for cell in raw_cells
                 for metric in cell.metrics
-                if metric.status is TaskUtilityStatus.UNEVALUABLE
-                and not (
-                    not validated_policy.require_probability_scores
-                    and metric.name in {"auroc", "brier_score"}
-                    and metric.reason_code == "MISSING_SCORE"
+                if (
+                    metric.status is TaskUtilityStatus.UNEVALUABLE
+                    and not (
+                        not validated_policy.require_probability_scores
+                        and metric.name in {"auroc", "brier_score"}
+                        and metric.reason_code == "MISSING_SCORE"
+                    )
                 )
             )
             if blocking_reasons:
@@ -1550,14 +1597,17 @@ def evaluate_task_utility(
                 status = TaskUtilityStatus.PASS
                 reason_code = "WITHIN_BOUND"
 
-        if cell.status is TaskUtilityStatus.UNEVALUABLE or (
-            status is TaskUtilityStatus.UNEVALUABLE
-            and cell.status is not TaskUtilityStatus.FAIL
-        ):
-            cell = _redacted_unevaluable_cell(
+        cells = tuple(
+            _redacted_unevaluable_cell(
                 cell,
                 report_reason=reason_code,
             )
+            if cell.status is TaskUtilityStatus.UNEVALUABLE
+            or reason_code == "COHORT_TOO_SMALL"
+            else cell
+            for cell in raw_cells
+        )
+        counted_cells = Counter(cell.status.value for cell in cells)
 
         return TaskUtilityReport(
             report_version=TASK_UTILITY_REPORT_VERSION,
@@ -1569,14 +1619,13 @@ def evaluate_task_utility(
             status=status,
             reason_code=reason_code,
             status_counts={
-                "PASS": int(cell.status is TaskUtilityStatus.PASS),
-                "FAIL": int(cell.status is TaskUtilityStatus.FAIL),
-                "UNEVALUABLE": int(cell.status is TaskUtilityStatus.UNEVALUABLE),
+                item.value: counted_cells[item.value]
+                for item in TaskUtilityStatus
             },
-            metric_counts={name: 1 for name in TASK_METRICS},
-            evaluable_count=cell.evaluable_count,
-            unevaluable_count=cell.unevaluable_count,
-            cells=(cell,),
+            metric_counts={name: len(cells) for name in TASK_METRICS},
+            evaluable_count=overall.evaluable_count,
+            unevaluable_count=overall.unevaluable_count,
+            cells=cells,
         )
     except Exception:  # noqa: BLE001 - malformed evidence must fail closed
         return _structural_fallback_report()
