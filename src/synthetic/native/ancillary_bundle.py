@@ -214,6 +214,117 @@ def _inputs_are_bound(
     )
 
 
+def _bundle_identity_state(
+    bundle: object,
+    member: object,
+) -> tuple[AncillaryBundleValidationStatus, str]:
+    if not isinstance(bundle, ObservedResourceBundle) or not isinstance(member, CohortMember):
+        return AncillaryBundleValidationStatus.UNEVALUABLE, "MALFORMED_BUNDLE"
+    try:
+        if bundle.source_frame is None or member.frame is None:
+            return AncillaryBundleValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
+        if (
+            bundle.patient_id != member.demographics.patient_id
+            or bundle.source_frame is not member.frame
+            or not _patient_row_matches_member(bundle, member)
+        ):
+            return AncillaryBundleValidationStatus.FAIL, "BUNDLE_IDENTITY_INVALID"
+    except Exception:  # noqa: BLE001 - typed-object corruption stays redacted
+        return AncillaryBundleValidationStatus.UNEVALUABLE, "MALFORMED_BUNDLE"
+    return AncillaryBundleValidationStatus.PASS, "OK"
+
+
+def _base_resources_state(
+    bundle: object,
+) -> tuple[AncillaryBundleValidationStatus, str]:
+    if not isinstance(bundle, ObservedResourceBundle):
+        return AncillaryBundleValidationStatus.UNEVALUABLE, "MALFORMED_BUNDLE"
+    if bundle.source_frame is None:
+        return AncillaryBundleValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
+    try:
+        status = validate_observed_resources(_zeroed_base(bundle)).status
+    except Exception:  # noqa: BLE001 - malformed visible rows are a fixed failure
+        return AncillaryBundleValidationStatus.FAIL, "BASE_RESOURCES_INVALID"
+    if status is ResourceValidationStatus.PASS:
+        return AncillaryBundleValidationStatus.PASS, "OK"
+    if status is ResourceValidationStatus.UNEVALUABLE:
+        return AncillaryBundleValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
+    return AncillaryBundleValidationStatus.FAIL, "BASE_RESOURCES_INVALID"
+
+
+def _ancillary_resources_state(
+    bundle: object,
+    member: object,
+    policy: object,
+) -> tuple[AncillaryBundleValidationStatus, str]:
+    if (
+        not isinstance(bundle, ObservedResourceBundle)
+        or not isinstance(member, CohortMember)
+        or not isinstance(policy, GhdAncillaryPolicy)
+    ):
+        return AncillaryBundleValidationStatus.UNEVALUABLE, "MALFORMED_BUNDLE"
+    try:
+        projection = AncillaryResourceProjection(
+            bundle.patient_id,
+            bundle.shape,
+            {name: bundle.rows[name] for name in GHD_ANCILLARY_RESOURCE_NAMES},
+        )
+        status = validate_ghd_ancillary_resources(member, projection, policy).status
+        if status is AncillaryValidationStatus.PASS and not _projection_visits_resolve(
+            _zeroed_base(bundle), projection
+        ):
+            return AncillaryBundleValidationStatus.FAIL, "ANCILLARY_RESOURCES_INVALID"
+    except Exception:  # noqa: BLE001 - malformed rows cannot escape the boundary
+        return AncillaryBundleValidationStatus.FAIL, "ANCILLARY_RESOURCES_INVALID"
+    if status is AncillaryValidationStatus.PASS:
+        return AncillaryBundleValidationStatus.PASS, "OK"
+    if status is AncillaryValidationStatus.UNEVALUABLE:
+        return AncillaryBundleValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
+    return AncillaryBundleValidationStatus.FAIL, "ANCILLARY_RESOURCES_INVALID"
+
+
+def _truth_boundary_state(
+    bundle: object,
+) -> tuple[AncillaryBundleValidationStatus, str]:
+    if not isinstance(bundle, ObservedResourceBundle):
+        return AncillaryBundleValidationStatus.UNEVALUABLE, "MALFORMED_BUNDLE"
+    try:
+        mapping = bundle.to_mapping()
+        expected_keys = {"contract", "patient_id", "resources", "clinical_descendants"}
+        if not isinstance(mapping, Mapping) or set(mapping) != expected_keys:
+            return AncillaryBundleValidationStatus.FAIL, "TRUTH_BOUNDARY_INVALID"
+        if any(
+            key in mapping
+            for key in ("source_frame", "truth", "latent_trajectory", "hidden_events")
+        ):
+            return AncillaryBundleValidationStatus.FAIL, "TRUTH_BOUNDARY_INVALID"
+        if "<evaluator-only>" not in repr(bundle):
+            return AncillaryBundleValidationStatus.FAIL, "TRUTH_BOUNDARY_INVALID"
+    except Exception:  # noqa: BLE001 - malformed wrappers are not rendered to callers
+        return AncillaryBundleValidationStatus.UNEVALUABLE, "MALFORMED_BUNDLE"
+    return AncillaryBundleValidationStatus.PASS, "OK"
+
+
+def validate_ghd_ancillary_bundle(
+    bundle: ObservedResourceBundle,
+    member: CohortMember,
+    policy: GhdAncillaryPolicy,
+) -> AncillaryBundleValidationReport:
+    """Return a redacted fixed report for one merged or empty ancillary bundle."""
+
+    states = (
+        ("bundle_identity", _bundle_identity_state(bundle, member)),
+        ("base_resources", _base_resources_state(bundle)),
+        ("ancillary_resources", _ancillary_resources_state(bundle, member, policy)),
+        ("truth_boundary", _truth_boundary_state(bundle)),
+    )
+    checks = tuple(
+        AncillaryBundleCheck(name, status, reason)
+        for name, (status, reason) in states
+    )
+    return AncillaryBundleValidationReport(_status_for_checks(checks), checks)
+
+
 def _validated_components(
     bundle: ObservedResourceBundle,
     member: CohortMember,
@@ -291,4 +402,5 @@ __all__ = [
     "AncillaryBundleValidationReport",
     "AncillaryBundleValidationStatus",
     "merge_ghd_ancillary_resources",
+    "validate_ghd_ancillary_bundle",
 ]
