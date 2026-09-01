@@ -7,6 +7,7 @@ locations are never retained in public mappings or exception text.
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import math
@@ -20,6 +21,13 @@ from dataclasses import dataclass, replace
 from dataclasses import field as dataclass_field
 from pathlib import Path
 
+from synthetic.calibrate import (
+    DEFAULT_AGE_WINDOWS,
+    _load_disclosure_policy,
+    _load_partition_policy,
+    _read_regular_file,
+    _write_exclusive_fsynced,
+)
 from synthetic.calibration_targets import (
     ETHNICITY_CATEGORY_SLUGS,
     RACE_CATEGORY_SLUGS,
@@ -30,13 +38,16 @@ from synthetic.heldout_validate import (
     HeldoutComparison,
     HeldoutRunConfig,
     HeldoutValidationReport,
+    load_fidelity_policy,
     validate_heldout,
 )
+from synthetic.run_directory import RunDirectory
 from synthetic.schema_contract import EXPECTED_SCHEMA_FINGERPRINT, schema_fingerprint
 from synthetic.validate import validate_structure
 
 PREVALENCE_EVIDENCE_REPORT_VERSION = "prevalence-evidence-report-v1"
 PACKAGE_MANIFEST_MAX_BYTES = 1024 * 1024
+MAX_PREVALENCE_EVIDENCE_OUTPUT_BYTES = 8 * 1024 * 1024
 V1_TARGET_FAMILIES = frozenset({"demographics", "recorded_outcome"})
 _EVIDENCE_STATUSES = ("PASS", "FAIL", "UNEVALUABLE")
 _OBSERVED_OUTCOME_LAYER = "outcome_layer=observed"
@@ -67,6 +78,18 @@ _MANIFEST_KEYS = frozenset(
     }
 )
 _PACKAGE_ARTIFACTS = frozenset({"datapackage.json", "validation-report.json", "manifest.json"})
+_REPORT_FILENAME = "prevalence-evidence-report.json"
+_SUMMARY_FILENAME = "prevalence-evidence-summary.txt"
+_REPORT_KEYS = frozenset(
+    {
+        "report_version",
+        "status",
+        "generation_identity",
+        "heldout_identity",
+        "runs",
+        "comparisons",
+    }
+)
 _RESOURCE_NAMES = (
     "patients",
     "patients_augmented",
@@ -816,6 +839,49 @@ class PrevalenceEvidenceReport:
             "comparisons": [comparison.to_mapping() for comparison in self.comparisons],
         }
 
+    def canonical_json_bytes(self) -> bytes:
+        """Return the stable, aggregate-only public report serialization."""
+        return _canonical_json_bytes(self.to_mapping())
+
+    def human_summary(self) -> str:
+        """Return a deterministic ASCII-only operational summary without values or locations."""
+        status_counts = {status: sum(item.status == status for item in self.comparisons) for status in _EVIDENCE_STATUSES}
+        return "\n".join(
+            (
+                "Governed multi-run prevalence evidence",
+                f"Report version: {self.report_version}",
+                f"Status: {self.status}",
+                f"Run count: {len(self.runs)}",
+                f"Comparison count: {len(self.comparisons)}",
+                f"Passing comparisons: {status_counts['PASS']}",
+                f"Failing comparisons: {status_counts['FAIL']}",
+                f"Unevaluable comparisons: {status_counts['UNEVALUABLE']}",
+                f"Schema fingerprint: {self.generation_identity['schema_fingerprint']}",
+                "Target scope: observed demographics and recorded outcomes",
+                "",
+            )
+        )
+
+    def lifecycle_identity(self) -> str:
+        """Return a stable safe identity used only to derive a no-replace lifecycle token."""
+        identity = {
+            "report_version": self.report_version,
+            "generation_identity": dict(self.generation_identity),
+            "heldout_identity": self.heldout_identity.to_mapping(),
+        }
+        return hashlib.sha256(_canonical_json_bytes(identity)).hexdigest()
+
+
+@dataclass(frozen=True)
+class PrevalenceEvidenceResult:
+    """A validated prevalence-evidence report suitable for transactional publication."""
+
+    report: PrevalenceEvidenceReport
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.report, PrevalenceEvidenceReport):
+            raise TypeError("report must be a PrevalenceEvidenceReport")
+
 
 def _snapshot_matches_identity(snapshot: _VerifiedPackageSnapshot, identity: PackageIdentity) -> bool:
     file_payload = json.dumps(
@@ -1038,7 +1104,361 @@ def verify_package_identity(spec: PrevalenceRunSpec) -> PackageIdentity:
             os.close(descriptor_fd)
 
 
+def _canonical_json_bytes(mapping: Mapping[str, object]) -> bytes:
+    return (
+        json.dumps(
+            mapping,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+            allow_nan=False,
+        )
+        + "\n"
+    ).encode("ascii")
+
+
+def _require_exact_mapping(value: object, keys: frozenset[str]) -> Mapping[str, object]:
+    if not isinstance(value, Mapping) or set(value) != keys or not all(isinstance(key, str) for key in value):
+        raise ValueError("prevalence evidence report is invalid")
+    return value
+
+
+def _parse_public_identity(value: object) -> PackageIdentity:
+    keys = frozenset(PackageIdentity.__annotations__)
+    mapping = _require_exact_mapping(value, keys)
+    try:
+        return PackageIdentity(
+            profile=mapping["profile"],  # type: ignore[arg-type]
+            engine=mapping["engine"],  # type: ignore[arg-type]
+            seed=mapping["seed"],  # type: ignore[arg-type]
+            schema_fingerprint=mapping["schema_fingerprint"],  # type: ignore[arg-type]
+            reference_time=mapping["reference_time"],  # type: ignore[arg-type]
+            reference_id=mapping["reference_id"],  # type: ignore[arg-type]
+            reference_sha256=mapping["reference_sha256"],  # type: ignore[arg-type]
+            configuration_sha256=mapping["configuration_sha256"],  # type: ignore[arg-type]
+            software_revision=mapping["software_revision"],  # type: ignore[arg-type]
+            prng_family=mapping["prng_family"],  # type: ignore[arg-type]
+            seed_derivation_version=mapping["seed_derivation_version"],  # type: ignore[arg-type]
+            derivation_fingerprint=mapping["derivation_fingerprint"],  # type: ignore[arg-type]
+            package_sha256=mapping["package_sha256"],  # type: ignore[arg-type]
+            manifest_sha256=mapping["manifest_sha256"],  # type: ignore[arg-type]
+        )
+    except (KeyError, TypeError, ValueError, PrevalenceEvidenceUnavailable):
+        raise ValueError("prevalence evidence report is invalid") from None
+
+
+def _validate_generation_identity(value: object) -> dict[str, object]:
+    fields = frozenset(PackageIdentity.__annotations__) - {"seed", "package_sha256", "manifest_sha256"}
+    mapping = _require_exact_mapping(value, fields)
+    try:
+        for field in (
+            "profile",
+            "engine",
+            "schema_fingerprint",
+            "reference_time",
+            "reference_id",
+            "software_revision",
+            "prng_family",
+            "seed_derivation_version",
+        ):
+            _require_token(mapping[field])
+        for field in (
+            "schema_fingerprint",
+            "reference_sha256",
+            "configuration_sha256",
+            "derivation_fingerprint",
+        ):
+            _require_digest(mapping[field])
+    except (KeyError, PrevalenceEvidenceUnavailable):
+        raise ValueError("prevalence evidence report is invalid") from None
+    return dict(mapping)
+
+
+def _validate_heldout_identity(value: object) -> dict[str, object]:
+    mapping = _require_exact_mapping(
+        value,
+        frozenset(
+            {
+                "source_snapshot",
+                "synthetic_artifact_id",
+                "schema_fingerprint",
+                "partition_policy",
+                "disclosure_policy",
+                "fidelity_policy",
+            }
+        ),
+    )
+    try:
+        _require_token(mapping["source_snapshot"])
+        _require_token(mapping["synthetic_artifact_id"])
+        _require_digest(mapping["schema_fingerprint"])
+        for name in ("partition_policy", "disclosure_policy"):
+            policy = _require_exact_mapping(mapping[name], frozenset({"policy_id", "policy_version"}))
+            _require_token(policy["policy_id"])
+            _require_token(policy["policy_version"])
+        fidelity = _require_exact_mapping(
+            mapping["fidelity_policy"],
+            frozenset({"policy_id", "policy_version", "target_registry_version"}),
+        )
+        for token in fidelity.values():
+            _require_token(token)
+    except (KeyError, PrevalenceEvidenceUnavailable):
+        raise ValueError("prevalence evidence report is invalid") from None
+    return {
+        "source_snapshot": mapping["source_snapshot"],
+        "synthetic_artifact_id": mapping["synthetic_artifact_id"],
+        "schema_fingerprint": mapping["schema_fingerprint"],
+        "partition_policy": dict(mapping["partition_policy"]),
+        "disclosure_policy": dict(mapping["disclosure_policy"]),
+        "fidelity_policy": dict(mapping["fidelity_policy"]),
+    }
+
+
+def _parse_prevalence_comparison(value: object) -> PrevalenceComparison:
+    if not isinstance(value, Mapping):
+        raise TypeError("prevalence evidence report is invalid")
+    required = frozenset(
+        {
+            "stratum_id",
+            "target_name",
+            "family",
+            "statistic",
+            "unit",
+            "status",
+            "heldout_value",
+            "generated_minimum",
+            "generated_maximum",
+            "maximum_absolute_difference",
+            "tolerance",
+            "evaluable_count",
+            "pass_count",
+            "fail_count",
+        }
+    )
+    if set(value) not in {required, required | {"quantile_level"}}:
+        raise ValueError("prevalence evidence report is invalid")
+    try:
+        return PrevalenceComparison(
+            stratum_id=value["stratum_id"],  # type: ignore[arg-type]
+            target_name=value["target_name"],  # type: ignore[arg-type]
+            family=value["family"],  # type: ignore[arg-type]
+            statistic=value["statistic"],  # type: ignore[arg-type]
+            unit=value["unit"],  # type: ignore[arg-type]
+            quantile_level=value.get("quantile_level"),  # type: ignore[arg-type]
+            status=value["status"],  # type: ignore[arg-type]
+            heldout_value=value["heldout_value"],  # type: ignore[arg-type]
+            generated_minimum=value["generated_minimum"],  # type: ignore[arg-type]
+            generated_maximum=value["generated_maximum"],  # type: ignore[arg-type]
+            maximum_absolute_difference=value["maximum_absolute_difference"],  # type: ignore[arg-type]
+            tolerance=value["tolerance"],  # type: ignore[arg-type]
+            evaluable_count=value["evaluable_count"],  # type: ignore[arg-type]
+            pass_count=value["pass_count"],  # type: ignore[arg-type]
+            fail_count=value["fail_count"],  # type: ignore[arg-type]
+        )
+    except (KeyError, TypeError, ValueError, PrevalenceEvidenceUnavailable):
+        raise ValueError("prevalence evidence report is invalid") from None
+
+
+def _parse_prevalence_evidence_report(value: object) -> dict[str, object]:
+    """Strictly parse public report fields without reconstructing withheld run values."""
+    mapping = _require_exact_mapping(value, _REPORT_KEYS)
+    if mapping["report_version"] != PREVALENCE_EVIDENCE_REPORT_VERSION or mapping["status"] not in _EVIDENCE_STATUSES:
+        raise ValueError("prevalence evidence report is invalid")
+    generation = _validate_generation_identity(mapping["generation_identity"])
+    heldout = _validate_heldout_identity(mapping["heldout_identity"])
+    raw_runs = mapping["runs"]
+    raw_comparisons = mapping["comparisons"]
+    if not isinstance(raw_runs, list) or len(raw_runs) < 3 or not isinstance(raw_comparisons, list):
+        raise ValueError("prevalence evidence report is invalid")
+    identities: list[PackageIdentity] = []
+    for item in raw_runs:
+        run = _require_exact_mapping(
+            item,
+            frozenset({"identity", "status", "comparison_count", "comparison_sha256"}),
+        )
+        identity = _parse_public_identity(run["identity"])
+        if run["status"] not in _EVIDENCE_STATUSES or isinstance(run["comparison_count"], bool) or not isinstance(
+            run["comparison_count"], int
+        ) or run["comparison_count"] < 0:
+            raise ValueError("prevalence evidence report is invalid")
+        try:
+            _require_digest(run["comparison_sha256"])
+        except PrevalenceEvidenceUnavailable:
+            raise ValueError("prevalence evidence report is invalid") from None
+        if _generation_identity(identity) != generation:
+            raise ValueError("prevalence evidence report is invalid")
+        identities.append(identity)
+    if len({identity.seed for identity in identities}) != len(identities) or identities != sorted(
+        identities, key=lambda identity: identity.seed
+    ):
+        raise ValueError("prevalence evidence report is invalid")
+    comparisons = tuple(_parse_prevalence_comparison(item) for item in raw_comparisons)
+    if tuple(sorted(comparisons, key=lambda item: item.canonical_key)) != comparisons or len(
+        {item.canonical_key for item in comparisons}
+    ) != len(comparisons):
+        raise ValueError("prevalence evidence report is invalid")
+    if mapping["status"] != _aggregate_status(tuple(item.status for item in comparisons)):
+        raise ValueError("prevalence evidence report is invalid")
+    return {
+        "report_version": mapping["report_version"],
+        "status": mapping["status"],
+        "generation_identity": generation,
+        "heldout_identity": heldout,
+        "runs": [dict(item) for item in raw_runs],
+        "comparisons": [item.to_mapping() for item in comparisons],
+    }
+
+
+def _reparse_written_prevalence_evidence(run: RunDirectory, result: PrevalenceEvidenceResult) -> None:
+    report_bytes = _read_regular_file(
+        run.partial_path / _REPORT_FILENAME,
+        "prevalence evidence report output",
+        maximum_bytes=MAX_PREVALENCE_EVIDENCE_OUTPUT_BYTES,
+    )
+    summary_bytes = _read_regular_file(
+        run.partial_path / _SUMMARY_FILENAME,
+        "prevalence evidence summary output",
+        maximum_bytes=MAX_PREVALENCE_EVIDENCE_OUTPUT_BYTES,
+    )
+    try:
+        parsed = _parse_prevalence_evidence_report(_strict_json_bytes(report_bytes))
+        summary = summary_bytes.decode("ascii", errors="strict")
+    except (UnicodeError, ValueError, PrevalenceEvidenceUnavailable):
+        raise ValueError("prevalence evidence output cannot be reparsed") from None
+    report = result.report
+    if (
+        parsed != report.to_mapping()
+        or report_bytes != report.canonical_json_bytes()
+        or summary != report.human_summary()
+        or summary_bytes != summary.encode("ascii")
+    ):
+        raise ValueError("prevalence evidence output is not canonical")
+
+
+def _lifecycle_run_id(report: PrevalenceEvidenceReport) -> str:
+    return report.lifecycle_identity()
+
+
+def _refuse_existing_lifecycle_path(output: Path, report: PrevalenceEvidenceReport) -> None:
+    if os.path.lexists(output):
+        raise FileExistsError("prevalence evidence output already exists")
+    absolute = Path(os.path.abspath(output))
+    lifecycle = _lifecycle_run_id(report)
+    candidates = (
+        absolute.parent / f".{absolute.name}.{lifecycle}.partial",
+        absolute.parent / f".{absolute.name}.{lifecycle}.failed",
+    )
+    if any(os.path.lexists(path) for path in candidates):
+        raise FileExistsError("prevalence evidence output lifecycle path already exists")
+
+
+def _prepare_failure_archive(run: RunDirectory) -> None:
+    for filename in (_REPORT_FILENAME, _SUMMARY_FILENAME):
+        try:
+            os.unlink(run.partial_path / filename)
+        except FileNotFoundError:
+            continue
+    with os.scandir(run.partial_path) as entries:
+        if next(entries, None) is not None:
+            raise OSError("prevalence evidence partial output could not be cleared")
+
+
+def write_prevalence_evidence(result: PrevalenceEvidenceResult, output: Path) -> None:
+    """Write a canonical aggregate report and summary using no-replace promotion."""
+    if not isinstance(result, PrevalenceEvidenceResult):
+        raise TypeError("result must be a PrevalenceEvidenceResult")
+    if not isinstance(output, Path):
+        raise TypeError("output must be a Path")
+    try:
+        _refuse_existing_lifecycle_path(output, result.report)
+        run = RunDirectory.start(output, _lifecycle_run_id(result.report))
+    except FileExistsError:
+        raise FileExistsError("prevalence evidence output lifecycle collision") from None
+    except (OSError, TypeError, ValueError):
+        raise ValueError("prevalence evidence output initialization failed") from None
+    try:
+        _write_exclusive_fsynced(run.partial_path / _REPORT_FILENAME, result.report.canonical_json_bytes())
+        _write_exclusive_fsynced(run.partial_path / _SUMMARY_FILENAME, result.report.human_summary().encode("ascii"))
+        _reparse_written_prevalence_evidence(run, result)
+        run.promote()
+    except Exception:  # noqa: BLE001 - no output failure detail may cross this boundary.
+        try:
+            _prepare_failure_archive(run)
+            run.fail("prevalence evidence output validation failed")
+        except Exception:  # noqa: BLE001 - lifecycle errors remain fixed and redacted.
+            raise ValueError("prevalence evidence output could not be promoted") from None
+        raise ValueError("prevalence evidence output could not be promoted") from None
+
+
+class _RedactedArgumentParser(argparse.ArgumentParser):
+    def error(self, message: str) -> None:
+        del message
+        self.exit(2, "prevalence evidence arguments invalid\n")
+
+
+def _argument_parser() -> argparse.ArgumentParser:
+    parser = _RedactedArgumentParser(
+        description="Run governed multi-run prevalence evidence", allow_abbrev=False
+    )
+    parser.add_argument("--real-root", required=True, type=Path)
+    parser.add_argument("--descriptor", required=True, type=Path)
+    parser.add_argument("--snapshot", required=True)
+    parser.add_argument("--calibration-artifact", required=True, type=Path)
+    parser.add_argument("--calibration-report", required=True, type=Path)
+    parser.add_argument("--partition-policy", required=True, type=Path)
+    parser.add_argument("--disclosure-policy", required=True, type=Path)
+    parser.add_argument("--partition-key-file", required=True, type=Path)
+    parser.add_argument("--frozen-policy", required=True, type=Path)
+    parser.add_argument("--package-root", required=True, action="append", type=Path)
+    parser.add_argument("--expected-seed", required=True, action="append", type=int)
+    parser.add_argument("--output", required=True, type=Path)
+    return parser
+
+
+def main() -> None:
+    """Run the explicit-input prevalence evidence gate with fixed redacted failures."""
+    parser = _argument_parser()
+    arguments = parser.parse_args()
+    if (
+        len(arguments.package_root) != len(arguments.expected_seed)
+        or len(arguments.package_root) < 3
+        or len(set(arguments.expected_seed)) != len(arguments.expected_seed)
+    ):
+        parser.error("package root and seed counts differ")
+    try:
+        runs = tuple(
+            PrevalenceRunSpec(package_root, expected_seed)
+            for package_root, expected_seed in zip(arguments.package_root, arguments.expected_seed, strict=True)
+        )
+        template = HeldoutRunConfig(
+            real_root=arguments.real_root,
+            real_descriptor=arguments.descriptor,
+            source_snapshot=arguments.snapshot,
+            synthetic_root=arguments.package_root[0],
+            calibration_artifact=arguments.calibration_artifact,
+            calibration_report=arguments.calibration_report,
+            partition_policy=_load_partition_policy(arguments.partition_policy),
+            disclosure_policy=_load_disclosure_policy(arguments.disclosure_policy),
+            partition_key=_read_regular_file(arguments.partition_key_file, "partition key"),
+            fidelity_policy=load_fidelity_policy(arguments.frozen_policy),
+            age_windows=DEFAULT_AGE_WINDOWS,
+            output=arguments.output,
+        )
+        report = evaluate_prevalence_evidence(PrevalenceEvidenceConfig(runs=runs, heldout_template=template))
+        result = PrevalenceEvidenceResult(report)
+        write_prevalence_evidence(result, arguments.output)
+    except Exception:  # noqa: BLE001 - no governed argument or evaluator details leave the process.
+        parser.exit(1, "prevalence evidence failed\n")
+    if result.report.status != "PASS":
+        parser.exit(1, "prevalence evidence failed\n")
+
+
+if __name__ == "__main__":  # pragma: no cover - subprocess tests exercise this command.
+    main()
+
+
 __all__ = [
+    "MAX_PREVALENCE_EVIDENCE_OUTPUT_BYTES",
     "PACKAGE_MANIFEST_MAX_BYTES",
     "PREVALENCE_EVIDENCE_REPORT_VERSION",
     "V1_REQUIRED_TARGET_KEYS",
@@ -1047,10 +1467,12 @@ __all__ = [
     "PrevalenceComparison",
     "PrevalenceEvidenceConfig",
     "PrevalenceEvidenceReport",
+    "PrevalenceEvidenceResult",
     "PrevalenceEvidenceUnavailable",
     "PrevalenceRunEvidence",
     "PrevalenceRunResult",
     "PrevalenceRunSpec",
     "evaluate_prevalence_evidence",
     "verify_package_identity",
+    "write_prevalence_evidence",
 ]
