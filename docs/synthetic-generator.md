@@ -302,6 +302,36 @@ Every path is required: there is no default governed data root, descriptor, poli
 
 A passing held-out report is limited aggregate fidelity evidence. It is not evidence of growth-disorder prevalence, demographic representativeness, clinical validity, privacy or non-matchability, or release approval. Privacy evaluation, temporal drift, task utility, prevalence evaluation, and a Synthea adapter remain separate deferred gates and require their own approved evidence and governance.
 
+## Governed multi-run prevalence evidence
+
+An authorized operator may run `synthetic.prevalence_evidence` only inside the governed environment after producing complete generated packages through the reviewed package lifecycle. Its Python API accepts an immutable `PrevalenceEvidenceConfig` with at least three predeclared, distinct `PrevalenceRunSpec(package_root, expected_seed)` values and an explicit governed `HeldoutRunConfig` template. `evaluate_prevalence_evidence(config)` verifies the exact manifest/package binding for every run—descriptor inventory, row counts, file digests, schema, generation identity, and expected seed—before it invokes the held-out evaluator. `write_prevalence_evidence(PrevalenceEvidenceResult(report), output)` is the only report writer; neither API changes a package or feeds evidence back into generation.
+
+```sh
+uv run python -m synthetic.prevalence_evidence \
+  --real-root /governed/ppoc \
+  --descriptor /governed/ppoc/datapackage.json \
+  --snapshot 2026-08-24 \
+  --calibration-artifact /approved/calibration/calibration-artifact.json \
+  --calibration-report /approved/calibration/calibration-report.json \
+  --partition-policy /governed/partition-policy.json \
+  --disclosure-policy /governed/disclosure-policy.json \
+  --partition-key-file /governed/partition.key \
+  --frozen-policy /governed/fidelity-policy.json \
+  --package-root /fixtures/predeclared-seed-101 \
+  --expected-seed 101 \
+  --package-root /fixtures/predeclared-seed-202 \
+  --expected-seed 202 \
+  --package-root /fixtures/predeclared-seed-303 \
+  --expected-seed 303 \
+  --output /governed/prevalence-evidence-report
+```
+
+Every governed input is explicit, including each repeated package root and expected seed; there are no default roots, keys, policies, artifacts, snapshots, packages, or seeds. The v1 evidence scope is only observed demographics and recorded outcomes under the frozen held-out policy. Latent disorder prevalence and observable phenotype diagnostics are excluded from the comparison and cannot affect the status. Joint demographic/prevalence strata remain deferred to a reviewed target-registry revision.
+
+`PASS` requires every required cell to be evaluable and pass in every run. `FAIL` means at least one evaluable required cell failed its frozen tolerance. `UNEVALUABLE` means no required cell failed but required evidence was missing, suppressed, or under-supported; it is never treated as zero or `PASS`. The promoted report is aggregate-only: it contains safe identities, package/manifest digests, aggregate comparison values, and statuses, but no paths, partition keys, rows, patient or visit identifiers, supports, denominators, hidden labels, or truth hashes. The gate applies no adaptive prevalence forcing, label allocation, tuning, package mutation, or report feedback.
+
+This is a narrowly scoped patient-disjoint held-out distributional check, not a claim that latent disease prevalence is correct. It does not replace other held-out fidelity checks or establish clinical validity, privacy/non-matchability, task utility, Synthea conformance, or release approval. CI remains synthetic-only with fictional packages and test key material; privacy, clinical review, utility, Synthea, and release gates require their own approved evidence and governance.
+
 ## Governed privacy-audit evidence
 
 An authorized operator may run the standalone privacy auditor only inside the governed environment against a completely generated exact-schema package and an approved frozen privacy policy. Every governed input is explicit; there is no default real-data root, policy, output, held-out package, shadow manifest, control package, or prior-release discovery.
