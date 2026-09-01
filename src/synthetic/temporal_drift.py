@@ -22,6 +22,7 @@ from synthetic.models import (
     LatentDisorderState,
 )
 from synthetic.native.observations import (
+    CensoringMode,
     ObservationFrame,
     ObservationTruth,
     ObservationWindow,
@@ -88,6 +89,9 @@ _CAUSAL_PHASE_ORDER = MappingProxyType(
 _TREATMENT_OUTCOMES = frozenset(
     {"treatment_response", "treatment_nonresponse"}
 )
+_STRUCTURAL_FALLBACK_PROFILE = "unavailable"
+_STRUCTURAL_FALLBACK_SEED = 0
+_STRUCTURAL_FALLBACK_SIZE = 0
 
 
 class TemporalDriftStatus(str, Enum):
@@ -910,19 +914,55 @@ def _source_event_timing_is_valid(
     )
 
 
-def _nested_causal_invariants_are_valid(
-    member: CohortMember, truth: ObservationTruth
-) -> bool:
-    if not isinstance(member.demographics, SyntheticDemographics):
+def _observation_window_is_valid(window: object) -> bool:
+    if type(window) is not ObservationWindow:
+        return False
+    bounds = (
+        window.start_age_days,
+        window.effective_end_age_days,
+        window.administrative_end_age_days,
+    )
+    if any(
+        isinstance(value, bool) or not isinstance(value, int)
+        for value in bounds
+    ):
+        return False
+    if not 0 <= bounds[0] < bounds[1] <= bounds[2]:
+        return False
+    mode = window.censoring_mode
+    if not isinstance(mode, CensoringMode):
+        return False
+    if mode is CensoringMode.LOST_TO_FOLLOW_UP:
+        return bounds[1] < bounds[2]
+    return bounds[1] == bounds[2]
+
+
+def _truth_independent_member_invariants_are_valid(member: object) -> bool:
+    if type(member) is not CohortMember:
+        return False
+    demographics = member.demographics
+    if type(demographics) is not SyntheticDemographics:
+        return False
+    patient_id = member.demographics.patient_id
+    if not isinstance(patient_id, str) or not patient_id:
         return False
     trajectory = member.trajectory
-    if not isinstance(trajectory.disorder, LatentDisorderState):
+    if type(trajectory) is not AgeRegimeDisorderTrajectory:
+        return False
+    if type(trajectory.disorder) is not LatentDisorderState:
         return False
     physiology = trajectory.physiology
-    if not isinstance(physiology.state, AgeRegimeState):
+    if type(physiology) is not AgeRegimeTrajectory:
+        return False
+    if type(physiology.state) is not AgeRegimeState:
         return False
     points = physiology.points
-    patient_id = member.demographics.patient_id
+    if (
+        type(points) is not tuple
+        or not points
+        or not all(type(point) is AgeRegimePoint for point in points)
+    ):
+        return False
     if any(point.patient_id != patient_id for point in points):
         return False
     point_ages = tuple(point.age_days for point in points)
@@ -935,33 +975,63 @@ def _nested_causal_invariants_are_valid(
         return False
     if any(current <= previous for previous, current in pairwise(point_ages)):
         return False
+    trajectory_events = trajectory.events
+    if type(trajectory_events) is not tuple or not all(
+        type(event) is ClinicalEvent for event in trajectory_events
+    ):
+        return False
+    if any(
+        event.patient_id != patient_id
+        or isinstance(event.age_days, bool)
+        or not isinstance(event.age_days, int)
+        or event.age_days < 0
+        for event in trajectory_events
+    ):
+        return False
     frame = member.frame
-    return (
-        frame.patient_id == patient_id
-        and truth.patient_id == frame.patient_id
-        and isinstance(frame.window, ObservationWindow)
-        and truth.window == frame.window
+    if type(frame) is not ObservationFrame or frame.patient_id != patient_id:
+        return False
+    window = frame.window
+    if not _observation_window_is_valid(window):
+        return False
+    visits = frame.visits
+    events = frame.events
+    if type(visits) is not tuple or type(events) is not tuple:
+        return False
+    if not all(type(visit) is ObservedVisit for visit in visits):
+        return False
+    if not all(type(event) is RecordedEvent for event in events):
+        return False
+    visit_ids = tuple(visit.visit_id for visit in visits)
+    if (
+        any(not isinstance(visit_id, str) or not visit_id for visit_id in visit_ids)
+        or len(visit_ids) != len(set(visit_ids))
+    ):
+        return False
+    visible_records = (*visits, *events)
+    return all(
+        record.patient_id == patient_id
+        and not isinstance(record.age_days, bool)
+        and isinstance(record.age_days, int)
+        and window.start_age_days
+        <= record.age_days
+        < window.effective_end_age_days
+        for record in visible_records
     )
+
+
+def _truth_invariants_are_valid(
+    member: CohortMember, truth: ObservationTruth
+) -> bool:
+    frame = member.frame
+    return truth.patient_id == frame.patient_id and truth.window == frame.window
 
 
 def _member_causal_statuses(
     member: CohortMember,
 ) -> tuple[TemporalDriftStatus, TemporalDriftStatus]:
     try:
-        if not isinstance(member, CohortMember):
-            return TemporalDriftStatus.FAIL, TemporalDriftStatus.FAIL
-        if not isinstance(member.trajectory, AgeRegimeDisorderTrajectory):
-            return TemporalDriftStatus.FAIL, TemporalDriftStatus.FAIL
-        if not isinstance(member.trajectory.physiology, AgeRegimeTrajectory):
-            return TemporalDriftStatus.FAIL, TemporalDriftStatus.FAIL
-        points = member.trajectory.physiology.points
-        if (
-            not isinstance(points, tuple)
-            or not points
-            or not all(isinstance(point, AgeRegimePoint) for point in points)
-        ):
-            return TemporalDriftStatus.FAIL, TemporalDriftStatus.FAIL
-        if not isinstance(member.frame, ObservationFrame):
+        if not _truth_independent_member_invariants_are_valid(member):
             return TemporalDriftStatus.FAIL, TemporalDriftStatus.FAIL
         truth = member.frame.truth
         if truth is None:
@@ -971,7 +1041,7 @@ def _member_causal_statuses(
             )
         if not isinstance(truth, ObservationTruth):
             return TemporalDriftStatus.FAIL, TemporalDriftStatus.FAIL
-        if not _nested_causal_invariants_are_valid(member, truth):
+        if not _truth_invariants_are_valid(member, truth):
             return TemporalDriftStatus.FAIL, TemporalDriftStatus.FAIL
         source_events = truth.source_events
         trajectory_events = member.trajectory.events
@@ -1143,6 +1213,19 @@ def _assemble_report(
     )
 
 
+def _structural_fallback_report(
+    policy: TemporalDriftPolicy,
+) -> TemporalDriftReport:
+    return _assemble_report(
+        policy,
+        _structural_comparisons(policy),
+        cohort_profile=_STRUCTURAL_FALLBACK_PROFILE,
+        cohort_seed=_STRUCTURAL_FALLBACK_SEED,
+        cohort_size=_STRUCTURAL_FALLBACK_SIZE,
+        required_window_lacks_support=False,
+    )
+
+
 def validate_temporal_drift(
     cohort: NativeCohort, policy: TemporalDriftPolicy
 ) -> TemporalDriftReport:
@@ -1153,10 +1236,13 @@ def validate_temporal_drift(
     if not isinstance(policy, TemporalDriftPolicy):
         raise TypeError("policy must be a TemporalDriftPolicy")
 
-    cohort_profile = cohort.profile
-    cohort_seed = cohort.seed
-    cohort_size = 0
     try:
+        cohort_profile = require_aggregate_safe_token(
+            cohort.profile, "cohort_profile"
+        )
+        cohort_seed = _require_integer(
+            cohort.seed, "cohort_seed", minimum=0
+        )
         members = cohort.members
         if type(members) is not tuple or not all(
             isinstance(member, CohortMember) for member in members
@@ -1168,14 +1254,7 @@ def validate_temporal_drift(
             for window in policy.windows
         )
     except Exception:  # noqa: BLE001 - injected evidence must fail closed
-        return _assemble_report(
-            policy,
-            _structural_comparisons(policy),
-            cohort_profile=cohort_profile,
-            cohort_seed=cohort_seed,
-            cohort_size=cohort_size,
-            required_window_lacks_support=False,
-        )
+        return _structural_fallback_report(policy)
 
     window_comparisons = tuple(
         comparison

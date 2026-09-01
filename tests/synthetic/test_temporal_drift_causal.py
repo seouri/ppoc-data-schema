@@ -284,6 +284,92 @@ def test_absent_private_truth_is_missing_evidence_and_unevaluable() -> None:
         ) == (None, None, None, None)
 
 
+@pytest.mark.parametrize(
+    "corruption",
+    (
+        "later-point-patient",
+        "later-point-age",
+        "frame-patient",
+        "frame-window-order",
+        "visits-list",
+        "events-list",
+        "wrong-visit-record-type",
+        "wrong-event-record-type",
+        "visible-visit-patient",
+        "visible-event-patient",
+        "duplicate-visit-id",
+        "visit-outside-frame",
+    ),
+)
+def test_missing_truth_does_not_mask_truth_independent_structural_corruption(
+    corruption: str,
+) -> None:
+    member = _valid_member(1)
+    frame = member.frame
+    if corruption == "later-point-patient":
+        object.__setattr__(
+            member.trajectory.physiology.points[1],
+            "patient_id",
+            "syn-secret-later-point",
+        )
+    elif corruption == "later-point-age":
+        points = member.trajectory.physiology.points
+        object.__setattr__(points[1], "age_days", points[0].age_days)
+    elif corruption == "frame-patient":
+        object.__setattr__(frame, "patient_id", "syn-secret-frame-patient")
+    elif corruption == "frame-window-order":
+        object.__setattr__(frame.window, "effective_end_age_days", 0)
+    elif corruption == "visits-list":
+        object.__setattr__(frame, "visits", list(frame.visits))
+    elif corruption == "events-list":
+        object.__setattr__(frame, "events", list(frame.events))
+    elif corruption == "wrong-visit-record-type":
+        wrong_records = temporal_member(
+            9,
+            point_ages=(10,),
+            event_ages=(10, 20, 110, 120),
+        ).frame.events
+        for record in wrong_records:
+            object.__setattr__(record, "patient_id", member.demographics.patient_id)
+        object.__setattr__(frame, "visits", wrong_records)
+    elif corruption == "wrong-event-record-type":
+        object.__setattr__(frame, "events", (frame.visits[0], frame.visits[2]))
+    elif corruption == "visible-visit-patient":
+        object.__setattr__(
+            frame.visits[0], "patient_id", "syn-secret-visible-visit"
+        )
+    elif corruption == "visible-event-patient":
+        wrong_events = temporal_member(
+            9, point_ages=(10,), event_ages=(10, 110)
+        ).frame.events
+        object.__setattr__(frame, "events", wrong_events)
+    elif corruption == "duplicate-visit-id":
+        object.__setattr__(frame.visits[1], "visit_id", frame.visits[0].visit_id)
+    elif corruption == "visit-outside-frame":
+        object.__setattr__(frame.visits[0], "age_days", 987_654)
+    else:  # pragma: no cover - the parametrization is closed above
+        raise AssertionError("unknown fictional corruption")
+    object.__setattr__(frame, "truth", None)
+    policy = dataclasses.replace(
+        temporal_policy(), maximum_unevaluable_checks=99
+    )
+
+    report = validate_temporal_drift(
+        temporal_cohort(member, _valid_member(2)), policy
+    )
+    encoded = json.dumps(report.to_mapping(), sort_keys=True)
+
+    assert report.status is TemporalDriftStatus.FAIL
+    for metric in ("causal_event_order", "causal_event_timing"):
+        comparison = _comparison(report, metric)
+        assert (comparison.status, comparison.reason_code) == (
+            TemporalDriftStatus.FAIL,
+            "STRUCTURAL_INVALID",
+        )
+    assert "syn-secret" not in encoded
+    assert "987654" not in encoded
+
+
 class _ExplodingFrame:
     @property
     def visits(self) -> object:
@@ -375,6 +461,63 @@ def test_nested_trajectory_and_truth_corruption_prevents_any_causal_pass() -> No
 class _ExplodingMembers(tuple[CohortMember, ...]):
     def __len__(self) -> int:
         raise RuntimeError("syn-secret-members raw exception age 987654")
+
+
+class _ExplodingProfileCohort(NativeCohort):
+    def __getattribute__(self, name: str) -> object:
+        if name == "profile":
+            raise RuntimeError("syn-secret-profile raw exception age 987654")
+        return super().__getattribute__(name)
+
+
+class _ExplodingSeedCohort(NativeCohort):
+    def __getattribute__(self, name: str) -> object:
+        if name == "seed":
+            raise RuntimeError("syn-secret-seed raw exception age 987654")
+        return super().__getattribute__(name)
+
+
+def _as_hostile_cohort(
+    cohort_type: type[NativeCohort], cohort: NativeCohort
+) -> NativeCohort:
+    hostile = object.__new__(cohort_type)
+    object.__setattr__(hostile, "profile", "development-v1")
+    object.__setattr__(hostile, "seed", 7)
+    object.__setattr__(hostile, "members", cohort.members)
+    object.__setattr__(hostile, "calibration", cohort.calibration)
+    return hostile
+
+
+def _assert_sanitized_structural_fallback(report: TemporalDriftReport) -> None:
+    encoded = json.dumps(report.to_mapping(), sort_keys=True)
+    assert report.status is TemporalDriftStatus.FAIL
+    assert report.cohort_profile == "unavailable"
+    assert report.cohort_seed == 0
+    assert report.cohort_size == 0
+    assert all(
+        comparison.status is TemporalDriftStatus.FAIL
+        and comparison.reason_code == "STRUCTURAL_INVALID"
+        for comparison in report.comparisons
+    )
+    assert "syn-secret" not in encoded
+    assert "987654" not in encoded
+    assert "raw exception" not in encoded
+
+
+def test_hostile_profile_accessor_returns_sanitized_structural_report() -> None:
+    cohort = _as_hostile_cohort(_ExplodingProfileCohort, _valid_cohort())
+
+    report = validate_temporal_drift(cohort, temporal_policy())
+
+    _assert_sanitized_structural_fallback(report)
+
+
+def test_hostile_seed_accessor_returns_sanitized_structural_report() -> None:
+    cohort = _as_hostile_cohort(_ExplodingSeedCohort, _valid_cohort())
+
+    report = validate_temporal_drift(cohort, temporal_policy())
+
+    _assert_sanitized_structural_fallback(report)
 
 
 def test_malformed_member_container_returns_redacted_structural_report() -> None:

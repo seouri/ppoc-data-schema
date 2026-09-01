@@ -1,7 +1,7 @@
 # Temporal Drift Evaluation Contract
 
-**Date:** 2026-08-31  
-**Status:** Approved next roadmap slice under the synthetic pediatric growth-fixture design  
+**Date:** 2026-08-31
+**Status:** Approved next roadmap slice under the synthetic pediatric growth-fixture design
 **Parent:** [Synthetic Pediatric Growth Fixture System Design](2026-08-30-synthetic-growth-fixtures-design.md)
 
 ## Purpose
