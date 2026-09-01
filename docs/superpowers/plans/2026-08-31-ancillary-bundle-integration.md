@@ -29,10 +29,10 @@
 - Create: `tests/synthetic/test_ancillary_bundle_models.py`
 - Create: `tests/synthetic/test_ancillary_bundle_merge.py`
 
-- [ ] Write failing tests for fixed statuses/reasons/check order, immutable reports, valid/invalid typed inputs, exact six-resource rows, empty-ancillary precondition, same patient/shape/frame binding, fresh bundle identity, no mutation, and deterministic mappings.
-- [ ] Run focused tests to confirm collection/behavior failures.
-- [ ] Implement the redacted merge seam and frozen aggregate models. Isolate ancillary rows before the generic validator; call the existing GHD validator before composing the fresh `ObservedResourceBundle`; reject double merges and fail atomically.
-- [ ] Run focused tests, Ruff, and `git diff --check`; commit `feat: merge GHD ancillary rows into observed bundles`.
+- [x] Write failing tests for fixed statuses/reasons/check order, immutable reports, valid/invalid typed inputs, exact six-resource rows, empty-ancillary precondition, same patient/shape/frame binding, fresh bundle identity, no mutation, and deterministic mappings.
+- [x] Run focused tests to confirm collection/behavior failures.
+- [x] Implement the redacted merge seam and frozen aggregate models. Isolate ancillary rows before the generic validator; call the existing GHD validator before composing the fresh `ObservedResourceBundle`; reject double merges and fail atomically.
+- [x] Run focused tests, Ruff, and `git diff --check`; commit `feat: merge GHD ancillary rows into observed bundles`.
 
 ### Task 2: Add full-bundle validation and adversarial boundaries
 
@@ -41,9 +41,9 @@
 - Create: `tests/synthetic/test_ancillary_bundle_validation.py`
 - Create: `tests/synthetic/test_ancillary_bundle_boundaries.py`
 
-- [ ] Write failing validator/boundary tests for malformed rows, broken patient/visit links, field order, causal timing, hidden-treatment/visible-diagnosis suppression, absent/malformed source evidence, truth/repr/mapping leakage, and forbidden imports/arguments/calls.
-- [ ] Implement `validate_ghd_ancillary_bundle` with fixed checks for `bundle_identity`, `base_resources`, `ancillary_resources`, and `truth_boundary`, preserving `FAIL > UNEVALUABLE > PASS` and redacted fallback behavior.
-- [ ] Run the focused integration suite, Ruff, and whitespace checks; commit `test: validate integrated GHD ancillary bundles`.
+- [x] Write failing validator/boundary tests for malformed rows, broken patient/visit links, field order, causal timing, hidden-treatment/visible-diagnosis suppression, absent/malformed source evidence, truth/repr/mapping leakage, and forbidden imports/arguments/calls.
+- [x] Implement `validate_ghd_ancillary_bundle` with fixed checks for `bundle_identity`, `base_resources`, `ancillary_resources`, and `truth_boundary`, preserving `FAIL > UNEVALUABLE > PASS` and redacted fallback behavior.
+- [x] Run the focused integration suite, Ruff, and whitespace checks; commit `test: validate integrated GHD ancillary bundles`.
 
 ### Task 3: Document the composition seam and preserve regressions
 
@@ -52,9 +52,9 @@
 - Modify: `README.md`
 - Create: `tests/synthetic/test_ancillary_bundle_docs.py`
 
-- [ ] Add failing documentation assertions for exact API, merge preconditions, full-bundle report, hidden-truth boundary, generic validator behavior, and explicit deferrals.
-- [ ] Add a concise usage section and README roadmap paragraph describing the in-memory evaluator seam; state that package export, augmented derivation, prevalence, privacy/non-matchability, clinical review, task utility, other disorders, release, and Synthea remain deferred.
-- [ ] Run docs/boundary tests, full Ruff, schema check, and whitespace checks; commit `docs: document ancillary bundle integration`.
+- [x] Add failing documentation assertions for exact API, merge preconditions, full-bundle report, hidden-truth boundary, generic validator behavior, and explicit deferrals.
+- [x] Add a concise usage section and README roadmap paragraph describing the in-memory evaluator seam; state that package export, augmented derivation, prevalence, privacy/non-matchability, clinical review, task utility, other disorders, release, and Synthea remain deferred.
+- [x] Run docs/boundary tests, full Ruff, schema check, and whitespace checks; commit `docs: document ancillary bundle integration`.
 
 ### Task 4: Review, verify, and hand off
 
@@ -62,7 +62,14 @@
 - Modify: this plan (checkbox/evidence metadata only)
 - Create: `.superpowers/sdd/2026-08-31-ancillary-bundle-integration/ledger.md` and ignored review reports
 
-- [ ] Run focused tests and a fresh scoped review after each implementation task; route every finding to the implementing subagent and re-review the exact fix range until PASS.
-- [ ] Run a fresh broad review across the complete feature range, checking hidden-truth non-disclosure, exact shape, immutable merge semantics, generic-validator preservation, causal/link checks, docs/non-claims, and prohibited boundaries.
-- [ ] Run full pytest with bytecode disabled, full Ruff, `uv lock --check`, schema validation, and `git diff --check`; update only plan/ledger metadata.
-- [ ] Merge the feature branch to `main` with `--no-ff`, push, verify `HEAD == origin/main`, and retain the worktree/SDD evidence.
+- [x] Run focused tests and a fresh scoped review after each implementation task; route every finding to the implementing subagent and re-review the exact fix range until PASS.
+- [x] Run a fresh broad review across the complete feature range, checking hidden-truth non-disclosure, exact shape, immutable merge semantics, generic-validator preservation, causal/link checks, docs/non-claims, and prohibited boundaries.
+- [x] Run full pytest with bytecode disabled, full Ruff, `uv lock --check`, schema validation, and `git diff --check`; update only plan/ledger metadata.
+- [x] Merge the feature branch to `main` with `--no-ff`, push, verify `HEAD == origin/main`, and retain the worktree/SDD evidence.
+
+## Final evidence
+
+- Scoped reviews: Task 1 PASS; Task 2 PASS after fixes `2d1cbb0` and `67f54fa`; Task 3 PASS; broad review PASS after fix `5986f3d` and scoped re-review PASS.
+- Verification at `5986f3d`: 1749 repository tests passed with bytecode disabled; `uv run ruff check src tests` passed; `uv lock --check` resolved 10 packages; schema check validated 8 resources; `git diff --check` passed.
+- Root `uv run ruff check .` remains outside the implementation gate because it reports six pre-existing schema-script findings; no unrelated schema files were changed.
+- The integrated bundle seam remains synthetic-only, evaluator-only, in-memory, and non-exportable; package-level counterfactual worlds, prevalence evidence, privacy/non-matchability, clinical review, and Synthea conformance remain deferred.
