@@ -30,10 +30,10 @@
 - Create: `tests/synthetic/test_counterfactual_world_models.py`
 - Create: `tests/synthetic/test_counterfactual_world_assembly.py`
 
-- [ ] Write failing tests for fixed statuses/reasons/check order, immutable report/model mappings, supported/deferred intervention handling, typed input validation, shared patient/demographics/policy/shape, exact six-resource output, source-frame binding, deterministic replay, and no mutation.
-- [ ] Add a deterministic base-compatible fixture builder with a loaded descriptor mapping and `length_availability_probability=0.0`; cover healthy/non-GHD/GHD and empty/partial visible descendants without real or governed inputs.
-- [ ] Implement `CounterfactualWorldCheck`, `CounterfactualWorldValidationReport`, `CounterfactualEhrWorldPair`, fixed redacted `CounterfactualWorldUnavailable`, and `assemble_counterfactual_ehr_worlds` exactly as specified. Re-run trajectory validation, generate both frames with the same named streams, project base rows, project/merge GHD ancillary resources, and retain hidden bindings only in `repr=False` fields.
-- [ ] Run focused model/assembly tests, Ruff on changed files, and `git diff --check`; commit `feat: assemble paired counterfactual EHR worlds`.
+- [x] Write failing tests for fixed statuses/reasons/check order, immutable report/model mappings, supported/deferred intervention handling, typed input validation, shared patient/demographics/policy/shape, exact six-resource output, source-frame binding, deterministic replay, and no mutation.
+- [x] Add a deterministic base-compatible fixture builder with a loaded descriptor mapping and `length_availability_probability=0.0`; cover healthy/non-GHD/GHD and empty/partial visible descendants without real or governed inputs.
+- [x] Implement `CounterfactualWorldCheck`, `CounterfactualWorldValidationReport`, `CounterfactualEhrWorldPair`, fixed redacted `CounterfactualWorldUnavailable`, and `assemble_counterfactual_ehr_worlds` exactly as specified. Re-run trajectory validation, generate both frames with the same named streams, project base rows, project/merge GHD ancillary resources, and retain hidden bindings only in `repr=False` fields.
+- [x] Run focused model/assembly tests, Ruff on changed files, and `git diff --check`; commit `feat: assemble paired counterfactual EHR worlds`.
 
 ### Task 2: Implement aggregate resource-level counterfactual validation
 
@@ -43,11 +43,11 @@
 - Create: `tests/synthetic/test_counterfactual_world_validation.py`
 - Create: `tests/synthetic/test_counterfactual_world_boundaries.py`
 
-- [ ] Write failing tests that tamper with demographics, patient rows, visits, measurements, events, descendants, ancillary rows/links, policy metadata, hidden bindings, and treatment-age gating; assert permitted changes for physiology severity, earlier recognition, treatment adherence, no-treatment-start, and empty/partial event cases.
-- [ ] Add validators for pair binding, shared demographics, shared observation, observation invariants, resource invariants, permitted changes, and truth boundary with fixed reason codes and status precedence.
-- [ ] Re-run `validate_counterfactual_pair`, both observation-frame validators, both integrated ancillary-bundle validators, and isolated base-resource checks; classify malformed private evidence as `UNEVALUABLE` only when no visible violation is provable.
-- [ ] Add static AST/import/public-signature tests rejecting filesystem, path/output/root/key, package/export, manifest, calibration/held-out/privacy, real/governed, DuckDB, model/callable, and Synthea dependencies; ensure no truth-manifest writer import.
-- [ ] Run focused validation/boundary tests, Ruff, and whitespace checks; commit `test: validate paired counterfactual EHR resources`.
+- [x] Write failing tests that tamper with demographics, patient rows, visits, measurements, events, descendants, ancillary rows/links, policy metadata, hidden bindings, and treatment-age gating; assert permitted changes for physiology severity, earlier recognition, treatment adherence, no-treatment-start, and empty/partial event cases.
+- [x] Add validators for pair binding, shared demographics, shared observation, observation invariants, resource invariants, permitted changes, and truth boundary with fixed reason codes and status precedence.
+- [x] Re-run `validate_counterfactual_pair`, both observation-frame validators, both integrated ancillary-bundle validators, and isolated base-resource checks; classify malformed private evidence as `UNEVALUABLE` only when no visible violation is provable.
+- [x] Add static AST/import/public-signature tests rejecting filesystem, path/output/root/key, package/export, manifest, calibration/held-out/privacy, real/governed, DuckDB, model/callable, and Synthea dependencies; ensure no truth-manifest writer import.
+- [x] Run focused validation/boundary tests, Ruff, and whitespace checks; commit `test: validate paired counterfactual EHR resources`.
 
 ### Task 3: Document the world composer, matrix, and deferrals
 
@@ -57,10 +57,10 @@
 - Modify: `README.md`
 - Create: `tests/synthetic/test_counterfactual_world_docs.py`
 
-- [ ] Write failing documentation assertions for the exact public API, loaded-descriptor/base-compatible caveat, deterministic shared streams, seven report checks, resource-level matrix, redaction, fixed failure boundary, and no-export/no-real/Synthea deferrals.
-- [ ] Add a concise usage section showing assembly from an existing `CounterfactualPair`, shared `SyntheticDemographics`/`ObservationPolicy`, loaded descriptor, GHD policy, and aggregate validation. Do not publish private truth or a package-writing recipe.
-- [ ] State that pair-aware exact-schema export is a later gate and Synthea is an optional adapter only after conformance; retain existing prevalence, calibration, held-out, privacy, clinical, utility, release, and non-matchability boundaries.
-- [ ] Run documentation tests, full Ruff, schema check, lock check, and whitespace checks; commit `docs: document paired counterfactual EHR worlds`.
+- [x] Write failing documentation assertions for the exact public API, loaded-descriptor/base-compatible caveat, deterministic shared streams, seven report checks, resource-level matrix, redaction, fixed failure boundary, and no-export/no-real/Synthea deferrals.
+- [x] Add a concise usage section showing assembly from an existing `CounterfactualPair`, shared `SyntheticDemographics`/`ObservationPolicy`, loaded descriptor, GHD policy, and aggregate validation. Do not publish private truth or a package-writing recipe.
+- [x] State that pair-aware exact-schema export is a later gate and Synthea is an optional adapter only after conformance; retain existing prevalence, calibration, held-out, privacy, clinical, utility, release, and non-matchability boundaries.
+- [x] Run documentation tests, full Ruff, schema check, lock check, and whitespace checks; commit `docs: document paired counterfactual EHR worlds`.
 
 ### Task 4: Review, verify, merge, and push
 
@@ -69,17 +69,17 @@
 - Modify: this plan (checkbox/evidence metadata only)
 - Create/modify: `.superpowers/sdd/2026-08-31-counterfactual-ehr-worlds/ledger.md` and ignored review reports
 
-- [ ] Run the SDD package script and a fresh scoped review after each implementation task; route every finding to the implementer and re-review the exact fix range until PASS.
-- [ ] Run a fresh broad review across the complete feature range for matrix correctness, visible-resource comparisons, hidden-truth non-disclosure, deterministic stream reuse, exact shape, failure redaction, unchanged generic validators, docs, and prohibited boundaries.
-- [ ] Run full pytest with bytecode disabled, full Ruff, `uv lock --check`, schema validation, and `git diff --check`; record exact outputs in ignored SDD evidence and update only metadata here.
+- [x] Run the SDD package script and a fresh scoped review after each implementation task; route every finding to the implementer and re-review the exact fix range until PASS.
+- [x] Run a fresh broad review across the complete feature range for matrix correctness, visible-resource comparisons, hidden-truth non-disclosure, deterministic stream reuse, exact shape, failure redaction, unchanged generic validators, docs, and prohibited boundaries.
+- [x] Run full pytest with bytecode disabled, full Ruff, `uv lock --check`, schema validation, and `git diff --check`; record exact outputs in ignored SDD evidence and update only metadata here.
 - [ ] Merge the reviewed feature branch to `main` with `--no-ff`, push, verify `HEAD == origin/main`, and retain the feature worktree and SDD evidence for auditability.
 
 ## Evidence template
 
-- Focused implementation/review commits: pending.
-- Scoped review/fix/re-review: pending.
-- Broad review: pending.
-- Full verification: pending.
+- Focused implementation/review commits: `5fde779`, `3fee811`, `454f3f1`, `5ad3edc`, `c22f56e`, `0e543e8`, `958c1c0`, `1641f14`, `3da01c5`.
+- Scoped review/fix/re-review: PASS for Tasks 1–3; broad fix re-review PASS; follow-up private-evidence re-review PASS; full-gate allowlist re-review PASS.
+- Broad review: PASS after consolidated fix `958c1c0` and follow-up `1641f14`; reports retained in ignored SDD evidence.
+- Full verification: `1798 passed`; `uv run ruff check src tests` passed; `uv lock --check` passed; `python3 schema/build.py --check` validated 8 resources; `git diff --check` passed. Repository-wide Ruff retains six pre-existing findings in `schema/build.py` and `schema/profile.py` (EXE001/I001/PLW1510), outside this feature range.
 - Merge/push parity: pending.
 
 ## Deferred roadmap gates
