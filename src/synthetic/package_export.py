@@ -548,6 +548,11 @@ def export_counterfactual_ehr_world_pair(
             raise ValueError("counterfactual world validation did not pass")
         copied_descriptor = _copy_descriptor(descriptor)
         baseline_rows, intervention_rows = _pair_base_rows(worlds, copied_descriptor)
+        run_id = _pair_run_id(metadata, worlds)
+        if _is_run_lifecycle_collision(output, run_id):
+            raise FileExistsError("run directory lifecycle path already exists")
+    except FileExistsError:
+        raise
     except Exception:  # noqa: BLE001 - pair pre-creation errors are deliberately redacted.
         raise CounterfactualPackageExportUnavailable(_PAIR_FAILURE_REASON) from None
 
@@ -576,7 +581,7 @@ def export_counterfactual_ehr_world_pair(
             except Exception:  # noqa: BLE001 - pair pre-creation errors are deliberately redacted.
                 raise CounterfactualPackageExportUnavailable(_PAIR_FAILURE_REASON) from None
 
-            run = _start_pair_run(output, _pair_run_id(metadata, worlds))
+            run = _start_pair_run(output, run_id)
             try:
                 for child_name, child_package in (("baseline", baseline), ("intervention", intervention)):
                     shutil.copytree(child_package, run.partial_path / child_name)
