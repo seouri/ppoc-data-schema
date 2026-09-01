@@ -299,10 +299,24 @@ def test_export_pair_removes_the_empty_partial_when_failure_archiving_fails(
         original_copy(source, directory_descriptor, child_name, files, dirs)
         raise RuntimeError("raw-copy-failure-token")
 
-    def fail_archiving(parent_descriptor: int, source: str, target: str) -> None:
+    def fail_archiving(
+        parent_descriptor: int,
+        source: str,
+        target: str,
+        expected_source_identity: tuple[int, int],
+        expected_parent_path: Path,
+        expected_parent_identity: tuple[int, int],
+    ) -> None:
         if target.endswith(".failed"):
             raise OSError("raw-failure-archive-token")
-        original_rename(parent_descriptor, source, target)
+        original_rename(
+            parent_descriptor,
+            source,
+            target,
+            expected_source_identity,
+            expected_parent_path,
+            expected_parent_identity,
+        )
 
     monkeypatch.setattr(package_export, "_copy_pair_child_at", copy_then_fail)
     monkeypatch.setattr(package_export, "_rename_pair_directory_at", fail_archiving)
@@ -883,3 +897,177 @@ def test_export_pair_start_race_raises_a_path_free_collision(
     assert injected
     assert str(tmp_path) not in str(error.value)
     assert str(error.value) == "run directory lifecycle path already exists"
+
+
+def test_export_pair_promotion_rechecks_source_identity_inside_rename(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Catch a same-name attacker directory inserted at the promotion handoff."""
+    original_rename = package_export._rename_pair_directory_at
+    moved = tmp_path / "moved-promotion-owner"
+    injected = False
+
+    def rename_after_swap(
+        parent_descriptor: int,
+        source_name: str,
+        destination_name: str,
+        expected_source_identity: tuple[int, int],
+        expected_parent_path: Path,
+        expected_parent_identity: tuple[int, int],
+    ) -> None:
+        nonlocal injected
+        if destination_name == "pair" and not injected:
+            os.rename(
+                source_name,
+                moved.name,
+                src_dir_fd=parent_descriptor,
+                dst_dir_fd=parent_descriptor,
+            )
+            os.mkdir(source_name, dir_fd=parent_descriptor)
+            injected = True
+        original_rename(
+            parent_descriptor,
+            source_name,
+            destination_name,
+            expected_source_identity,
+            expected_parent_path,
+            expected_parent_identity,
+        )
+
+    monkeypatch.setattr(package_export, "_rename_pair_directory_at", rename_after_swap)
+    output = tmp_path / "pair"
+
+    with pytest.raises(
+        CounterfactualPackageExportUnavailable, match="counterfactual package export failed"
+    ):
+        export_counterfactual_ehr_world_pair(
+            _worlds(InterventionKind.PHYSIOLOGY_SEVERITY),
+            _descriptor(),
+            output,
+            metadata=_metadata(),
+            derivation_oracle=IdentityPreservingTestDerivationOracle(),
+            trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
+            trusted_derivation_test_only=True,
+        )
+
+    assert injected
+    assert not output.exists()
+    assert not moved.exists()
+    assert _lifecycle_paths(tmp_path, output) == []
+
+
+def test_export_pair_failure_archive_rechecks_source_identity_inside_rename(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Catch a same-name attacker directory inserted at the archive handoff."""
+    original_scan = package_export._scan_exact_tree
+    original_rename = package_export._rename_pair_directory_at
+    moved = tmp_path / "moved-archive-owner"
+    injected = False
+
+    def scan_then_fail(root: Path, files: set[str], dirs: set[str]) -> None:
+        original_scan(root, files, dirs)
+        raise RuntimeError("archive-handoff-trigger")
+
+    def rename_after_swap(
+        parent_descriptor: int,
+        source_name: str,
+        destination_name: str,
+        expected_source_identity: tuple[int, int],
+        expected_parent_path: Path,
+        expected_parent_identity: tuple[int, int],
+    ) -> None:
+        nonlocal injected
+        if destination_name.endswith(".failed") and not injected:
+            os.rename(
+                source_name,
+                moved.name,
+                src_dir_fd=parent_descriptor,
+                dst_dir_fd=parent_descriptor,
+            )
+            os.mkdir(source_name, dir_fd=parent_descriptor)
+            injected = True
+        original_rename(
+            parent_descriptor,
+            source_name,
+            destination_name,
+            expected_source_identity,
+            expected_parent_path,
+            expected_parent_identity,
+        )
+
+    monkeypatch.setattr(package_export, "_scan_exact_tree", scan_then_fail)
+    monkeypatch.setattr(package_export, "_rename_pair_directory_at", rename_after_swap)
+    output = tmp_path / "pair"
+
+    with pytest.raises(
+        CounterfactualPackageExportUnavailable, match="counterfactual package export failed"
+    ):
+        export_counterfactual_ehr_world_pair(
+            _worlds(InterventionKind.PHYSIOLOGY_SEVERITY),
+            _descriptor(),
+            output,
+            metadata=_metadata(),
+            derivation_oracle=IdentityPreservingTestDerivationOracle(),
+            trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
+            trusted_derivation_test_only=True,
+        )
+
+    assert injected
+    assert not output.exists()
+    assert not moved.exists()
+    assert _lifecycle_paths(tmp_path, output) == []
+
+
+def test_export_pair_rebinds_the_promoted_root_to_the_visible_parent_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Catch success returning an attacker target after the pinned parent was moved."""
+    original_rename = package_export._rename_pair_directory_at
+    visible_parent = tmp_path / "destination"
+    moved_parent = tmp_path / "moved-parent"
+    output = visible_parent / "pair"
+    injected = False
+
+    def rename_after_parent_swap(
+        parent_descriptor: int,
+        source_name: str,
+        destination_name: str,
+        expected_source_identity: tuple[int, int],
+        expected_parent_path: Path,
+        expected_parent_identity: tuple[int, int],
+    ) -> None:
+        nonlocal injected
+        if destination_name == output.name and not injected:
+            visible_parent.rename(moved_parent)
+            visible_parent.mkdir()
+            output.mkdir()
+            (output / "attacker.txt").write_text("attacker-parent-token", encoding="utf-8")
+            injected = True
+        original_rename(
+            parent_descriptor,
+            source_name,
+            destination_name,
+            expected_source_identity,
+            expected_parent_path,
+            expected_parent_identity,
+        )
+
+    monkeypatch.setattr(package_export, "_rename_pair_directory_at", rename_after_parent_swap)
+
+    with pytest.raises(
+        CounterfactualPackageExportUnavailable, match="counterfactual package export failed"
+    ):
+        export_counterfactual_ehr_world_pair(
+            _worlds(InterventionKind.PHYSIOLOGY_SEVERITY),
+            _descriptor(),
+            output,
+            metadata=_metadata(),
+            derivation_oracle=IdentityPreservingTestDerivationOracle(),
+            trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
+            trusted_derivation_test_only=True,
+        )
+
+    assert injected
+    assert (output / "attacker.txt").read_text(encoding="utf-8") == "attacker-parent-token"
+    assert not (moved_parent / output.name).exists()

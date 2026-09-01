@@ -80,6 +80,7 @@ ALLOWED_PACKAGE_IMPORTS = {
     "synthetic.schema_contract",
     "synthetic.validate",
 }
+FORBIDDEN_DYNAMIC_IMPORT_SYMBOLS = {"__builtins__", "__import__", "eval", "exec"}
 
 
 def _imports(tree: ast.AST) -> set[str]:
@@ -90,6 +91,27 @@ def _imports(tree: ast.AST) -> set[str]:
         elif isinstance(node, ast.ImportFrom) and node.module:
             result.add(node.module)
     return result
+
+
+def _dynamic_import_violations(tree: ast.AST) -> tuple[str, ...]:
+    violations: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and node.id in FORBIDDEN_DYNAMIC_IMPORT_SYMBOLS:
+            violations.add(node.id)
+        elif isinstance(node, ast.Attribute) and node.attr in FORBIDDEN_DYNAMIC_IMPORT_SYMBOLS:
+            violations.add(node.attr)
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+            if "__import__" in node.value or node.value in FORBIDDEN_DYNAMIC_IMPORT_SYMBOLS:
+                violations.add(node.value)
+        elif isinstance(node, ast.Subscript):
+            subscript = node.slice
+            if (
+                isinstance(subscript, ast.Constant)
+                and isinstance(subscript.value, str)
+                and subscript.value in FORBIDDEN_DYNAMIC_IMPORT_SYMBOLS
+            ):
+                violations.add(subscript.value)
+    return tuple(sorted(violations))
 
 
 def _call_leaves(tree: ast.AST) -> set[str]:
@@ -236,11 +258,19 @@ def test_pair_world_contract_is_resolved_lazily_without_direct_native_imports() 
         and parents[node].attr == "import_module"
         for node in importlib_names
     )
-    assert not {
-        node.id
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Name) and node.id in {"__import__", "eval", "exec"}
-    }
+    assert _dynamic_import_violations(tree) == ()
+
+
+def test_dynamic_import_guard_rejects_indirect_builtin_and_string_forms() -> None:
+    bypasses = (
+        '__builtins__["__import__"]("synthetic.private")',
+        '__builtins__.__import__("synthetic.private")',
+        'getattr(__builtins__, "__import__")("synthetic.private")',
+        'eval("__import__(\\"synthetic.private\\")")',
+        'getattr(__builtins__, "exec")("pass")',
+    )
+    for source in bypasses:
+        assert _dynamic_import_violations(ast.parse(source)), source
 
 
 def test_pair_export_has_no_generic_observed_export_or_new_reader_boundary() -> None:

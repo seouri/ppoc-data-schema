@@ -806,6 +806,9 @@ def _rename_pair_directory_at(
     parent_descriptor: int,
     source_name: str,
     destination_name: str,
+    expected_source_identity: tuple[int, int],
+    expected_parent_path: Path,
+    expected_parent_identity: tuple[int, int],
 ) -> None:
     """No-replace rename within the already pinned lifecycle parent."""
     try:
@@ -831,6 +834,13 @@ def _rename_pair_directory_at(
         ctypes.c_uint,
     ]
     primitive.restype = ctypes.c_int
+    _require_directory_identity(expected_parent_path, expected_parent_identity)
+    if not _entry_has_identity_at(
+        parent_descriptor,
+        source_name,
+        expected_source_identity,
+    ):
+        raise DerivationUnavailable("pair lifecycle source was replaced")
     ctypes.set_errno(0)
     result = primitive(
         parent_descriptor,
@@ -882,6 +892,7 @@ def _remove_owned_empty_pair_root(
 def _archive_pair_failure(
     run: RunDirectory,
     parent_descriptor: int,
+    parent_identity: tuple[int, int],
     directory_descriptor: int,
     identity: tuple[int, int],
 ) -> None:
@@ -900,6 +911,9 @@ def _archive_pair_failure(
             parent_descriptor,
             run.partial_path.name,
             run.failed_path.name,
+            identity,
+            run.failed_path.parent,
+            parent_identity,
         )
         if not _entry_has_identity_at(parent_descriptor, run.failed_path.name, identity):
             raise DerivationUnavailable("pair failed tree was replaced")
@@ -914,12 +928,19 @@ def _archive_pair_failure(
 def _attempt_pair_failure_archive(
     run: RunDirectory,
     parent_descriptor: int,
+    parent_identity: tuple[int, int],
     directory_descriptor: int,
     identity: tuple[int, int],
 ) -> None:
     """Best-effort fixed archive without leaking cleanup detail at the public boundary."""
     try:
-        _archive_pair_failure(run, parent_descriptor, directory_descriptor, identity)
+        _archive_pair_failure(
+            run,
+            parent_descriptor,
+            parent_identity,
+            directory_descriptor,
+            identity,
+        )
     except Exception:  # noqa: BLE001 - failure details are deliberately suppressed.
         return
 
@@ -999,6 +1020,7 @@ def export_counterfactual_ehr_world_pair(
 
     run: RunDirectory | None = None
     parent_descriptor: int | None = None
+    parent_identity: tuple[int, int] | None = None
     partial_descriptor: int | None = None
     partial_identity: tuple[int, int] | None = None
     expected_file_sha256: dict[str, str] | None = None
@@ -1029,7 +1051,7 @@ def export_counterfactual_ehr_world_pair(
                     raise CounterfactualPackageExportUnavailable(_PAIR_FAILURE_REASON) from None
 
                 run = _start_pair_run(output, run_id)
-                parent_descriptor, _parent_identity = _open_pinned_directory(
+                parent_descriptor, parent_identity = _open_pinned_directory(
                     run.partial_path.parent
                 )
                 partial_descriptor, partial_identity = _open_pinned_directory(run.partial_path)
@@ -1088,6 +1110,7 @@ def export_counterfactual_ehr_world_pair(
         if (
             run is None
             or parent_descriptor is None
+            or parent_identity is None
             or partial_descriptor is None
             or partial_identity is None
             or expected_file_sha256 is None
@@ -1107,28 +1130,37 @@ def export_counterfactual_ehr_world_pair(
             parent_descriptor,
             run.partial_path.name,
             run.target.name,
+            partial_identity,
+            run.target.parent,
+            parent_identity,
         )
         promoted = run.target
         if not _entry_has_identity_at(parent_descriptor, run.target.name, partial_identity):
             raise DerivationUnavailable("pair target tree was replaced")
+        _require_directory_identity(run.target.parent, parent_identity)
+        _require_directory_identity(run.target, partial_identity)
         try:
             _restore_pair_tree_modes(partial_descriptor, modes)
         except (OSError, DerivationUnavailable):
             # Publication already succeeded and remains identity-bound. A mode
             # restoration failure must not turn that success into an API error.
             pass
+        _require_directory_identity(run.target.parent, parent_identity)
+        _require_directory_identity(run.target, partial_identity)
         return promoted
     except FileExistsError:
         if run is None:
             raise
         if (
             parent_descriptor is not None
+            and parent_identity is not None
             and partial_descriptor is not None
             and partial_identity is not None
         ):
             _attempt_pair_failure_archive(
                 run,
                 parent_descriptor,
+                parent_identity,
                 partial_descriptor,
                 partial_identity,
             )
@@ -1137,12 +1169,14 @@ def export_counterfactual_ehr_world_pair(
         if (
             run is not None
             and parent_descriptor is not None
+            and parent_identity is not None
             and partial_descriptor is not None
             and partial_identity is not None
         ):
             _attempt_pair_failure_archive(
                 run,
                 parent_descriptor,
+                parent_identity,
                 partial_descriptor,
                 partial_identity,
             )
@@ -1151,12 +1185,14 @@ def export_counterfactual_ehr_world_pair(
         if (
             run is not None
             and parent_descriptor is not None
+            and parent_identity is not None
             and partial_descriptor is not None
             and partial_identity is not None
         ):
             _attempt_pair_failure_archive(
                 run,
                 parent_descriptor,
+                parent_identity,
                 partial_descriptor,
                 partial_identity,
             )
