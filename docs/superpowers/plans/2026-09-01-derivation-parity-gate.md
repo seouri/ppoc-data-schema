@@ -268,7 +268,7 @@
   repeated fictional triple produced byte-identical reports with unchanged
   inputs and a passing redaction scan.
 
-- [ ] **Step 4: Commit plan metadata and integrate.**
+- [x] **Step 4: Commit plan metadata and integrate.**
 
   Stage only this plan's checkbox/evidence changes, commit them, fast-forward
   the reviewed branch into `main`, rerun the full verification matrix on the
@@ -281,9 +281,26 @@
   Preserve unrelated caches/worktrees and retain this feature worktree and
   ignored SDD evidence unless cleanup is demonstrably safe.
 
+  Evidence: plan metadata was committed as `c894589`; `main` was fast-forwarded
+  from `bee6be0` to that reviewed tip, the merged-tip verification matrix
+  passed, `origin/main` was pushed, and fetch-based parity verification matched
+  local `HEAD` at `c894589a82d547e3463aba06de8e78504e136d5f`.
+
 ## Completion evidence
 
 Record implementation and fix commit IDs, scoped/broad review PASS reports,
 focused and full test counts, Ruff/lock/schema/whitespace output, deterministic
 serialization evidence, merged commit, push result, and local/remote parity
 here before integration.
+
+Recorded evidence: Task 1 commits `f05382c`..`ce49657` with scoped review PASS;
+Task 2 commits `7e061e5`..`8e19fae` with diagnosis, redaction, structural, BIV,
+scalar, foreign-key, ordering, and exact-comparison fixes plus scoped reviews
+PASS; Task 3 commits `accfd39`..`4c7bd85` with boundary/docs fixes and scoped
+reviews PASS; broad review `broad-review.md` and consolidated re-review
+`broad-rereview.md` both retained in ignored SDD evidence. Final merged-tip
+verification: 2054 tests passed, Ruff clean, lock resolved 10 packages, schema
+checker validated 8 resources, diff check clean, and repeated fictional reports
+were byte-identical with unchanged inputs and redaction scan passing. Merge and
+push tip: `c894589a82d547e3463aba06de8e78504e136d5f`; local and `origin/main`
+match.
