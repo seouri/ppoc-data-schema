@@ -356,10 +356,69 @@ def test_jointly_wrong_diagnosis_flags_fail_from_encounter_and_problem_list():
         )
     )
     for rows in (candidate_rows["patients_augmented"], reference_rows["patients_augmented"]):
-        rows[0].update({"chronic_dx_flag": 0, "growth_dx_flag": 0, "healthy_flag": 0})
+        rows[0].update({"chronic_dx_flag": 0, "growth_dx_flag": 0, "healthy_flag": 1})
     report = evaluate(package, base, candidate_rows, reference_rows)
     assert check(report, "clinical_flag_relationships").status is DerivationParityStatus.FAIL
     assert check(report, "reference_field_parity").status is DerivationParityStatus.PASS
+
+
+def test_unknown_chronic_membership_remains_reference_dependent():
+    package, base, candidate_rows, reference_rows = fixtures()
+    for rows in (base["visits"], candidate_rows["visits_augmented"], reference_rows["visits_augmented"]):
+        rows[0]["enc_diag_1"] = ""
+    base["problem_list"].append(
+        row(
+            package,
+            "problem_list",
+            patient_id="fictional-person",
+            problem_list_id="fictional-problem",
+            pl_diag="J45.909",
+        )
+    )
+    for rows in (candidate_rows["patients_augmented"], reference_rows["patients_augmented"]):
+        rows[0].update(
+            {
+                "chronic_dx_flag": 1,
+                "growth_dx_flag": 0,
+                "healthy_flag": 0,
+                "visits_count_pre_dx": 2,
+                "dx_age_years": "",
+                "dx_age_years_e10": "",
+            }
+        )
+    report = evaluate(package, base, candidate_rows, reference_rows)
+    assert check(report, "clinical_flag_relationships").status is DerivationParityStatus.PASS
+    assert report.status is DerivationParityStatus.PASS
+
+
+def test_undated_growth_problem_makes_diagnosis_summary_unevaluable():
+    package, base, candidate_rows, reference_rows = fixtures()
+    for rows in (base["visits"], candidate_rows["visits_augmented"], reference_rows["visits_augmented"]):
+        rows[0]["enc_diag_1"] = ""
+    base["problem_list"].append(
+        row(
+            package,
+            "problem_list",
+            patient_id="fictional-person",
+            problem_list_id="fictional-problem",
+            noted_date_age_in_days="",
+            pl_diag="E10.9",
+        )
+    )
+    for rows in (candidate_rows["patients_augmented"], reference_rows["patients_augmented"]):
+        rows[0].update(
+            {
+                "chronic_dx_flag": 0,
+                "growth_dx_flag": 1,
+                "healthy_flag": 0,
+                "visits_count_pre_dx": 2,
+                "dx_age_years": "",
+                "dx_age_years_e10": "",
+            }
+        )
+    report = evaluate(package, base, candidate_rows, reference_rows)
+    assert check(report, "deterministic_patient_summaries").status is DerivationParityStatus.UNEVALUABLE
+    assert report.status is DerivationParityStatus.UNEVALUABLE
 
 
 def test_runtime_error_from_input_iterable_is_fixed_redacted_failure():

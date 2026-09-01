@@ -281,7 +281,6 @@ _GROWTH_PREFIXES = (
     "Q77", "Q78.0", "Q78.1", "Q87.1", "Q87.2", "Q87.3", "Q87.4", "Q90", "Q96", "Q98.0",
     "Q98.4", "Q98.5",
 )
-_CHRONIC_PREFIXES = ("E10",)
 
 
 @dataclass(frozen=True)
@@ -446,15 +445,19 @@ def _diagnosis_ages(visits: Iterable[Mapping[str, object]], prefixes: tuple[str,
     return ages
 
 
-def _problem_diagnosis_ages(problems: Iterable[Mapping[str, object]], prefixes: tuple[str, ...]) -> list[int]:
-    return [
-        int(item["noted_date_age_in_days"])
-        for item in problems
-        if item["noted_date_age_in_days"] is not None
-        and isinstance(item["pl_diag"], str)
-        and item["pl_diag"]
-        and item["pl_diag"].startswith(prefixes)
-    ]
+def _problem_diagnosis_ages(problems: Iterable[Mapping[str, object]], prefixes: tuple[str, ...]) -> tuple[list[int], bool]:
+    ages: list[int] = []
+    missing = False
+    for item in problems:
+        code = item["pl_diag"]
+        if not isinstance(code, str) or not code or not code.startswith(prefixes):
+            continue
+        age = item["noted_date_age_in_days"]
+        if age is None:
+            missing = True
+        else:
+            ages.append(int(age))
+    return ages, missing
 
 
 def _expected_patient_values(visits: Iterable[Mapping[str, object]], problems: Iterable[Mapping[str, object]]) -> tuple[dict[str, object], bool]:
@@ -463,7 +466,10 @@ def _expected_patient_values(visits: Iterable[Mapping[str, object]], problems: I
     if any(age is None for age in ages):
         return {}, True
     visit_ages = [int(age) for age in ages]
-    diagnosis_ages = _diagnosis_ages(items, _GROWTH_PREFIXES) + _problem_diagnosis_ages(problems, _GROWTH_PREFIXES)
+    problem_ages, missing_problem_age = _problem_diagnosis_ages(problems, _GROWTH_PREFIXES)
+    if missing_problem_age:
+        return {}, True
+    diagnosis_ages = _diagnosis_ages(items, _GROWTH_PREFIXES) + problem_ages
     values: dict[str, object] = {
         "visits_count": len(items),
         "visits_count_pre_dx": sum(age < min(diagnosis_ages) for age in visit_ages) if diagnosis_ages else len(items),
@@ -488,7 +494,10 @@ def _expected_patient_values(visits: Iterable[Mapping[str, object]], problems: I
         "p70", "p92_6", "q77", "q78_0", "q78_1", "q87_1", "q87_2", "q87_3", "q87_4",
         "q90", "q96", "q98_0", "q98_4", "q98_5",
     )):
-        matching = _diagnosis_ages(items, (_prefix(field),)) + _problem_diagnosis_ages(problems, (_prefix(field),))
+        problem_ages, missing_problem_age = _problem_diagnosis_ages(problems, (_prefix(field),))
+        if missing_problem_age:
+            return {}, True
+        matching = _diagnosis_ages(items, (_prefix(field),)) + problem_ages
         values[field] = round(min(matching) / 365.25, 3) if matching else None
     return values, False
 
@@ -761,12 +770,11 @@ def _flag_check(visits: Mapping[str, Mapping[str, object]], problems: Iterable[M
                 for problem in problem_items
                 if problem["patient_id"] == identity and isinstance(problem["pl_diag"], str) and problem["pl_diag"]
             ]
-            for field, prefixes in (("growth_dx_flag", _GROWTH_PREFIXES), ("chronic_dx_flag", _CHRONIC_PREFIXES)):
-                compared += 1
-                expected = int(any(code.startswith(prefixes) for code in base_diagnoses))
-                if item[field] != expected:
-                    failed = True
-                    mismatches += 1
+            compared += 1
+            expected = int(any(code.startswith(_GROWTH_PREFIXES) for code in base_diagnoses))
+            if item["growth_dx_flag"] != expected:
+                failed = True
+                mismatches += 1
             expected_flags = {"ever_stunting_flag": "stunting_flag", "ever_wasting_flag": "wasting_flag", "ever_underweight_flag": "underweight_flag", "ever_obesity_flag": "obesity_flag"}
             for field, visit_flag in expected_flags.items():
                 compared += 1
