@@ -25,7 +25,6 @@ from synthetic.calibration_targets import (
     RACE_CATEGORY_SLUGS,
     RECORDED_FLAGS,
     SEX_CATEGORY_SLUGS,
-    is_registered_target_key,
 )
 from synthetic.heldout_validate import (
     HeldoutComparison,
@@ -82,9 +81,8 @@ _DIRECTORY_OPEN_FLAGS = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os
 _FILE_OPEN_FLAGS = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_NOFOLLOW", 0)
 
 _TargetKey = tuple[str, str, str, str, str, float | None]
-V1_REQUIRED_TARGET_KEYS: tuple[_TargetKey, ...] = tuple(
-    sorted(
-        (
+_V1_TARGET_KEYS = frozenset(
+    (
             *(
                 (_OBSERVED_OUTCOME_LAYER, f"sex_{slug}", "demographics", "proportion", "proportion", None)
                 for slug in SEX_CATEGORY_SLUGS.values()
@@ -109,9 +107,9 @@ V1_REQUIRED_TARGET_KEYS: tuple[_TargetKey, ...] = tuple(
                 (_OBSERVED_OUTCOME_LAYER, flag, "recorded_outcome", "proportion", "proportion", None)
                 for flag in RECORDED_FLAGS.values()
             ),
-        )
     )
 )
+V1_REQUIRED_TARGET_KEYS: tuple[_TargetKey, ...] = tuple(sorted(_V1_TARGET_KEYS))
 
 
 class PrevalenceEvidenceUnavailable(ValueError):
@@ -548,11 +546,7 @@ def _comparison_key(comparison: HeldoutComparison) -> _TargetKey:
 
 
 def _is_v1_comparison(comparison: HeldoutComparison) -> bool:
-    return (
-        comparison.stratum_id == _OBSERVED_OUTCOME_LAYER
-        and comparison.family in V1_TARGET_FAMILIES
-        and is_registered_target_key(*_comparison_key(comparison))
-    )
+    return _comparison_key(comparison) in _V1_TARGET_KEYS
 
 
 def _aggregate_status(statuses: tuple[str, ...]) -> str:
@@ -712,10 +706,18 @@ class PrevalenceRunResult:
         object.__setattr__(self, "comparisons", sorted_comparisons)
 
     def to_mapping(self) -> dict[str, object]:
+        comparison_payload = json.dumps(
+            [comparison.to_mapping() for comparison in self.comparisons],
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+            allow_nan=False,
+        ).encode("ascii")
         return {
             "identity": self.identity.to_mapping(),
             "status": self.status,
-            "comparisons": [comparison.to_mapping() for comparison in self.comparisons],
+            "comparison_count": len(self.comparisons),
+            "comparison_sha256": hashlib.sha256(comparison_payload).hexdigest(),
         }
 
 

@@ -33,6 +33,7 @@ from synthetic.prevalence_evidence import (
     PrevalenceRunResult,
     PrevalenceRunSpec,
     evaluate_prevalence_evidence,
+    verify_package_identity,
 )
 from synthetic.schema_contract import schema_fingerprint
 from synthetic.validate import validate_structure
@@ -95,6 +96,19 @@ def _controlled_heldout_result(
                 "FAIL",
                 0.0,
                 1.0,
+                1.0,
+                0.0,
+            ),
+            HeldoutComparison(
+                "outcome_layer=observed",
+                "diagnosis_age_years_mean",
+                "recorded_outcome",
+                "mean",
+                "year",
+                None,
+                "FAIL",
+                1.0,
+                2.0,
                 1.0,
                 0.0,
             ),
@@ -265,9 +279,20 @@ def test_evidence_evaluates_only_observed_demographic_and_recorded_outcome_targe
     assert [run["identity"]["package_sha256"] for run in public_report["runs"]] == [
         run.identity.package_sha256 for run in report.runs
     ]
-    assert all(run["comparisons"] for run in public_report["runs"])
-    assert "support" not in json.dumps(public_report, sort_keys=True)
-    assert "denominator" not in json.dumps(public_report, sort_keys=True)
+    assert all(set(run) == {"identity", "status", "comparison_count", "comparison_sha256"} for run in public_report["runs"])
+    serialized_runs = json.dumps(public_report["runs"], sort_keys=True)
+    for field in (
+        "comparisons",
+        "heldout_value",
+        "synthetic_value",
+        "difference",
+        "tolerance",
+        "support",
+        "denominator",
+        "heldout_aggregate_sha256",
+        "synthetic_aggregate_sha256",
+    ):
+        assert field not in serialized_runs
 
 
 def test_evidence_uses_fail_over_unevaluable_over_pass_across_runs(tmp_path: Path) -> None:
@@ -349,6 +374,7 @@ def test_evidence_ignores_latent_and_observable_comparisons_from_a_controlled_he
 
     assert report.status == "PASS"
     assert all(item.family in {"demographics", "recorded_outcome"} for item in report.comparisons)
+    assert all(not item.target_name.startswith("diagnosis_age_years_") for item in report.comparisons)
 
 
 def test_report_rejects_aggregate_comparisons_that_do_not_match_run_evidence(tmp_path: Path) -> None:
@@ -429,11 +455,10 @@ def test_public_mapping_excludes_heldout_truth_hashes(tmp_path: Path) -> None:
         "prng_family",
         "seed_derivation_version",
         "derivation_fingerprint",
-        "schema_fingerprint",
     ),
 )
 def test_evidence_rejects_cross_run_generation_identity_mismatches(
-    tmp_path: Path, attribute: str
+    tmp_path: Path, attribute: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Ignoring any shared generation identity field would mix incomparable packages."""
     config = _config(tmp_path)
@@ -446,9 +471,21 @@ def test_evidence_rejects_cross_run_generation_identity_mismatches(
         else "different-token"
     )
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    identity = verify_package_identity(config.runs[-1])
+    assert getattr(identity, attribute) == manifest[attribute]
+    module = __import__("synthetic.prevalence_evidence", fromlist=["validate_heldout"])
+    called = False
+
+    def must_not_evaluate(_config: HeldoutRunConfig) -> object:
+        nonlocal called
+        called = True
+        raise AssertionError("generation identity mismatch reached held-out evaluation")
+
+    monkeypatch.setattr(module, "validate_heldout", must_not_evaluate)
 
     with pytest.raises(PrevalenceEvidenceUnavailable, match="unavailable"):
         evaluate_prevalence_evidence(config)
+    assert not called
 
 
 def test_evidence_rejects_a_source_package_replaced_during_heldout_evaluation(
