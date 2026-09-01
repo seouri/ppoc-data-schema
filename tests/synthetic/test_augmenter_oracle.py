@@ -273,6 +273,72 @@ def test_subprocess_failures_are_redacted_and_leave_no_outputs(
     _assert_unavailable(tmp_path, descriptor)
 
 
+def test_failure_traceback_frames_do_not_retain_sensitive_adapter_locals(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Catch fixed errors whose traceback locals still retain subprocess diagnostics."""
+    package_root = tmp_path / "package-secret-path"
+    package_root.mkdir()
+    descriptor = _descriptor()
+    _write_synthetic_package(package_root, descriptor)
+    renamed_package = tmp_path / "renamed-package"
+    outside_directory = tmp_path / "traceback-outside"
+    outside_directory.mkdir()
+
+    def fail(command: list[str], **_: object) -> subprocess.CompletedProcess[bytes]:
+        output_root = Path(command[command.index("--output_dir") + 1])
+        _write_fake_outputs(output_root)
+        (output_root / VISITS_OUTPUT).write_bytes(b"fictional-growth-patient-001\n")
+        package_root.rename(renamed_package)
+        package_root.symlink_to(outside_directory, target_is_directory=True)
+        return subprocess.CompletedProcess(
+            ["/fake/private/command/path"],
+            0,
+            stdout=b"fictional-growth-patient-001",
+            stderr=b"secret-subprocess-stderr",
+        )
+
+    monkeypatch.setattr(augmenter_oracle.subprocess, "run", fail)
+
+    with pytest.raises(DerivationUnavailable) as caught:
+        SourceMatchedAugmenterOracle().derive(package_root, descriptor)
+
+    assert caught.value.__cause__ is None
+    assert caught.value.__context__ is None
+    adapter_frames: list[dict[str, object]] = []
+    traceback = caught.value.__traceback__
+    while traceback is not None:
+        frame = traceback.tb_frame
+        if Path(frame.f_code.co_filename).resolve() == Path(augmenter_oracle.__file__).resolve():
+            adapter_frames.append(dict(frame.f_locals))
+        traceback = traceback.tb_next
+
+    assert adapter_frames
+    retained = repr(adapter_frames)
+    for secret in (
+        "secret-subprocess-stderr",
+        "fictional-growth-patient-001",
+        "/fake/private/command/path",
+        str(package_root),
+    ):
+        assert secret not in retained
+    assert all(
+        not isinstance(value, subprocess.CompletedProcess)
+        for frame_locals in adapter_frames
+        for value in frame_locals.values()
+    )
+    for local_name in (
+        "completed",
+        "command",
+        "descriptor",
+        "outputs",
+        "package_root",
+        "self",
+    ):
+        assert all(local_name not in frame_locals for frame_locals in adapter_frames)
+
+
 @pytest.mark.parametrize("mode", ["missing", "changed"])
 def test_runtime_manifest_integrity_failures_stop_before_invocation(
     tmp_path: Path,

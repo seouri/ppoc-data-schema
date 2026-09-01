@@ -380,6 +380,23 @@ class SourceMatchedAugmenterOracle:
     ) -> DerivationResult:
         failed = False
         try:
+            return self._derive(package_root, descriptor)
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except Exception:  # noqa: BLE001 - replace the entire private failure chain
+            failed = True
+        del self, package_root, descriptor
+        if failed:
+            _unavailable()
+        raise AssertionError("unreachable")
+
+    def _derive(
+        self,
+        package_root: Path,
+        descriptor: dict[str, Any],
+    ) -> DerivationResult:
+        failed = False
+        try:
             if not isinstance(package_root, Path):
                 raise _AdapterFailure
             package_root = Path(os.path.abspath(package_root))
