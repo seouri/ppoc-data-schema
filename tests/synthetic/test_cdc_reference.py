@@ -1,5 +1,6 @@
 import ast
 import math
+import shutil
 from pathlib import Path
 
 import numpy as np
@@ -88,8 +89,42 @@ def test_reference_module_has_no_forbidden_imports() -> None:
         b"Sex,Agemos,L,M,S\n1,1,1,10,0.2\n1,0,1,11,0.2\n",
         b"Sex,Agemos,L,M\n1,0,1,10\n1,1,1,11\n",
         b"Sex,Agemos,L,M,S\n1,0,1,10,0.2\n1,1,1,11,0.2\n\xff",
+        b"Sex,Agemos,L,M,S\n1,0,1,10,-0.2\n1,1,1,11,0.2\n2,0,1,9,0.2\n2,1,1,10,0.2\n",
     ],
 )
 def test_parser_rejects_malformed_tables(source: bytes) -> None:
     with pytest.raises(ValueError):
         _parse_lms_table(source, "test")
+
+
+def _minimal_repository(tmp_path: Path) -> Path:
+    data = tmp_path / "data"
+    data.mkdir()
+    shutil.copy(ROOT / "data/augment-runtime-manifest.json", data / "augment-runtime-manifest.json")
+    for table in ("statage_combined.csv", "wtage_combined.csv", "bmiagerev.csv", "hcageinf.csv"):
+        shutil.copy(ROOT / "data" / table, data / table)
+    return tmp_path
+
+
+def test_reference_rejects_table_digest_drift_without_leaking_path(tmp_path: Path) -> None:
+    repository = _minimal_repository(tmp_path)
+    table = repository / "data/statage_combined.csv"
+    table.write_bytes(table.read_bytes() + b"\n")
+    with pytest.raises(ValueError, match="digest") as caught:
+        CdcGrowthReference.from_repository(repository)
+    assert str(repository) not in str(caught.value)
+
+
+def test_reference_rejects_altered_manifest_without_leaking_path(tmp_path: Path) -> None:
+    repository = _minimal_repository(tmp_path)
+    manifest = repository / "data/augment-runtime-manifest.json"
+    manifest.write_bytes(manifest.read_bytes() + b" ")
+    with pytest.raises(ValueError) as caught:
+        CdcGrowthReference.from_repository(repository)
+    assert str(repository) not in str(caught.value)
+
+
+def test_reference_rejects_symlinked_data_directory(tmp_path: Path) -> None:
+    (tmp_path / "data").symlink_to(ROOT / "data", target_is_directory=True)
+    with pytest.raises(ValueError):
+        CdcGrowthReference.from_repository(tmp_path)

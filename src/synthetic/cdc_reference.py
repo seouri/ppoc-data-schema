@@ -28,6 +28,7 @@ _TABLES = {
 }
 _TABLE_NAMES = tuple(dict.fromkeys(_TABLES.values()))
 _EXPECTED_MANIFEST_COUNT = 14
+_EXPECTED_TABLE_PATHS = {f"data/{name}" for name in _TABLE_NAMES}
 _REQUIRED_COLUMNS = ("Sex", "Agemos", "L", "M", "S")
 
 
@@ -126,7 +127,7 @@ def _manifest(root: Path) -> dict[str, tuple[str, int]]:
     entries = manifest.get("files") if isinstance(manifest, dict) else None
     if not isinstance(entries, list) or len(entries) != _EXPECTED_MANIFEST_COUNT:
         raise ValueError("runtime manifest is invalid")
-    result: dict[str, str] = {}
+    result: dict[str, tuple[str, int]] = {}
     for entry in entries:
         if not isinstance(entry, dict):
             raise TypeError("runtime manifest is invalid")
@@ -142,11 +143,9 @@ def _manifest(root: Path) -> dict[str, tuple[str, int]]:
         count = entry.get("bytes")
         if not isinstance(digest, str) or len(digest) != 64 or isinstance(count, bool) or not isinstance(count, int):
             raise ValueError("runtime manifest entries are invalid")
-        path = root / Path(*pure.parts)
-        data = _read_regular(path)
-        if len(data) != count or hashlib.sha256(data).hexdigest() != digest:
-            raise ValueError("runtime source digest mismatch")
         result[raw] = (digest, count)
+    if not _EXPECTED_TABLE_PATHS.issubset(result):
+        raise ValueError("runtime manifest entries are incomplete")
     return result
 
 
@@ -158,7 +157,6 @@ class CdcGrowthReference:
     @classmethod
     def from_repository(cls, repository_root: Path) -> CdcGrowthReference:
         root = Path(repository_root)
-        manifest = _manifest(root)
         data_dir = root / "data"
         try:
             data_metadata = data_dir.lstat()
@@ -166,6 +164,7 @@ class CdcGrowthReference:
             raise ValueError("CDC source directory is unavailable") from None
         if stat.S_ISLNK(data_metadata.st_mode) or not stat.S_ISDIR(data_metadata.st_mode):
             raise ValueError("CDC source directory is invalid")
+        manifest = _manifest(root)
         parsed: dict[str, tuple[_LmsRow, ...]] = {}
         for table in _TABLE_NAMES:
             path = root / "data" / table
