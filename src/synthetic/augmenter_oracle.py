@@ -189,11 +189,10 @@ def _snapshot_runtime(
             raise _AdapterFailure
 
 
-def _safe_output_path(
-    package_root: Path,
+def _safe_output_parts(
     descriptor: dict[str, Any],
     resource_name: str,
-) -> Path:
+) -> tuple[str, ...]:
     specification = resource_spec(descriptor, resource_name)
     raw_path = specification.get("path")
     if not isinstance(raw_path, str) or not raw_path or "\\" in raw_path:
@@ -203,17 +202,72 @@ def _safe_output_path(
         raise _AdapterFailure
     if any(part in {"", ".", ".."} for part in pure.parts):
         raise _AdapterFailure
+    return pure.parts
 
-    target = package_root.joinpath(*pure.parts)
-    current = package_root
-    for component in pure.parts[:-1]:
-        current /= component
-        _require_directory(current)
+
+def _directory_open_flags() -> int:
+    return (
+        os.O_RDONLY
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+
+
+def _open_package_root(package_root: Path) -> tuple[int, tuple[int, int]]:
+    descriptor = os.open(package_root, _directory_open_flags())
     try:
-        target.lstat()
-    except FileNotFoundError:
-        return target
-    raise _AdapterFailure
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISDIR(metadata.st_mode):
+            raise _AdapterFailure
+        return descriptor, (metadata.st_dev, metadata.st_ino)
+    except Exception:
+        os.close(descriptor)
+        raise
+
+
+def _require_package_identity(
+    package_root: Path,
+    identity: tuple[int, int],
+) -> None:
+    metadata = package_root.lstat()
+    if (
+        stat.S_ISLNK(metadata.st_mode)
+        or not stat.S_ISDIR(metadata.st_mode)
+        or (metadata.st_dev, metadata.st_ino) != identity
+    ):
+        raise _AdapterFailure
+
+
+def _open_parent_directory(root_descriptor: int, parts: tuple[str, ...]) -> int:
+    current = os.dup(root_descriptor)
+    try:
+        for component in parts[:-1]:
+            following = os.open(
+                component,
+                _directory_open_flags(),
+                dir_fd=current,
+            )
+            os.close(current)
+            current = following
+        return current
+    except Exception:
+        os.close(current)
+        raise
+
+
+def _require_output_absent(
+    root_descriptor: int,
+    parts: tuple[str, ...],
+) -> None:
+    parent_descriptor = _open_parent_directory(root_descriptor, parts)
+    try:
+        try:
+            os.stat(parts[-1], dir_fd=parent_descriptor, follow_symlinks=False)
+        except FileNotFoundError:
+            return
+        raise _AdapterFailure
+    finally:
+        os.close(parent_descriptor)
 
 
 def _validated_output_bytes(output_root: Path) -> dict[str, bytes]:
@@ -233,35 +287,62 @@ def _validated_output_bytes(output_root: Path) -> dict[str, bytes]:
     return outputs
 
 
-def _write_exclusive(path: Path, content: bytes) -> tuple[int, int]:
+def _write_exclusive(
+    root_descriptor: int,
+    parts: tuple[str, ...],
+    content: bytes,
+) -> tuple[int, int]:
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
-    descriptor = os.open(path, flags, 0o600)
-    metadata = os.fstat(descriptor)
-    identity = metadata.st_dev, metadata.st_ino
+    parent_descriptor = _open_parent_directory(root_descriptor, parts)
     try:
+        descriptor = os.open(parts[-1], flags, 0o600, dir_fd=parent_descriptor)
+        metadata = os.fstat(descriptor)
+        identity = metadata.st_dev, metadata.st_ino
         try:
-            with os.fdopen(descriptor, "wb", closefd=False) as stream:
-                stream.write(content)
-        finally:
-            os.close(descriptor)
-    except Exception:
-        _remove_created(path, identity)
-        raise
-    return identity
+            try:
+                with os.fdopen(descriptor, "wb", closefd=False) as stream:
+                    stream.write(content)
+            finally:
+                os.close(descriptor)
+        except Exception:
+            _remove_created_from_parent(parent_descriptor, parts[-1], identity)
+            raise
+        return identity
+    finally:
+        os.close(parent_descriptor)
 
 
-def _remove_created(path: Path, identity: tuple[int, int]) -> None:
+def _remove_created_from_parent(
+    parent_descriptor: int,
+    name: str,
+    identity: tuple[int, int],
+) -> None:
     try:
-        metadata = path.lstat()
+        metadata = os.stat(name, dir_fd=parent_descriptor, follow_symlinks=False)
         if (
             stat.S_ISREG(metadata.st_mode)
             and (metadata.st_dev, metadata.st_ino) == identity
         ):
-            path.unlink()
+            os.unlink(name, dir_fd=parent_descriptor)
     except OSError:
         pass
+
+
+def _remove_created(
+    root_descriptor: int,
+    parts: tuple[str, ...],
+    identity: tuple[int, int],
+) -> None:
+    try:
+        parent_descriptor = _open_parent_directory(root_descriptor, parts)
+    except OSError:
+        return
+    try:
+        _remove_created_from_parent(parent_descriptor, parts[-1], identity)
+    finally:
+        os.close(parent_descriptor)
 
 
 class SourceMatchedAugmenterOracle:
@@ -297,73 +378,84 @@ class SourceMatchedAugmenterOracle:
         package_root: Path,
         descriptor: dict[str, Any],
     ) -> DerivationResult:
+        failed = False
         try:
             if not isinstance(package_root, Path):
                 raise _AdapterFailure
-            _require_directory(package_root)
-            visits_destination = _safe_output_path(
-                package_root, descriptor, "visits_augmented"
-            )
-            patients_destination = _safe_output_path(
-                package_root, descriptor, "patients_augmented"
-            )
-            if visits_destination == patients_destination:
-                raise _AdapterFailure
-
-            entries = _verify_manifest(self._repository_root)
-            with tempfile.TemporaryDirectory(prefix="ppoc-augmenter-oracle-") as temporary:
-                temporary_root = Path(temporary)
-                runtime_root = temporary_root / "runtime"
-                output_root = temporary_root / "outputs"
-                _snapshot_runtime(self._repository_root, runtime_root, entries)
-                output_root.mkdir(mode=0o700)
-                command = [
-                    sys.executable,
-                    "-E",
-                    "-s",
-                    str(runtime_root / "scripts" / "augment.py"),
-                    str(package_root),
-                    "--output_dir",
-                    str(output_root),
-                    "--output_format",
-                    "csv",
-                ]
-                completed = subprocess.run(
-                    command,
-                    cwd=runtime_root,
-                    shell=False,
-                    check=False,
-                    capture_output=True,
-                    timeout=self.timeout_seconds,
-                )
-                if completed.returncode != 0:
+            package_root = Path(os.path.abspath(package_root))
+            package_descriptor, package_identity = _open_package_root(package_root)
+            try:
+                visits_parts = _safe_output_parts(descriptor, "visits_augmented")
+                patients_parts = _safe_output_parts(descriptor, "patients_augmented")
+                if visits_parts == patients_parts:
                     raise _AdapterFailure
-                outputs = _validated_output_bytes(output_root)
+                _require_package_identity(package_root, package_identity)
+                _require_output_absent(package_descriptor, visits_parts)
+                _require_output_absent(package_descriptor, patients_parts)
 
-                visits_destination = _safe_output_path(
-                    package_root, descriptor, "visits_augmented"
-                )
-                patients_destination = _safe_output_path(
-                    package_root, descriptor, "patients_augmented"
-                )
-                created: list[tuple[Path, tuple[int, int]]] = []
-                try:
-                    created.append(
-                        (
-                            visits_destination,
-                            _write_exclusive(visits_destination, outputs["visits"]),
-                        )
+                entries = _verify_manifest(self._repository_root)
+                with tempfile.TemporaryDirectory(
+                    prefix="ppoc-augmenter-oracle-"
+                ) as temporary:
+                    temporary_root = Path(temporary)
+                    runtime_root = temporary_root / "runtime"
+                    output_root = temporary_root / "outputs"
+                    _snapshot_runtime(self._repository_root, runtime_root, entries)
+                    output_root.mkdir(mode=0o700)
+                    command = [
+                        sys.executable,
+                        "-E",
+                        "-s",
+                        str(runtime_root / "scripts" / "augment.py"),
+                        str(package_root),
+                        "--output_dir",
+                        str(output_root),
+                        "--output_format",
+                        "csv",
+                    ]
+                    completed = subprocess.run(
+                        command,
+                        cwd=runtime_root,
+                        shell=False,
+                        check=False,
+                        capture_output=True,
+                        timeout=self.timeout_seconds,
                     )
-                    created.append(
-                        (
-                            patients_destination,
-                            _write_exclusive(patients_destination, outputs["patients"]),
+                    if completed.returncode != 0:
+                        raise _AdapterFailure
+                    outputs = _validated_output_bytes(output_root)
+
+                    _require_package_identity(package_root, package_identity)
+                    _require_output_absent(package_descriptor, visits_parts)
+                    _require_output_absent(package_descriptor, patients_parts)
+                    created: list[tuple[tuple[str, ...], tuple[int, int]]] = []
+                    try:
+                        created.append(
+                            (
+                                visits_parts,
+                                _write_exclusive(
+                                    package_descriptor,
+                                    visits_parts,
+                                    outputs["visits"],
+                                ),
+                            )
                         )
-                    )
-                except Exception:
-                    for path, identity in reversed(created):
-                        _remove_created(path, identity)
-                    raise
+                        created.append(
+                            (
+                                patients_parts,
+                                _write_exclusive(
+                                    package_descriptor,
+                                    patients_parts,
+                                    outputs["patients"],
+                                ),
+                            )
+                        )
+                    except Exception:
+                        for parts, identity in reversed(created):
+                            _remove_created(package_descriptor, parts, identity)
+                        raise
+            finally:
+                os.close(package_descriptor)
 
             return DerivationResult(
                 oracle_id=self.oracle_id,
@@ -373,4 +465,7 @@ class SourceMatchedAugmenterOracle:
         except (KeyboardInterrupt, SystemExit):
             raise
         except Exception:  # noqa: BLE001 - redact every implementation-boundary failure
+            failed = True
+        if failed:
             _unavailable()
+        raise AssertionError("unreachable")

@@ -133,6 +133,8 @@ def _assert_unavailable(
         (oracle or SourceMatchedAugmenterOracle()).derive(package_root, descriptor)
 
     assert str(caught.value) == UNAVAILABLE_MESSAGE
+    assert caught.value.__cause__ is None
+    assert caught.value.__context__ is None
     assert "fictional-growth-patient-001" not in str(caught.value)
     assert "secret-subprocess-stderr" not in str(caught.value)
     assert str(package_root) not in str(caught.value)
@@ -236,7 +238,7 @@ def test_subprocess_failures_are_redacted_and_leave_no_outputs(
     def fail(command: list[str], **_: object) -> subprocess.CompletedProcess[bytes]:
         if mode == "timeout":
             raise subprocess.TimeoutExpired(
-                command,
+                ["/fake/private/command/path"],
                 0.01,
                 output=b"fictional-growth-patient-001",
                 stderr=b"secret-subprocess-stderr",
@@ -295,8 +297,9 @@ def _extra_file(output_root: Path) -> None:
 
 
 def _unexpected_directory(output_root: Path) -> None:
-    _write_fake_outputs(output_root)
-    (output_root / "unexpected-directory").mkdir()
+    output_root.mkdir(parents=True, exist_ok=True)
+    (output_root / VISITS_OUTPUT).mkdir()
+    (output_root / PATIENTS_OUTPUT).write_bytes(b"patient-output\n")
 
 
 def _symlinked_expected_output(output_root: Path) -> None:
@@ -308,7 +311,8 @@ def _symlinked_expected_output(output_root: Path) -> None:
 
 
 def _duplicate_timestamped_output(output_root: Path) -> None:
-    _write_fake_outputs(output_root)
+    output_root.mkdir(parents=True, exist_ok=True)
+    (output_root / VISITS_OUTPUT).write_bytes(b"visit-output\n")
     (output_root / "visits_augmented-20260901123457.csv").write_bytes(b"duplicate\n")
 
 
@@ -391,3 +395,34 @@ def test_preexisting_augmented_destination_stops_before_invocation(
     patients_output = tmp_path / resource_spec(descriptor, "patients_augmented")["path"]
     assert not patients_output.exists()
     assert invoked is False
+
+
+def test_replaced_package_root_cannot_redirect_augmented_writes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Catch replacing the validated package directory with an outside symlink."""
+    package_root = tmp_path / "package"
+    package_root.mkdir()
+    descriptor = _descriptor()
+    _write_synthetic_package(package_root, descriptor)
+    original_directory = tmp_path / "renamed-original-package"
+    outside_directory = tmp_path / "outside"
+    outside_directory.mkdir()
+
+    def replace_root(
+        command: list[str],
+        **_: object,
+    ) -> subprocess.CompletedProcess[bytes]:
+        _write_fake_outputs(Path(command[command.index("--output_dir") + 1]))
+        package_root.rename(original_directory)
+        package_root.symlink_to(outside_directory, target_is_directory=True)
+        return subprocess.CompletedProcess(command, 0, stdout=b"", stderr=b"")
+
+    monkeypatch.setattr(augmenter_oracle.subprocess, "run", replace_root)
+
+    _assert_unavailable(package_root, descriptor)
+    for name in ("visits_augmented", "patients_augmented"):
+        relative = resource_spec(descriptor, name)["path"]
+        assert not (outside_directory / relative).exists()
+        assert not (original_directory / relative).exists()
