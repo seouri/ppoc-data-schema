@@ -26,6 +26,9 @@ packages = ["src/synthetic"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+markers = [
+  "scale: opt-in 10,000-member development integration profile",
+]
 
 [tool.ruff]
 target-version = "py312"
