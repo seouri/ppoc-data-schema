@@ -91,7 +91,9 @@ FORBIDDEN_PUBLIC_ARGUMENT_TOKENS = {
     "outputs",
 }
 PROTECTED_OUTPUT_FRAGMENTS = {
+    "eventtrace",
     "hiddentruth",
+    "identifier",
     "latent",
     "patientid",
     "row",
@@ -236,6 +238,35 @@ def _forbidden_public_arguments(signature: inspect.Signature) -> set[str]:
     }
 
 
+def _public_instance_method_names(tree: ast.Module) -> set[tuple[str, str]]:
+    return {
+        (parent.name, method.name)
+        for parent in tree.body
+        if isinstance(parent, ast.ClassDef) and parent.name in PUBLIC_CALLABLES
+        for method in parent.body
+        if isinstance(method, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and not method.name.startswith("_")
+    }
+
+
+def _forbidden_public_instance_method_arguments(tree: ast.Module) -> set[str]:
+    return {
+        argument.arg
+        for parent in tree.body
+        if isinstance(parent, ast.ClassDef) and parent.name in PUBLIC_CALLABLES
+        for method in parent.body
+        if isinstance(method, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and not method.name.startswith("_")
+        for argument in (
+            *method.args.posonlyargs,
+            *method.args.args,
+            *method.args.kwonlyargs,
+        )
+        if argument.arg not in {"self", "cls"}
+        and set(argument.arg.lower().split("_")) & FORBIDDEN_PUBLIC_ARGUMENT_TOKENS
+    }
+
+
 def _public_serializers(tree: ast.Module) -> tuple[ast.FunctionDef, ...]:
     serializers: list[ast.FunctionDef] = []
     for parent in tree.body:
@@ -248,12 +279,16 @@ def _public_serializers(tree: ast.Module) -> tuple[ast.FunctionDef, ...]:
 
 
 def _serializer_output_names(tree: ast.Module) -> set[str]:
-    return {
-        node.value
-        for serializer in _public_serializers(tree)
-        for node in ast.walk(serializer)
-        if isinstance(node, ast.Constant) and isinstance(node.value, str)
-    }
+    names: set[str] = set()
+    for serializer in _public_serializers(tree):
+        for node in ast.walk(serializer):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                names.add(node.value)
+            elif isinstance(node, (ast.Attribute, ast.Name)):
+                names.add(node.attr if isinstance(node, ast.Attribute) else node.id)
+            elif isinstance(node, ast.keyword) and node.arg is not None:
+                names.add(node.arg)
+    return names
 
 
 def _protected_output_names(names: set[str]) -> set[str]:
@@ -337,6 +372,14 @@ def test_parity_api_has_only_in_memory_inputs_and_no_path_key_or_output_argument
     assert _public_callable_names(tree) == PUBLIC_CALLABLES
     for name in PUBLIC_CALLABLES:
         assert _forbidden_public_arguments(inspect.signature(getattr(derivation_parity, name))) == set()
+    assert _public_instance_method_names(tree) == {
+        ("DerivationImplementation", "to_mapping"),
+        ("DerivationParityCheck", "to_mapping"),
+        ("DerivationParityPolicy", "to_mapping"),
+        ("DerivationParityReport", "to_json_bytes"),
+        ("DerivationParityReport", "to_mapping"),
+    }
+    assert _forbidden_public_instance_method_arguments(tree) == set()
 
 
 def test_parity_contract_uses_the_fixed_check_universe_and_redaction() -> None:
@@ -410,6 +453,7 @@ def test_redaction_scanner_rejects_hidden_compound_mapping_and_repr_names() -> N
     cases = (
         ('return {"patient_id": "value"}', {"patient_id"}),
         ('return {"patient_rows": "value"}', {"patient_rows"}),
+        ('return {"event_trace": "value"}', {"event_trace"}),
         ('return {"hidden_truth": "value"}', {"hidden_truth"}),
         ('return {"source_path": "value"}', {"source_path"}),
         ('return "row"', {"row"}),
@@ -418,3 +462,28 @@ def test_redaction_scanner_rejects_hidden_compound_mapping_and_repr_names() -> N
         source = f"class Dangerous:\n    def to_mapping(self):\n        {body}\n"
         tree = ast.parse(source)
         assert _protected_output_names(_serializer_output_names(tree)) == expected
+
+
+def test_redaction_scanner_rejects_keyword_mappings_and_attribute_references() -> None:
+    cases = (
+        ("to_mapping", "return dict(event_trace=value)", {"event_trace"}),
+        ("to_mapping", "return {'safe': self.event_trace}", {"event_trace"}),
+        ("__repr__", "return f'{self.event_trace!r}'", {"event_trace"}),
+    )
+    for method, body, expected in cases:
+        source = f"class Dangerous:\n    def {method}(self):\n        {body}\n"
+        tree = ast.parse(source)
+        assert _protected_output_names(_serializer_output_names(tree)) == expected
+
+
+def test_public_method_argument_guard_rejects_path_key_report_and_output_inputs() -> None:
+    cases = (
+        ("write_report", "output", {"output"}),
+        ("from_path", "path", {"path"}),
+        ("from_key", "key", {"key"}),
+    )
+    for method, argument, expected in cases:
+        tree = ast.parse(
+            f"class DerivationParityReport:\n    def {method}(self, {argument}):\n        ...\n"
+        )
+        assert _forbidden_public_instance_method_arguments(tree) == expected
