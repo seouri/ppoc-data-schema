@@ -33,11 +33,11 @@
 - Consumes: `HeldoutRunConfig`, `HeldoutValidationResult`, `HeldoutComparison`, `FidelityPolicy`, `CalibrationArtifact`, `schema_fingerprint`, and package descriptor/resource contracts.
 - Produces: immutable `PrevalenceRunSpec`, `PrevalenceEvidenceConfig`, `PackageIdentity`, `PrevalenceRunEvidence`, `PrevalenceEvidenceUnavailable`, strict manifest/tree/hash helpers, and fixed constants for report version and v1 family scope.
 
-- [ ] **Step 1: Write the failing model and parser tests**
+- [x] **Step 1: Write the failing model and parser tests**
 
   Build a fictional exact-schema package fixture with a generated-style manifest, then assert model validation rejects fewer than three runs, duplicate or boolean seeds, non-`Path` roots, duplicate roots, empty profile/identity fields, missing or test-only derivation fingerprints, and mismatched expected seeds. Assert strict parsing rejects unknown/missing manifest keys, duplicate JSON keys, BOM, nonfinite values, oversized input, wrong status/metadata-only/version, malformed digests, invalid row counts, and file-hash entries outside the descriptor inventory. Assert `PackageIdentity` mappings contain only safe digests/tokens and never path strings.
 
-- [ ] **Step 2: Run the focused tests to verify the API is absent**
+- [x] **Step 2: Run the focused tests to verify the API is absent**
 
   Run:
 
@@ -47,11 +47,11 @@
 
   Expected: collection or assembly failures because `synthetic.prevalence_evidence` does not yet expose the models. Correct only fixture syntax before implementation.
 
-- [ ] **Step 3: Implement strict immutable models and package verification**
+- [x] **Step 3: Implement strict immutable models and package verification**
 
   Implement exact-key strict JSON loading with secure no-follow regular-file reads and fixed redacted errors. Parse every manifest field emitted by `RunManifest.generated`, enforce generated/non-test status and all type/digest/token constraints, require expected seed equality, and verify descriptor-declared resource paths, exact allowed tree, row counts from `validate_structure`, and each `file_sha256` byte digest. Compute a deterministic package digest from the sorted verified file-hash mapping and a separate manifest byte digest. Reject symlinks, hard links, path traversal, extra files, missing files, descriptor/schema mismatch, and package-root identity changes. Store no root path in public mappings.
 
-- [ ] **Step 4: Run focused tests, lint, and commit**
+- [x] **Step 4: Run focused tests, lint, and commit**
 
   ```sh
   UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_prevalence_evidence_models.py
@@ -76,21 +76,21 @@
 - Consumes: Task 1 `PrevalenceEvidenceConfig` and `PackageIdentity`, plus `validate_heldout`, `HeldoutRunConfig`, `compare_targets`, `HeldoutComparison`, and fixed target registry functions.
 - Produces: `PrevalenceComparison`, `PrevalenceRunResult`, `PrevalenceEvidenceReport`, `evaluate_prevalence_evidence(config)`, deterministic family/count helpers, and aggregate-only serialization mappings.
 
-- [ ] **Step 1: Write failing evaluation tests**
+- [x] **Step 1: Write failing evaluation tests**
 
   Create at least three manifest-capable fictional packages with distinct seeds and a held-out fixture. Assert a successful aggregate report filters out physiology/observation/utilization comparisons, retains only demographics and recorded outcomes, records each safe package/manifest digest and identity, and sorts runs and target keys deterministically. Mutate one package to create a target failure and assert aggregate `FAIL`; remove/under-support a required target and assert `UNEVALUABLE`; assert a package with latent/observable diagnostic names cannot enter the report. Assert any profile/configuration/reference/software/PRNG/seed-derivation/derivation/schema mismatch fails before target computation, and duplicate package roots or expected seeds fail closed.
 
-- [ ] **Step 2: Run integration tests to verify evaluation is absent**
+- [x] **Step 2: Run integration tests to verify evaluation is absent**
 
   Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_prevalence_evidence_integration.py`
 
   Expected: failures because `evaluate_prevalence_evidence` and aggregate models are missing. Fix only fixture construction errors before implementation.
 
-- [ ] **Step 3: Implement per-run held-out evaluation and deterministic aggregation**
+- [x] **Step 3: Implement per-run held-out evaluation and deterministic aggregation**
 
   Verify all package identities first and establish a canonical shared generation identity. Retain each configuration-time physical root identity privately and require every pinned evaluation descriptor to match it; exact bytes are bound and repeatedly reverified during evaluation, while in-place immutability before evaluation is an operator precondition. For each package, create a `dataclasses.replace` copy of the held-out config with that package root and no output side effect, call the existing held-out evaluator, and retain only registered `demographics` and `recorded_outcome` comparisons. Normalize every run over the exact required v1 key universe, inserting canonical unevaluable cells for missing keys, and reject any held-out result whose source/schema/policy identity is not shared. Aggregate by canonical target key with held-out value, generated min/max, maximum difference, `maximum_tolerance_exceedance = max(difference - tolerance)`, evaluable/pass/fail counts, and status; do not publish an unpaired aggregate tolerance or any per-run values. Use fail-over-unevaluable-over-pass precedence and require every run/cell to pass for aggregate `PASS`. Keep latent and observable layers out of target status and never mutate packages or feed results into generation.
 
-- [ ] **Step 4: Run integration tests, lint, and commit**
+- [x] **Step 4: Run integration tests, lint, and commit**
 
   ```sh
   UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_prevalence_evidence_integration.py tests/synthetic/test_heldout_integration.py
@@ -115,21 +115,21 @@
 - Consumes: `PrevalenceEvidenceReport`, `PrevalenceEvidenceResult`, `PrevalenceEvidenceConfig`, `RunDirectory`, and existing secure output helpers.
 - Produces: `write_prevalence_evidence(result, output)`, canonical JSON/ASCII summary methods, and `python -m synthetic.prevalence_evidence` with every governed argument explicit.
 
-- [ ] **Step 1: Write failing writer/CLI tests**
+- [x] **Step 1: Write failing writer/CLI tests**
 
   Assert canonical JSON and summary round-trip exactly, no paths/keys/IDs/supports/denominators/raw rows appear, and reports include only safe aggregate identity and comparison fields. Assert output promotion for `PASS`, `FAIL`, and `UNEVALUABLE`, no overwrite or lifecycle collision, fixed redacted `failure.json` on write/reparse failure, and no promoted output after hard input failure. Assert CLI requires all explicit real/descriptor/snapshot/package-manifest/frozen-policy inputs and returns zero only for `PASS`; unknown flags and malformed inputs produce fixed redacted stderr.
 
-- [ ] **Step 2: Run CLI tests to verify the lifecycle is absent**
+- [x] **Step 2: Run CLI tests to verify the lifecycle is absent**
 
   Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_prevalence_evidence_cli.py`
 
   Expected: failures because writer/parser/CLI interfaces are incomplete. Correct only fixture syntax before implementation.
 
-- [ ] **Step 3: Implement canonical redacted output lifecycle and CLI**
+- [x] **Step 3: Implement canonical redacted output lifecycle and CLI**
 
   Add exact report parsing/validation, deterministic human summary, lifecycle identity derived only from safe report identity, exclusive fsynced writes, strict semantic reparse, no-replace promotion, and fixed failure archival matching existing governed validators. Reparse the exact v1 key set; validate fixed run comparison counts, aggregate counts against run count, paired margin/status relationships, and report-level feasibility between the redacted per-run summaries and aggregate comparison/report status without reconstructing or publishing per-run values. Treat per-run status as in-memory-bound because its individual cells are withheld, and require writer equality with that validated in-memory report before promotion. Define an argument parser with explicit repeated package-root and expected-seed inputs plus all held-out policy/artifact/key files; redact parser and runtime errors; return exit status one for non-PASS evidence without disclosing details. Never echo any supplied path or partition key.
 
-- [ ] **Step 4: Run CLI tests, lint, and commit**
+- [x] **Step 4: Run CLI tests, lint, and commit**
 
   ```sh
   UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_prevalence_evidence_cli.py tests/synthetic/test_prevalence_evidence_integration.py
@@ -156,21 +156,21 @@
 - Consumes: completed `synthetic.prevalence_evidence` API and current deferred-gate wording.
 - Produces: explicit operator documentation, target-layer caveats, CLI example, and AST/import/redaction boundary tests proving visible generation remains isolated.
 
-- [ ] **Step 1: Write failing docs/boundary tests**
+- [x] **Step 1: Write failing docs/boundary tests**
 
   Assert documentation names the module/API, minimum predeclared seeds, exact manifest/package binding, recorded-vs-latent/observable scope, fail/unevaluable semantics, aggregate-only redaction, no adaptive prevalence forcing, explicit CLI inputs, and the unchanged Synthea/held-out/privacy/release caveats. AST-scan visible generator, native, manifest, derivation, and package-export roots to ensure they do not import `synthetic.prevalence_evidence`; scan the governed module for no visible-generator import or hidden-truth serialization path.
 
-- [ ] **Step 2: Run boundary tests to verify the documentation is absent**
+- [x] **Step 2: Run boundary tests to verify the documentation is absent**
 
   Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_prevalence_evidence_boundaries.py tests/synthetic/test_heldout_boundaries.py`
 
   Expected: failures for missing documentation and boundary assertions. Correct only test-fixture syntax before implementation.
 
-- [ ] **Step 3: Implement documentation and boundary assertions**
+- [x] **Step 3: Implement documentation and boundary assertions**
 
   Add a concise governed-use section with a command template that uses explicit repeated package roots and seeds, explain that only observed demographic/recorded-outcome marginals are evidence, and state that latent/observable prevalence, clinical validity, privacy/non-matchability, task utility, Synthea conformance, and release remain separate gates. Extend AST deny lists only for visible roots; do not make the new governed module visible to generation.
 
-- [ ] **Step 4: Run boundary tests, lint, and commit**
+- [x] **Step 4: Run boundary tests, lint, and commit**
 
   ```sh
   UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_prevalence_evidence_boundaries.py tests/synthetic/test_heldout_boundaries.py
@@ -195,7 +195,7 @@
 - Consumes: all prior tasks and the spec.
 - Produces: evidence that the full synthetic suite, focused boundary/lifecycle tests, Ruff, lock, schema, and diff checks pass before integration.
 
-- [ ] **Step 1: Run the full verification matrix**
+- [x] **Step 1: Run the full verification matrix**
 
   ```sh
   UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q
@@ -205,11 +205,11 @@
   git diff --check
   ```
 
-- [ ] **Step 2: Record broad review and completion evidence**
+- [x] **Step 2: Record broad review and completion evidence**
 
   Use a fresh architecture-level reviewer to inspect the complete diff against the spec, record findings and rulings in `.superpowers/sdd/2026-09-01-prevalence-evidence-gate/broad-review.md`, update this plan with commit IDs and verification output, and leave unrelated pre-existing caches/worktrees untouched.
 
-- [ ] **Step 3: Commit plan metadata and prepare integration**
+- [x] **Step 3: Commit plan metadata and prepare integration**
 
   ```sh
   git add docs/superpowers/plans/2026-09-01-prevalence-evidence-gate.md
@@ -217,3 +217,12 @@
   ```
 
   Then use `superpowers:finishing-a-development-branch` to merge the reviewed branch to `main`, push it, and verify `HEAD` equals `origin/main`.
+
+## Completion evidence
+
+- Task 1 package identity implementation and repairs: `744dfc0`, `5e05100`; strict model tests and review passed.
+- Task 2 evaluation and aggregation implementation and repairs: `74db388`, `3468d59`, `21ef240`, `830aac3`; observed-only filtering, deterministic aggregation, and aggregate-only redaction review passed.
+- Task 3 report/CLI implementation and repair: `1630a27`, `9df7989`; canonical transactional output, CLI redaction, and removal of per-run commitments review passed.
+- Task 4 documentation/boundary implementation and repair: `f384dc7`, `f8b20df`; visible import isolation, transitive dynamic-import coverage, and governed-use documentation review passed.
+- Task 5 semantic and release repairs: `f36255f`, `3eae7be`, `8e4b0c8`, `afb7ba9`, `af82143`, `475af03`; root sealing, schema/registry identity binding, required-cell normalization, paired margin/extrema/range checks, strict parser feasibility, and final release sign-off passed.
+- Final feature-tip verification at `475af03`: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q` — 1,970 passed; `uv run ruff check src tests` — passed; `uv lock --check` — passed; `uv run python schema/build.py --check` — passed; `git diff --check 45be5d0..475af03` — clean. Review artifacts are under `.superpowers/sdd/2026-09-01-prevalence-evidence-gate/` and remain git-ignored.
