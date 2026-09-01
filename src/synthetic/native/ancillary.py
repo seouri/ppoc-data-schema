@@ -18,6 +18,17 @@ from typing import ClassVar
 
 from synthetic.cohort import CohortMember
 from synthetic.models import AgeRegimeDisorderTrajectory, ClinicalEvent, DisorderKind
+from synthetic.native.ancillary_contract import (
+    GHD_ANCILLARY_RESOURCE_NAMES,
+    GHD_DIAGNOSIS_CODE,
+    GHD_IGF1_COMPONENT,
+    GHD_LAB_COMPONENT_NAMES,
+    GHD_LAB_RESULT_FLAG,
+    GHD_MEDICATION_NAME,
+    GHD_MEDICATION_RECORD_TYPE,
+    GHD_REFERRAL_SPECIALTY,
+    GHD_STIM_COMPONENT,
+)
 from synthetic.native.observations import (
     ObservationValidationStatus,
     RecordedEvent,
@@ -25,22 +36,6 @@ from synthetic.native.observations import (
     validate_observation_frame,
 )
 from synthetic.native.resources import ResourceRow, ResourceShape
-
-GHD_ANCILLARY_RESOURCE_NAMES = (
-    "labs",
-    "medications",
-    "problem_list",
-    "referrals",
-)
-
-GHD_DIAGNOSIS_CODE = "SYN-GHD"
-GHD_IGF1_COMPONENT = "SYN-GHD-IGF1"
-GHD_STIM_COMPONENT = "SYN-GHD-STIM"
-GHD_LAB_COMPONENT_NAMES = (GHD_IGF1_COMPONENT, GHD_STIM_COMPONENT)
-GHD_LAB_RESULT_FLAG = "Synthetic"
-GHD_REFERRAL_SPECIALTY = "Synthetic Pediatric Endocrinology"
-GHD_MEDICATION_RECORD_TYPE = "Internal"
-GHD_MEDICATION_NAME = "Synthetic growth hormone"
 
 # Descriptive aliases keep the fictional vocabulary easy to discover without
 # introducing additional terminology or a clinical code-system claim.

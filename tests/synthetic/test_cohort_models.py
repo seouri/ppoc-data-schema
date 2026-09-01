@@ -3,6 +3,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import math
+from collections.abc import Iterator, Mapping
 
 import pytest
 
@@ -114,11 +115,29 @@ def _frame(
 
 
 def _bundle(frame: ObservationFrame) -> ObservedResourceBundle:
-    shape = ResourceShape(
-        tuple(ResourceSpec(name, ("patient_id",)) for name in BASE_RESOURCE_NAMES)
+    patient_fields = (
+        "patient_id",
+        "sex",
+        "ethnicity",
+        *(f"race_{index}" for index in range(1, 9)),
     )
+    shape = ResourceShape(
+        tuple(
+            ResourceSpec(
+                name,
+                patient_fields if name == "patients" else ("patient_id",),
+            )
+            for name in BASE_RESOURCE_NAMES
+        )
+    )
+    demographics = SyntheticDemographics(frame.patient_id).to_mapping()
     rows = {
-        name: (ResourceRow(name, (("patient_id", frame.patient_id),)),)
+        name: (
+            ResourceRow(
+                name,
+                tuple((field_name, demographics[field_name]) for field_name in patient_fields),
+            ),
+        )
         if name == "patients"
         else ()
         for name in BASE_RESOURCE_NAMES
@@ -285,6 +304,247 @@ def test_member_rejects_wrong_types_and_patient_mismatches() -> None:
         )
 
 
+@pytest.mark.parametrize("field_name", ["demographics", "frame", "bundle"])
+def test_member_rejects_serializable_contract_subclasses(
+    field_name: str,
+) -> None:
+    class TruthDemographics(SyntheticDemographics):
+        def to_mapping(self) -> dict[str, str]:
+            return {**super().to_mapping(), "truth": "latent-secret"}
+
+    class TruthFrame(ObservationFrame):
+        def to_mapping(self) -> dict[str, object]:
+            return {**super().to_mapping(), "truth": "frame-secret"}
+
+    class TruthBundle(ObservedResourceBundle):
+        def to_mapping(self) -> dict[str, object]:
+            return {**super().to_mapping(), "truth": "bundle-secret"}
+
+    trajectory = _trajectory()
+    frame = _frame(trajectory)
+    demographics: SyntheticDemographics = SyntheticDemographics("syn-cohort-member")
+    bundle: ObservedResourceBundle | None = _bundle(frame)
+    if field_name == "demographics":
+        demographics = TruthDemographics("syn-cohort-member")
+    elif field_name == "frame":
+        frame = TruthFrame(
+            frame.patient_id,
+            frame.policy_version,
+            frame.window,
+            frame.visits,
+            frame.events,
+            frame.truth,
+        )
+        bundle = None
+    else:
+        assert bundle is not None
+        bundle = TruthBundle(
+            bundle.patient_id,
+            bundle.shape,
+            bundle.rows,
+            bundle.clinical_descendants,
+            bundle.source_frame,
+        )
+
+    with pytest.raises(TypeError, match=field_name) as error:
+        CohortMember(demographics, trajectory, frame, bundle)
+    assert "secret" not in str(error.value)
+
+
+def test_member_mapping_revalidates_frozen_visible_contracts() -> None:
+    class TruthDemographics(SyntheticDemographics):
+        def to_mapping(self) -> dict[str, str]:
+            return {**super().to_mapping(), "truth": "postconstruction-secret"}
+
+    member = _member(include_bundle=False)
+    object.__setattr__(
+        member,
+        "demographics",
+        TruthDemographics("syn-cohort-member"),
+    )
+
+    with pytest.raises(TypeError, match="demographics") as error:
+        member.to_mapping()
+    assert "postconstruction-secret" not in str(error.value)
+
+
+def test_member_mapping_rejects_mutated_exact_demographics() -> None:
+    sensitive = "/governed/real-patient.csv truth_hash"
+    member = _member(include_bundle=False)
+    object.__setattr__(member.demographics, "patient_id", sensitive)
+
+    with pytest.raises((TypeError, ValueError), match="demographics") as error:
+        member.to_mapping()
+    assert sensitive not in str(error.value)
+
+
+def test_member_mapping_rejects_mutated_rows_without_invoking_them() -> None:
+    sensitive = "/governed/real-patient.csv truth_hash"
+
+    class SensitiveRows(Mapping[str, tuple[ResourceRow, ...]]):
+        def __getitem__(self, key: str) -> tuple[ResourceRow, ...]:
+            del key
+            raise RuntimeError(sensitive)
+
+        def __iter__(self) -> Iterator[str]:
+            raise RuntimeError(sensitive)
+
+        def __len__(self) -> int:
+            raise RuntimeError(sensitive)
+
+    member = _member()
+    assert member.bundle is not None
+    object.__setattr__(member.bundle, "rows", SensitiveRows())
+
+    with pytest.raises((TypeError, ValueError), match="bundle.rows") as error:
+        member.to_mapping()
+    assert sensitive not in str(error.value)
+
+
+def test_member_mapping_rejects_mutated_exact_resource_row_values() -> None:
+    member = _member()
+    assert member.bundle is not None
+    row = member.bundle.rows["patients"][0]
+    object.__setattr__(
+        row,
+        "values",
+        (*row.values, ("truth", "/governed/real-patient.csv truth_hash")),
+    )
+
+    with pytest.raises((TypeError, ValueError), match="bundle.rows") as error:
+        member.to_mapping()
+    encoded_error = str(error.value)
+    assert "real-patient" not in encoded_error
+    assert "truth_hash" not in encoded_error
+
+
+def test_member_rejects_subclassed_nested_visible_serializers() -> None:
+    class TruthWindow(ObservationWindow):
+        def to_mapping(self) -> dict[str, object]:
+            return {**super().to_mapping(), "truth": "window-secret"}
+
+    class TruthRow(ResourceRow):
+        def to_mapping(self) -> dict[str, str | int | float]:
+            return {**super().to_mapping(), "truth": "row-secret"}
+
+    trajectory = _trajectory()
+    window = TruthWindow(0, 731, 731, CensoringMode.NONE)
+    truth = ObservationTruth(
+        "syn-cohort-member",
+        window,
+        (),
+        (),
+        (),
+        (),
+        latent_trajectory_hash="a" * 64,
+        truth_hash="b" * 64,
+        policy=_policy(),
+        latent_trajectory=trajectory,
+    )
+    frame = ObservationFrame(
+        "syn-cohort-member",
+        "cohort-observation-v1",
+        window,
+        (),
+        (),
+        truth,
+    )
+    with pytest.raises(TypeError, match="frame.window") as error:
+        CohortMember(
+            SyntheticDemographics("syn-cohort-member"),
+            trajectory,
+            frame,
+            None,
+        )
+    assert "window-secret" not in str(error.value)
+
+    safe_frame = _frame(trajectory)
+    bundle = _bundle(safe_frame)
+    rows = dict(bundle.rows)
+    patient_values = bundle.rows["patients"][0].values
+    rows["patients"] = (
+        TruthRow("patients", patient_values),
+    )
+    nested_row_bundle = ObservedResourceBundle(
+        bundle.patient_id,
+        bundle.shape,
+        rows,
+        bundle.clinical_descendants,
+        bundle.source_frame,
+    )
+    with pytest.raises(TypeError, match="bundle.rows") as error:
+        CohortMember(
+            SyntheticDemographics("syn-cohort-member"),
+            trajectory,
+            safe_frame,
+            nested_row_bundle,
+        )
+    assert "row-secret" not in str(error.value)
+
+
+@pytest.mark.parametrize("field_name", ["bundle.shape", "bundle.source_frame"])
+def test_member_rejects_subclassed_bundle_contract_dependencies(
+    field_name: str,
+) -> None:
+    class ExtendedShape(ResourceShape):
+        pass
+
+    class ExtendedFrame(ObservationFrame):
+        pass
+
+    trajectory = _trajectory()
+    frame = _frame(trajectory)
+    bundle = _bundle(frame)
+    shape: ResourceShape = bundle.shape
+    source_frame: ObservationFrame = bundle.source_frame
+    if field_name == "bundle.shape":
+        shape = ExtendedShape(bundle.shape.resources)
+    else:
+        source_frame = ExtendedFrame(
+            frame.patient_id,
+            frame.policy_version,
+            frame.window,
+            frame.visits,
+            frame.events,
+            frame.truth,
+        )
+    extended_bundle = ObservedResourceBundle(
+        bundle.patient_id,
+        shape,
+        bundle.rows,
+        bundle.clinical_descendants,
+        source_frame,
+    )
+
+    with pytest.raises(TypeError, match=field_name.replace(".", r"\.")):
+        CohortMember(
+            SyntheticDemographics("syn-cohort-member"),
+            trajectory,
+            frame,
+            extended_bundle,
+        )
+
+
+def test_member_rejects_trajectory_subclasses() -> None:
+    class ExtendedTrajectory(AgeRegimeDisorderTrajectory):
+        pass
+
+    trajectory = _trajectory()
+    extended = ExtendedTrajectory(
+        trajectory.physiology,
+        trajectory.disorder,
+        trajectory.events,
+    )
+
+    with pytest.raises(TypeError, match="trajectory"):
+        CohortMember(
+            SyntheticDemographics("syn-cohort-member"),
+            extended,
+            _frame(extended),
+            None,
+        )
+
+
 def test_native_cohort_mapping_contains_only_visible_aggregate_counts() -> None:
     member = _member()
     cohort = NativeCohort("development-v1", 7, (member,), _calibration())
@@ -302,12 +562,45 @@ def test_native_cohort_mapping_contains_only_visible_aggregate_counts() -> None:
     assert "aggregate-artifact-v1" not in json.dumps(cohort.to_mapping())
 
 
+def test_native_cohort_mapping_revalidates_member_counts() -> None:
+    sensitive = "/governed/real-patient.csv truth_hash"
+
+    class SensitiveVisits(tuple[object, ...]):
+        def __len__(self) -> int:
+            raise RuntimeError(sensitive)
+
+    member = _member(include_bundle=False)
+    cohort = NativeCohort("development-v1", 7, (member,), _calibration())
+    object.__setattr__(member.frame, "visits", SensitiveVisits())
+
+    with pytest.raises((TypeError, ValueError), match="members") as error:
+        cohort.to_mapping()
+    assert sensitive not in str(error.value)
+
+
 def test_native_cohort_validates_container_types() -> None:
     calibration = _calibration()
     with pytest.raises(TypeError, match="members"):
         NativeCohort("development-v1", 7, [_member()], calibration)  # type: ignore[arg-type]
     with pytest.raises(TypeError, match="calibration"):
         NativeCohort("development-v1", 7, (), object())  # type: ignore[arg-type]
+
+    class ExtendedCalibration(CalibrationSamplingProfile):
+        pass
+
+    profile = _calibration()
+    extended = ExtendedCalibration(
+        profile.artifact_id,
+        profile.target_registry_version,
+        profile.sex_weights,
+        profile.ethnicity_weights,
+        profile.race_weights,
+        profile.race_multiselect_probability,
+        profile.recorded_healthy_probability,
+        profile.recorded_growth_dx_probability,
+    )
+    with pytest.raises(TypeError, match="calibration"):
+        NativeCohort("development-v1", 7, (), extended)
 
 
 def test_generation_unavailable_is_a_value_error() -> None:

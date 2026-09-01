@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+from typing import Self
 
 import pytest
 
@@ -391,6 +392,71 @@ def test_validator_detects_non_link_ancillary_values_and_descriptor_shape_order_
 
     assert shape_report.status is CounterfactualWorldValidationStatus.FAIL
     assert next(check for check in shape_report.checks if check.name == "resource_invariants").status is CounterfactualWorldValidationStatus.FAIL
+
+
+def test_member_and_pair_mappings_reject_mutated_visible_ancillary_values() -> None:
+    worlds = _worlds(InterventionKind.PHYSIOLOGY_SEVERITY)
+    bundle = worlds.intervention.bundle
+    assert bundle is not None
+    lab = bundle.rows["labs"][0]
+    sensitive = "/governed/real-patient.csv truth_hash"
+    object.__setattr__(
+        lab,
+        "values",
+        tuple(
+            (name, sensitive if name == "result_component_name" else value)
+            for name, value in lab.values
+        ),
+    )
+
+    for to_mapping in (worlds.intervention.to_mapping, worlds.to_mapping):
+        with pytest.raises(ValueError) as error:
+            to_mapping()
+        assert sensitive not in str(error.value)
+
+
+@pytest.mark.parametrize("mutation", ("value", "field_name"))
+def test_member_and_pair_mappings_reject_deceptive_ancillary_strings(
+    mutation: str,
+) -> None:
+    sensitive = "/governed/real-patient.csv truth_hash"
+
+    class DeceptiveString(str):
+        def __new__(cls, compares_as: str) -> Self:
+            instance = super().__new__(cls, sensitive)
+            instance.compares_as = compares_as
+            return instance
+
+        def __eq__(self, other: object) -> bool:
+            return other == self.compares_as
+
+        def __hash__(self) -> int:
+            return hash(self.compares_as)
+
+    worlds = _worlds(InterventionKind.PHYSIOLOGY_SEVERITY)
+    bundle = worlds.intervention.bundle
+    assert bundle is not None
+    lab = bundle.rows["labs"][0]
+    object.__setattr__(
+        lab,
+        "values",
+        tuple(
+            (
+                DeceptiveString(name)
+                if mutation == "field_name" and name == "result_component_name"
+                else name,
+                DeceptiveString(value)
+                if mutation == "value" and name == "result_component_name"
+                else value,
+            )
+            for name, value in lab.values
+        ),
+    )
+
+    for to_mapping in (worlds.intervention.to_mapping, worlds.to_mapping):
+        with pytest.raises(ValueError) as error:
+            to_mapping()
+        assert sensitive not in str(error.value)
 
 
 def test_validator_detects_bundle_source_frame_binding_tampering() -> None:

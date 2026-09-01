@@ -11,6 +11,7 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from numbers import Real
+from types import MappingProxyType
 
 from synthetic.calibration import (
     CalibrationArtifact,
@@ -27,18 +28,35 @@ from synthetic.calibration_targets import (
 from synthetic.models import AgeRegimeDisorderTrajectory, DisorderKind, PatientState
 from synthetic.native.age_regime_disorder import AgeRegimeDisorderKernel
 from synthetic.native.age_regimes import AgeRegimeConfig, AgeRegimeTrajectoryKernel
+from synthetic.native.ancillary_contract import (
+    GHD_ANCILLARY_RESOURCE_NAMES,
+    ghd_ancillary_rows_are_valid,
+)
 from synthetic.native.clinical_modules import GrowthDisorderModule
 from synthetic.native.observations import (
+    CensoringMode,
+    EncounterType,
+    MeasurementAvailability,
+    MeasurementChannel,
+    MeasurementObservation,
     ObservationFrame,
     ObservationPolicy,
+    ObservationTruth,
     ObservationValidationStatus,
+    ObservationWindow,
+    ObservedVisit,
+    RecordedEvent,
+    RecordedEventKind,
     generate_observation_frame,
     validate_observation_frame,
 )
 from synthetic.native.resources import (
     BASE_RESOURCE_NAMES,
+    ClinicalDescendant,
     ObservedResourceBundle,
+    ResourceRow,
     ResourceShape,
+    ResourceSpec,
     ResourceValidationStatus,
     SyntheticDemographics,
     project_observed_resources,
@@ -446,7 +464,7 @@ class CalibrationSamplingProfile:
     ) -> CalibrationSamplingProfile:
         """Extract a complete sampling profile from released aggregate cells."""
 
-        if not isinstance(artifact, CalibrationArtifact):
+        if type(artifact) is not CalibrationArtifact:
             raise TypeError("artifact must be a CalibrationArtifact")
         if artifact.source_partition != "calibration":
             raise ValueError("source_partition must be calibration")
@@ -533,36 +551,449 @@ class CalibrationSamplingProfile:
     def to_mapping(self) -> dict[str, object]:
         """Return only released aggregate probabilities and safe identities."""
 
-        def weight_mapping(
-            weights: tuple[tuple[str, float], ...],
-        ) -> list[dict[str, str | float]]:
-            return [
-                {"category": category, "probability": probability}
-                for category, probability in weights
-            ]
-
-        return {
-            "artifact_id": self.artifact_id,
-            "target_registry_version": self.target_registry_version,
-            "sex_weights": weight_mapping(self.sex_weights),
-            "ethnicity_weights": weight_mapping(self.ethnicity_weights),
-            "race_weights": weight_mapping(self.race_weights),
-            "race_multiselect_probability": self.race_multiselect_probability,
-            "recorded_healthy_probability": self.recorded_healthy_probability,
-            "recorded_growth_dx_probability": self.recorded_growth_dx_probability,
-        }
+        profile = _snapshot_calibration_profile(self)
+        return _calibration_profile_mapping(profile)
 
     def __repr__(self) -> str:
         return "CalibrationSamplingProfile(<aggregate-only>)"
 
 
-def _member_visible_mapping(member: CohortMember) -> dict[str, object]:
-    mapping: dict[str, object] = {
-        "demographics": member.demographics.to_mapping(),
-        "frame": member.frame.to_mapping(),
+def _snapshot_calibration_profile(
+    profile: CalibrationSamplingProfile,
+) -> CalibrationSamplingProfile:
+    """Return a validated exact profile without trusting frozen stored values."""
+
+    if type(profile) is not CalibrationSamplingProfile:
+        raise TypeError("calibration must be exactly a CalibrationSamplingProfile")
+    try:
+        if (
+            type(profile.artifact_id) is not str
+            or type(profile.target_registry_version) is not str
+        ):
+            raise TypeError
+        for weights in (
+            profile.sex_weights,
+            profile.ethnicity_weights,
+            profile.race_weights,
+        ):
+            if type(weights) is not tuple:
+                raise TypeError
+            for pair in weights:
+                if (
+                    type(pair) is not tuple
+                    or len(pair) != 2
+                    or type(pair[0]) is not str
+                    or type(pair[1]) is not float
+                    or not math.isfinite(pair[1])
+                ):
+                    raise TypeError
+        if not all(
+            type(value) is float and math.isfinite(value)
+            for value in (
+                profile.race_multiselect_probability,
+                profile.recorded_healthy_probability,
+                profile.recorded_growth_dx_probability,
+            )
+        ):
+            raise TypeError
+        return CalibrationSamplingProfile(
+            artifact_id=profile.artifact_id,
+            target_registry_version=profile.target_registry_version,
+            sex_weights=profile.sex_weights,
+            ethnicity_weights=profile.ethnicity_weights,
+            race_weights=profile.race_weights,
+            race_multiselect_probability=profile.race_multiselect_probability,
+            recorded_healthy_probability=profile.recorded_healthy_probability,
+            recorded_growth_dx_probability=profile.recorded_growth_dx_probability,
+        )
+    except Exception:  # noqa: BLE001 - mutated fields must fail with fixed text
+        raise ValueError("calibration contains invalid aggregate values") from None
+
+
+def _calibration_profile_mapping(
+    profile: CalibrationSamplingProfile,
+) -> dict[str, object]:
+    def weight_mapping(
+        weights: tuple[tuple[str, float], ...],
+    ) -> list[dict[str, str | float]]:
+        return [
+            {"category": category, "probability": probability}
+            for category, probability in weights
+        ]
+
+    return {
+        "artifact_id": profile.artifact_id,
+        "target_registry_version": profile.target_registry_version,
+        "sex_weights": weight_mapping(profile.sex_weights),
+        "ethnicity_weights": weight_mapping(profile.ethnicity_weights),
+        "race_weights": weight_mapping(profile.race_weights),
+        "race_multiselect_probability": profile.race_multiselect_probability,
+        "recorded_healthy_probability": profile.recorded_healthy_probability,
+        "recorded_growth_dx_probability": profile.recorded_growth_dx_probability,
     }
-    if member.bundle is not None:
-        mapping["bundle"] = member.bundle.to_mapping()
+
+
+def _require_exact_visible_frame(frame: ObservationFrame) -> None:
+    """Reject subtype-expanded serializers in one visible frame graph."""
+
+    if type(frame) is not ObservationFrame:
+        raise TypeError("frame must be exactly an ObservationFrame")
+    if type(frame.window) is not ObservationWindow:
+        raise TypeError("frame.window must be exactly an ObservationWindow")
+    if type(frame.visits) is not tuple:
+        raise TypeError("frame.visits must be exactly a tuple")
+    for visit in frame.visits:
+        if type(visit) is not ObservedVisit:
+            raise TypeError("frame.visits must contain exact ObservedVisit values")
+        if type(visit.measurements) is not tuple:
+            raise TypeError("frame.visits.measurements must be exactly tuples")
+        if not all(type(item) is MeasurementObservation for item in visit.measurements):
+            raise TypeError(
+                "frame.visits.measurements must contain exact "
+                "MeasurementObservation values"
+            )
+    if type(frame.events) is not tuple or not all(
+        type(event) is RecordedEvent for event in frame.events
+    ):
+        raise TypeError("frame.events must contain exact RecordedEvent values")
+
+
+def _require_exact_visible_scalar(value: object) -> None:
+    """Reject scalar subclasses before equality or ordinary serialization."""
+
+    if type(value) is str or type(value) is int:
+        return
+    if type(value) is float and math.isfinite(value):
+        return
+    raise TypeError("visible values must use exact finite primitive types")
+
+
+def _require_exact_frame_primitives(frame: ObservationFrame) -> None:
+    if type(frame.patient_id) is not str or type(frame.policy_version) is not str:
+        raise TypeError("frame identifiers must be exact strings")
+    if (
+        type(frame.window.start_age_days) is not int
+        or type(frame.window.effective_end_age_days) is not int
+        or type(frame.window.administrative_end_age_days) is not int
+        or type(frame.window.censoring_mode) is not CensoringMode
+    ):
+        raise TypeError("frame window must use exact primitive values")
+    for visit in frame.visits:
+        if (
+            type(visit.patient_id) is not str
+            or type(visit.visit_id) is not str
+            or type(visit.age_days) is not int
+            or type(visit.encounter_type) is not EncounterType
+        ):
+            raise TypeError("frame visits must use exact primitive values")
+        for measurement in visit.measurements:
+            if (
+                type(measurement.channel) is not MeasurementChannel
+                or type(measurement.availability) is not MeasurementAvailability
+                or (
+                    measurement.recorded_value is not None
+                    and (
+                        type(measurement.recorded_value) is not float
+                        or not math.isfinite(measurement.recorded_value)
+                    )
+                )
+            ):
+                raise TypeError("frame measurements must use exact primitive values")
+    for event in frame.events:
+        if (
+            type(event.patient_id) is not str
+            or type(event.age_days) is not int
+            or type(event.event_kind) is not RecordedEventKind
+            or type(event.code) is not str
+            or (
+                event.opportunity_index is not None
+                and type(event.opportunity_index) is not int
+            )
+        ):
+            raise TypeError("frame events must use exact primitive values")
+
+
+def _require_exact_visible_bundle(bundle: ObservedResourceBundle) -> None:
+    """Reject subtype-expanded serializers in one visible resource graph."""
+
+    if type(bundle) is not ObservedResourceBundle:
+        raise TypeError("bundle must be exactly an ObservedResourceBundle")
+    if type(bundle.shape) is not ResourceShape:
+        raise TypeError("bundle.shape must be exactly a ResourceShape")
+    if type(bundle.source_frame) is not ObservationFrame:
+        raise TypeError("bundle.source_frame must be exactly an ObservationFrame")
+    _require_exact_visible_frame(bundle.source_frame)
+    if type(bundle.rows) is not MappingProxyType:
+        raise TypeError("bundle.rows must be exactly an immutable mapping")
+    try:
+        row_names = tuple(bundle.rows)
+        if not all(type(name) is str for name in row_names) or (
+            row_names != BASE_RESOURCE_NAMES
+        ):
+            raise TypeError
+        for resource_name in BASE_RESOURCE_NAMES:
+            resource_rows = bundle.rows[resource_name]
+            if type(resource_rows) is not tuple or not all(
+                type(row) is ResourceRow for row in resource_rows
+            ):
+                raise TypeError("bundle.rows must contain exact ResourceRow values")
+    except Exception:  # noqa: BLE001 - hostile mappings must not leak callbacks
+        raise TypeError("bundle.rows must contain exact ResourceRow values") from None
+    if type(bundle.clinical_descendants) is not tuple or not all(
+        type(item) is ClinicalDescendant for item in bundle.clinical_descendants
+    ):
+        raise TypeError(
+            "bundle.clinical_descendants must contain exact ClinicalDescendant values"
+        )
+
+
+def _snapshot_visible_frame(frame: ObservationFrame) -> ObservationFrame:
+    """Rebuild a validated frame whose visible serializers cannot be mutated."""
+
+    _require_exact_visible_frame(frame)
+    try:
+        _require_exact_frame_primitives(frame)
+        window = ObservationWindow(
+            frame.window.start_age_days,
+            frame.window.effective_end_age_days,
+            frame.window.administrative_end_age_days,
+            frame.window.censoring_mode,
+        )
+        visits: list[ObservedVisit] = []
+        for visit in frame.visits:
+            measurements = tuple(
+                MeasurementObservation(
+                    measurement.channel,
+                    measurement.availability,
+                    measurement.recorded_value,
+                )
+                for measurement in visit.measurements
+            )
+            visits.append(
+                ObservedVisit(
+                    visit.patient_id,
+                    visit.visit_id,
+                    visit.age_days,
+                    visit.encounter_type,
+                    measurements,
+                )
+            )
+        events = tuple(
+            RecordedEvent(
+                event.patient_id,
+                event.age_days,
+                event.event_kind,
+                event.code,
+                event.opportunity_index,
+            )
+            for event in frame.events
+        )
+        truth = ObservationTruth(
+            frame.patient_id,
+            window,
+            (),
+            (),
+            (),
+            (),
+        )
+        return ObservationFrame(
+            frame.patient_id,
+            frame.policy_version,
+            window,
+            tuple(visits),
+            events,
+            truth,
+        )
+    except Exception:  # noqa: BLE001 - mutated fields must fail with fixed text
+        raise ValueError("frame contains invalid visible values") from None
+
+
+def _snapshot_resource_shape(shape: ResourceShape) -> ResourceShape:
+    if type(shape) is not ResourceShape or type(shape.resources) is not tuple:
+        raise TypeError("bundle.shape must be exactly a ResourceShape")
+    try:
+        resources: list[ResourceSpec] = []
+        for resource in shape.resources:
+            if (
+                type(resource) is not ResourceSpec
+                or type(resource.name) is not str
+                or type(resource.field_names) is not tuple
+                or not all(type(field_name) is str for field_name in resource.field_names)
+            ):
+                raise TypeError
+            resources.append(ResourceSpec(resource.name, tuple(resource.field_names)))
+        return ResourceShape(tuple(resources))
+    except Exception:  # noqa: BLE001 - mutated shape values must be redacted
+        raise ValueError("bundle.shape contains invalid values") from None
+
+
+def _snapshot_visible_bundle(
+    bundle: ObservedResourceBundle,
+    *,
+    validate_semantics: bool,
+) -> ObservedResourceBundle:
+    """Rebuild a bundle and enforce row order before ordinary serialization."""
+
+    _require_exact_visible_bundle(bundle)
+    shape = _snapshot_resource_shape(bundle.shape)
+    source_frame = _snapshot_visible_frame(bundle.source_frame)
+    try:
+        if type(bundle.patient_id) is not str:
+            raise TypeError
+        rows: dict[str, tuple[ResourceRow, ...]] = {}
+        for resource_name in BASE_RESOURCE_NAMES:
+            copied_rows: list[ResourceRow] = []
+            for row in bundle.rows[resource_name]:
+                if type(row.values) is not tuple or not all(
+                    type(pair) is tuple and len(pair) == 2 for pair in row.values
+                ):
+                    raise TypeError
+                if type(row.resource_name) is not str:
+                    raise TypeError
+                for field_name, value in row.values:
+                    if type(field_name) is not str:
+                        raise TypeError
+                    _require_exact_visible_scalar(value)
+                copied_rows.append(ResourceRow(row.resource_name, tuple(row.values)))
+            rows[resource_name] = tuple(copied_rows)
+        if not all(
+            type(item.patient_id) is str
+            and type(item.visit_id) is str
+            and type(item.age_days) is int
+            and type(item.event_kind) is RecordedEventKind
+            and type(item.code) is str
+            for item in bundle.clinical_descendants
+        ):
+            raise TypeError
+        descendants = tuple(
+            ClinicalDescendant(
+                item.patient_id,
+                item.visit_id,
+                item.age_days,
+                item.event_kind,
+                item.code,
+            )
+            for item in bundle.clinical_descendants
+        )
+        snapshot = ObservedResourceBundle(
+            bundle.patient_id,
+            shape,
+            rows,
+            descendants,
+            source_frame,
+        )
+    except Exception:  # noqa: BLE001 - mutated row values must fail with fixed text
+        raise ValueError("bundle.rows contain invalid values") from None
+    if validate_semantics:
+        try:
+            validation_rows = {
+                resource_name: (
+                    snapshot.rows[resource_name]
+                    if resource_name in {"patients", "visits"}
+                    else ()
+                )
+                for resource_name in BASE_RESOURCE_NAMES
+            }
+            validation_bundle = ObservedResourceBundle(
+                snapshot.patient_id,
+                snapshot.shape,
+                validation_rows,
+                snapshot.clinical_descendants,
+                snapshot.source_frame,
+            )
+            report = validate_observed_resources(validation_bundle)
+            if report.status is ResourceValidationStatus.FAIL:
+                raise ValueError
+            visit_ids = frozenset(
+                dict(row.values)["visit_id"] for row in snapshot.rows["visits"]
+            )
+            ancillary_rows = {
+                resource_name: snapshot.rows[resource_name]
+                for resource_name in GHD_ANCILLARY_RESOURCE_NAMES
+            }
+            if not ghd_ancillary_rows_are_valid(
+                snapshot.patient_id,
+                snapshot.shape,
+                ancillary_rows,
+                visit_ids,
+            ):
+                raise ValueError
+        except Exception:  # noqa: BLE001 - validation callbacks must be redacted
+            raise ValueError("bundle.rows contain invalid visible values") from None
+    return snapshot
+
+
+def _snapshot_demographics(
+    demographics: SyntheticDemographics,
+) -> SyntheticDemographics:
+    if type(demographics) is not SyntheticDemographics:
+        raise TypeError("demographics must be exactly SyntheticDemographics")
+    try:
+        if (
+            type(demographics.patient_id) is not str
+            or type(demographics.sex) is not str
+            or type(demographics.ethnicity) is not str
+            or type(demographics.races) is not tuple
+            or not all(type(race) is str for race in demographics.races)
+        ):
+            raise TypeError
+        return SyntheticDemographics(
+            demographics.patient_id,
+            demographics.sex,
+            demographics.ethnicity,
+            tuple(demographics.races),
+        )
+    except Exception:  # noqa: BLE001 - mutated fields must fail with fixed text
+        raise ValueError("demographics contain invalid visible values") from None
+
+
+def _snapshot_member_contract(
+    member: CohortMember,
+    *,
+    validate_visible_semantics: bool = False,
+) -> tuple[SyntheticDemographics, ObservationFrame, ObservedResourceBundle | None]:
+    """Snapshot and validate every object used by ordinary member mappings."""
+
+    if type(member) is not CohortMember:
+        raise TypeError("members must contain exact CohortMember values")
+    demographics = _snapshot_demographics(member.demographics)
+    if type(member.trajectory) is not AgeRegimeDisorderTrajectory:
+        raise TypeError("trajectory must be exactly an AgeRegimeDisorderTrajectory")
+    frame = _snapshot_visible_frame(member.frame)
+    bundle = (
+        _snapshot_visible_bundle(
+            member.bundle,
+            validate_semantics=validate_visible_semantics,
+        )
+        if member.bundle is not None
+        else None
+    )
+    try:
+        patient_ids = {
+            demographics.patient_id,
+            member.trajectory.physiology.points[0].patient_id,
+            frame.patient_id,
+        }
+        if bundle is not None:
+            patient_ids.add(bundle.patient_id)
+    except Exception:  # noqa: BLE001 - evaluator mutation must be redacted
+        raise ValueError("trajectory contains invalid patient values") from None
+    if len(patient_ids) != 1:
+        raise ValueError("cohort member objects must identify the same patient")
+    return demographics, frame, bundle
+
+
+def _member_visible_mapping(member: CohortMember) -> dict[str, object]:
+    demographics, frame, bundle = _snapshot_member_contract(
+        member,
+        validate_visible_semantics=True,
+    )
+    mapping: dict[str, object] = {
+        "demographics": SyntheticDemographics.to_mapping(demographics),
+        "frame": ObservationFrame.to_mapping(frame),
+    }
+    if bundle is not None:
+        mapping["bundle"] = ObservedResourceBundle.to_mapping(bundle)
     return mapping
 
 
@@ -576,23 +1007,7 @@ class CohortMember:
     bundle: ObservedResourceBundle | None
 
     def __post_init__(self) -> None:
-        if not isinstance(self.demographics, SyntheticDemographics):
-            raise TypeError("demographics must be SyntheticDemographics")
-        if not isinstance(self.trajectory, AgeRegimeDisorderTrajectory):
-            raise TypeError("trajectory must be an AgeRegimeDisorderTrajectory")
-        if not isinstance(self.frame, ObservationFrame):
-            raise TypeError("frame must be an ObservationFrame")
-        if self.bundle is not None and not isinstance(self.bundle, ObservedResourceBundle):
-            raise TypeError("bundle must be an ObservedResourceBundle or None")
-        patient_ids = {
-            self.demographics.patient_id,
-            self.trajectory.physiology.points[0].patient_id,
-            self.frame.patient_id,
-        }
-        if self.bundle is not None:
-            patient_ids.add(self.bundle.patient_id)
-        if len(patient_ids) != 1:
-            raise ValueError("cohort member objects must identify the same patient")
+        _snapshot_member_contract(self)
 
     def to_mapping(self) -> dict[str, object]:
         """Return only visible demographics, observations, and resources."""
@@ -615,23 +1030,34 @@ class NativeCohort:
     def __post_init__(self) -> None:
         require_aggregate_safe_token(self.profile, "profile")
         _require_nonnegative_integer(self.seed, "seed")
-        if not isinstance(self.members, tuple) or not all(
-            isinstance(member, CohortMember) for member in self.members
+        if type(self.members) is not tuple or not all(
+            type(member) is CohortMember for member in self.members
         ):
             raise TypeError("members must be a tuple of CohortMember values")
-        if not isinstance(self.calibration, CalibrationSamplingProfile):
+        if type(self.calibration) is not CalibrationSamplingProfile:
             raise TypeError("calibration must be a CalibrationSamplingProfile")
 
     def to_mapping(self) -> dict[str, str | int]:
         """Return fixed cohort metadata and visible aggregate counts only."""
 
+        try:
+            profile = require_aggregate_safe_token(self.profile, "profile")
+            seed = _require_nonnegative_integer(self.seed, "seed")
+            if type(self.members) is not tuple:
+                raise TypeError
+            snapshots = tuple(
+                _snapshot_member_contract(member) for member in self.members
+            )
+            _snapshot_calibration_profile(self.calibration)
+        except Exception:  # noqa: BLE001 - aggregate mapping must be fixed-redacted
+            raise ValueError("members contain invalid cohort values") from None
         return {
-            "profile": self.profile,
-            "seed": self.seed,
-            "member_count": len(self.members),
-            "bundle_count": sum(member.bundle is not None for member in self.members),
-            "visible_visit_count": sum(len(member.frame.visits) for member in self.members),
-            "visible_event_count": sum(len(member.frame.events) for member in self.members),
+            "profile": profile,
+            "seed": seed,
+            "member_count": len(snapshots),
+            "bundle_count": sum(bundle is not None for _, _, bundle in snapshots),
+            "visible_visit_count": sum(len(frame.visits) for _, frame, _ in snapshots),
+            "visible_event_count": sum(len(frame.events) for _, frame, _ in snapshots),
         }
 
     def __repr__(self) -> str:
@@ -648,9 +1074,9 @@ def generate_native_cohort(
 ) -> NativeCohort:
     """Generate a deterministic evaluator-only cohort from aggregate weights."""
 
-    if not isinstance(config, CohortConfig):
+    if type(config) is not CohortConfig:
         raise TypeError("config must be a CohortConfig")
-    if not isinstance(calibration, CalibrationSamplingProfile):
+    if type(calibration) is not CalibrationSamplingProfile:
         raise TypeError("calibration must be a CalibrationSamplingProfile")
     try:
         reference_value = getattr(reference, "value", None)

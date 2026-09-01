@@ -338,6 +338,75 @@ def test_preflight_injected_object_failures_are_redacted(failure_kind: str) -> N
     assert "truth_hash" not in encoded
 
 
+def test_generation_rejects_strict_input_subclasses_before_attribute_access() -> None:
+    sensitive = "/governed/real-patient.csv truth_hash"
+
+    class ArmedConfig(CohortConfig):
+        def __getattribute__(self, name: str) -> object:
+            if name == "module_weights":
+                try:
+                    armed = object.__getattribute__(self, "_armed")
+                except AttributeError:
+                    armed = False
+                if armed:
+                    raise RuntimeError(sensitive)
+            return super().__getattribute__(name)
+
+    class ArmedCalibration(CalibrationSamplingProfile):
+        def __getattribute__(self, name: str) -> object:
+            if name == "sex_weights":
+                try:
+                    armed = object.__getattribute__(self, "_armed")
+                except AttributeError:
+                    armed = False
+                if armed:
+                    raise RuntimeError(sensitive)
+            return super().__getattribute__(name)
+
+    config = _config(patient_count=1)
+    armed_config = ArmedConfig(
+        config.profile,
+        config.patient_count,
+        config.seed,
+        config.ages_days,
+        config.observation_policy,
+        config.module_weights,
+        config.reference_sex_mapping,
+        config.age_regime_config,
+    )
+    object.__setattr__(armed_config, "_armed", True)
+
+    calibration = _calibration()
+    armed_calibration = ArmedCalibration(
+        calibration.artifact_id,
+        calibration.target_registry_version,
+        calibration.sex_weights,
+        calibration.ethnicity_weights,
+        calibration.race_weights,
+        calibration.race_multiselect_probability,
+        calibration.recorded_healthy_probability,
+        calibration.recorded_growth_dx_probability,
+    )
+    object.__setattr__(armed_calibration, "_armed", True)
+
+    for field_name, strict_input in (
+        ("config", armed_config),
+        ("calibration", armed_calibration),
+    ):
+        call_config = strict_input if field_name == "config" else config
+        call_calibration = (
+            strict_input if field_name == "calibration" else calibration
+        )
+        with pytest.raises(TypeError, match=field_name) as error:
+            generate_native_cohort(
+                call_config,  # type: ignore[arg-type]
+                RegimeLinearTestReference(),
+                call_calibration,  # type: ignore[arg-type]
+                modules=_modules(),
+            )
+        assert sensitive not in str(error.value)
+
+
 def test_one_named_stream_family_flows_through_module_and_observation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
