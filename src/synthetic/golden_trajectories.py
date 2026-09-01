@@ -52,6 +52,13 @@ _CASE_ID = re.compile(r"golden-[a-z0-9]+(?:-[a-z0-9]+)*-v[1-9][0-9]*\Z")
 _PATIENT_ID = re.compile(r"syn-golden-[a-z0-9]+(?:-[a-z0-9]+)*\Z")
 _TOKEN = re.compile(r"[a-z][a-z0-9_]*\Z")
 _MAX_AGE_DAYS = 7305
+_PUBERTY_ONSET_BOUNDS = (3287, 5114)
+_PUBERTY_TEMPO_BOUNDS = (730, 1460)
+_PUBERTY_HEIGHT_SPURT_BOUNDS = (0.2, 0.8)
+_PUBERTY_BMI_SHIFT_BOUNDS = (-0.2, 0.3)
+_CONSTITUTIONAL_DELAY_BOUNDS = (180, 720)
+_GHD_ONSET_BOUNDS = (730, 3652)
+_GHD_TREATMENT_OFFSET_DAYS = 510
 _AGE_TUPLE = (0, 700, 730, 760, 3000, 4379, 4380, 4740, 5470, 5475, 6575, 7305)
 _ALL_REGIMES = tuple(GrowthRegime)
 _DISEASE_EVENTS = (
@@ -70,6 +77,54 @@ _EVENT_PHASES = {
     "treatment_start": 5,
     "treatment_response": 6,
     "treatment_nonresponse": 6,
+}
+_PHYSIOLOGY_Z_FIELDS = (
+    "birth_length_z",
+    "birth_weight_z",
+    "head_circumference_z",
+    "childhood_height_z",
+    "childhood_bmi_z",
+    "puberty_height_spurt_z",
+    "puberty_bmi_shift_z",
+)
+_FIXED_PHYSIOLOGY_VALUES = (
+    "age-regimes-v1",
+    0.1,
+    -0.1,
+    0.2,
+    0.0,
+    0.0,
+    4380,
+    1095,
+    0.5,
+    0.0,
+)
+_FIXED_DISORDER_VALUES = {
+    GOLDEN_CASE_IDS[0]: (DisorderKind.HEALTHY, None, 0.0, 0, None, 0.0),
+    GOLDEN_CASE_IDS[1]: (
+        DisorderKind.FAMILIAL_SHORT_STATURE,
+        0,
+        1.0,
+        0,
+        None,
+        0.0,
+    ),
+    GOLDEN_CASE_IDS[2]: (
+        DisorderKind.CONSTITUTIONAL_DELAY,
+        4380,
+        1.0,
+        360,
+        None,
+        0.0,
+    ),
+    GOLDEN_CASE_IDS[3]: (
+        DisorderKind.GROWTH_HORMONE_DEFICIENCY,
+        3000,
+        1.0,
+        0,
+        3510,
+        0.6,
+    ),
 }
 
 
@@ -108,6 +163,143 @@ def _validate_integer_ages(value: object, *, nonempty: bool = True) -> tuple[int
     return tuple(age for age in value)
 
 
+def _exact_finite_float(value: object) -> bool:
+    return type(value) is float and math.isfinite(value)
+
+
+def _exact_optional_age(value: object) -> bool:
+    return value is None or (
+        type(value) is int and 0 <= value <= _MAX_AGE_DAYS
+    )
+
+
+def _validate_physiology_state(state: object, *, fixed: bool) -> None:
+    if type(state) is not AgeRegimeState:
+        raise TypeError("physiology_state must be an exact AgeRegimeState")
+    if type(state.module_version) is not str or state.module_version != "age-regimes-v1":
+        raise ValueError("physiology_state version is unavailable")
+    if any(not _exact_finite_float(getattr(state, field)) for field in _PHYSIOLOGY_Z_FIELDS):
+        raise ValueError("physiology_state z values must be exact and finite")
+    if not (
+        _PUBERTY_HEIGHT_SPURT_BOUNDS[0]
+        <= state.puberty_height_spurt_z
+        <= _PUBERTY_HEIGHT_SPURT_BOUNDS[1]
+        and _PUBERTY_BMI_SHIFT_BOUNDS[0]
+        <= state.puberty_bmi_shift_z
+        <= _PUBERTY_BMI_SHIFT_BOUNDS[1]
+    ):
+        raise ValueError("physiology_state puberty offsets are unavailable")
+    if (
+        type(state.puberty_onset_age_days) is not int
+        or not _PUBERTY_ONSET_BOUNDS[0]
+        <= state.puberty_onset_age_days
+        <= _PUBERTY_ONSET_BOUNDS[1]
+    ):
+        raise ValueError("physiology_state puberty onset is unavailable")
+    if (
+        type(state.puberty_tempo_days) is not int
+        or not _PUBERTY_TEMPO_BOUNDS[0]
+        <= state.puberty_tempo_days
+        <= _PUBERTY_TEMPO_BOUNDS[1]
+        or state.puberty_onset_age_days + state.puberty_tempo_days > _MAX_AGE_DAYS
+    ):
+        raise ValueError("physiology_state puberty tempo is unavailable")
+    values = (
+        state.module_version,
+        state.birth_length_z,
+        state.birth_weight_z,
+        state.head_circumference_z,
+        state.childhood_height_z,
+        state.childhood_bmi_z,
+        state.puberty_onset_age_days,
+        state.puberty_tempo_days,
+        state.puberty_height_spurt_z,
+        state.puberty_bmi_shift_z,
+    )
+    if fixed and values != _FIXED_PHYSIOLOGY_VALUES:
+        raise ValueError("fixed physiology_state does not match the golden contract")
+
+
+def _validate_disorder_state(state: object, *, case_id: str) -> None:
+    if type(state) is not LatentDisorderState:
+        raise TypeError("disorder_state must be an exact LatentDisorderState")
+    if type(state.kind) is not DisorderKind:
+        raise TypeError("disorder_state kind must be an exact DisorderKind")
+    if not _exact_optional_age(state.onset_age_days):
+        raise ValueError("disorder_state onset is unavailable")
+    if not _exact_finite_float(state.severity) or state.severity < 0:
+        raise ValueError("disorder_state severity is unavailable")
+    if (
+        type(state.puberty_delay_days) is not int
+        or not 0 <= state.puberty_delay_days <= _MAX_AGE_DAYS
+    ):
+        raise ValueError("disorder_state puberty delay is unavailable")
+    if not _exact_optional_age(state.treatment_start_age_days):
+        raise ValueError("disorder_state treatment start is unavailable")
+    if (
+        not _exact_finite_float(state.treatment_response)
+        or not 0 <= state.treatment_response <= 1
+    ):
+        raise ValueError("disorder_state treatment response is unavailable")
+    if state.kind is DisorderKind.HEALTHY:
+        coherent = (
+            state.onset_age_days is None
+            and state.severity == 0
+            and state.puberty_delay_days == 0
+            and state.treatment_start_age_days is None
+            and state.treatment_response == 0
+        )
+    elif state.kind is DisorderKind.FAMILIAL_SHORT_STATURE:
+        coherent = (
+            state.onset_age_days == 0
+            and state.severity > 0
+            and state.puberty_delay_days == 0
+            and state.treatment_start_age_days is None
+            and state.treatment_response == 0
+        )
+    elif state.kind is DisorderKind.CONSTITUTIONAL_DELAY:
+        coherent = (
+            state.onset_age_days == 4380
+            and state.severity > 0
+            and _CONSTITUTIONAL_DELAY_BOUNDS[0]
+            <= state.puberty_delay_days
+            <= _CONSTITUTIONAL_DELAY_BOUNDS[1]
+            and state.treatment_start_age_days is None
+            and state.treatment_response == 0
+        )
+    else:
+        treatment_start = state.treatment_start_age_days
+        coherent = (
+            state.onset_age_days is not None
+            and _GHD_ONSET_BOUNDS[0] <= state.onset_age_days <= _GHD_ONSET_BOUNDS[1]
+            and state.severity > 0
+            and state.puberty_delay_days == 0
+            and (
+                (
+                    treatment_start is None
+                    and state.treatment_response == 0
+                )
+                or (
+                    treatment_start == state.onset_age_days + _GHD_TREATMENT_OFFSET_DAYS
+                    and 0 <= state.treatment_response <= 1
+                )
+            )
+        )
+    if not coherent:
+        raise ValueError("disorder_state is incoherent")
+    expected = _FIXED_DISORDER_VALUES.get(case_id)
+    values = (
+        state.kind,
+        state.onset_age_days,
+        state.severity,
+        state.puberty_delay_days,
+        state.treatment_start_age_days,
+        state.treatment_response,
+    )
+    if expected is not None and values != expected:
+        raise ValueError("fixed disorder_state does not match the golden contract")
+
+
 @dataclass(frozen=True, repr=False)
 class GoldenTrajectoryCase:
     case_id: str
@@ -142,12 +334,10 @@ class GoldenTrajectoryCase:
             raise ValueError("patient must contain fixed fictional values")
         if type(self.seed) is not int or self.seed < 0:
             raise ValueError("seed must be a nonnegative integer")
-        if type(self.physiology_state) is not AgeRegimeState:
-            raise TypeError("physiology_state must be an exact AgeRegimeState")
-        if self.physiology_state.module_version != "age-regimes-v1":
-            raise ValueError("physiology_state version is unavailable")
-        if type(self.disorder_state) is not LatentDisorderState:
-            raise TypeError("disorder_state must be an exact LatentDisorderState")
+        _validate_physiology_state(
+            self.physiology_state, fixed=self.case_id in GOLDEN_CASE_IDS
+        )
+        _validate_disorder_state(self.disorder_state, case_id=self.case_id)
         ages = _validate_integer_ages(self.ages_days)
         probes = _validate_integer_ages(self.pattern_probe_ages_days)
         if type(self.required_regimes) is not tuple or not self.required_regimes:
@@ -441,10 +631,26 @@ def _validated_cases(cases: tuple[GoldenTrajectoryCase, ...]) -> tuple[GoldenTra
         raise ValueError("cases must be a nonempty tuple")
     if any(type(case) is not GoldenTrajectoryCase for case in cases):
         raise TypeError("cases must contain exact GoldenTrajectoryCase values")
-    identifiers = tuple(case.case_id for case in cases)
+    copied = tuple(
+        GoldenTrajectoryCase(
+            case.case_id,
+            case.patient,
+            case.seed,
+            case.ages_days,
+            case.physiology_state,
+            case.disorder_state,
+            case.required_regimes,
+            case.required_event_types,
+            case.height_pattern,
+            case.bmi_pattern,
+            case.pattern_probe_ages_days,
+        )
+        for case in cases
+    )
+    identifiers = tuple(case.case_id for case in copied)
     if len(set(identifiers)) != len(identifiers):
         raise ValueError("case IDs must be unique")
-    return tuple(case for case in cases)
+    return copied
 
 
 def run_golden_trajectory_suite(
