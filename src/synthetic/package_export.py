@@ -21,6 +21,7 @@ from typing import Any
 from synthetic.base_resources import BASE_RESOURCES
 from synthetic.csv_package import write_resource, write_synthetic_descriptor
 from synthetic.derivation import DerivationOracle, DerivationUnavailable
+from synthetic.derivation_binding import BoundDerivationOracle, DerivationBinding
 from synthetic.manifest import RunManifest
 from synthetic.native.resources import (
     ObservedResourceBundle,
@@ -321,29 +322,17 @@ def _validate_preflight(
     output: Path,
     metadata: PackageExportMetadata,
     derivation_oracle: DerivationOracle | None,
-    trusted_derivation_fingerprint: str,
-    trusted_derivation_test_only: bool,
+    derivation_binding: DerivationBinding,
 ) -> tuple[
     dict[str, Any],
     dict[str, list[dict[str, object]]],
-    Callable[[Path, dict[str, Any]], object],
-    str,
+    BoundDerivationOracle,
 ]:
     if not isinstance(metadata, PackageExportMetadata):
         raise TypeError("metadata must be PackageExportMetadata")
     if derivation_oracle is None:
         raise DerivationUnavailable("authoritative derivation oracle is not configured")
-    derive = getattr(derivation_oracle, "derive", None)
-    if not callable(derive):
-        raise DerivationUnavailable("authoritative derivation oracle is not configured")
-    oracle_id = getattr(derivation_oracle, "oracle_id", None)
-    if not isinstance(oracle_id, str) or not oracle_id.strip():
-        raise DerivationUnavailable("authoritative derivation oracle is not configured")
-    _require_digest(
-        "trusted_derivation_fingerprint", trusted_derivation_fingerprint, allow_placeholder=False
-    )
-    if not isinstance(trusted_derivation_test_only, bool):
-        raise TypeError("trusted_derivation_test_only must be a boolean")
+    bound_oracle = BoundDerivationOracle(derivation_oracle, derivation_binding)
     copied_descriptor = _copy_descriptor(descriptor)
     if schema_fingerprint(copied_descriptor) != EXPECTED_SCHEMA_FINGERPRINT:
         raise ValueError("descriptor does not match the exact schema contract")
@@ -354,8 +343,7 @@ def _validate_preflight(
     return (
         canonical_descriptor,
         _normalize_base_rows(canonical_descriptor, base_rows),
-        derive,
-        oracle_id,
+        bound_oracle,
     )
 
 
@@ -978,8 +966,7 @@ def export_counterfactual_ehr_world_pair(
     *,
     metadata: PackageExportMetadata,
     derivation_oracle: DerivationOracle,
-    trusted_derivation_fingerprint: str,
-    trusted_derivation_test_only: bool,
+    derivation_binding: DerivationBinding,
 ) -> Path:
     """Export a validated fictional world pair as two exact-schema child packages."""
     try:
@@ -990,6 +977,7 @@ def export_counterfactual_ehr_world_pair(
         raise CounterfactualPackageExportUnavailable(_PAIR_FAILURE_REASON) from None
 
     try:
+        BoundDerivationOracle(derivation_oracle, derivation_binding)
         (
             pair_type,
             validation_status_type,
@@ -1035,8 +1023,7 @@ def export_counterfactual_ehr_world_pair(
                         staging / "baseline",
                         metadata=metadata,
                         derivation_oracle=derivation_oracle,
-                        trusted_derivation_fingerprint=trusted_derivation_fingerprint,
-                        trusted_derivation_test_only=trusted_derivation_test_only,
+                        derivation_binding=derivation_binding,
                     )
                     intervention = export_exact_schema_package(
                         copied_descriptor,
@@ -1044,8 +1031,7 @@ def export_counterfactual_ehr_world_pair(
                         staging / "intervention",
                         metadata=metadata,
                         derivation_oracle=derivation_oracle,
-                        trusted_derivation_fingerprint=trusted_derivation_fingerprint,
-                        trusted_derivation_test_only=trusted_derivation_test_only,
+                        derivation_binding=derivation_binding,
                     )
                 except Exception:  # noqa: BLE001 - pair pre-creation errors are redacted.
                     raise CounterfactualPackageExportUnavailable(_PAIR_FAILURE_REASON) from None
@@ -1211,20 +1197,18 @@ def export_exact_schema_package(
     *,
     metadata: PackageExportMetadata,
     derivation_oracle: DerivationOracle,
-    trusted_derivation_fingerprint: str,
-    trusted_derivation_test_only: bool,
+    derivation_binding: DerivationBinding,
 ) -> Path:
     """Export staged, oracle-augmented rows as an atomically promoted package."""
     try:
         _require_output_available(output)
-        copied_descriptor, normalized_rows, derive, oracle_id = _validate_preflight(
+        copied_descriptor, normalized_rows, bound_oracle = _validate_preflight(
             descriptor,
             base_rows,
             output,
             metadata,
             derivation_oracle,
-            trusted_derivation_fingerprint,
-            trusted_derivation_test_only,
+            derivation_binding,
         )
     except (FileExistsError, PackageExportUnavailable):
         raise
@@ -1280,31 +1264,9 @@ def export_exact_schema_package(
                             for name in BASE_RESOURCES
                         }
 
-                        derivation = derive(staging, stage_descriptor)
+                        bound_oracle.derive(staging, stage_descriptor)
                         _require_directory_identity(outer, outer_identity)
                         _require_directory_identity(staging, staging_identity)
-                        current_oracle_id = getattr(derivation_oracle, "oracle_id", None)
-                        if not isinstance(current_oracle_id, str) or not current_oracle_id.strip():
-                            raise DerivationUnavailable("derivation oracle returned no identity")
-                        if current_oracle_id != oracle_id:
-                            raise DerivationUnavailable("derivation oracle identity changed")
-                        returned_oracle_id = getattr(derivation, "oracle_id", None)
-                        if not isinstance(returned_oracle_id, str) or not returned_oracle_id.strip():
-                            raise DerivationUnavailable("derivation oracle returned no identity")
-                        if returned_oracle_id != oracle_id:
-                            raise DerivationUnavailable("derivation oracle identity changed")
-                        implementation_fingerprint = getattr(
-                            derivation, "implementation_fingerprint", None
-                        )
-                        if implementation_fingerprint != trusted_derivation_fingerprint:
-                            raise DerivationUnavailable(
-                                "derivation fingerprint does not match trusted configuration"
-                            )
-                        test_only = getattr(derivation, "test_only", None)
-                        if not isinstance(test_only, bool) or test_only != trusted_derivation_test_only:
-                            raise DerivationUnavailable(
-                                "derivation test-only classification does not match"
-                            )
                         allowed_files, allowed_dirs = _allowed_tree(
                             copied_descriptor, BASE_RESOURCES + _AUGMENTED_RESOURCES
                         )
@@ -1383,8 +1345,8 @@ def export_exact_schema_package(
             reference_sha256=metadata.reference_sha256,
             configuration_sha256=metadata.configuration_sha256,
             software_revision=metadata.software_revision,
-            derivation_fingerprint=trusted_derivation_fingerprint,
-            test_only_derivation=trusted_derivation_test_only,
+            derivation_fingerprint=derivation_binding.oracle.implementation_fingerprint,
+            test_only_derivation=derivation_binding.test_only,
             row_counts=row_counts,
             file_sha256=file_sha256,
         )
@@ -1406,8 +1368,7 @@ def export_observed_resource_package(
     *,
     metadata: PackageExportMetadata,
     derivation_oracle: DerivationOracle,
-    trusted_derivation_fingerprint: str,
-    trusted_derivation_test_only: bool,
+    derivation_binding: DerivationBinding,
 ) -> Path:
     """Export validated observed-resource bundles through the exact-schema lifecycle."""
     try:
@@ -1447,6 +1408,5 @@ def export_observed_resource_package(
         output,
         metadata=metadata,
         derivation_oracle=derivation_oracle,
-        trusted_derivation_fingerprint=trusted_derivation_fingerprint,
-        trusted_derivation_test_only=trusted_derivation_test_only,
+        derivation_binding=derivation_binding,
     )

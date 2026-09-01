@@ -28,11 +28,13 @@ from synthetic.schema_contract import (
     schema_fingerprint,
 )
 from synthetic.validate import validate_structure
-from tests.synthetic.fakes import IdentityPreservingTestDerivationOracle
+from tests.synthetic.fakes import (
+    IdentityPreservingTestDerivationOracle,
+    test_derivation_binding,
+)
 from tests.synthetic.test_counterfactual_world_validation import _worlds
 
 ROOT = Path(__file__).resolve().parents[2]
-TRUSTED_FINGERPRINT = "0123456789abcdef" * 4
 
 
 def _descriptor() -> dict:
@@ -123,8 +125,7 @@ def test_export_pair_creates_two_exact_schema_packages_and_a_deterministic_aggre
         tmp_path / "pair",
         metadata=metadata,
         derivation_oracle=IdentityPreservingTestDerivationOracle(),
-        trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
-        trusted_derivation_test_only=True,
+        derivation_binding=test_derivation_binding(),
     )
     replay = export_counterfactual_ehr_world_pair(
         worlds,
@@ -132,8 +133,7 @@ def test_export_pair_creates_two_exact_schema_packages_and_a_deterministic_aggre
         tmp_path / "pair-replay",
         metadata=metadata,
         derivation_oracle=IdentityPreservingTestDerivationOracle(),
-        trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
-        trusted_derivation_test_only=True,
+        derivation_binding=test_derivation_binding(),
     )
 
     assert result == tmp_path / "pair"
@@ -217,8 +217,7 @@ def test_export_pair_archives_only_fixed_failure_content_after_copy_failure(
             tmp_path / "pair",
             metadata=_metadata(),
             derivation_oracle=IdentityPreservingTestDerivationOracle(),
-            trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
-            trusted_derivation_test_only=True,
+            derivation_binding=test_derivation_binding(),
         )
 
     assert not (tmp_path / "pair").exists()
@@ -267,8 +266,7 @@ def test_export_pair_clears_a_restrictive_copied_child_before_archiving_failure(
             tmp_path / "pair",
             metadata=_metadata(),
             derivation_oracle=IdentityPreservingTestDerivationOracle(),
-            trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
-            trusted_derivation_test_only=True,
+            derivation_binding=test_derivation_binding(),
         )
 
     assert not (tmp_path / "pair").exists()
@@ -330,8 +328,7 @@ def test_export_pair_removes_the_empty_partial_when_failure_archiving_fails(
             tmp_path / "pair",
             metadata=_metadata(),
             derivation_oracle=IdentityPreservingTestDerivationOracle(),
-            trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
-            trusted_derivation_test_only=True,
+            derivation_binding=test_derivation_binding(),
         )
 
     assert not (tmp_path / "pair").exists()
@@ -366,8 +363,7 @@ def test_export_pair_clears_a_restrictive_partial_root_before_archiving_failure(
             tmp_path / "pair",
             metadata=_metadata(),
             derivation_oracle=IdentityPreservingTestDerivationOracle(),
-            trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
-            trusted_derivation_test_only=True,
+            derivation_binding=test_derivation_binding(),
         )
 
     assert not (tmp_path / "pair").exists()
@@ -421,8 +417,7 @@ def test_export_pair_preserves_each_supported_visible_matrix_and_ghd_ancillary_r
         tmp_path / intervention.value,
         metadata=_metadata(),
         derivation_oracle=IdentityPreservingTestDerivationOracle(),
-        trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
-        trusted_derivation_test_only=True,
+        derivation_binding=test_derivation_binding(),
     )
 
     assert len(_tree_bytes(result)) == 23
@@ -470,8 +465,7 @@ def test_export_pair_calls_the_oracle_only_for_two_distinct_visible_child_stagin
         tmp_path / "pair",
         metadata=_metadata(),
         derivation_oracle=oracle,
-        trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
-        trusted_derivation_test_only=True,
+        derivation_binding=test_derivation_binding(),
     )
 
     expected_paths = tuple(
@@ -498,8 +492,8 @@ def test_export_pair_calls_the_oracle_only_for_two_distinct_visible_child_stagin
         "missing_bundle",
         "descriptor",
         "oracle",
-        "fingerprint",
-        "classification",
+        "binding_none",
+        "binding_object",
     ),
 )
 def test_export_pair_rejects_invalid_precreation_inputs_without_public_lifecycle_artifacts(
@@ -511,8 +505,7 @@ def test_export_pair_rejects_invalid_precreation_inputs_without_public_lifecycle
     kwargs: dict[str, object] = {
         "metadata": _metadata(),
         "derivation_oracle": IdentityPreservingTestDerivationOracle(),
-        "trusted_derivation_fingerprint": TRUSTED_FINGERPRINT,
-        "trusted_derivation_test_only": True,
+        "derivation_binding": test_derivation_binding(),
     }
     if case == "unevaluable_world":
         object.__setattr__(worlds.intervention.frame, "truth", None)
@@ -531,10 +524,10 @@ def test_export_pair_rejects_invalid_precreation_inputs_without_public_lifecycle
         descriptor["resources"].pop()
     elif case == "oracle":
         kwargs["derivation_oracle"] = None
-    elif case == "fingerprint":
-        kwargs["trusted_derivation_fingerprint"] = "invalid-fingerprint"
+    elif case == "binding_none":
+        kwargs["derivation_binding"] = None
     else:
-        kwargs["trusted_derivation_test_only"] = 1
+        kwargs["derivation_binding"] = object()
 
     output = tmp_path / f"invalid-{case}"
     with pytest.raises(
@@ -542,6 +535,45 @@ def test_export_pair_rejects_invalid_precreation_inputs_without_public_lifecycle
     ):
         export_counterfactual_ehr_world_pair(worlds, descriptor, output, **kwargs)  # type: ignore[arg-type]
     _assert_no_pair_output(tmp_path, output)
+
+
+def test_export_pair_rejects_incomplete_non_test_binding_before_private_staging(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    mapping = test_derivation_binding().to_mapping()
+    mapping["test_only"] = False
+    incomplete_binding = type(test_derivation_binding()).from_mapping(mapping)
+    temporary_calls = 0
+
+    class RejectTemporaryDirectory:
+        def __init__(self, **kwargs: object) -> None:
+            nonlocal temporary_calls
+            del kwargs
+            temporary_calls += 1
+            raise AssertionError("private staging must not start")
+
+    monkeypatch.setattr(
+        package_export.tempfile,
+        "TemporaryDirectory",
+        RejectTemporaryDirectory,
+    )
+
+    with pytest.raises(
+        CounterfactualPackageExportUnavailable,
+        match="counterfactual package export failed",
+    ):
+        export_counterfactual_ehr_world_pair(
+            _worlds(InterventionKind.PHYSIOLOGY_SEVERITY),
+            _descriptor(),
+            tmp_path / "pair",
+            metadata=_metadata(),
+            derivation_oracle=IdentityPreservingTestDerivationOracle(),
+            derivation_binding=incomplete_binding,
+        )
+
+    assert temporary_calls == 0
+    _assert_no_pair_output(tmp_path, tmp_path / "pair")
 
 
 def test_export_pair_rejects_existing_output_without_overwriting(tmp_path: Path) -> None:
@@ -556,8 +588,7 @@ def test_export_pair_rejects_existing_output_without_overwriting(tmp_path: Path)
             output,
             metadata=_metadata(),
             derivation_oracle=IdentityPreservingTestDerivationOracle(),
-            trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
-            trusted_derivation_test_only=True,
+            derivation_binding=test_derivation_binding(),
         )
 
     assert (output / "keep.txt").read_text(encoding="utf-8") == "keep"
@@ -581,8 +612,7 @@ def test_export_pair_rejects_deterministic_lifecycle_collision_before_oracle_cal
             output,
             metadata=_metadata(),
             derivation_oracle=oracle,
-            trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
-            trusted_derivation_test_only=True,
+            derivation_binding=test_derivation_binding(),
         )
 
     assert oracle.calls == []
@@ -642,8 +672,7 @@ def test_export_pair_archives_only_fixed_failure_content_after_copied_tree_rejec
             output,
             metadata=_metadata(),
             derivation_oracle=IdentityPreservingTestDerivationOracle(),
-            trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
-            trusted_derivation_test_only=True,
+            derivation_binding=test_derivation_binding(),
         )
 
     _assert_failure_only(tmp_path, output, "hidden-tree-token")
@@ -670,8 +699,7 @@ def test_export_pair_redacts_post_creation_pair_manifest_failure(
             output,
             metadata=_metadata(),
             derivation_oracle=IdentityPreservingTestDerivationOracle(),
-            trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
-            trusted_derivation_test_only=True,
+            derivation_binding=test_derivation_binding(),
         )
 
     assert raw_token not in str(error.value)
@@ -704,8 +732,7 @@ def test_export_pair_rejects_a_manifest_replaced_after_the_path_scan(
             output,
             metadata=_metadata(),
             derivation_oracle=IdentityPreservingTestDerivationOracle(),
-            trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
-            trusted_derivation_test_only=True,
+            derivation_binding=test_derivation_binding(),
         )
 
     assert not output.exists()
@@ -738,8 +765,7 @@ def test_export_pair_cleans_the_original_partial_inode_after_name_replacement(
             output,
             metadata=_metadata(),
             derivation_oracle=IdentityPreservingTestDerivationOracle(),
-            trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
-            trusted_derivation_test_only=True,
+            derivation_binding=test_derivation_binding(),
         )
 
     assert not output.exists()
@@ -781,8 +807,7 @@ def test_export_pair_never_follows_a_failure_file_injected_after_cleanup(
             output,
             metadata=_metadata(),
             derivation_oracle=IdentityPreservingTestDerivationOracle(),
-            trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
-            trusted_derivation_test_only=True,
+            derivation_binding=test_derivation_binding(),
         )
 
     assert injected
@@ -824,8 +849,7 @@ def test_export_pair_completes_private_staging_cleanup_before_promotion(
             output,
             metadata=_metadata(),
             derivation_oracle=IdentityPreservingTestDerivationOracle(),
-            trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
-            trusted_derivation_test_only=True,
+            derivation_binding=test_derivation_binding(),
         )
 
     assert not output.exists()
@@ -851,8 +875,7 @@ def test_export_pair_metadata_subclass_cannot_expand_visible_metadata(
         tmp_path / "pair",
         metadata=metadata,
         derivation_oracle=IdentityPreservingTestDerivationOracle(),
-        trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
-        trusted_derivation_test_only=True,
+        derivation_binding=test_derivation_binding(),
     )
 
     manifest = json.loads((result / "pair-manifest.json").read_text(encoding="utf-8"))
@@ -890,8 +913,7 @@ def test_export_pair_start_race_raises_a_path_free_collision(
             tmp_path / "pair",
             metadata=_metadata(),
             derivation_oracle=IdentityPreservingTestDerivationOracle(),
-            trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
-            trusted_derivation_test_only=True,
+            derivation_binding=test_derivation_binding(),
         )
 
     assert injected
@@ -946,8 +968,7 @@ def test_export_pair_promotion_rechecks_source_identity_inside_rename(
             output,
             metadata=_metadata(),
             derivation_oracle=IdentityPreservingTestDerivationOracle(),
-            trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
-            trusted_derivation_test_only=True,
+            derivation_binding=test_derivation_binding(),
         )
 
     assert injected
@@ -1009,8 +1030,7 @@ def test_export_pair_failure_archive_rechecks_source_identity_inside_rename(
             output,
             metadata=_metadata(),
             derivation_oracle=IdentityPreservingTestDerivationOracle(),
-            trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
-            trusted_derivation_test_only=True,
+            derivation_binding=test_derivation_binding(),
         )
 
     assert injected
@@ -1064,8 +1084,7 @@ def test_export_pair_rebinds_the_promoted_root_to_the_visible_parent_path(
             output,
             metadata=_metadata(),
             derivation_oracle=IdentityPreservingTestDerivationOracle(),
-            trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
-            trusted_derivation_test_only=True,
+            derivation_binding=test_derivation_binding(),
         )
 
     assert injected

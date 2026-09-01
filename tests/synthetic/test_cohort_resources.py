@@ -39,6 +39,7 @@ from tests.synthetic.cohort_fixtures import aggregate_calibration_artifact
 from tests.synthetic.fakes import (
     IdentityPreservingTestDerivationOracle,
     RegimeLinearTestReference,
+    test_derivation_binding,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -524,8 +525,7 @@ def test_caller_can_export_returned_bundles_separately(tmp_path: Path) -> None:
             reference_sha256="b" * 64,
         ),
         derivation_oracle=IdentityPreservingTestDerivationOracle(),
-        trusted_derivation_fingerprint="0123456789abcdef" * 4,
-        trusted_derivation_test_only=True,
+        derivation_binding=test_derivation_binding(),
     )
 
     assert package == tmp_path / "caller-export"

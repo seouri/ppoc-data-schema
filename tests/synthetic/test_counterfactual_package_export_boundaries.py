@@ -74,6 +74,7 @@ ALLOWED_PACKAGE_IMPORTS = {
     "synthetic.base_resources",
     "synthetic.csv_package",
     "synthetic.derivation",
+    "synthetic.derivation_binding",
     "synthetic.manifest",
     "synthetic.native.resources",
     "synthetic.run_directory",
@@ -196,8 +197,7 @@ def test_pair_export_public_signature_has_only_typed_in_memory_inputs_and_output
         "output",
         "metadata",
         "derivation_oracle",
-        "trusted_derivation_fingerprint",
-        "trusted_derivation_test_only",
+        "derivation_binding",
     )
     assert not set(signature.parameters) & FORBIDDEN_ARGUMENTS
     assert signature.parameters["output"].annotation == "Path"

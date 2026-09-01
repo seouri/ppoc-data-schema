@@ -23,11 +23,13 @@ from synthetic.package_export import (
 from synthetic.randomness import NamedRandomStreams
 from synthetic.schema_contract import load_descriptor
 from synthetic.validate import validate_structure
-from tests.synthetic.fakes import IdentityPreservingTestDerivationOracle
+from tests.synthetic.fakes import (
+    IdentityPreservingTestDerivationOracle,
+    test_derivation_binding,
+)
 from tests.synthetic.test_observation_generation import _event_trajectory, _policy
 
 ROOT = Path(__file__).resolve().parents[2]
-TRUSTED_FINGERPRINT = "0123456789abcdef" * 4
 
 
 def _descriptor() -> dict:
@@ -85,8 +87,7 @@ def _export(tmp_path: Path, bundles: object, output_name: str = "package") -> Pa
         tmp_path / output_name,
         metadata=_metadata(),
         derivation_oracle=IdentityPreservingTestDerivationOracle(),
-        trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
-        trusted_derivation_test_only=True,
+        derivation_binding=test_derivation_binding(),
     )
 
 

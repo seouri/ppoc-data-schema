@@ -2,7 +2,65 @@ import csv
 from pathlib import Path
 
 from synthetic.derivation import DerivationResult
-from synthetic.schema_contract import resource_spec
+from synthetic.derivation_binding import DerivationBinding
+from synthetic.schema_contract import EXPECTED_SCHEMA_FINGERPRINT, resource_spec
+
+
+def test_derivation_binding() -> DerivationBinding:
+    """Fictional, test-only binding with intentionally unevaluable evidence."""
+    return DerivationBinding.from_mapping(
+        {
+            "binding_version": "derivation-binding-v1",
+            "binding_id": "binding-ci-v1",
+            "schema_fingerprint": EXPECTED_SCHEMA_FINGERPRINT,
+            "oracle": {
+                "oracle_id": "identity-preserving-test-oracle-v1",
+                "implementation_fingerprint": "0123456789abcdef" * 4,
+                "source_revision": "revision-ci-v1",
+                "dependency_fingerprint": "a" * 64,
+                "source_kind": "approved_parity_harness",
+            },
+            "reference_standard": {
+                "standard_id": "standard-ci-v1",
+                "standard_fingerprint": "b" * 64,
+                "version": "standard-ci-v1",
+            },
+            "golden_evidence": {
+                "manifest_id": None,
+                "manifest_fingerprint": None,
+                "parity_contract": None,
+                "parity_report_id": None,
+                "parity_report_fingerprint": None,
+                "parity_status": "UNEVALUABLE",
+                "candidate_implementation_fingerprint": None,
+                "reference_implementation_fingerprint": None,
+                "parity_schema_fingerprint": None,
+                "covered_categories": [
+                    "filter_order",
+                    "age_boundaries",
+                    "missingness",
+                    "harrall_outlier",
+                    "biv_filtering",
+                    "velocity_variants",
+                    "rounding",
+                ],
+                "bidirectional_case_count": 0,
+                "synthetic_fuzz_case_count": 0,
+                "fuzz_corpus_fingerprint": None,
+            },
+            "review": {
+                "review_id": None,
+                "review_fingerprint": None,
+                "reviewed_at": None,
+                "reviewer_role": None,
+                "status": "PENDING",
+            },
+            "test_only": True,
+        }
+    )
+
+
+test_derivation_binding.__test__ = False
 
 
 class LinearTestReference:

@@ -3,11 +3,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import re
 from pathlib import Path
 
 from synthetic.base_resources import BASE_RESOURCES, build_base_rows
 from synthetic.derivation import DerivationOracle, DerivationUnavailable
+from synthetic.derivation_binding import DerivationBinding
 from synthetic.models import PatientState
 from synthetic.native.healthy import HealthyKernel
 from synthetic.package_export import (
@@ -31,20 +31,13 @@ def generate_smoke(
     software_revision: str,
     reference: GrowthReference,
     derivation_oracle: DerivationOracle | None,
-    trusted_derivation_fingerprint: str,
-    trusted_derivation_test_only: bool,
+    derivation_binding: DerivationBinding,
 ) -> Path:
     """Generate and atomically promote the exact-schema synthetic smoke package."""
     if patient_count < 1:
         raise ValueError("patient_count must be positive")
     if derivation_oracle is None:
         raise DerivationUnavailable("authoritative derivation oracle is not configured")
-    if re.fullmatch(r"[0-9a-f]{64}", trusted_derivation_fingerprint) is None:
-        raise ValueError("trusted_derivation_fingerprint must be lowercase SHA-256 hex")
-    if trusted_derivation_fingerprint == "0" * 64:
-        raise ValueError("trusted_derivation_fingerprint cannot be a placeholder")
-    if not isinstance(trusted_derivation_test_only, bool):
-        raise TypeError("trusted_derivation_test_only must be a boolean")
     _require_output_available(output)
     descriptor = load_descriptor(descriptor_path)
     smoke_configuration = {
@@ -87,8 +80,7 @@ def generate_smoke(
             software_revision=software_revision,
         ),
         derivation_oracle=derivation_oracle,
-        trusted_derivation_fingerprint=trusted_derivation_fingerprint,
-        trusted_derivation_test_only=trusted_derivation_test_only,
+        derivation_binding=derivation_binding,
     )
 
 

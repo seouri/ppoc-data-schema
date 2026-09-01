@@ -671,7 +671,10 @@ from synthetic.package_export import (
     export_observed_resource_package,
 )
 from synthetic.schema_contract import load_descriptor
-from tests.synthetic.fakes import IdentityPreservingTestDerivationOracle
+from tests.synthetic.fakes import (
+    IdentityPreservingTestDerivationOracle,
+    test_derivation_binding,
+)
 
 
 def export_passing_observed_bundles(repository: Path, bundles: list[object], output: Path) -> Path:
@@ -693,8 +696,7 @@ def export_passing_observed_bundles(repository: Path, bundles: list[object], out
             software_revision="development-example",
         ),
         derivation_oracle=IdentityPreservingTestDerivationOracle(),
-        trusted_derivation_fingerprint="0123456789abcdef" * 4,
-        trusted_derivation_test_only=True,
+        derivation_binding=test_derivation_binding(),
     )
 ```
 
@@ -733,7 +735,10 @@ from synthetic.package_export import (
 )
 from synthetic.schema_contract import load_descriptor
 from synthetic.validate import validate_structure
-from tests.synthetic.fakes import IdentityPreservingTestDerivationOracle
+from tests.synthetic.fakes import (
+    IdentityPreservingTestDerivationOracle,
+    test_derivation_binding,
+)
 
 # `worlds` is a previously assembled and PASS-validated fictional pair.
 descriptor_mapping = load_descriptor(Path("datapackage.json"))
@@ -752,8 +757,7 @@ output = export_counterfactual_ehr_world_pair(
     Path("counterfactual-pair"),
     metadata=metadata,
     derivation_oracle=IdentityPreservingTestDerivationOracle(),
-    trusted_derivation_fingerprint="0123456789abcdef" * 4,
-    trusted_derivation_test_only=True,
+    derivation_binding=test_derivation_binding(),
 )
 
 # Existing package tooling receives an ordinary child, never the envelope.
@@ -877,7 +881,7 @@ The package requires Python 3.12 or newer. The test-only reference and derivatio
 
 ## Run the smoke profile from Python
 
-`generate_smoke` requires an injected `GrowthReference`, an injected `DerivationOracle`, and an externally trusted derivation fingerprint/classification. The output path must not already exist.
+`generate_smoke` requires an injected `GrowthReference`, an injected `DerivationOracle`, and an explicit derivation binding. The output path must not already exist.
 
 ```python
 import tempfile
@@ -887,6 +891,7 @@ from synthetic.generate import generate_smoke
 from tests.synthetic.fakes import (
     IdentityPreservingTestDerivationOracle,
     LinearTestReference,
+    test_derivation_binding,
 )
 
 repository = Path.cwd()
@@ -902,13 +907,12 @@ promoted = generate_smoke(
     software_revision="local-smoke",
     reference=LinearTestReference(),
     derivation_oracle=oracle,
-    trusted_derivation_fingerprint="0123456789abcdef" * 4,
-    trusted_derivation_test_only=True,
+    derivation_binding=test_derivation_binding(),
 )
 print(promoted)
 ```
 
-The trusted fingerprint and `trusted_derivation_test_only` value must come from configuration outside the oracle result. The generator rejects a mismatch, an invalid/non-lowercase SHA-256 fingerprint, a placeholder all-zero fingerprint, or a non-boolean classification. The test oracle's fixed fingerprint is intentionally visible test metadata, not a production identity.
+The binding must come from configuration outside the oracle result. The generator rejects an oracle identity, implementation fingerprint, or test-only classification mismatch. The test oracle's fixed fingerprint is intentionally visible test metadata, not a production identity.
 
 ## Oracle and reference contracts
 

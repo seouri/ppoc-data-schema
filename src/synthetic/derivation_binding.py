@@ -8,7 +8,12 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
+from pathlib import Path
 from types import MappingProxyType
+from typing import Any
+
+from synthetic.derivation import DerivationOracle, DerivationResult
+from synthetic.schema_contract import EXPECTED_SCHEMA_FINGERPRINT
 
 DERIVATION_BINDING_VERSION = "derivation-binding-v1"
 DERIVATION_BINDING_CHECK_NAMES = (
@@ -591,3 +596,70 @@ def require_approved_derivation_binding(
     )
     if not approved:
         raise DerivationBindingUnavailable()
+
+
+class BoundDerivationOracle:
+    """Bind one derivation call to validated aggregate oracle identity."""
+
+    def __init__(
+        self,
+        oracle: DerivationOracle,
+        binding: DerivationBinding,
+        *,
+        expected_schema_fingerprint: str = EXPECTED_SCHEMA_FINGERPRINT,
+    ) -> None:
+        try:
+            report = validate_derivation_binding(
+                binding,
+                expected_schema_fingerprint=expected_schema_fingerprint,
+            )
+            if binding.test_only:
+                if report.status is DerivationBindingStatus.FAIL:
+                    raise DerivationBindingUnavailable()
+            else:
+                require_approved_derivation_binding(
+                    binding,
+                    expected_schema_fingerprint=expected_schema_fingerprint,
+                )
+            oracle_id = getattr(oracle, "oracle_id", None)
+            derive = getattr(oracle, "derive", None)
+            if (
+                not isinstance(oracle_id, str)
+                or not oracle_id.strip()
+                or oracle_id != binding.oracle.oracle_id
+                or not callable(derive)
+            ):
+                raise DerivationBindingUnavailable()
+        except DerivationBindingUnavailable:
+            raise
+        except Exception:  # noqa: BLE001 - adapter failures are deliberately redacted.
+            raise DerivationBindingUnavailable() from None
+
+        self.oracle_id = oracle_id
+        self._oracle = oracle
+        self._derive = derive
+        self._binding = binding
+
+    def derive(
+        self,
+        package_root: Path,
+        descriptor: dict[str, Any],
+    ) -> DerivationResult:
+        try:
+            result = self._derive(package_root, descriptor)
+            if not isinstance(result, DerivationResult):
+                raise DerivationBindingUnavailable()
+            current_oracle_id = getattr(self._oracle, "oracle_id", None)
+            if (
+                current_oracle_id != self.oracle_id
+                or result.oracle_id != self.oracle_id
+                or result.implementation_fingerprint
+                != self._binding.oracle.implementation_fingerprint
+                or result.test_only is not self._binding.test_only
+            ):
+                raise DerivationBindingUnavailable()
+            return result
+        except DerivationBindingUnavailable:
+            raise
+        except Exception:  # noqa: BLE001 - adapter failures are deliberately redacted.
+            raise DerivationBindingUnavailable() from None

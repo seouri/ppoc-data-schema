@@ -21,7 +21,10 @@ from synthetic.schema_contract import (
     schema_fingerprint,
 )
 from synthetic.validate import validate_structure
-from tests.synthetic.fakes import IdentityPreservingTestDerivationOracle
+from tests.synthetic.fakes import (
+    IdentityPreservingTestDerivationOracle,
+    test_derivation_binding,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 TRUSTED_FINGERPRINT = "0123456789abcdef" * 4
@@ -75,8 +78,7 @@ def _export(
     output_name: str = "package",
     metadata: PackageExportMetadata | None = None,
     derivation_oracle: object = _DEFAULT,
-    trusted_derivation_fingerprint: str = TRUSTED_FINGERPRINT,
-    trusted_derivation_test_only: bool = True,
+    derivation_binding: object = _DEFAULT,
 ) -> Path:
     descriptor = _descriptor() if descriptor is None else descriptor
     return export_exact_schema_package(
@@ -89,8 +91,11 @@ def _export(
             if derivation_oracle is _DEFAULT
             else derivation_oracle
         ),
-        trusted_derivation_fingerprint=trusted_derivation_fingerprint,
-        trusted_derivation_test_only=trusted_derivation_test_only,
+        derivation_binding=(
+            test_derivation_binding()
+            if derivation_binding is _DEFAULT
+            else derivation_binding
+        ),
     )
 
 
@@ -256,14 +261,13 @@ def test_export_writes_only_exact_schema_package_and_is_deterministic(tmp_path: 
     }
 
 
-def test_export_rejects_missing_oracle_and_invalid_trusted_configuration_before_lifecycle(
+def test_export_rejects_missing_oracle_and_invalid_binding_before_lifecycle(
     tmp_path: Path,
 ) -> None:
     for index, changes in enumerate((
         {"derivation_oracle": None},
-        {"trusted_derivation_fingerprint": "not-a-digest"},
-        {"trusted_derivation_fingerprint": "0" * 64},
-        {"trusted_derivation_test_only": 1},
+        {"derivation_binding": None},
+        {"derivation_binding": object()},
     )):
         with pytest.raises((PackageExportUnavailable, TypeError, ValueError)):
             _export(tmp_path, output_name=f"invalid-{index}", **changes)

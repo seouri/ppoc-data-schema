@@ -12,10 +12,10 @@ from synthetic.run_directory import RunDirectory
 from tests.synthetic.fakes import (
     IdentityPreservingTestDerivationOracle,
     LinearTestReference,
+    test_derivation_binding,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
-TRUSTED_FINGERPRINT = "0123456789abcdef" * 4
 
 
 def _hashes(root: Path) -> dict[str, str]:
@@ -37,8 +37,7 @@ def test_smoke_generation_is_exact_schema_and_reproducible(tmp_path: Path) -> No
         "software_revision": "test-revision",
         "reference": LinearTestReference(),
         "derivation_oracle": IdentityPreservingTestDerivationOracle(),
-        "trusted_derivation_fingerprint": TRUSTED_FINGERPRINT,
-        "trusted_derivation_test_only": True,
+        "derivation_binding": test_derivation_binding(),
     }
     generate_smoke(output=first, **arguments)
     generate_smoke(output=second, **arguments)
@@ -73,8 +72,7 @@ def test_smoke_manifest_records_injected_reference_digest(tmp_path: Path) -> Non
         software_revision="test-revision",
         reference=HashedLinearTestReference(),
         derivation_oracle=IdentityPreservingTestDerivationOracle(),
-        trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
-        trusted_derivation_test_only=True,
+        derivation_binding=test_derivation_binding(),
     )
 
     manifest = json.loads((output / "manifest.json").read_text())
@@ -106,8 +104,7 @@ def test_smoke_generation_preserves_legacy_lifecycle_run_token(
         software_revision="test-revision",
         reference=LinearTestReference(),
         derivation_oracle=IdentityPreservingTestDerivationOracle(),
-        trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
-        trusted_derivation_test_only=True,
+        derivation_binding=test_derivation_binding(),
     )
 
     expected = hashlib.sha256(f"{seed}:{patient_count}:{reference_time}".encode()).hexdigest()[:12]
@@ -127,8 +124,7 @@ def test_smoke_generation_delegates_exact_rows_and_metadata_to_shared_package_li
             output=output,
             metadata=kwargs["metadata"],
             oracle=kwargs["derivation_oracle"],
-            fingerprint=kwargs["trusted_derivation_fingerprint"],
-            test_only=kwargs["trusted_derivation_test_only"],
+            binding=kwargs["derivation_binding"],
         )
         return expected
 
@@ -144,15 +140,13 @@ def test_smoke_generation_delegates_exact_rows_and_metadata_to_shared_package_li
         software_revision="test-revision",
         reference=LinearTestReference(),
         derivation_oracle=oracle,
-        trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
-        trusted_derivation_test_only=True,
+        derivation_binding=test_derivation_binding(),
     )
 
     assert result == expected
     assert captured["output"] == tmp_path / "run"
     assert captured["oracle"] is oracle
-    assert captured["fingerprint"] == TRUSTED_FINGERPRINT
-    assert captured["test_only"] is True
+    assert captured["binding"] == test_derivation_binding()
     assert isinstance(captured["metadata"], PackageExportMetadata)
     metadata = captured["metadata"]
     assert metadata.profile == "smoke"
@@ -193,8 +187,7 @@ def test_smoke_collision_is_detected_before_patient_row_generation(
             software_revision="test-revision",
             reference=LinearTestReference(),
             derivation_oracle=IdentityPreservingTestDerivationOracle(),
-            trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
-            trusted_derivation_test_only=True,
+            derivation_binding=test_derivation_binding(),
         )
 
     assert generation_calls == 0
@@ -211,33 +204,22 @@ def test_no_derivation_oracle_cannot_promote_output(tmp_path: Path) -> None:
             software_revision="test-revision",
             reference=LinearTestReference(),
             derivation_oracle=None,
-            trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
-            trusted_derivation_test_only=True,
+            derivation_binding=test_derivation_binding(),
         )
     assert not (tmp_path / "run").exists()
 
 
 def test_untrusted_derivation_identity_cannot_promote(tmp_path: Path) -> None:
+    binding_mapping = test_derivation_binding().to_mapping()
+    binding_mapping["oracle"]["implementation_fingerprint"] = "f" * 64
+    mismatched_binding = type(test_derivation_binding()).from_mapping(binding_mapping)
     with pytest.raises(DerivationUnavailable):
         generate_smoke(
             descriptor_path=ROOT / "datapackage.json", output=tmp_path / "run",
             patient_count=1, seed=1, reference_time="2026-08-30T00:00:00Z",
             software_revision="test", reference=LinearTestReference(),
             derivation_oracle=IdentityPreservingTestDerivationOracle(),
-            trusted_derivation_fingerprint="f" * 64,
-            trusted_derivation_test_only=True,
-        )
-
-
-def test_placeholder_trusted_fingerprint_is_rejected(tmp_path: Path) -> None:
-    with pytest.raises(ValueError):
-        generate_smoke(
-            descriptor_path=ROOT / "datapackage.json", output=tmp_path / "run",
-            patient_count=1, seed=1, reference_time="2026-08-30T00:00:00Z",
-            software_revision="test", reference=LinearTestReference(),
-            derivation_oracle=IdentityPreservingTestDerivationOracle(),
-            trusted_derivation_fingerprint="0" * 64,
-            trusted_derivation_test_only=True,
+            derivation_binding=mismatched_binding,
         )
 
 
@@ -257,8 +239,7 @@ def test_oracle_cannot_mutate_actual_partial(tmp_path: Path) -> None:
             descriptor_path=ROOT / "datapackage.json", output=output,
             patient_count=1, seed=1, reference_time="2026-08-30T00:00:00Z",
             software_revision="test", reference=LinearTestReference(),
-            derivation_oracle=Hostile(), trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
-            trusted_derivation_test_only=True,
+            derivation_oracle=Hostile(), derivation_binding=test_derivation_binding(),
         )
     assert not output.exists()
 
@@ -274,8 +255,7 @@ def test_oracle_test_only_classification_must_match_trusted_config(tmp_path: Pat
             descriptor_path=ROOT / "datapackage.json", output=tmp_path / "run",
             patient_count=1, seed=1, reference_time="2026-08-30T00:00:00Z",
             software_revision="test", reference=LinearTestReference(),
-            derivation_oracle=Mismatch(), trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
-            trusted_derivation_test_only=True,
+            derivation_oracle=Mismatch(), derivation_binding=test_derivation_binding(),
         )
 
 
@@ -298,7 +278,7 @@ def test_non_boolean_oracle_classification_fails_closed(tmp_path: Path) -> None:
             descriptor_path=ROOT / "datapackage.json", output=tmp_path / "run",
             patient_count=1, seed=1, reference_time="2026-08-30T00:00:00Z",
             software_revision="test", reference=LinearTestReference(), derivation_oracle=Duck(),
-            trusted_derivation_fingerprint=TRUSTED_FINGERPRINT, trusted_derivation_test_only=True,
+            derivation_binding=test_derivation_binding(),
         )
 
 
@@ -316,7 +296,7 @@ def test_oracle_fifo_replacement_fails_before_hashing(tmp_path: Path) -> None:
             descriptor_path=ROOT / "datapackage.json", output=tmp_path / "run",
             patient_count=1, seed=1, reference_time="2026-08-30T00:00:00Z",
             software_revision="test", reference=LinearTestReference(), derivation_oracle=Hostile(),
-            trusted_derivation_fingerprint=TRUSTED_FINGERPRINT, trusted_derivation_test_only=True,
+            derivation_binding=test_derivation_binding(),
         )
 
 
@@ -338,7 +318,6 @@ def test_derivation_cannot_write_extra_artifacts_or_mutate_base(tmp_path: Path, 
             patient_count=1, seed=1, reference_time="2026-08-30T00:00:00Z",
             software_revision="test", reference=LinearTestReference(),
             derivation_oracle=Hostile(),
-            trusted_derivation_fingerprint=TRUSTED_FINGERPRINT,
-            trusted_derivation_test_only=True,
+            derivation_binding=test_derivation_binding(),
         )
     assert not (tmp_path / "run").exists()

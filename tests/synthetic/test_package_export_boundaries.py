@@ -78,6 +78,7 @@ PACKAGE_EXPORT_IMPORTS = {
     "synthetic.base_resources",
     "synthetic.csv_package",
     "synthetic.derivation",
+    "synthetic.derivation_binding",
     "synthetic.manifest",
     "synthetic.native.resources",
     "synthetic.run_directory",
