@@ -181,6 +181,8 @@ def test_result_canonical_report_and_summary_round_trip_without_governed_details
         "too-few-passes-for-passing-runs",
         "singleton-unequal-range",
         "exceedance-greater-than-maximum-difference",
+        "non-contract-schema-fingerprint",
+        "unknown-target-registry-version",
     ),
 )
 def test_strict_report_parser_rejects_cross_field_invalid_public_evidence(
@@ -258,7 +260,7 @@ def test_strict_report_parser_rejects_cross_field_invalid_public_evidence(
         comparison["generated_minimum"] = 0.0
         comparison["maximum_absolute_difference"] = 0.5
         mapping["status"] = "UNEVALUABLE"
-    else:
+    elif mutation == "exceedance-greater-than-maximum-difference":
         run["status"] = "FAIL"
         comparison["status"] = "FAIL"
         comparison["pass_count"] = 2
@@ -267,6 +269,24 @@ def test_strict_report_parser_rejects_cross_field_invalid_public_evidence(
         comparison["maximum_absolute_difference"] = 0.5
         comparison["maximum_tolerance_exceedance"] = 0.6
         mapping["status"] = "FAIL"
+    elif mutation == "non-contract-schema-fingerprint":
+        generation_identity = mapping["generation_identity"]
+        heldout_identity = mapping["heldout_identity"]
+        assert isinstance(generation_identity, dict)
+        assert isinstance(heldout_identity, dict)
+        generation_identity["schema_fingerprint"] = "e" * 64
+        heldout_identity["schema_fingerprint"] = "e" * 64
+        for run_mapping in runs:
+            assert isinstance(run_mapping, dict)
+            identity = run_mapping["identity"]
+            assert isinstance(identity, dict)
+            identity["schema_fingerprint"] = "e" * 64
+    else:
+        heldout_identity = mapping["heldout_identity"]
+        assert isinstance(heldout_identity, dict)
+        fidelity_policy = heldout_identity["fidelity_policy"]
+        assert isinstance(fidelity_policy, dict)
+        fidelity_policy["target_registry_version"] = "unknown-v999"
 
     with pytest.raises(ValueError, match="report is invalid"):
         module._parse_prevalence_evidence_report(mapping)

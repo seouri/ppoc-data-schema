@@ -33,6 +33,7 @@ from synthetic.calibration_targets import (
     RACE_CATEGORY_SLUGS,
     RECORDED_FLAGS,
     SEX_CATEGORY_SLUGS,
+    TARGET_REGISTRY_VERSION,
 )
 from synthetic.heldout_validate import (
     HeldoutComparison,
@@ -1228,6 +1229,8 @@ def _validate_generation_identity(value: object) -> dict[str, object]:
             _require_digest(mapping[field])
     except (KeyError, PrevalenceEvidenceUnavailable):
         raise ValueError("prevalence evidence report is invalid") from None
+    if mapping["schema_fingerprint"] != EXPECTED_SCHEMA_FINGERPRINT:
+        raise ValueError("prevalence evidence report is invalid")
     return dict(mapping)
 
 
@@ -1261,6 +1264,8 @@ def _validate_heldout_identity(value: object) -> dict[str, object]:
             _require_token(token)
     except (KeyError, PrevalenceEvidenceUnavailable):
         raise ValueError("prevalence evidence report is invalid") from None
+    if fidelity["target_registry_version"] != TARGET_REGISTRY_VERSION:
+        raise ValueError("prevalence evidence report is invalid")
     return {
         "source_snapshot": mapping["source_snapshot"],
         "synthetic_artifact_id": mapping["synthetic_artifact_id"],
