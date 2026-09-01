@@ -27,13 +27,7 @@ _TABLES = {
     "head_circumference_cm": "hcageinf.csv",
 }
 _TABLE_NAMES = tuple(dict.fromkeys(_TABLES.values()))
-_EXPECTED = {
-    "scripts/__init__.py", "scripts/augment.py", "scripts/harrall_outliers.py",
-    "data/statage_combined.csv", "data/wtage_combined.csv", "data/bmiagerev.csv",
-    "data/hcageinf.csv", "data/wtstat.csv", "data/wtleninf.csv", "data/hvage_no_pub.csv",
-    "data/hvage_earlier_pub.csv", "data/hvage_average_pub.csv", "data/hvage_later_pub.csv",
-    "data/icd10cm-tabular-2026.csv",
-}
+_EXPECTED_MANIFEST_COUNT = 14
 _REQUIRED_COLUMNS = ("Sex", "Agemos", "L", "M", "S")
 
 
@@ -76,7 +70,7 @@ def _parse_lms_table(source_bytes: bytes, metric: str) -> tuple[_LmsRow, ...]:
     except StopIteration as exc:
         raise ValueError("CDC table is empty") from exc
     if len(header) != len(set(header)) or not set(_REQUIRED_COLUMNS).issubset(header):
-        raise ValueError("CDC table has invalid columns")
+        raise ValueError(f"CDC table has invalid columns for {metric}")
     rows: list[_LmsRow] = []
     for fields in reader:
         if len(fields) != len(header) or not any(fields):
@@ -103,18 +97,24 @@ def _parse_lms_table(source_bytes: bytes, metric: str) -> tuple[_LmsRow, ...]:
 
 
 def _read_regular(path: Path) -> bytes:
-    metadata = path.lstat()
+    try:
+        metadata = path.lstat()
+    except OSError:
+        raise ValueError("CDC source file is unavailable") from None
     if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
         raise ValueError("CDC source file must be a regular file")
     flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
-    descriptor = os.open(path, flags)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError:
+        raise ValueError("CDC source file is unavailable") from None
     try:
         return b"".join(iter(lambda: os.read(descriptor, 1024 * 1024), b""))
     finally:
         os.close(descriptor)
 
 
-def _manifest(root: Path) -> dict[str, str]:
+def _manifest(root: Path) -> dict[str, tuple[str, int]]:
     manifest_path = root / "data/augment-runtime-manifest.json"
     source = _read_regular(manifest_path)
     if hashlib.sha256(source).hexdigest() != AUGMENTER_RUNTIME_MANIFEST_SHA256:
@@ -124,7 +124,7 @@ def _manifest(root: Path) -> dict[str, str]:
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise ValueError("runtime manifest is invalid") from exc
     entries = manifest.get("files") if isinstance(manifest, dict) else None
-    if not isinstance(entries, list) or len(entries) != len(_EXPECTED):
+    if not isinstance(entries, list) or len(entries) != _EXPECTED_MANIFEST_COUNT:
         raise ValueError("runtime manifest is invalid")
     result: dict[str, str] = {}
     for entry in entries:
@@ -136,7 +136,7 @@ def _manifest(root: Path) -> dict[str, str]:
         pure = PurePosixPath(raw)
         if pure.is_absolute() or pure.as_posix() != raw or any(part in {"", ".", ".."} for part in pure.parts):
             raise ValueError("runtime manifest path is invalid")
-        if raw in result or raw not in _EXPECTED or entry.get("source_relative_name") != raw:
+        if raw in result or entry.get("source_relative_name") != raw:
             raise ValueError("runtime manifest entries are invalid")
         digest = entry.get("sha256")
         count = entry.get("bytes")
@@ -146,9 +146,7 @@ def _manifest(root: Path) -> dict[str, str]:
         data = _read_regular(path)
         if len(data) != count or hashlib.sha256(data).hexdigest() != digest:
             raise ValueError("runtime source digest mismatch")
-        result[raw] = digest
-    if set(result) != _EXPECTED:
-        raise ValueError("runtime manifest entries are incomplete")
+        result[raw] = (digest, count)
     return result
 
 
@@ -160,17 +158,32 @@ class CdcGrowthReference:
     @classmethod
     def from_repository(cls, repository_root: Path) -> CdcGrowthReference:
         root = Path(repository_root)
-        digests = _manifest(root)
+        manifest = _manifest(root)
+        data_dir = root / "data"
+        try:
+            data_metadata = data_dir.lstat()
+        except OSError:
+            raise ValueError("CDC source directory is unavailable") from None
+        if stat.S_ISLNK(data_metadata.st_mode) or not stat.S_ISDIR(data_metadata.st_mode):
+            raise ValueError("CDC source directory is invalid")
         parsed: dict[str, tuple[_LmsRow, ...]] = {}
         for table in _TABLE_NAMES:
             path = root / "data" / table
-            parsed[table] = _parse_lms_table(_read_regular(path), table)
+            manifest_digest, manifest_bytes = manifest[f"data/{table}"]
+            source_bytes = _read_regular(path)
+            if len(source_bytes) != manifest_bytes or hashlib.sha256(source_bytes).hexdigest() != manifest_digest:
+                raise ValueError("runtime source digest mismatch")
+            parsed[table] = _parse_lms_table(source_bytes, table)
         series: dict[tuple[str, str], tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]] = {}
         for metric, table in _TABLES.items():
             for sex in ("M", "F"):
                 rows = tuple(row for row in parsed[table] if row.sex == sex)
-                series[(metric, sex)] = tuple(np.array([getattr(row, field) for row in rows], dtype=float) for field in ("agemos", "l", "m", "s"))  # type: ignore[assignment]
-        fingerprint = {"mapping": _MAPPING_TOKEN, "reference_id": _REFERENCE_ID, "tables": [{"name": name, "sha256": digests[f"data/{name}"]} for name in _TABLE_NAMES]}
+                ages = np.array([row.agemos for row in rows], dtype=float)
+                ls = np.array([row.l for row in rows], dtype=float)
+                ms = np.array([row.m for row in rows], dtype=float)
+                ss = np.array([row.s for row in rows], dtype=float)
+                series[(metric, sex)] = (ages, ls, ms, ss)
+        fingerprint = {"mapping": _MAPPING_TOKEN, "reference_id": _REFERENCE_ID, "tables": [{"name": name, "sha256": manifest[f"data/{name}"][0]} for name in _TABLE_NAMES]}
         canonical = json.dumps(fingerprint, sort_keys=True, separators=(",", ":")).encode()
         return cls(series, hashlib.sha256(canonical).hexdigest())
 

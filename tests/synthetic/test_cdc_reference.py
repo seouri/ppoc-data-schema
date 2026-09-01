@@ -35,11 +35,10 @@ def test_reference_matches_source_row_and_interpolates_lms() -> None:
 
     lower = [line.split(",") for line in rows[2:4]]
     age = 30
-    expected = _inverse_lms(
-        *(float(np.interp(age / 30.4375, [float(row[1]) for row in lower], [float(row[i]) for row in lower])) for i in (2, 3, 4)),
-        0.0,
-    )
-    assert math.isclose(reference.value("length_cm", int(age), "M", 0.0), expected, rel_tol=1e-12)
+    l, m, s = (float(np.interp(age / 30.4375, [float(row[1]) for row in lower], [float(row[i]) for row in lower])) for i in (2, 3, 4))
+    z = 1.25
+    expected = m * math.exp(s * z) if abs(l) < 1e-6 else m * (1 + l * s * z) ** (1 / l)
+    assert math.isclose(reference.value("length_cm", int(age), "M", z), expected, rel_tol=1e-12)
 
 
 def test_inverse_lms_branches_and_tiny_parser() -> None:
@@ -47,6 +46,7 @@ def test_inverse_lms_branches_and_tiny_parser() -> None:
     tiny = b"Sex,Agemos,L,M,S\n1,0,1,10,0.2\n1,1,1,11,0.2\n2,0,1,9,0.2\n2,1,1,10,0.2\n"
     parsed = _parse_lms_table(tiny, "tiny")
     assert len(parsed) == 4
+    assert {row.sex for row in parsed} == {"M", "F"}
     assert math.isclose(_inverse_lms(parsed[0].l, parsed[0].m, parsed[0].s, 1), 12.0)
 
 
@@ -74,3 +74,22 @@ def test_reference_module_has_no_forbidden_imports() -> None:
     imports = [node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)]
     assert "scripts.augment" not in imports
     assert "synthetic.generate" not in imports
+    assert "pandas" not in imports
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        b"Sex,Agemos,L,M,S\n3,0,1,10,0.2\n3,1,1,11,0.2\n",
+        b"Sex,Agemos,L,M,S\n1,0,1,10,0.2\n1,0,1,11,0.2\n2,0,1,9,0.2\n2,1,1,10,0.2\n",
+        b"Sex,Agemos,L,M,S,M\n1,0,1,10,0.2\n1,1,1,11,0.2\n",
+        b"Sex,Agemos,L,M,S\n1,0,nan,10,0.2\n1,1,1,11,0.2\n",
+        b"Sex,Agemos,L,M,S\n1,0,1,0,0.2\n1,1,1,11,0.2\n",
+        b"Sex,Agemos,L,M,S\n1,1,1,10,0.2\n1,0,1,11,0.2\n",
+        b"Sex,Agemos,L,M\n1,0,1,10\n1,1,1,11\n",
+        b"Sex,Agemos,L,M,S\n1,0,1,10,0.2\n1,1,1,11,0.2\n\xff",
+    ],
+)
+def test_parser_rejects_malformed_tables(source: bytes) -> None:
+    with pytest.raises(ValueError):
+        _parse_lms_table(source, "test")
