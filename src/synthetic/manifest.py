@@ -24,6 +24,7 @@ class RunManifest:
     status: str
     reference_sha256: str | None = None
     derivation_fingerprint: str = ""
+    test_only_derivation: bool | None = None
     metadata_only: bool = False
     row_counts: dict[str, int] = field(default_factory=dict)
     file_sha256: dict[str, str] = field(default_factory=dict)
@@ -102,6 +103,7 @@ class RunManifest:
             configuration_sha256=configuration_sha256,
             software_revision=software_revision,
             derivation_fingerprint=derivation_fingerprint,
+            test_only_derivation=True if test_only_derivation else None,
             prng_family=PRNG_FAMILY,
             seed_derivation_version=SEED_DERIVATION_VERSION,
             status=(
@@ -117,6 +119,9 @@ class RunManifest:
     def to_json_bytes(self) -> bytes:
         if not self.metadata_only and (not self.row_counts or not self.file_sha256):
             raise ValueError("generated manifests require row_counts and file_sha256")
+        mapping = asdict(self)
+        if mapping["test_only_derivation"] is not True:
+            del mapping["test_only_derivation"]
         return (
-            json.dumps(asdict(self), sort_keys=True, indent=2, ensure_ascii=False) + "\n"
+            json.dumps(mapping, sort_keys=True, indent=2, ensure_ascii=False) + "\n"
         ).encode("utf-8")

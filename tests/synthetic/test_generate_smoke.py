@@ -90,6 +90,28 @@ def test_smoke_profile_override_changes_only_profile_metadata(tmp_path: Path) ->
     }
 
 
+@pytest.mark.parametrize("profile", ("patient-profile", "profile/path", "profile value"))
+def test_smoke_profile_rejects_unsafe_aggregate_metadata(profile: str, tmp_path: Path) -> None:
+    """Catches a smoke profile accepting record or path-like metadata tokens."""
+    output = tmp_path / "run"
+
+    with pytest.raises(ValueError):
+        generate_smoke(
+            descriptor_path=ROOT / "datapackage.json",
+            output=output,
+            patient_count=1,
+            seed=20260901,
+            reference_time="2026-09-01T00:00:00Z",
+            software_revision="test-revision",
+            reference=LinearTestReference(),
+            derivation_oracle=IdentityPreservingTestDerivationOracle(),
+            derivation_binding=test_derivation_binding(),
+            profile=profile,
+        )
+
+    assert not output.exists()
+
+
 def test_smoke_manifest_records_injected_reference_digest(tmp_path: Path) -> None:
     class HashedLinearTestReference(LinearTestReference):
         source_sha256 = "a" * 64

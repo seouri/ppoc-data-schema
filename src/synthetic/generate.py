@@ -3,13 +3,16 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 from pathlib import Path
 
 from synthetic.base_resources import BASE_RESOURCES, build_base_rows
-from synthetic.calibration import require_aggregate_safe_token
 from synthetic.derivation import DerivationOracle, DerivationUnavailable
 from synthetic.derivation_binding import DerivationBinding
-from synthetic.development_runtime import build_development_runtime
+from synthetic.development_runtime import (
+    build_development_runtime,
+    generate_development_cohort,
+)
 from synthetic.models import PatientState
 from synthetic.native.healthy import HealthyKernel
 from synthetic.package_export import (
@@ -25,6 +28,56 @@ from synthetic.schema_contract import load_descriptor
 CLI_UNAVAILABLE_MESSAGE = "No production growth reference or authoritative derivation oracle is configured"
 _DEVELOPMENT_UNAVAILABLE_MESSAGE = "Synthetic development generation unavailable"
 _DEVELOPMENT_PROFILES = frozenset({"development-smoke", "development-cohort"})
+_AGGREGATE_TOKEN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
+_AGGREGATE_IDENTIFIER_RE = re.compile(r"\b[A-Za-z][A-Za-z0-9]*-[PV]-[0-9]{3,}\b", re.IGNORECASE)
+_AGGREGATE_PATH_EXTENSION_RE = re.compile(
+    r"\b[A-Za-z0-9_-]+\.(?:csv|tsv|json|parquet|txt|zip|gz)\b", re.IGNORECASE
+)
+_AGGREGATE_UNSAFE_WORDS = frozenset({"patient", "visit", "path", "key", "identifier"})
+_RECORD_INDICATORS = frozenset(
+    {"patient", "visit", "identifier", "uuid", "sequence", "truth", "candidate", "match", "row", "resource"}
+)
+
+
+def _metadata_components(value: str) -> tuple[str, ...]:
+    acronym_separated = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1 \2", value)
+    normalized = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", acronym_separated)
+    return tuple(re.findall(r"[a-z0-9]+", normalized.lower()))
+
+
+def _contains_indicator_components(value: str, indicators: frozenset[str]) -> bool:
+    components = _metadata_components(value)
+    for indicator in indicators:
+        indicator_components = _metadata_components(indicator)
+        width = len(indicator_components)
+        if width and any(
+            components[index : index + width] == indicator_components
+            for index in range(len(components) - width + 1)
+        ):
+            return True
+    return False
+
+
+def _contains_unsafe_metadata_material(value: str) -> bool:
+    return (
+        bool(frozenset(_metadata_components(value)) & _AGGREGATE_UNSAFE_WORDS)
+        or _AGGREGATE_IDENTIFIER_RE.search(value) is not None
+        or "/" in value
+        or "\\" in value
+        or _AGGREGATE_PATH_EXTENSION_RE.search(value) is not None
+    )
+
+
+def _require_aggregate_safe_token(value: object, field: str) -> str:
+    if not isinstance(value, str):
+        raise ValueError(f"{field} must be a string")  # noqa: TRY004
+    if _AGGREGATE_TOKEN_RE.fullmatch(value) is None:
+        raise ValueError(f"{field} must be an ASCII token without whitespace or path separators")
+    if _contains_unsafe_metadata_material(value):
+        raise ValueError(f"{field} must be aggregate-safe")
+    if _contains_indicator_components(value, _RECORD_INDICATORS):
+        raise ValueError(f"{field} must not contain record or hidden-state indicators")
+    return value
 
 
 def generate_smoke(
@@ -45,7 +98,7 @@ def generate_smoke(
         raise ValueError("patient_count must be positive")
     if derivation_oracle is None:
         raise DerivationUnavailable("authoritative derivation oracle is not configured")
-    profile = require_aggregate_safe_token(profile, "profile")
+    profile = _require_aggregate_safe_token(profile, "profile")
     _require_output_available(output)
     descriptor = load_descriptor(descriptor_path)
     smoke_configuration = {
@@ -123,8 +176,18 @@ def main() -> None:
                 derivation_binding=runtime.derivation_binding,
                 profile="development-smoke",
             )
+        elif args.profile == "development-cohort":
+            generate_development_cohort(
+                runtime,
+                descriptor_path=descriptor_path,
+                output=args.output,
+                patient_count=args.patients,
+                seed=args.seed,
+                reference_time=args.reference_time,
+                software_revision=args.software_revision,
+            )
         else:
-            raise RuntimeError("development cohort generation is not configured")
+            raise RuntimeError("development profile dispatch is not configured")
     except (KeyboardInterrupt, SystemExit):
         raise
     except Exception:  # noqa: BLE001 - CLI failures must not expose implementation details.

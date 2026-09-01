@@ -48,8 +48,17 @@ def _import_from_base(
 def _imports(path: Path) -> set[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"))
     module, is_package = _module_context(path)
+    return _imports_from_nodes(list(ast.walk(tree)), module, is_package=is_package)
+
+
+def _imports_from_nodes(
+    nodes: list[ast.AST],
+    module: str,
+    *,
+    is_package: bool,
+) -> set[str]:
     names: set[str] = set()
-    for node in ast.walk(tree):
+    for node in nodes:
         if isinstance(node, ast.Import):
             names.update(alias.name for alias in node.names)
         elif isinstance(node, ast.ImportFrom):
@@ -58,6 +67,53 @@ def _imports(path: Path) -> set[str]:
                 names.add(base)
                 names.update(f"{base}.{alias.name}" for alias in node.names)
     return names
+
+
+def _is_type_checking_guard(node: ast.expr) -> bool:
+    return (
+        isinstance(node, ast.Name)
+        and node.id == "TYPE_CHECKING"
+        or isinstance(node, ast.Attribute)
+        and isinstance(node.value, ast.Name)
+        and node.value.id in {"typing", "typing_extensions"}
+        and node.attr == "TYPE_CHECKING"
+    )
+
+
+def _runtime_import_nodes(tree: ast.Module) -> list[ast.AST]:
+    """Return imports executed while a visible generator module initializes.
+
+    Direct source checks remain deliberately broader; only the transitive closure
+    excludes type-only and deferred imports that have no runtime import edge.
+    """
+    nodes: list[ast.AST] = []
+
+    def visit(node: ast.AST) -> None:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            return
+        if isinstance(node, ast.If) and _is_type_checking_guard(node.test):
+            for statement in node.orelse:
+                visit(statement)
+            return
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            nodes.append(node)
+            return
+        for child in ast.iter_child_nodes(node):
+            visit(child)
+
+    for statement in tree.body:
+        visit(statement)
+    return nodes
+
+
+def _runtime_imports(path: Path) -> set[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    module, is_package = _module_context(path)
+    return _imports_from_nodes(
+        _runtime_import_nodes(tree),
+        module,
+        is_package=is_package,
+    )
 
 
 def _module_path(module: str) -> Path | None:
@@ -80,7 +136,7 @@ def _transitive_imports(paths: tuple[Path, ...]) -> set[str]:
         if path in visited:
             continue
         visited.add(path)
-        direct = _imports(path)
+        direct = _runtime_imports(path)
         imported.update(direct)
         pending.extend(candidate for name in direct if (candidate := _module_path(name)) is not None)
     return imported
@@ -121,6 +177,33 @@ def test_import_scanner_qualifies_relative_forbidden_imports(
     monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
 
     assert forbidden in _imports(path)
+
+
+def test_runtime_import_scan_excludes_type_checking_and_deferred_imports(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Transitive closure models imports executed as the visible module initializes."""
+    path = tmp_path / "src/synthetic/generate.py"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "from .derivation import DerivationUnavailable\n"
+        "from typing import TYPE_CHECKING\n"
+        "if TYPE_CHECKING:\n"
+        "    from .calibration_input import CalibrationInput\n"
+        "def deferred() -> None:\n"
+        "    from .privacy_audit import audit\n"
+        "class Deferred:\n"
+        "    from .calibration_input import helper\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
+
+    imported = _transitive_imports((path,))
+
+    assert "synthetic.derivation" in imported
+    assert "synthetic.calibration_input" not in imported
+    assert "synthetic.privacy_audit" not in imported
 
 
 def test_visible_generator_interfaces_do_not_import_governed_privacy_inputs() -> None:

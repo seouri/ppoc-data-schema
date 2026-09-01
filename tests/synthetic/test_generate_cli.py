@@ -101,6 +101,32 @@ def test_development_smoke_cli_exports_exact_visible_package(tmp_path: Path) -> 
     assert b"truth" not in published.lower()
 
 
+def test_development_cohort_cli_exports_exact_visible_package(tmp_path: Path) -> None:
+    """Catches the cohort CLI route bypassing the fixed native profile or exact exporter."""
+    output = tmp_path / "development-cohort"
+
+    result = _run(_command(output, profile="development-cohort"))
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == ""
+    assert result.stderr == ""
+    descriptor = load_descriptor(ROOT / "datapackage.json")
+    expected_resources = {resource["path"] for resource in descriptor["resources"]}
+    assert {path.name for path in output.glob("*.csv")} == expected_resources
+    assert len(expected_resources) == 8
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["profile"] == "development-cohort"
+    assert manifest["reference_id"] == "cdc-lms-reference-v1"
+    assert manifest["reference_sha256"] == CdcGrowthReference.from_repository(ROOT).source_sha256
+    assert manifest["derivation_fingerprint"] == AUGMENTER_RUNTIME_MANIFEST_SHA256
+    assert manifest["test_only_derivation"] is True
+    assert manifest["status"] == "STRUCTURE_VALIDATED_TEST_ORACLE"
+    assert not validate_structure(output, descriptor).errors
+    published = b"".join(path.read_bytes() for path in sorted(output.iterdir()) if path.is_file())
+    for forbidden in (b"latent", b"severity", b"truth", b"growth_hormone_deficiency"):
+        assert forbidden not in published.lower()
+
+
 def test_development_smoke_cli_is_reproducible_across_distinct_outputs(tmp_path: Path) -> None:
     """Catches CLI generation that depends on the selected output path."""
     first = tmp_path / "first"

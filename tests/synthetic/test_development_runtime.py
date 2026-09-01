@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import csv
 import hashlib
 import json
 import shutil
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from synthetic import development_runtime
 from synthetic.augmenter_oracle import (
     AUGMENTER_ORACLE_ID,
     AUGMENTER_RUNTIME_MANIFEST_SHA256,
@@ -26,7 +29,11 @@ from synthetic.derivation_binding import (
     validate_derivation_binding,
 )
 from synthetic.development_runtime import DevelopmentRuntime, build_development_runtime
-from synthetic.schema_contract import EXPECTED_SCHEMA_FINGERPRINT
+from synthetic.models import DisorderKind
+from synthetic.native.resources import BASE_RESOURCE_NAMES, ResourceValidationStatus
+from synthetic.package_export import PackageExportUnavailable
+from synthetic.schema_contract import EXPECTED_SCHEMA_FINGERPRINT, field_names, load_descriptor
+from synthetic.validate import validate_structure
 
 ROOT = Path(__file__).resolve().parents[2]
 UNAVAILABLE_MESSAGE = "source-matched augmenter unavailable"
@@ -353,3 +360,202 @@ def test_bound_oracle_rejects_mismatched_derivation_result() -> None:
     bound = BoundDerivationOracle(WrongResultOracle(), runtime.derivation_binding)
     with pytest.raises(DerivationBindingUnavailable):
         bound.derive(ROOT, {})
+
+
+def test_development_cohort_configuration_is_fixed_and_aggregate_only() -> None:
+    """Catches cohort policy or demographic weights drifting from the fixed development profile."""
+    config = development_runtime.development_cohort_config(64, 20260901)
+    calibration = development_runtime.development_calibration_profile()
+
+    assert config.profile == "development-cohort-v1"
+    assert config.ages_days == (0, 365, 730, 1460, 2190, 3650, 4380, 5114, 5475, 6200, 7305)
+    assert config.observation_policy.window_start_age_days == 0
+    assert config.observation_policy.window_end_age_days == 7306
+    assert config.observation_policy.length_availability_probability == 0.0
+    assert config.observation_policy.height_availability_probability == 1.0
+    assert config.observation_policy.weight_availability_probability == 1.0
+    assert config.observation_policy.head_circumference_availability_probability == 1.0
+    assert tuple((item.kind, item.probability) for item in config.module_weights) == (
+        (DisorderKind.HEALTHY, 0.5),
+        (DisorderKind.GROWTH_HORMONE_DEFICIENCY, 0.5),
+    )
+    assert config.reference_sex_mapping == (("F", "F"), ("M", "M"), ("U", "U"))
+    assert calibration.artifact_id == "development-cohort-v1"
+    assert calibration.target_registry_version == "calibration-targets-v1"
+    assert dict(calibration.sex_weights)["U"] == 0.0
+    assert sum(weight for _, weight in calibration.sex_weights) == pytest.approx(1.0)
+    assert sum(weight for _, weight in calibration.ethnicity_weights) == pytest.approx(1.0)
+    assert sum(weight for _, weight in calibration.race_weights) == pytest.approx(1.0)
+    assert calibration.race_multiselect_probability == 0.06
+    assert calibration.recorded_healthy_probability == 0.0
+    assert calibration.recorded_growth_dx_probability == 0.0
+    assert config == development_runtime.development_cohort_config(64, 20260901)
+
+
+def test_development_cohort_runner_exports_only_visible_longitudinal_resources(
+    tmp_path: Path,
+) -> None:
+    """Catches cohort export that omits visits, latent coverage, or aggregate-only package metadata."""
+    runtime = build_development_runtime(ROOT)
+    descriptor = load_descriptor(ROOT / "datapackage.json")
+    cohort = development_runtime.build_development_cohort(
+        runtime,
+        descriptor=descriptor,
+        patient_count=64,
+        seed=20260901,
+    )
+
+    config = development_runtime.development_cohort_config(64, 20260901)
+    assert len(cohort.members) == 64
+    assert {
+        member.trajectory.disorder.kind for member in cohort.members
+    } == {
+        DisorderKind.HEALTHY,
+        DisorderKind.GROWTH_HORMONE_DEFICIENCY,
+    }
+    patient_ids = tuple(member.demographics.patient_id for member in cohort.members)
+    visit_ids = tuple(
+        visit.visit_id for member in cohort.members for visit in member.frame.visits
+    )
+    assert len(patient_ids) == len(set(patient_ids)) == 64
+    assert len(visit_ids) == len(set(visit_ids)) == 64 * len(config.ages_days)
+    assert all(patient_id.startswith("syn-") for patient_id in patient_ids)
+    assert all(visit_id.startswith("syn-") for visit_id in visit_ids)
+    assert all(
+        tuple(visit.age_days for visit in member.frame.visits) == config.ages_days
+        for member in cohort.members
+    )
+    assert all(
+        not member.bundle.rows[resource_name]
+        for member in cohort.members
+        for resource_name in BASE_RESOURCE_NAMES[2:]
+        if member.bundle is not None
+    )
+
+    output = tmp_path / "development-cohort"
+    replay = tmp_path / "development-cohort-replay"
+    generated = development_runtime.generate_development_cohort(
+        runtime,
+        descriptor_path=ROOT / "datapackage.json",
+        output=output,
+        patient_count=64,
+        seed=20260901,
+        reference_time="2026-09-01T00:00:00Z",
+        software_revision="development-generator-v1",
+    )
+    replayed = development_runtime.generate_development_cohort(
+        runtime,
+        descriptor_path=ROOT / "datapackage.json",
+        output=replay,
+        patient_count=64,
+        seed=20260901,
+        reference_time="2026-09-01T00:00:00Z",
+        software_revision="development-generator-v1",
+    )
+
+    assert generated == output
+    assert replayed == replay
+    expected_resources = {resource["path"] for resource in descriptor["resources"]}
+    assert {path.name for path in output.glob("*.csv")} == expected_resources
+    assert len(expected_resources) == 8
+    assert not validate_structure(output, descriptor).errors
+    for resource in descriptor["resources"]:
+        if resource["name"] not in BASE_RESOURCE_NAMES[2:]:
+            continue
+        with (output / resource["path"]).open(encoding=resource.get("encoding", "utf-8"), newline="") as handle:
+            rows = list(csv.reader(handle))
+        assert rows == [list(field_names(descriptor, resource["name"]))]
+
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+    replay_manifest = json.loads((replay / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["profile"] == "development-cohort"
+    assert manifest["reference_id"] == "cdc-lms-reference-v1"
+    assert manifest["reference_sha256"] == runtime.reference.source_sha256
+    assert manifest["derivation_fingerprint"] == AUGMENTER_RUNTIME_MANIFEST_SHA256
+    assert manifest["test_only_derivation"] is True
+    assert manifest["status"] == "STRUCTURE_VALIDATED_TEST_ORACLE"
+    assert manifest["configuration_sha256"] == replay_manifest["configuration_sha256"]
+    published = b"".join(path.read_bytes() for path in sorted(output.iterdir()) if path.is_file())
+    for forbidden in (b"latent", b"severity", b"truth", b"growth_hormone_deficiency"):
+        assert forbidden not in published.lower()
+
+
+@pytest.mark.parametrize("failure", ("missing", "non-pass"))
+def test_development_cohort_runner_redacts_invalid_resource_bundles(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+) -> None:
+    """Catches a missing or failed bundle reaching package export without the fixed redaction."""
+    runtime = build_development_runtime(ROOT)
+    descriptor = load_descriptor(ROOT / "datapackage.json")
+    if failure == "missing":
+        generate_native_cohort = development_runtime.generate_native_cohort
+
+        def generate_without_bundle(*args: object, **kwargs: object) -> object:
+            cohort = generate_native_cohort(*args, **kwargs)
+            return replace(
+                cohort,
+                members=(replace(cohort.members[0], bundle=None), *cohort.members[1:]),
+            )
+
+        monkeypatch.setattr(development_runtime, "generate_native_cohort", generate_without_bundle)
+    else:
+        monkeypatch.setattr(
+            development_runtime,
+            "validate_observed_resources",
+            lambda _: SimpleNamespace(status=ResourceValidationStatus.FAIL),
+        )
+
+    with pytest.raises(ValueError, match="observed resource bundle did not pass"):
+        development_runtime.build_development_cohort(
+            runtime,
+            descriptor=descriptor,
+            patient_count=1,
+            seed=20260901,
+        )
+
+    output = tmp_path / failure
+    with pytest.raises(PackageExportUnavailable) as caught:
+        development_runtime.generate_development_cohort(
+            runtime,
+            descriptor_path=ROOT / "datapackage.json",
+            output=output,
+            patient_count=1,
+            seed=20260901,
+            reference_time="2026-09-01T00:00:00Z",
+            software_revision="development-generator-v1",
+        )
+
+    assert str(caught.value) == "observed package export failed"
+    assert not output.exists()
+
+
+def test_development_cohort_runner_redacts_output_collision_before_sampling(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Catches output collisions reaching native sampling instead of the fixed preflight gate."""
+    runtime = build_development_runtime(ROOT)
+    output = tmp_path / "collision"
+    output.mkdir()
+    marker = output / "keep.txt"
+    marker.write_text("existing", encoding="utf-8")
+
+    def unexpected_sampling(*args: object, **kwargs: object) -> object:
+        raise AssertionError("cohort sampling must not occur after an output collision")
+
+    monkeypatch.setattr(development_runtime, "build_development_cohort", unexpected_sampling)
+    with pytest.raises(PackageExportUnavailable) as caught:
+        development_runtime.generate_development_cohort(
+            runtime,
+            descriptor_path=ROOT / "datapackage.json",
+            output=output,
+            patient_count=1,
+            seed=20260901,
+            reference_time="2026-09-01T00:00:00Z",
+            software_revision="development-generator-v1",
+        )
+
+    assert str(caught.value) == "observed package export failed"
+    assert marker.read_text(encoding="utf-8") == "existing"
