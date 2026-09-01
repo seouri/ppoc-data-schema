@@ -442,6 +442,17 @@ def test_public_mapping_excludes_heldout_truth_hashes(tmp_path: Path) -> None:
     assert report.heldout_identity.synthetic_aggregate_sha256 not in representation
 
 
+def test_default_report_and_run_reprs_exclude_internal_comparison_values(tmp_path: Path) -> None:
+    """Leaving dataclass comparison fields repr-visible would disclose one-run values in logs."""
+    report = evaluate_prevalence_evidence(_config(tmp_path))
+    representations = (repr(report), repr(report.runs[0]))
+
+    for representation in representations:
+        for field in ("heldout_value", "synthetic_value", "difference", "tolerance"):
+            assert field not in representation
+        assert "0.5" not in representation
+
+
 @pytest.mark.parametrize(
     "attribute",
     (

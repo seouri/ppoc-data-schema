@@ -685,7 +685,7 @@ class PrevalenceRunResult:
 
     identity: PackageIdentity
     status: str
-    comparisons: tuple[HeldoutComparison, ...]
+    comparisons: tuple[HeldoutComparison, ...] = dataclass_field(repr=False)
 
     def __post_init__(self) -> None:
         if not isinstance(self.identity, PackageIdentity):
@@ -771,7 +771,7 @@ class PrevalenceEvidenceReport:
     generation_identity: Mapping[str, object]
     heldout_identity: _HeldoutIdentity
     runs: tuple[PrevalenceRunResult, ...]
-    comparisons: tuple[PrevalenceComparison, ...]
+    comparisons: tuple[PrevalenceComparison, ...] = dataclass_field(repr=False)
 
     def __post_init__(self) -> None:
         if self.report_version != PREVALENCE_EVIDENCE_REPORT_VERSION:
