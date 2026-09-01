@@ -21,6 +21,7 @@ from synthetic.native.ancillary import (
     GhdAncillaryPolicy,
     validate_ghd_ancillary_resources,
 )
+from synthetic.native.observations import ObservationFrame
 from synthetic.native.resources import (
     ObservedResourceBundle,
     ResourceRow,
@@ -221,7 +222,9 @@ def _bundle_identity_state(
     if not isinstance(bundle, ObservedResourceBundle) or not isinstance(member, CohortMember):
         return AncillaryBundleValidationStatus.UNEVALUABLE, "MALFORMED_BUNDLE"
     try:
-        if bundle.source_frame is None or member.frame is None:
+        if not isinstance(bundle.source_frame, ObservationFrame) or not isinstance(
+            member.frame, ObservationFrame
+        ):
             return AncillaryBundleValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
         if (
             bundle.patient_id != member.demographics.patient_id
@@ -239,7 +242,7 @@ def _base_resources_state(
 ) -> tuple[AncillaryBundleValidationStatus, str]:
     if not isinstance(bundle, ObservedResourceBundle):
         return AncillaryBundleValidationStatus.UNEVALUABLE, "MALFORMED_BUNDLE"
-    if bundle.source_frame is None:
+    if not isinstance(bundle.source_frame, ObservationFrame):
         return AncillaryBundleValidationStatus.UNEVALUABLE, "INSUFFICIENT_EVIDENCE"
     try:
         status = validate_observed_resources(_zeroed_base(bundle)).status
@@ -293,16 +296,29 @@ def _truth_boundary_state(
         expected_keys = {"contract", "patient_id", "resources", "clinical_descendants"}
         if not isinstance(mapping, Mapping) or set(mapping) != expected_keys:
             return AncillaryBundleValidationStatus.FAIL, "TRUTH_BOUNDARY_INVALID"
-        if any(
-            key in mapping
-            for key in ("source_frame", "truth", "latent_trajectory", "hidden_events")
-        ):
+        if not _visible_mapping_is_safe(mapping):
             return AncillaryBundleValidationStatus.FAIL, "TRUTH_BOUNDARY_INVALID"
         if "<evaluator-only>" not in repr(bundle):
             return AncillaryBundleValidationStatus.FAIL, "TRUTH_BOUNDARY_INVALID"
     except Exception:  # noqa: BLE001 - malformed wrappers are not rendered to callers
         return AncillaryBundleValidationStatus.UNEVALUABLE, "MALFORMED_BUNDLE"
     return AncillaryBundleValidationStatus.PASS, "OK"
+
+
+def _visible_mapping_is_safe(value: object) -> bool:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return True
+    if isinstance(value, Mapping):
+        forbidden_keys = {"source_frame", "truth", "latent_trajectory", "hidden_events"}
+        return all(
+            isinstance(key, str)
+            and key not in forbidden_keys
+            and _visible_mapping_is_safe(nested)
+            for key, nested in value.items()
+        )
+    if isinstance(value, (list, tuple)):
+        return all(_visible_mapping_is_safe(nested) for nested in value)
+    return False
 
 
 def validate_ghd_ancillary_bundle(

@@ -117,6 +117,43 @@ def test_full_bundle_validator_suppresses_hidden_treatment_and_marks_missing_evi
     assert _check(absent, "bundle_identity")[0] == "UNEVALUABLE"
 
 
+def test_full_bundle_validator_marks_a_shared_malformed_private_frame_unevaluable() -> None:
+    member, base, projection = _merge_inputs()
+    from synthetic.native.ancillary_bundle import merge_ghd_ancillary_resources
+
+    merged = merge_ghd_ancillary_resources(base, member, projection, _policy())
+    opaque_frame = object()
+    object.__setattr__(member, "frame", opaque_frame)
+    object.__setattr__(merged, "source_frame", opaque_frame)
+
+    report = validate_ghd_ancillary_bundle(merged, member, _policy())
+
+    assert report.status is AncillaryBundleValidationStatus.UNEVALUABLE
+    assert _check(report, "bundle_identity") == ("UNEVALUABLE", "INSUFFICIENT_EVIDENCE")
+    assert _check(report, "base_resources") == ("UNEVALUABLE", "INSUFFICIENT_EVIDENCE")
+
+
+def test_full_bundle_validator_rejects_nested_private_values_without_rendering_them() -> None:
+    member, base, projection = _merge_inputs()
+    from synthetic.native.ancillary_bundle import merge_ghd_ancillary_resources
+
+    merged = merge_ghd_ancillary_resources(base, member, projection, _policy())
+    lab = merged.rows["labs"][0]
+    object.__setattr__(
+        lab,
+        "values",
+        tuple((name, member.frame if name == "result_value" else value) for name, value in lab.values),
+    )
+
+    report = validate_ghd_ancillary_bundle(merged, member, _policy())
+
+    assert report.status is AncillaryBundleValidationStatus.FAIL
+    assert _check(report, "truth_boundary") == ("FAIL", "TRUTH_BOUNDARY_INVALID")
+    rendered = repr(report) + json.dumps(report.to_mapping(), sort_keys=True)
+    assert "ObservationFrame" not in rendered
+    assert member.demographics.patient_id not in rendered
+
+
 def test_full_bundle_validator_returns_redacted_unevaluable_report_for_malformed_typed_input() -> None:
     report = validate_ghd_ancillary_bundle(object(), object(), object())
 
