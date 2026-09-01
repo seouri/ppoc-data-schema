@@ -389,6 +389,39 @@ def test_singleton_threshold_failure_is_redacted_before_cohort_floor_status() ->
     assert "healthy" not in serialized
 
 
+def test_optional_missing_score_does_not_override_singleton_support_redaction() -> None:
+    cohort = task_cohort(task_member(10, DisorderKind.HEALTHY))
+    report = evaluate_task_utility(
+        cohort,
+        (TaskPrediction(True),),
+        task_policy(
+            minimum_cohort_size=1,
+            minimum_evaluable_members=1,
+            require_probability_scores=False,
+        ),
+    )
+    cell = report.cells[0]
+
+    assert report.status is TaskUtilityStatus.UNEVALUABLE
+    assert report.reason_code == "INSUFFICIENT_SUPPORT"
+    assert report.cohort_size == 1
+    assert cell.status is TaskUtilityStatus.UNEVALUABLE
+    assert cell.reason_code == "INSUFFICIENT_SUPPORT"
+    assert cell.missing_score_count == 1
+    assert (
+        cell.positive_count,
+        cell.negative_count,
+        cell.true_positive,
+        cell.true_negative,
+        cell.false_positive,
+        cell.false_negative,
+    ) == (None, None, None, None, None, None)
+    _assert_null_metric_evidence(report)
+    serialized = report.canonical_json()
+    assert "syn-task-utility-10" not in serialized
+    assert "healthy" not in serialized
+
+
 def test_below_cohort_floor_nulls_even_otherwise_evaluable_metrics() -> None:
     report = evaluate_task_utility(
         balanced_task_cohort(),

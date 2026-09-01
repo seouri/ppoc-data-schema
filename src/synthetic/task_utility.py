@@ -456,11 +456,17 @@ class TaskUtilityCell:
                 )
             if failed_metrics:
                 raise ValueError("failed metrics must take precedence over unevaluable cell status")
+            metric_reasons = {
+                metric.reason_code for metric in unevaluable_metrics
+            }
             expected_reason = (
                 "MISSING_PREDICTION"
                 if structural_counts["unevaluable_count"]
                 else "MISSING_SCORE"
-                if structural_counts["missing_score_count"]
+                if (
+                    structural_counts["missing_score_count"]
+                    and "MISSING_SCORE" in metric_reasons
+                )
                 else "INSUFFICIENT_SUPPORT"
             )
             if reason != expected_reason:
