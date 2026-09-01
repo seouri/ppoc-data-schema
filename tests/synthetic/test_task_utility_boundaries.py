@@ -9,6 +9,8 @@ ROOT = Path(__file__).resolve().parents[2]
 TASK_UTILITY = ROOT / "src" / "synthetic" / "task_utility.py"
 
 _VISIBLE_MODULES = (
+    ROOT / "src" / "synthetic" / "__init__.py",
+    ROOT / "src" / "synthetic" / "cohort.py",
     ROOT / "src" / "synthetic" / "generate.py",
     ROOT / "src" / "synthetic" / "manifest.py",
     ROOT / "src" / "synthetic" / "derivation.py",
@@ -20,9 +22,11 @@ _FORBIDDEN_EVALUATOR_MODULES = {
     "csv",
     "duckdb",
     "lightgbm",
+    "os",
     "pathlib",
     "shutil",
     "sklearn",
+    "subprocess",
     "tempfile",
     "tensorflow",
     "torch",
@@ -45,6 +49,21 @@ _ALLOWED_CALIBRATION_IMPORTS = {
     "synthetic.calibration",
     "synthetic.calibration.require_aggregate_safe_token",
 }
+_ALLOWED_EVALUATOR_IMPORT_BASES = {
+    "__future__",
+    "collections",
+    "collections.abc",
+    "dataclasses",
+    "enum",
+    "json",
+    "math",
+    "synthetic.calibration",
+    "synthetic.cohort",
+    "synthetic.models",
+    "synthetic.native.observations",
+    "synthetic.native.resources",
+    "types",
+}
 _FORBIDDEN_CALL_LEAVES = {
     "GridSearchCV",
     "NamedTemporaryFile",
@@ -59,9 +78,11 @@ _FORBIDDEN_CALL_LEAVES = {
     "fit",
     "fit_predict",
     "fit_transform",
+    "fdopen",
     "load_calibration_artifact",
     "load_manifest",
     "load_package",
+    "listdir",
     "makedirs",
     "mkdir",
     "mkdtemp",
@@ -78,6 +99,7 @@ _FORBIDDEN_CALL_LEAVES = {
     "replace",
     "rmdir",
     "rmtree",
+    "scandir",
     "symlink",
     "touch",
     "train",
@@ -94,17 +116,24 @@ _FORBIDDEN_CALL_LEAVES = {
     "build_package",
 }
 _FORBIDDEN_PUBLIC_ARGUMENT_TOKENS = {
+    "artifact",
     "callable",
+    "descriptor",
+    "input",
     "key",
     "keys",
+    "label",
+    "manifest",
     "model",
     "models",
     "output",
     "outputs",
     "path",
     "paths",
+    "privacy",
     "report",
     "reports",
+    "truth",
 }
 
 
@@ -141,6 +170,20 @@ def _imports(tree: ast.AST, module_name: str, *, is_package: bool) -> set[str]:
             if base:
                 imported.add(base)
                 imported.update(f"{base}.{alias.name}" for alias in node.names)
+    return imported
+
+
+def _import_bases(
+    tree: ast.AST, module_name: str, *, is_package: bool
+) -> set[str]:
+    imported: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            base = _import_from_base(node, module_name, is_package=is_package)
+            if base:
+                imported.add(base)
     return imported
 
 
@@ -232,6 +275,10 @@ def _forbidden_public_arguments(arguments: set[str]) -> set[str]:
     }
 
 
+def _unexpected_import_bases(imports: set[str]) -> set[str]:
+    return imports - _ALLOWED_EVALUATOR_IMPORT_BASES
+
+
 def test_visible_generation_export_and_native_paths_do_not_import_task_evaluator() -> None:
     for path in _VISIBLE_MODULES:
         module_name, is_package = _module_context(path)
@@ -244,21 +291,83 @@ def test_visible_generation_export_and_native_paths_do_not_import_task_evaluator
         ), path
 
 
+def test_visible_module_boundary_covers_public_cohort_surfaces() -> None:
+    assert ROOT / "src" / "synthetic" / "__init__.py" in _VISIBLE_MODULES
+    assert ROOT / "src" / "synthetic" / "cohort.py" in _VISIBLE_MODULES
+
+
+@pytest.mark.parametrize(
+    ("source", "module_name", "is_package"),
+    [
+        ("import synthetic.task_utility", "synthetic.cohort", False),
+        ("from .task_utility import evaluate_task_utility", "synthetic.cohort", False),
+        ("from . import task_utility", "synthetic", True),
+    ],
+)
+def test_visible_import_scan_detects_absolute_and_relative_task_evaluator_imports(
+    source: str, module_name: str, is_package: bool
+) -> None:
+    imports = _imports(
+        ast.parse(source),
+        module_name,
+        is_package=is_package,
+    )
+    assert any(
+        imported == "synthetic.task_utility"
+        or imported.startswith("synthetic.task_utility.")
+        for imported in imports
+    )
+
+
 def test_task_evaluator_has_no_filesystem_governed_training_or_output_lifecycle() -> None:
     tree = ast.parse(
         TASK_UTILITY.read_text(encoding="utf-8"), filename=str(TASK_UTILITY)
     )
     imports = _imports(tree, "synthetic.task_utility", is_package=False)
+    import_bases = _import_bases(
+        tree,
+        "synthetic.task_utility",
+        is_package=False,
+    )
 
     assert _forbidden_modules(imports) == set()
+    assert _unexpected_import_bases(import_bases) == set()
     assert _forbidden_calls(_calls(tree)) == set()
     assert _forbidden_public_arguments(_public_arguments(tree)) == set()
+
+
+def test_public_evaluator_signature_is_exactly_cohort_predictions_policy() -> None:
+    tree = ast.parse(
+        TASK_UTILITY.read_text(encoding="utf-8"), filename=str(TASK_UTILITY)
+    )
+    functions = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "evaluate_task_utility"
+    ]
+
+    assert len(functions) == 1
+    arguments = functions[0].args
+    assert [argument.arg for argument in arguments.args] == [
+        "cohort",
+        "predictions",
+        "policy",
+    ]
+    assert arguments.posonlyargs == []
+    assert arguments.kwonlyargs == []
+    assert arguments.vararg is None
+    assert arguments.kwarg is None
+    assert arguments.defaults == []
+    assert arguments.kw_defaults == []
 
 
 @pytest.mark.parametrize(
     ("source", "expected"),
     [
         ("from pathlib import Path", {"pathlib", "pathlib.Path"}),
+        ("from os import listdir", {"os", "os.listdir"}),
+        ("import subprocess", {"subprocess"}),
         ("import duckdb", {"duckdb"}),
         (
             "from sklearn.linear_model import LogisticRegression",
@@ -305,6 +414,25 @@ def test_import_scan_allows_only_aggregate_token_validator_from_calibration() ->
 @pytest.mark.parametrize(
     "source",
     [
+        "import glob",
+        "import multiprocessing",
+        "from os import walk",
+    ],
+)
+def test_narrow_import_surface_rejects_equivalent_filesystem_and_process_modules(
+    source: str,
+) -> None:
+    imports = _import_bases(
+        ast.parse(source),
+        "synthetic.task_utility",
+        is_package=False,
+    )
+    assert _unexpected_import_bases(imports)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
         "Path('report.json')",
         "open('report.json')",
         "destination.write_text('payload')",
@@ -313,6 +441,9 @@ def test_import_scan_allows_only_aggregate_token_validator_from_calibration() ->
         "model.predict(features)",
         "build_manifest(rows)",
         "run_synthea(config)",
+        "os.listdir(root)",
+        "os.scandir(root)",
+        "os.fdopen(fd)",
     ],
 )
 def test_call_scan_detects_filesystem_export_and_model_training(source: str) -> None:
@@ -328,6 +459,11 @@ def test_call_scan_detects_filesystem_export_and_model_training(source: str) -> 
         "output_path",
         "screening_model",
         "predict_callable",
+        "descriptor",
+        "calibration_artifact",
+        "privacy_input",
+        "real_label",
+        "counterfactual_truth_manifest",
     ],
 )
 def test_public_argument_scan_detects_forbidden_inputs(argument: str) -> None:
