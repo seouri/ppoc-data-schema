@@ -112,13 +112,10 @@ def test_cross_document_links_preserve_native_release_one_and_fail_closed_cli() 
     synthetic_guide = SYNTHETIC_GUIDE.read_text(encoding="utf-8")
     guide = _guide_text()
 
-    assert "[optional Synthea engine-conformance guide](docs/synthea-conformance.md)" in readme
+    assert "[synthetic generator guide](docs/synthetic-generator.md)" in readme
     assert "[optional Synthea engine-conformance guide](synthea-conformance.md)" in synthetic_guide
-    assert PRODUCTION_FAILURE in readme
     assert PRODUCTION_FAILURE in synthetic_guide
-    assert "native generator remains the release-one route" in readme
     assert "native generator remains the release-one route" in synthetic_guide
-    assert "not imported automatically by generation, export, or evaluator code" in readme
     assert "not imported automatically by generation, export, or evaluator code" in synthetic_guide
     assert "synthetic-growth-fixtures-design.md" in guide
     assert "synthetic-generator.md" in guide

@@ -97,23 +97,17 @@ def test_guide_documents_metrics_statuses_scopes_and_optional_scores() -> None:
     assert "hidden truth" in section
 
 
-def test_guide_and_readme_state_every_task_utility_nonclaim() -> None:
+def test_guide_states_every_task_utility_nonclaim_and_readme_links_the_guide() -> None:
     guide = GUIDE.read_text(encoding="utf-8")
     readme = README.read_text(encoding="utf-8")
-    sections = (
-        _task_section(
-            guide,
-            "## Evaluator-only synthetic task-utility evaluation\n",
-        ),
-        _task_section(
-            readme,
-            "## Evaluator-only synthetic task utility\n",
-        ),
+    section = _task_section(
+        guide,
+        "## Evaluator-only synthetic task-utility evaluation\n",
     )
 
-    for section in sections:
-        for boundary in _NON_CLAIMS:
-            assert boundary in section
+    for boundary in _NON_CLAIMS:
+        assert boundary in section
+    assert "[synthetic generator guide](docs/synthetic-generator.md)" in readme
 
 
 def test_ordinary_mappings_remain_free_of_private_task_truth() -> None:

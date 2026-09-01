@@ -268,22 +268,17 @@ def test_prevalence_evidence_docs_preserve_separate_evidence_caveats() -> None:
         GUIDE.read_text(encoding="utf-8"),
         "## Governed multi-run prevalence evidence\n",
     )
-    readme_section = _section(
-        README.read_text(encoding="utf-8"),
-        "## Governed multi-run prevalence evidence\n",
-    )
-
-    for section in (guide_section, readme_section):
-        for boundary in (
-            "held-out",
-            "privacy",
-            "non-matchability",
-            "clinical validity",
-            "task utility",
-            "release",
-            "Synthea",
-        ):
-            assert boundary in section
+    for boundary in (
+        "held-out",
+        "privacy",
+        "non-matchability",
+        "clinical validity",
+        "task utility",
+        "release",
+        "Synthea",
+    ):
+        assert boundary in guide_section
+    assert "[synthetic generator guide](docs/synthetic-generator.md)" in README.read_text(encoding="utf-8")
 
 
 def test_visible_generator_roots_do_not_import_prevalence_evidence() -> None:

@@ -297,8 +297,6 @@ def _scale_documentation_section(document: str) -> str:
 def test_development_scale_documentation_declares_scheduled_gate_and_boundaries() -> None:
     guide = _scale_documentation_section(GUIDE.read_text(encoding="utf-8"))
     readme = README.read_text(encoding="utf-8")
-    readme_start = readme.index("The [scheduled development scale profile]")
-    readme_paragraph = readme[readme_start : readme.index("\n\n", readme_start)]
 
     assert "SYNTHETIC_RUN_SCALE=1 uv run pytest -m scale tests/synthetic/test_development_scale.py" in guide
     for detail in (
@@ -315,20 +313,18 @@ def test_development_scale_documentation_declares_scheduled_gate_and_boundaries(
     ):
         assert detail in guide
 
-    for document in (guide, readme_paragraph):
-        for non_claim in (
-            "prevalence",
-            "clinical validity",
-            "real labels",
-            "privacy/non-matchability",
-            "held-out",
-            "Synthea",
-            "release evidence",
-        ):
-            assert non_claim in document
+    for non_claim in (
+        "prevalence",
+        "clinical validity",
+        "real labels",
+        "privacy/non-matchability",
+        "held-out",
+        "Synthea",
+        "release evidence",
+    ):
+        assert non_claim in guide
 
-    assert "does not bind the augmenter" in readme_paragraph
-    assert "docs/synthetic-generator.md#scheduled-development-scale-profile" in readme_paragraph
+    assert "[synthetic generator guide](docs/synthetic-generator.md)" in readme
 
 
 @pytest.mark.parametrize(

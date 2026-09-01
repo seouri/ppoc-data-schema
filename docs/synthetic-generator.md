@@ -2,6 +2,8 @@
 
 This guide describes the exact-schema synthetic smoke generator, the development-only in-memory native cohort, and development-only observed-resource package export in this repository. They are development and integration harnesses for completely generated records; they are not a clinically validated simulator, a prevalence-validated representative cohort, a privacy audit, or a release-approved fixture.
 
+The approved system design is documented in the [synthetic growth fixture specification](superpowers/specs/2026-08-30-synthetic-growth-fixtures-design.md); this guide is its implementation-facing companion.
+
 ## Current scope
 
 The exact-schema smoke slice generates healthy patients aged two years and older. It produces three deterministic measurement visits per patient at ages 730, 1095, and 1460 days. Height and BMI are the two generated anthropometric dimensions; weight is derived from them. The smoke profile alternates recorded/reference sex across patients only to exercise the schema. It does not model growth-disorder states, disorder prevalence, calibrated demographics, infancy, puberty, or clinical events. The separate native cohort API below composes completely fictional healthy-plus-disorder trajectories in memory; it does not change this visible smoke contract.

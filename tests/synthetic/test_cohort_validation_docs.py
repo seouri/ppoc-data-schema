@@ -52,24 +52,20 @@ def test_profile_guide_documents_separate_layers_and_visible_category_projection
 def test_profile_documentation_names_every_deferred_claim_boundary() -> None:
     """Catches a profile report being presented as evidence it cannot establish."""
     guide = GUIDE.read_text(encoding="utf-8")
+    for deferred in (
+        "prevalence",
+        "held-out",
+        "clinical",
+        "privacy",
+        "non-matchability",
+        "package",
+        "Synthea",
+    ):
+        assert deferred in guide
+
+
+def test_readme_links_the_dedicated_synthetic_generator_guide() -> None:
+    """Catches the public README losing its synthetic-generator guide link."""
     readme = README.read_text(encoding="utf-8")
 
-    for document in (guide, readme):
-        for deferred in (
-            "prevalence",
-            "held-out",
-            "clinical",
-            "privacy",
-            "non-matchability",
-            "package",
-            "Synthea",
-        ):
-            assert deferred in document
-
-
-def test_readme_links_the_native_cohort_profile_report_guide() -> None:
-    """Catches a public roadmap that omits the new evaluator entry point."""
-    readme = README.read_text(encoding="utf-8")
-
-    assert "validate_native_cohort" in readme
-    assert "docs/synthetic-generator.md#evaluator-only-native-cohort-fidelity-profile" in readme
+    assert "[synthetic generator guide](docs/synthetic-generator.md)" in readme

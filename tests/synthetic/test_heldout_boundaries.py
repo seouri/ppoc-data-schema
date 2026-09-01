@@ -127,12 +127,4 @@ def test_heldout_documentation_declares_explicit_governed_gate() -> None:
     assert "no real data in CI" in guide
     for deferred_gate in ("privacy", "temporal drift", "task utility", "prevalence", "Synthea"):
         assert deferred_gate in guide
-    assert "Patient-disjoint held-out validation" in readme
-    assert "synthetic.heldout_validate" in readme
-    assert "no default data root" in readme
-    assert "fictional synthetic packages" in readme
-    assert "PASS" in readme
-    assert "FAIL" in readme
-    assert "UNEVALUABLE" in readme
-    for deferred_gate in ("privacy", "temporal drift", "task utility", "prevalence", "Synthea"):
-        assert deferred_gate in readme
+    assert "[synthetic generator guide](docs/synthetic-generator.md)" in readme

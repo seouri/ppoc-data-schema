@@ -71,7 +71,7 @@ def test_candidate_guide_is_linked_without_enabling_the_production_cli() -> None
     synthetic_guide = SYNTHETIC_GUIDE.read_text(encoding="utf-8")
     combined = f"{readme}\n{synthetic_guide}"
 
-    assert "[candidate augmenter-oracle guide](docs/augmenter-oracle.md)" in readme
+    assert "[synthetic generator guide](docs/synthetic-generator.md)" in readme
     assert "[candidate augmenter-oracle guide](augmenter-oracle.md)" in synthetic_guide
     assert "production command has no configured authoritative oracle" in combined
     assert "No production growth reference or authoritative derivation oracle is configured" in combined

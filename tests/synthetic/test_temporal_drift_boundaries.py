@@ -369,26 +369,6 @@ def test_temporal_drift_guide_documents_exact_evaluator_contract() -> None:
     assert "strictly exceeds `maximum_unevaluable_checks`" in temporal_section
 
 
-def test_readme_summarizes_temporal_drift_api_metrics_and_non_claims() -> None:
+def test_readme_links_the_dedicated_synthetic_generator_guide() -> None:
     readme = README.read_text(encoding="utf-8")
-    paragraph_start = readme.index(
-        "The evaluator-only [`validate_temporal_drift`]"
-    )
-    temporal_paragraph = readme[paragraph_start:].split("\n\n", maxsplit=1)[0]
-
-    assert "docs/synthetic-generator.md#evaluator-only-temporal-drift-validation" in readme
-    for name in ("TemporalDriftPolicy", "TemporalWindowPolicy", "validate_temporal_drift"):
-        assert name in readme
-    for metric in _METRICS:
-        assert metric in readme
-    for status in ("PASS", "FAIL", "UNEVALUABLE"):
-        assert status in readme
-    for boundary in _NON_CLAIMS:
-        assert boundary in readme
-    assert (
-        "Individual `UNEVALUABLE` comparisons do not by themselves block an overall `PASS`"
-        in temporal_paragraph
-    )
-    assert "smaller than `minimum_cohort_size`" in temporal_paragraph
-    assert "required window lacks minimum support" in temporal_paragraph
-    assert "strictly exceeds `maximum_unevaluable_checks`" in temporal_paragraph
+    assert "[synthetic generator guide](docs/synthetic-generator.md)" in readme

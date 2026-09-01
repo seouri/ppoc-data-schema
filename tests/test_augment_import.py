@@ -119,7 +119,8 @@ def test_documentation_describes_synthetic_only_import_boundary() -> None:
     assert "not bound as authoritative" in guide
     assert "does not change the native generator, package exporter, calibration, privacy, counterfactual, Synthea, or release gates" in guide
 
-    for document in (readme, synthetic_guide):
+    assert "[synthetic generator guide](docs/synthetic-generator.md)" in readme
+    for document in (synthetic_guide,):
         assert "source-matched growth augmenter" in document
         assert "not bound as authoritative" in document
         assert "no production growth reference or authoritative augmentation oracle is shipped" not in document

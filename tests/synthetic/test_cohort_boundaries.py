@@ -461,21 +461,21 @@ def test_cohort_boundary_scanner_detects_governed_argument_families() -> None:
 def test_native_cohort_documentation_states_usage_and_deferred_gates() -> None:
     """Catches the user guide presenting the cohort without its safety boundaries."""
     guide = GUIDE.read_text(encoding="utf-8")
-    readme = README.read_text(encoding="utf-8")
+    for required in (
+        "generate_native_cohort",
+        "CalibrationSamplingProfile",
+        "released aggregate",
+        "explicit module prior",
+        "healthy-plus-disorder",
+        "already-loaded descriptor mapping",
+        "evaluator-only",
+        "no real-data path",
+        "fail-closed command-line",
+    ):
+        assert required in guide
 
-    for document in (guide, readme):
-        for required in (
-            "generate_native_cohort",
-            "CalibrationSamplingProfile",
-            "released aggregate",
-            "explicit module prior",
-            "healthy-plus-disorder",
-            "already-loaded descriptor mapping",
-            "evaluator-only",
-            "no real-data path",
-            "fail-closed command-line",
-        ):
-            assert required in document
+    readme = README.read_text(encoding="utf-8")
+    assert "[synthetic generator guide](docs/synthetic-generator.md)" in readme
 
     for required in (
         "CalibrationArtifact",

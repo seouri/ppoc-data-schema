@@ -86,21 +86,5 @@ def test_guide_states_exact_ghd_timing_and_aggregate_contract() -> None:
         assert phrase in guide, f"GHD section is missing exact semantic: {phrase}"
 
 
-def test_readme_links_guide_without_overclaiming_ghd_pathway() -> None:
-    assert "docs/synthetic-generator.md#evaluator-only-ghd-ancillary-pathway" in README
-    assert "GHD ancillary" in README
-    paragraph_start = README.index("GHD ancillary")
-    paragraph_end = README.index("\n\n", paragraph_start)
-    paragraph = README[paragraph_start:paragraph_end]
-    for term in (
-        "evaluator-only",
-        "package",
-        "prevalence",
-        "clinical",
-        "privacy",
-        "non-matchability",
-        "derivation",
-        "release",
-        "Synthea",
-    ):
-        assert term.lower() in paragraph.lower(), f"README GHD roadmap must defer {term}"
+def test_readme_links_the_dedicated_synthetic_generator_guide() -> None:
+    assert "[synthetic generator guide](docs/synthetic-generator.md)" in README

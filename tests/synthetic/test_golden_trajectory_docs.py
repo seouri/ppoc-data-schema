@@ -135,11 +135,9 @@ def test_cross_document_links_preserve_native_release_one_and_fail_closed_cli() 
     synthetic_guide = SYNTHETIC_GUIDE.read_text(encoding="utf-8")
     guide = _guide_text()
 
-    assert "[golden trajectory guide](docs/golden-trajectories.md)" in readme
+    assert "[synthetic generator guide](docs/synthetic-generator.md)" in readme
     assert "[golden trajectory guide](golden-trajectories.md)" in synthetic_guide
-    assert PRODUCTION_FAILURE in readme
     assert PRODUCTION_FAILURE in synthetic_guide
-    assert "native generator remains the release-one route" in readme
     assert "native generator remains the release-one route" in synthetic_guide
     assert "synthetic-growth-fixtures-design.md" in guide
     assert "synthetic-generator.md#development-only-age-regime-smoke-example" in guide

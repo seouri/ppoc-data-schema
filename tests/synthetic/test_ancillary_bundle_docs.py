@@ -71,22 +71,5 @@ def test_guide_explains_validation_boundaries_and_deferred_claims() -> None:
         assert term in section, f"bundle-integration section is missing deferred boundary {term}"
 
 
-def test_readme_links_the_bundle_integration_section_without_claiming_release_evidence() -> None:
-    assert "docs/synthetic-generator.md#in-memory-ghd-ancillary-bundle-integration" in README
-    start = README.index("The evaluator-only [in-memory GHD ancillary bundle integration]")
-    end = README.index("\n\n", start)
-    paragraph = README[start:end].lower()
-    for term in (
-        "evaluator-only",
-        "in-memory",
-        "package",
-        "prevalence",
-        "privacy",
-        "non-matchability",
-        "held-out",
-        "clinical",
-        "task utility",
-        "release",
-        "synthea",
-    ):
-        assert term in paragraph, f"README bundle-integration paragraph must defer {term}"
+def test_readme_links_the_dedicated_synthetic_generator_guide() -> None:
+    assert "[synthetic generator guide](docs/synthetic-generator.md)" in README

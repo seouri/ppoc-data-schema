@@ -368,8 +368,7 @@ def test_documentation_states_the_complete_parity_contract_and_safe_usage() -> N
         "Synthea conformance",
     ):
         assert boundary in combined
-    assert "Evaluator-only augmented-derivation parity gate" in readme
-    assert "validate_derivation_parity" in readme
+    assert "[synthetic generator guide](docs/synthetic-generator.md)" in readme
 
 
 def test_parity_api_has_only_in_memory_inputs_and_no_path_key_or_output_arguments() -> None:

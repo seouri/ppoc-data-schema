@@ -401,5 +401,5 @@ def test_package_export_documentation_states_the_exact_api_and_boundaries() -> N
         assert deferred_gate in guide
     assert "structural success is not privacy/non-matchability or prevalence evidence" in guide
     assert "Labs, medications, referrals, exact-schema export," not in guide
-    assert "exact-schema observed-resource package export" in readme
+    assert "[synthetic generator guide](docs/synthetic-generator.md)" in readme
     assert "does not enable package or file export" not in readme

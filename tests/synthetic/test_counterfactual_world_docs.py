@@ -90,25 +90,5 @@ def test_guide_preserves_truth_boundary_and_explicit_deferrals() -> None:
         assert term in section, f"paired-world section is missing boundary {term}"
 
 
-def test_readme_links_paired_worlds_without_claiming_governed_evidence() -> None:
-    target = "docs/synthetic-generator.md#in-memory-paired-counterfactual-ehr-worlds"
-    assert target in README
-    start = README.index("The evaluator-only [in-memory paired counterfactual EHR worlds]")
-    end = README.index("\n\n", start)
-    paragraph = README[start:end].lower()
-    for term in (
-        "evaluator-only",
-        "in-memory",
-        "deterministic",
-        "package",
-        "prevalence",
-        "calibration",
-        "held-out",
-        "privacy",
-        "non-matchability",
-        "clinical",
-        "task utility",
-        "release",
-        "synthea",
-    ):
-        assert term in paragraph, f"README paired-world paragraph must defer {term}"
+def test_readme_links_the_dedicated_synthetic_generator_guide() -> None:
+    assert "[synthetic generator guide](docs/synthetic-generator.md)" in README
