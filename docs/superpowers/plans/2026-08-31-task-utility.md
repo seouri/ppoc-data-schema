@@ -150,6 +150,6 @@
 
   Run full pytest with `PYTHONDONTWRITEBYTECODE=1`, full Ruff plus a touched-file Ruff check if a recorded unrelated baseline exists, `uv lock --check`, schema check, and `git diff --check`. Update only checkbox metadata and evidence references in this plan/ledger; commit plan metadata separately.
 
-- [ ] **Step 4: Merge and push**
+- [x] **Step 4: Merge and push**
 
   From the primary checkout, verify the main worktree is clean except pre-existing ignored/untracked pycache, merge `codex/task-utility` with `--no-ff`, push `main`, verify `git rev-parse HEAD` equals `origin/main`, and retain the isolated worktree and SDD reports for auditability.
