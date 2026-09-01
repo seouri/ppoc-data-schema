@@ -413,7 +413,7 @@ Construct the same fictional binding twice, call to_json_bytes twice, and assert
 
 Package the complete feature diff and dispatch a final reviewer on the most capable available model. The review must independently trace the spec, all five tasks, the exporter boundary, exact redaction, and no-real-data/no-Synthea boundary. Resolve every Critical/Important finding in one consolidated fix wave, rerun focused review, and record residual Minor rulings in the SDD ledger.
 
-- [ ] **Step 4: Verify integration state before merge**
+- [x] **Step 4: Verify integration state before merge**
 
 Confirm the feature worktree is clean except ignored SDD evidence, inspect staged names/stat/whitespace, verify git log contains only scoped commits after 603b874, and run git rev-parse HEAD. Do not remove unrelated caches or existing worktrees.
 
