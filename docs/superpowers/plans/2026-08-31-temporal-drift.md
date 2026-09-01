@@ -32,7 +32,7 @@
 - Consumes: `require_aggregate_safe_token` from `synthetic.calibration`, `NativeCohort` types only for type checking.
 - Produces: `TEMPORAL_DRIFT_REPORT_VERSION`, `TEMPORAL_METRICS`, `TEMPORAL_REASON_CODES`, `TemporalDriftStatus`, `TemporalWindowPolicy`, `TemporalDriftPolicy`, `TemporalComparison`, `TemporalCheck`, and `TemporalDriftReport` with immutable validated constructors and canonical serialization.
 
-- [ ] **Step 1: Write failing policy/model tests**
+- [x] **Step 1: Write failing policy/model tests**
 
 Add tests for valid values and exact rejection behavior. Use a fictional policy such as:
 
@@ -51,17 +51,17 @@ TemporalDriftPolicy(
 
 Assert frozen dataclasses, exact fixed metric/status/reason registries, positive support/minimum cohort values, finite nonnegative bounds, coverage fractions in `[0,1]`, safe IDs, ordered half-open windows, duplicate/overlap rejection, boolean rejection, mutable-input rejection, and unknown metric/reason rejection. Assert `UNEVALUABLE` comparisons null all numeric/support fields, causal comparisons null numeric fields even when passing, and report mappings use exactly the spec's top-level keys with compact sorted ASCII JSON plus newline only in `to_json_bytes()`.
 
-- [ ] **Step 2: Run the model tests to verify they fail**
+- [x] **Step 2: Run the model tests to verify they fail**
 
 Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_temporal_drift_models.py`
 
 Expected: collection failure because `synthetic.temporal_drift` and its models do not exist. Fix only test setup/import errors before implementation.
 
-- [ ] **Step 3: Implement strict frozen models and registries**
+- [x] **Step 3: Implement strict frozen models and registries**
 
 Implement the exact model fields in the spec. Use `Enum` values `PASS`, `FAIL`, and `UNEVALUABLE`; a closed metric registry in canonical order; and reason codes `OK`, `WITHIN_BOUND`, `INSUFFICIENT_SUPPORT`, `COHORT_TOO_SMALL`, `MISSING_EVIDENCE`, `STRUCTURAL_INVALID`, and `OUTSIDE_BOUND`. Validate numeric types with explicit boolean rejection and `math.isfinite`, freeze windows/policies/comparisons/checks, and reject identifier-like text in policy/report fields. Make `TemporalComparison.to_mapping()` omit no required fields but null all numeric fields for `UNEVALUABLE` and causal metrics. Make `TemporalDriftReport.to_mapping()` recursively JSON-compatible, sorted, and aggregate-only; `canonical_json()` must be compact sorted ASCII without a newline, `to_json_bytes()` adds exactly one newline, and `repr()` must be the fixed evaluator-safe form.
 
-- [ ] **Step 4: Run model tests, lint, and commit**
+- [x] **Step 4: Run model tests, lint, and commit**
 
 Run:
 
@@ -89,21 +89,21 @@ git commit -m "build: add temporal drift policy models"
 - Consumes: validated temporal policy and `NativeCohort` members with visible `ObservationFrame` visits/events and trajectory points.
 - Produces: `validate_temporal_drift(cohort, policy) -> TemporalDriftReport` for visible metrics, private metric extraction helpers, and deterministic comparison ordering.
 
-- [ ] **Step 1: Write failing visible-metric tests and fictional fixtures**
+- [x] **Step 1: Write failing visible-metric tests and fictional fixtures**
 
 Build the smallest typed fictional cohort fixture using existing `CohortMember`/native fixture helpers; never write CSVs or copy source rows. Add tests for lower-inclusive/upper-exclusive assignment, empty windows, growth-point and visible-visit coverage floors, visible event rates, interval means using consecutive visits within a window, and adjacent-window visit-count/event-rate step bounds. Assert support floors produce `UNEVALUABLE`, lower-bound coverage failures produce `FAIL`, upper-bound interval failures produce `FAIL`, zero steps pass, and comparison order is fixed. Assert visible aggregate values never include member IDs or event codes.
 
-- [ ] **Step 2: Run metric tests to verify they fail**
+- [x] **Step 2: Run metric tests to verify they fail**
 
 Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_temporal_drift_metrics.py`
 
 Expected: failures because `validate_temporal_drift` and metric extraction are not implemented.
 
-- [ ] **Step 3: Implement deterministic visible metrics**
+- [x] **Step 3: Implement deterministic visible metrics**
 
 Validate `NativeCohort` and `TemporalDriftPolicy` types before reading members. For each window, count members meeting the configured growth-point/visible-visit floors, calculate coverage fractions, count members with visible recorded events, and calculate mean inter-visit days from each member's sorted visible visit ages with at least two visits. Use only finite numeric values and aggregate counts. Emit lower-bound coverage comparisons with `difference=max(0,target-observed)`, upper-bound interval comparisons with `difference=max(0,observed-target)`, and `UNEVALUABLE` when the contributing member support is below `minimum_member_support` or no interval exists. Compare adjacent mean visit counts and visible event rates with `difference=max(0,abs(step)-target)`; omit the first-window step comparison. Never serialize per-member arrays, IDs, event codes, or raw sequences.
 
-- [ ] **Step 4: Run metric tests, lint, and commit**
+- [x] **Step 4: Run metric tests, lint, and commit**
 
 Run:
 
@@ -131,21 +131,21 @@ git commit -m "feat: compute temporal drift metrics"
 - Consumes: visible metric comparisons from Task 2 and evaluator-held `AgeRegimeDisorderTrajectory`/`ObservationTruth` objects.
 - Produces: fixed causal-order/timing comparisons and final status/check aggregation in `validate_temporal_drift`.
 
-- [ ] **Step 1: Write failing causal/status tests**
+- [x] **Step 1: Write failing causal/status tests**
 
 Add tests for valid phase-ordered source events; reversed phases; decreasing ages; treatment outcome before treatment start; both treatment outcomes; hidden onset made visible; event patient mismatch; negative event ages; visible visit/event outside its observation window; missing private truth; malformed member/frame/trajectory; cohort below minimum size; and mixed visible FAIL plus causal UNEVALUABLE evidence. Assert malformed evidence yields fixed `STRUCTURAL_INVALID`/`FAIL`, missing truth yields `MISSING_EVIDENCE`/`UNEVALUABLE`, FAIL dominates UNEVALUABLE, and no raw exception text, event age, event code, or patient token appears in any report/repr/error.
 
-- [ ] **Step 2: Run causal tests to verify they fail**
+- [x] **Step 2: Run causal tests to verify they fail**
 
 Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_temporal_drift_causal.py`
 
 Expected: failures because causal validation and global status aggregation are incomplete.
 
-- [ ] **Step 3: Implement causal checks and report assembly**
+- [x] **Step 3: Implement causal checks and report assembly**
 
 Implement fixed phase validation over source events without returning their values. Treat absent `ObservationTruth` or unavailable evaluator-held source events as `UNEVALUABLE`, not PASS. Validate source event ages are nonnegative, phases are strictly ordered, treatment outcomes are terminal and follow treatment start, hidden onset remains hidden, and all event patient references match the member internally; catch malformed injected objects and replace them with fixed aggregate structural comparisons. Validate visible records against their existing observation window. Add `cohort_size`, `causal_event_order`, and `causal_event_timing` checks, combine visible and causal comparisons in canonical order, compute status precedence exactly as the spec, and return `TemporalDriftReport` without mutating inputs. Ensure all caught exceptions become fixed statuses/reasons and never include exception text.
 
-- [ ] **Step 4: Run focused temporal suite, lint, and commit**
+- [x] **Step 4: Run focused temporal suite, lint, and commit**
 
 Run:
 
@@ -173,21 +173,21 @@ git commit -m "feat: validate temporal causal drift"
 - Consumes: the public temporal policy/report/evaluator API and the temporal-drift spec.
 - Produces: user-facing evaluator-only documentation and AST/import protections for visible generation/export/trajectory paths.
 
-- [ ] **Step 1: Write failing documentation and AST tests**
+- [x] **Step 1: Write failing documentation and AST tests**
 
 Add assertions that the guide and README name `TemporalDriftPolicy`, `TemporalWindowPolicy`, `validate_temporal_drift`, fixed metrics, half-open windows, `PASS`/`FAIL`/`UNEVALUABLE`, hidden causal checks, and all non-claims. AST-scan `src/synthetic/generate.py`, `src/synthetic/manifest.py`, `src/synthetic/derivation.py`, `src/synthetic/native/`, `src/synthetic/package_export.py`, and `src/synthetic/csv_package.py` to reject imports/calls to `synthetic.temporal_drift`, `Path`, file/output lifecycle functions, calibration/held-out/privacy runtimes, and path/key/report/output argument names; allow the evaluator module and tests.
 
-- [ ] **Step 2: Run boundary tests to verify they fail**
+- [x] **Step 2: Run boundary tests to verify they fail**
 
 Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_temporal_drift_boundaries.py`
 
 Expected: failure because the documentation section and boundary test do not exist.
 
-- [ ] **Step 3: Implement documentation and AST guard**
+- [x] **Step 3: Implement documentation and AST guard**
 
 Add one concise “Evaluator-only temporal-drift validation” section to the guide and a matching README paragraph. Show the exact in-memory call shape, explain visible age-window metrics and adjacent-window steps, explain status precedence and hidden causal checks, and state that reports diagnose development sequence behavior only. Explicitly defer real-data temporal fidelity, prevalence, clinical validity, privacy/non-matchability, task utility, release, and Synthea claims. Keep existing command examples unchanged and preserve one-physical-line paragraphs where required. Implement the AST guard with `ast.parse` over only visible modules; reject forbidden imports/calls and public argument names without scanning evaluator internals.
 
-- [ ] **Step 4: Run documentation/boundary tests, lint, and commit**
+- [x] **Step 4: Run documentation/boundary tests, lint, and commit**
 
 Run:
 
@@ -214,15 +214,15 @@ git commit -m "docs: explain temporal drift evaluator"
 - Consumes: the complete temporal-drift feature branch and review packages.
 - Produces: a reviewed branch with final verification and remote parity.
 
-- [ ] **Step 1: Create SDD ledger, conflict scan, and task review packages**
+- [x] **Step 1: Create SDD ledger, conflict scan, and task review packages**
 
 Record the base branch and every shared-interface conflict in `.superpowers/sdd/2026-08-31-temporal-drift/progress.md`: Task 1↔2 model/metric types, Task 1↔3 status/report assembly, Task 1↔4 public boundary/docs, Task 2↔3 private truth/visible metrics, and Task 3↔4 evaluator isolation. Generate one exact review package per implementation task from its parent commit to its task commit and dispatch a fresh reviewer for each; reviewers must inspect the task brief, current source, focused tests, and diff without editing source.
 
-- [ ] **Step 2: Resolve findings through implementer-only fixes and scoped re-reviews**
+- [x] **Step 2: Resolve findings through implementer-only fixes and scoped re-reviews**
 
 For each Critical/Important finding, dispatch one implementer with the exact reproduction and regression requirement, generate a package from the fix parent to fix head, and dispatch a fresh scoped re-review. Preserve safe Minor observations in the ledger. Allow at most one broad fix wave after the whole-slice review; do not weaken hidden-truth, no-filesystem, or aggregate-only boundaries.
 
-- [ ] **Step 3: Run final verification before integration**
+- [x] **Step 3: Run final verification before integration**
 
 Run:
 
