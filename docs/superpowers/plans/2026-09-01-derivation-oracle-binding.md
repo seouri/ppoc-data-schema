@@ -277,6 +277,13 @@ git commit -m "feat: validate derivation binding evidence"
 - Modify: tests/synthetic/test_package_export_boundaries.py
 - Modify: tests/synthetic/test_generate_smoke.py
 - Create: tests/synthetic/test_derivation_binding_integration.py
+- Modify: tests/synthetic/test_observed_resource_package_export.py
+- Modify: tests/synthetic/test_counterfactual_package_export.py
+- Modify: tests/synthetic/test_counterfactual_package_export_boundaries.py
+- Modify: tests/synthetic/test_cohort_resources.py
+- Modify: docs/synthetic-generator.md
+- Modify: docs/superpowers/specs/2026-08-31-counterfactual-package-export-design.md
+- Modify: docs/superpowers/specs/2026-08-31-observed-resource-package-export-design.md
 
 **Interfaces:**
 
@@ -285,11 +292,11 @@ git commit -m "feat: validate derivation binding evidence"
 - generate_smoke uses the same derivation_binding keyword.
 - Existing fictional test-oracle behavior remains available through a test-only binding fixture.
 
-- [ ] **Step 1: Write failing integration tests**
+- [x] **Step 1: Write failing integration tests**
 
 Assert that a matching fake oracle is delegated exactly once for a valid test-only binding; declared oracle ID mismatch, returned ID mismatch, returned fingerprint mismatch, and returned test_only mismatch raise fixed redacted failures. Assert that a non-test binding with missing evidence is rejected before the underlying oracle is called and before augmented output is copied. Assert that a complete approved non-test binding preserves existing base hashes, augmented outputs, structural validation, and manifests. Assert that all three exporter/generator entry points reject calls omitting derivation_binding. Assert that test package manifests retain the fingerprint and test-only marker but contain no binding evidence, review IDs, parity IDs, or hidden truth. Static scans must still find no path reader, real-data import, network call, Synthea import, or implicit binding invocation outside the explicit argument path.
 
-- [ ] **Step 2: Run integration tests and verify expected failure**
+- [x] **Step 2: Run integration tests and verify expected failure**
 
 ~~~sh
 PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_derivation_binding_integration.py tests/synthetic/test_package_export.py tests/synthetic/test_generate_smoke.py
@@ -297,19 +304,19 @@ PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests
 
 Expected: collection or signature failures show the old loose exporter/generator contract.
 
-- [ ] **Step 3: Implement BoundDerivationOracle**
+- [x] **Step 3: Implement BoundDerivationOracle**
 
 The constructor validates the binding against EXPECTED_SCHEMA_FINGERPRINT. For test-only bindings, reject only a FAIL report and permit UNEVALUABLE development evidence. For non-test bindings, call require_approved_derivation_binding before any staging directory or output file is created. Verify the underlying oracle exposes a nonempty oracle_id equal to binding.oracle.oracle_id.
 
 derive delegates once and requires a DerivationResult-shaped return whose oracle_id, implementation_fingerprint, and test_only exactly equal the binding identities. Do not inspect arbitrary result attributes, retain rows, or include caller text in errors.
 
-- [ ] **Step 4: Replace loose exporter/generator trust arguments**
+- [x] **Step 4: Replace loose exporter/generator trust arguments**
 
 Update _validate_preflight and both package-export entry points so the caller supplies derivation_binding. Instantiate BoundDerivationOracle during preflight and use its derive method for isolated staging. Remove the old trusted fingerprint/classification parameters from all public and internal call sites; do not leave a compatibility path that bypasses the binding. Retain every existing lifecycle, descriptor, base-hash, unexpected-file, structural, and manifest check.
 
 Update generate_smoke similarly. Add test_derivation_binding() to tests/synthetic/fakes.py using the fake oracle's fixed identity and test-only classification. Update every existing package/generator test and documentation example call to pass that fixture. Keep generate.main unavailable and unchanged.
 
-- [ ] **Step 5: Run integration tests and lint**
+- [x] **Step 5: Run integration tests and lint**
 
 ~~~sh
 PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_derivation_binding_models.py tests/synthetic/test_derivation_binding_evaluation.py tests/synthetic/test_derivation_binding_integration.py tests/synthetic/test_package_export.py tests/synthetic/test_package_export_boundaries.py tests/synthetic/test_generate_smoke.py
@@ -318,7 +325,7 @@ UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run ruff check src/synthetic/derivation_bindi
 
 Expected: focused tests pass and Ruff is clean.
 
-- [ ] **Step 6: Commit the integration slice**
+- [x] **Step 6: Commit the integration slice**
 
 ~~~sh
 git add src/synthetic/derivation_binding.py src/synthetic/package_export.py src/synthetic/generate.py tests/synthetic/fakes.py tests/synthetic/test_package_export.py tests/synthetic/test_package_export_boundaries.py tests/synthetic/test_generate_smoke.py tests/synthetic/test_derivation_binding_integration.py
