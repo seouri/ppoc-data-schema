@@ -114,7 +114,10 @@ def _qualified_calls(
         if not isinstance(node, ast.Call) or (name := _call_name(node.func)) is None:
             continue
         root, dot, suffix = name.partition(".")
-        calls.add(f"{bindings.get(root, root)}{dot}{suffix}")
+        qualified_name = f"{bindings.get(root, root)}{dot}{suffix}"
+        if qualified_name.startswith("asyncio.subprocess.create_subprocess_"):
+            qualified_name = qualified_name.replace("asyncio.subprocess.", "asyncio.", 1)
+        calls.add(qualified_name)
     return calls
 
 
@@ -124,7 +127,7 @@ def _dynamic_imports(
     bindings = _bindings(tree, module_name, is_package=is_package)
     imports: set[str] = set()
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Call) or not node.args:
+        if not isinstance(node, ast.Call):
             continue
         name = _call_name(node.func)
         if name is None:
@@ -133,7 +136,14 @@ def _dynamic_imports(
         qualified_name = f"{bindings.get(root, root)}{dot}{suffix}"
         if qualified_name not in {"__import__", "importlib.import_module"}:
             continue
-        argument = node.args[0]
+        argument = (
+            node.args[0]
+            if node.args
+            else next(
+                (keyword.value for keyword in node.keywords if keyword.arg == "name"),
+                None,
+            )
+        )
         if isinstance(argument, ast.Constant) and isinstance(argument.value, str):
             imports.add(argument.value)
     return imports
@@ -244,7 +254,14 @@ def test_boundary_scanner_rejects_relative_dynamic_and_external_route_evasions()
             False,
             "synthetic.prevalence_evidence",
         ),
+        (
+            "import importlib as loader\nloader.import_module(name='synthetic.calibration')",
+            "synthetic.generate",
+            False,
+            "synthetic.calibration",
+        ),
         ("__import__('synthea')", "synthetic.generate", False, "synthea"),
+        ("__import__(name='synthea')", "synthetic.generate", False, "synthea"),
     )
     for source, module_name, is_package, forbidden_module in cases:
         tree = ast.parse(source)
@@ -253,7 +270,17 @@ def test_boundary_scanner_rejects_relative_dynamic_and_external_route_evasions()
         ) == {forbidden_module}
 
     external_cases = (
+        (
+            "from asyncio import subprocess as a\na.create_subprocess_exec('fictional')",
+            "asyncio.create_subprocess_exec",
+        ),
+        (
+            "import asyncio\nasyncio.create_subprocess_shell('fictional')",
+            "asyncio.create_subprocess_shell",
+        ),
+        ("import os\nos.popen('fictional')", "os.popen"),
         ("import os\nos.system('fictional')", "os.system"),
+        ("import subprocess\nsubprocess.Popen(['fictional'])", "subprocess.Popen"),
         ("import subprocess\nsubprocess.run(['fictional'])", "subprocess.run"),
         ("import subprocess\nsubprocess.call(['fictional'])", "subprocess.call"),
         (
@@ -264,15 +291,24 @@ def test_boundary_scanner_rejects_relative_dynamic_and_external_route_evasions()
             "import subprocess as process\nprocess.check_output(['fictional'])",
             "subprocess.check_output",
         ),
+        ("import subprocess\nsubprocess.getoutput('fictional')", "subprocess.getoutput"),
+        (
+            "import subprocess\nsubprocess.getstatusoutput('fictional')",
+            "subprocess.getstatusoutput",
+        ),
         (
             "from subprocess import Popen as launch\nlaunch(['fictional'])",
             "subprocess.Popen",
         ),
     )
+    detected_calls: set[str] = set()
     for source, expected_call in external_cases:
         tree = ast.parse(source)
-        assert expected_call in _external_process_calls(
+        calls = _external_process_calls(
             tree,
             "synthetic.generate",
             is_package=False,
         )
+        assert expected_call in calls
+        detected_calls.update(calls)
+    assert detected_calls == FORBIDDEN_EXTERNAL_PROCESS_CALLS
