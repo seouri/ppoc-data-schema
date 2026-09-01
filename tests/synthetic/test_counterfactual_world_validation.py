@@ -4,8 +4,13 @@ import dataclasses
 
 import pytest
 
-from synthetic.native.counterfactual import InterventionKind, generate_counterfactual_pair
+from synthetic.native.counterfactual import (
+    CounterfactualPair,
+    InterventionKind,
+    generate_counterfactual_pair,
+)
 from synthetic.native.counterfactual_worlds import (
+    CounterfactualEhrWorldPair,
     CounterfactualWorldValidationStatus,
     assemble_counterfactual_ehr_worlds,
     validate_counterfactual_ehr_worlds,
@@ -215,6 +220,63 @@ def test_validator_rejects_cross_pair_frame_and_bundle_splice_with_typed_but_wro
     assert next(check for check in report.checks if check.name == "pair_binding").status is CounterfactualWorldValidationStatus.FAIL
 
 
+def test_constructor_and_validator_reject_same_trajectory_frame_replayed_with_a_different_seed() -> None:
+    pair = _pair(InterventionKind.PHYSIOLOGY_SEVERITY)
+    policy = dataclasses.replace(
+        _policy(),
+        height_error_sd_cm=0.7,
+        weight_error_sd_kg=0.4,
+        head_circumference_error_sd_cm=0.3,
+    )
+    demographics = SyntheticDemographics(PATIENT.patient_id, "F")
+    worlds = assemble_counterfactual_ehr_worlds(
+        pair, demographics, policy, _descriptor(), _ancillary_policy()
+    )
+    alternate_pair = CounterfactualPair(
+        pair.baseline,
+        pair.intervention,
+        dataclasses.replace(pair.baseline_context, run_seed=20260999),
+        dataclasses.replace(pair.intervention_context, run_seed=20260999),
+        pair.matrix,
+    )
+    alternate = assemble_counterfactual_ehr_worlds(
+        alternate_pair, demographics, policy, _descriptor(), _ancillary_policy()
+    )
+
+    assert tuple(
+        (visit.age_days, tuple(item.availability for item in visit.measurements))
+        for visit in worlds.intervention.frame.visits
+    ) == tuple(
+        (visit.age_days, tuple(item.availability for item in visit.measurements))
+        for visit in alternate.intervention.frame.visits
+    )
+    assert worlds.intervention.frame.events == alternate.intervention.frame.events
+    assert worlds.intervention.frame.visits != alternate.intervention.frame.visits
+    with pytest.raises(ValueError, match="observation"):
+        CounterfactualEhrWorldPair(
+            worlds.baseline,
+            alternate.intervention,
+            worlds.matrix,
+            worlds.observation_policy,
+            worlds.shape,
+            worlds._pair,
+            worlds._ancillary_policy,
+            worlds._observation_stream_identities,
+            worlds._observation_stream_seed,
+            worlds._observation_stream_patient_index,
+        )
+
+    object.__setattr__(worlds.intervention, "frame", alternate.intervention.frame)
+    object.__setattr__(worlds.intervention, "bundle", alternate.intervention.bundle)
+
+    report = validate_counterfactual_ehr_worlds(worlds)
+
+    check = next(item for item in report.checks if item.name == "shared_observation")
+    assert report.status is CounterfactualWorldValidationStatus.FAIL
+    assert check.status is CounterfactualWorldValidationStatus.FAIL
+    assert check.reason_code == "SHARED_OBSERVATION_INVALID"
+
+
 def test_validator_detects_changed_demographics_and_patient_row_at_the_shared_demographics_check() -> None:
     worlds = _worlds(InterventionKind.PHYSIOLOGY_SEVERITY)
     object.__setattr__(worlds.intervention, "demographics", SyntheticDemographics(PATIENT.patient_id, "M"))
@@ -350,3 +412,44 @@ def test_validator_rejects_private_object_in_a_visible_row_value() -> None:
 
     assert report.status is CounterfactualWorldValidationStatus.FAIL
     assert next(check for check in report.checks if check.name == "truth_boundary").status is CounterfactualWorldValidationStatus.FAIL
+
+
+def test_validator_returns_a_redacted_truth_boundary_failure_for_a_cyclic_visible_mapping() -> None:
+    worlds = _worlds(InterventionKind.PHYSIOLOGY_SEVERITY)
+    bundle = worlds.intervention.bundle
+    assert bundle is not None
+    row = bundle.rows["labs"][0]
+    cyclic: dict[str, object] = {}
+    cyclic["self"] = cyclic
+    object.__setattr__(
+        row,
+        "values",
+        tuple((name, cyclic if name == "result_value" else value) for name, value in row.values),
+    )
+
+    report = validate_counterfactual_ehr_worlds(worlds)
+
+    check = next(item for item in report.checks if item.name == "truth_boundary")
+    assert report.status is CounterfactualWorldValidationStatus.FAIL
+    assert check.status is CounterfactualWorldValidationStatus.FAIL
+    assert check.reason_code == "TRUTH_BOUNDARY_INVALID"
+    assert set(report.to_mapping()) == {"status", "check_counts", "checks"}
+    assert "self" not in repr(report)
+
+
+def test_validator_passes_an_earlier_recognition_world_with_partial_recorded_events() -> None:
+    worlds = assemble_counterfactual_ehr_worlds(
+        _pair(InterventionKind.EARLIER_RECOGNITION),
+        SyntheticDemographics(PATIENT.patient_id, "F"),
+        dataclasses.replace(_policy(), diagnosis_probability=0.0),
+        _descriptor(),
+        _ancillary_policy(),
+    )
+
+    assert all(member.frame.events for member in (worlds.baseline, worlds.intervention))
+    assert all(
+        event.event_kind.value != "diagnosis"
+        for member in (worlds.baseline, worlds.intervention)
+        for event in member.frame.events
+    )
+    assert validate_counterfactual_ehr_worlds(worlds).status is CounterfactualWorldValidationStatus.PASS

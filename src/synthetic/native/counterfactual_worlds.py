@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum
+from math import isfinite
 from types import MappingProxyType
 from typing import ClassVar
 
@@ -72,8 +73,31 @@ COUNTERFACTUAL_WORLD_REASON_CODES_BY_STATUS: Mapping[
 ] = MappingProxyType(
     {
         CounterfactualWorldValidationStatus.PASS: frozenset({"OK"}),
-        CounterfactualWorldValidationStatus.FAIL: frozenset({"MALFORMED_WORLDS"}),
-        CounterfactualWorldValidationStatus.UNEVALUABLE: frozenset({"INSUFFICIENT_EVIDENCE"}),
+        CounterfactualWorldValidationStatus.FAIL: frozenset(
+            {
+                "PAIR_BINDING_INVALID",
+                "SHARED_DEMOGRAPHICS_INVALID",
+                "SHARED_OBSERVATION_INVALID",
+                "OBSERVATION_INVARIANTS_INVALID",
+                "RESOURCE_INVARIANTS_INVALID",
+                "PERMITTED_CHANGES_INVALID",
+                "TRUTH_BOUNDARY_INVALID",
+            }
+        ),
+        CounterfactualWorldValidationStatus.UNEVALUABLE: frozenset(
+            {"INSUFFICIENT_EVIDENCE", "MALFORMED_WORLDS"}
+        ),
+    }
+)
+_FAILURE_REASON_BY_CHECK: Mapping[str, str] = MappingProxyType(
+    {
+        "pair_binding": "PAIR_BINDING_INVALID",
+        "shared_demographics": "SHARED_DEMOGRAPHICS_INVALID",
+        "shared_observation": "SHARED_OBSERVATION_INVALID",
+        "observation_invariants": "OBSERVATION_INVARIANTS_INVALID",
+        "resource_invariants": "RESOURCE_INVARIANTS_INVALID",
+        "permitted_changes": "PERMITTED_CHANGES_INVALID",
+        "truth_boundary": "TRUTH_BOUNDARY_INVALID",
     }
 )
 COUNTERFACTUAL_WORLD_REASON_CODES = frozenset(
@@ -121,6 +145,11 @@ class CounterfactualWorldCheck:
             raise TypeError("status must be a CounterfactualWorldValidationStatus")
         if self.reason_code not in COUNTERFACTUAL_WORLD_REASON_CODES_BY_STATUS[self.status]:
             raise ValueError("reason_code must be compatible with status")
+        if (
+            self.status is CounterfactualWorldValidationStatus.FAIL
+            and self.reason_code != _FAILURE_REASON_BY_CHECK[self.name]
+        ):
+            raise ValueError("reason_code must identify the failed check")
 
     def to_mapping(self) -> dict[str, str]:
         return {
@@ -256,6 +285,19 @@ class CounterfactualEhrWorldPair:
                 ).status is not AncillaryBundleValidationStatus.PASS
             ):
                 raise ValueError("world frames must use the shared observation policy")
+        replayed_frames = tuple(
+            generate_observation_frame(
+                trajectory,
+                self.observation_policy,
+                NamedRandomStreams(
+                    self._observation_stream_seed,
+                    self._observation_stream_patient_index,
+                ),
+            )
+            for trajectory in (self._pair.baseline, self._pair.intervention)
+        )
+        if tuple(member.frame for member in (self.baseline, self.intervention)) != replayed_frames:
+            raise ValueError("world frames must equal deterministic observation replay")
 
     def to_mapping(self) -> dict[str, object]:
         return {
@@ -387,13 +429,14 @@ def _world_check(
         status = evaluator()  # type: ignore[operator]
         if not isinstance(status, CounterfactualWorldValidationStatus):
             raise TypeError("counterfactual world check returned an invalid status")
-    except (ArithmeticError, AttributeError, IndexError, KeyError, TypeError, ValueError):
+    except Exception:  # noqa: BLE001 - public validator always returns a redacted report
         status = CounterfactualWorldValidationStatus.UNEVALUABLE
-    reason = {
-        CounterfactualWorldValidationStatus.PASS: "OK",
-        CounterfactualWorldValidationStatus.FAIL: "MALFORMED_WORLDS",
-        CounterfactualWorldValidationStatus.UNEVALUABLE: "INSUFFICIENT_EVIDENCE",
-    }[status]
+    if status is CounterfactualWorldValidationStatus.FAIL:
+        reason = _FAILURE_REASON_BY_CHECK[name]
+    elif status is CounterfactualWorldValidationStatus.PASS:
+        reason = "OK"
+    else:
+        reason = "INSUFFICIENT_EVIDENCE"
     return CounterfactualWorldCheck(name, status, reason)
 
 
@@ -501,17 +544,54 @@ def _check_shared_observation(worlds: CounterfactualEhrWorldPair) -> Counterfact
     ):
         return CounterfactualWorldValidationStatus.FAIL
     try:
-        if (
-            baseline.frame.policy_version != worlds.observation_policy.policy_version
-            or intervention.frame.policy_version != worlds.observation_policy.policy_version
-            or baseline.frame.window != intervention.frame.window
-            or baseline.frame.truth.policy != worlds.observation_policy
-            or intervention.frame.truth.policy != worlds.observation_policy
-        ):
-            return CounterfactualWorldValidationStatus.FAIL
-    except (AttributeError, TypeError):
+        replayed_frames = tuple(
+            generate_observation_frame(
+                trajectory,
+                worlds.observation_policy,
+                NamedRandomStreams(
+                    worlds._observation_stream_seed,
+                    worlds._observation_stream_patient_index,
+                ),
+            )
+            for trajectory in (pair.baseline, pair.intervention)
+        )
+    except (AttributeError, TypeError, ValueError):
         return CounterfactualWorldValidationStatus.UNEVALUABLE
-    return CounterfactualWorldValidationStatus.PASS
+    evidence_missing = False
+    for frame, replayed in zip(
+        (baseline.frame, intervention.frame), replayed_frames, strict=True
+    ):
+        try:
+            visible_state = (
+                frame.patient_id,
+                frame.policy_version,
+                frame.window,
+                frame.visits,
+                frame.events,
+            )
+            replayed_visible_state = (
+                replayed.patient_id,
+                replayed.policy_version,
+                replayed.window,
+                replayed.visits,
+                replayed.events,
+            )
+            if visible_state != replayed_visible_state:
+                return CounterfactualWorldValidationStatus.FAIL
+            if not isinstance(frame.truth, ObservationTruth):
+                evidence_missing = True
+                continue
+            if frame.truth.policy != worlds.observation_policy:
+                return CounterfactualWorldValidationStatus.FAIL
+            if frame != replayed:
+                return CounterfactualWorldValidationStatus.FAIL
+        except (AttributeError, TypeError, ValueError):
+            evidence_missing = True
+    return (
+        CounterfactualWorldValidationStatus.UNEVALUABLE
+        if evidence_missing
+        else CounterfactualWorldValidationStatus.PASS
+    )
 
 
 def _visit_structure(member: CohortMember) -> tuple[tuple[object, ...], ...]:
@@ -680,13 +760,32 @@ def _check_permitted_changes(worlds: CounterfactualEhrWorldPair) -> Counterfactu
     return CounterfactualWorldValidationStatus.FAIL
 
 
-def _is_visible_value(value: object) -> bool:
-    if value is None or isinstance(value, (str, int, float, bool)):
+def _is_visible_value(value: object, active_containers: set[int] | None = None) -> bool:
+    if value is None or isinstance(value, str):
         return True
-    if isinstance(value, (list, tuple)):
-        return all(_is_visible_value(item) for item in value)
-    if isinstance(value, Mapping):
-        return all(isinstance(key, str) and _is_visible_value(item) for key, item in value.items())
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int):
+        return True
+    if isinstance(value, float):
+        return isfinite(value)
+    if isinstance(value, (list, tuple, Mapping)):
+        active = set() if active_containers is None else active_containers
+        identity = id(value)
+        if identity in active:
+            return False
+        active.add(identity)
+        try:
+            if isinstance(value, Mapping):
+                return all(
+                    isinstance(key, str) and _is_visible_value(item, active)
+                    for key, item in value.items()
+                )
+            return all(_is_visible_value(item, active) for item in value)
+        except Exception:  # noqa: BLE001 - adversarial containers fail the boundary
+            return False
+        finally:
+            active.remove(identity)
     return False
 
 
@@ -700,14 +799,20 @@ def _check_truth_boundary(worlds: CounterfactualEhrWorldPair) -> CounterfactualW
         for bundle in _bundles(worlds):
             for resource_name in BASE_RESOURCE_NAMES:
                 for row in bundle.rows[resource_name]:
-                    if any(not isinstance(value, (str, int, float)) for _, value in row.values):
+                    if any(
+                        isinstance(value, bool)
+                        or not isinstance(value, (str, int, float))
+                        or isinstance(value, float)
+                        and not isfinite(value)
+                        for _, value in row.values
+                    ):
                         return CounterfactualWorldValidationStatus.FAIL
         rendered = repr(worlds)
         if rendered != "CounterfactualEhrWorldPair(<evaluator-only>)" or any(
             token in rendered for token in ("truth", "trajectory", "seed", "stream", "context")
         ):
             return CounterfactualWorldValidationStatus.FAIL
-    except (AttributeError, KeyError, TypeError, ValueError):
+    except Exception:  # noqa: BLE001 - public validator always returns a redacted report
         return CounterfactualWorldValidationStatus.FAIL
     return CounterfactualWorldValidationStatus.PASS
 

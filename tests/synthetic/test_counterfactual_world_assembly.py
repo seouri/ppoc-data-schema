@@ -331,10 +331,14 @@ def test_assemble_rejects_every_untyped_input_at_the_fixed_redacted_boundary(slo
 
 @pytest.mark.parametrize(
     "intervention",
-    (InterventionKind.UTILIZATION_INTENSITY, InterventionKind.MEASUREMENT_ERROR_REMOVAL),
+    (
+        InterventionKind.UTILIZATION_INTENSITY,
+        InterventionKind.MEASUREMENT_ERROR_REMOVAL,
+        "unreviewed-intervention",
+    ),
 )
 def test_assemble_rejects_deferred_interventions_at_a_fixed_redacted_boundary(
-    intervention: InterventionKind,
+    intervention: object,
 ) -> None:
     # The trajectory constructor rejects deferred kinds, so a valid supported
     # pair is deliberately relabelled to exercise the world-assembly guard.

@@ -94,6 +94,15 @@ def test_world_validator_module_remains_in_memory_and_uses_no_forbidden_public_i
             if arguments is not None:
                 names = {argument.arg for argument in (*arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs)}
                 assert not names & forbidden_arguments
+            if isinstance(node, ast.ClassDef):
+                public_fields = {
+                    item.target.id
+                    for item in node.body
+                    if isinstance(item, ast.AnnAssign)
+                    and isinstance(item.target, ast.Name)
+                    and not item.target.id.startswith("_")
+                }
+                assert not public_fields & forbidden_arguments
 
     calls = {
         node.func.id
@@ -101,3 +110,35 @@ def test_world_validator_module_remains_in_memory_and_uses_no_forbidden_public_i
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
     }
     assert not calls & {"open", "print", "input", "eval", "exec", "__import__"}
+
+    def dotted_name(node: ast.expr) -> str:
+        if isinstance(node, ast.Name):
+            return node.id.lower()
+        if isinstance(node, ast.Attribute):
+            prefix = dotted_name(node.value)
+            return f"{prefix}.{node.attr.lower()}" if prefix else node.attr.lower()
+        return ""
+
+    forbidden_call_fragments = (
+        "open",
+        "read_text",
+        "read_bytes",
+        "write_text",
+        "write_bytes",
+        "export",
+        "package",
+        "manifest",
+        "calibrat",
+        "heldout",
+        "privacy",
+        "governed",
+        "duckdb",
+        "synthea",
+        "network",
+    )
+    call_names = (dotted_name(node.func) for node in ast.walk(tree) if isinstance(node, ast.Call))
+    assert not any(
+        fragment in call_name
+        for call_name in call_names
+        for fragment in forbidden_call_fragments
+    )
