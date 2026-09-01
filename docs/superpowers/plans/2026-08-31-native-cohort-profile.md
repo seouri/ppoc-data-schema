@@ -264,6 +264,13 @@ Dispatch the most capable fresh reviewer over the full branch range. Require che
 
 From the feature worktree run focused cohort tests, the complete `pytest` suite, Ruff, schema validation, `git diff --check`, and a staged-file audit. Confirm no real data, key material, generated package, path, or hidden truth artifact is tracked. Record exact test counts and the branch tip in the ledger.
 
-- [ ] **Step 4: Merge, push, parity, and cleanup**
+- [x] **Step 4: Merge, push, parity, and cleanup**
 
 Using the finishing-development-branch workflow, fast-forward the reviewed branch into `main`, rerun full verification on merged `main`, push `origin/main`, and verify `git rev-parse HEAD` equals `git rev-parse origin/main`. Remove only this plan's worktree, branch, and ignored SDD workspace; preserve unrelated worktrees and pre-existing generated caches.
+
+## Completion evidence
+
+- Implementation and boundary-fix commits: `876168b`, `d6f68f2`, `5da239a`, `1fd0b7b`, `fbf6889`, `d7d684d`, `a3effd0`, `b30b3e1`, `f3892f3`, `bbfe738`, `1f6f951`, `073b77c`, `8552370`, `141fdc1`, and `802f7d6`.
+- Review evidence: initial broad review findings were resolved through five bounded implementer fix rounds; exact final range `8552370..802f7d6` received PASS in `boundary-fix-5-review.md`.
+- Verification: `1859 passed`; Ruff, lock, eight-resource schema validation, whitespace, boundary, and import-order checks passed on the reviewed tip and merged `main`.
+- Integration: merged as `2e70c06` and pushed to `origin/main`; final parity is verified after the metadata push.

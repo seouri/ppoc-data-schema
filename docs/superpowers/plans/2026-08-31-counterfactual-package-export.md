@@ -312,7 +312,7 @@
   Record exact outputs and any unchanged repository-wide lint baseline in the
   ignored SDD evidence.
 
-- [ ] **Step 4: Merge and push.**
+- [x] **Step 4: Merge and push.**
 
   Update only plan metadata with commit hashes and evidence. Merge the feature
   branch to `main` using `git merge --no-ff`, rerun the focused and full gates
@@ -327,11 +327,11 @@
 
 ## Acceptance evidence template
 
-- Implementation/review commits: pending.
-- Scoped reviews and exact fix re-reviews: pending.
-- Broad review: pending.
-- Feature verification: pending.
-- Merge/push parity: pending.
+- Implementation/review commits: `7daf0df`, `f895b63`, `f0a5dbf`, `d6e1593`, `d4ab94a`, `2bc85ee`, `75ce71d`, `39310f4`, `965dbaa`, `6cc8683`, `eadea34`, and `9d5474e`.
+- Scoped reviews and exact fix re-reviews: final exact re-review PASS in `broad-fix-2-review.md`; no Critical or Important findings remain.
+- Broad review: PASS after the consolidated lifecycle/oracle hardening and exact-range re-review.
+- Feature verification: `1839 passed`; Ruff, lock, eight-resource schema validation, whitespace, descriptor immutability, and deterministic two-destination byte parity checks passed.
+- Merge/push parity: merged as `2a7c3ce`, pushed to `origin/main`, and parity was verified before the subsequent roadmap metadata commit.
 
 ## Deferred roadmap gates
 
