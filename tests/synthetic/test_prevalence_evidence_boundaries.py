@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import sys
 from pathlib import Path
 
 import pytest
@@ -118,6 +119,7 @@ def _transitive_imports(roots: tuple[Path, ...]) -> set[str]:
         visited.add(path)
         direct = _imports(path)
         names.update(direct)
+        names.update(_dynamic_module_literals(path))
         pending.extend(candidate for name in direct if (candidate := _module_path(name)) is not None)
     return names
 
@@ -213,11 +215,24 @@ def test_prevalence_evidence_docs_preserve_separate_evidence_caveats() -> None:
 def test_visible_generator_roots_do_not_import_prevalence_evidence() -> None:
     direct = set().union(*(_imports(path) for path in VISIBLE_ROOTS))
     transitive = _transitive_imports(VISIBLE_ROOTS)
-    dynamic = set().union(*(_dynamic_module_literals(path) for path in VISIBLE_ROOTS))
 
     assert not direct & {GOVERNED_IMPORT}
     assert not transitive & {GOVERNED_IMPORT}
-    assert not dynamic & {GOVERNED_IMPORT}
+
+
+def test_transitive_import_scan_detects_dynamic_governed_literal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "src" / "synthetic"
+    root.mkdir(parents=True)
+    (root / "generate.py").write_text("from . import support\n", encoding="utf-8")
+    (root / "support.py").write_text(
+        'importlib.import_module("synthetic.prevalence_evidence")\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
+
+    assert GOVERNED_IMPORT in _transitive_imports((root / "generate.py",))
 
 
 @pytest.mark.parametrize(
