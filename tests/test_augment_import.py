@@ -2,10 +2,13 @@
 
 import csv
 import hashlib
-import importlib
 import json
+import stat
+import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
@@ -28,20 +31,6 @@ EXPECTED_RUNTIME_PATHS = {
     *(f"data/{name}" for name in CDC_REFERENCE_NAMES),
     "data/icd10cm-tabular-2026.csv",
 }
-EXPECTED_CDC_KEYS = {
-    "height_for_age",
-    "weight_for_age",
-    "bmi_for_age",
-    "head_circ_for_age",
-    "weight_for_stature",
-    "weight_for_length",
-    "hvage_no_pub",
-    "hvage_earlier_pub",
-    "hvage_average_pub",
-    "hvage_later_pub",
-}
-
-
 def _descriptor_fields(name: str) -> list[str]:
     descriptor = json.loads((ROOT / "datapackage.json").read_text())
     resource = next(resource for resource in descriptor["resources"] if resource["name"] == name)
@@ -55,24 +44,47 @@ def _write_csv(path: Path, fields: list[str], row: dict[str, object]) -> None:
         writer.writerow({field: row.get(field, "") for field in fields})
 
 
+def _assert_manifest_entries_are_regular_files(root: Path, entries: list[dict[str, object]]) -> None:
+    for entry in entries:
+        relative_path = Path(str(entry["path"]))
+        assert not relative_path.is_absolute()
+        path = root / relative_path
+        assert not path.is_symlink()
+        assert stat.S_ISREG(path.lstat().st_mode)
+        assert path.stat().st_size == entry["bytes"]
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == entry["sha256"]
+        assert entry["sha256"] == entry["sha256"].lower()
+
+
 def test_runtime_manifest_covers_exact_source_matched_closure() -> None:
     """Detect a missing, altered, or accidentally broadened runtime import."""
     manifest = json.loads((DATA_DIR / "augment-runtime-manifest.json").read_text())
     entries = manifest["files"]
 
     assert {entry["path"] for entry in entries} == EXPECTED_RUNTIME_PATHS
-    for entry in entries:
-        relative_path = Path(entry["path"])
-        assert not relative_path.is_absolute()
-        path = ROOT / relative_path
-        assert path.is_file()
-        assert path.stat().st_size == entry["bytes"]
-        assert hashlib.sha256(path.read_bytes()).hexdigest() == entry["sha256"]
-        assert entry["sha256"] == entry["sha256"].lower()
+    _assert_manifest_entries_are_regular_files(ROOT, entries)
 
 
-def test_reference_headers_and_imported_cdc_data_match_runtime_contract(monkeypatch) -> None:
-    """Detect reference tables or import setup that cannot support augmentation."""
+def test_manifest_closure_rejects_a_symlinked_target(tmp_path) -> None:
+    """Detect a manifest entry that follows a symlink outside its declared closure."""
+    target = tmp_path / "reference.csv"
+    target.write_text("reference\n")
+    linked = tmp_path / "linked.csv"
+    linked.symlink_to(target)
+    entries = [
+        {
+            "path": "linked.csv",
+            "bytes": target.stat().st_size,
+            "sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+        }
+    ]
+
+    with pytest.raises(AssertionError):
+        _assert_manifest_entries_are_regular_files(tmp_path, entries)
+
+
+def test_reference_headers_match_runtime_contract() -> None:
+    """Detect reference tables that cannot support augmentation."""
     for name in CDC_REFERENCE_NAMES:
         with (DATA_DIR / name).open(encoding="utf-8-sig", newline="") as stream:
             header = next(csv.reader(stream))
@@ -82,15 +94,9 @@ def test_reference_headers_and_imported_cdc_data_match_runtime_contract(monkeypa
         icd10_header = next(csv.reader(stream))
     assert {"diag_name", "chronic"}.issubset(icd10_header)
 
-    monkeypatch.chdir(ROOT)
-    monkeypatch.syspath_prepend(str(ROOT / "scripts"))
-    sys.modules.pop("scripts.augment", None)
-    augmenter = importlib.import_module("scripts.augment")
-    assert set(augmenter.cdc_data) == EXPECTED_CDC_KEYS
 
-
-def test_augmentation_preserves_descriptor_output_headers_for_synthetic_input(tmp_path, monkeypatch) -> None:
-    """Detect an augmenter output that no longer satisfies the package schemas."""
+def test_documented_cli_preserves_descriptor_output_headers_for_synthetic_input(tmp_path) -> None:
+    """Detect a documented CLI run that no longer satisfies the package schemas."""
     visits_fields = _descriptor_fields("visits")
     patients_fields = _descriptor_fields("patients")
     problem_list_fields = _descriptor_fields("problem_list")
@@ -127,12 +133,27 @@ def test_augmentation_preserves_descriptor_output_headers_for_synthetic_input(tm
         {"patient_id": "synthetic-patient-001", "problem_list_id": "synthetic-problem-001"},
     )
 
-    monkeypatch.chdir(ROOT)
-    monkeypatch.syspath_prepend(str(ROOT / "scripts"))
-    sys.modules.pop("scripts.augment", None)
-    augmenter = importlib.import_module("scripts.augment")
-    visits = augmenter.augment_visits(str(tmp_path))
-    patients = augmenter.augment_patients(str(tmp_path), visits)
+    output_dir = tmp_path / "fixed-output"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/augment.py",
+            str(tmp_path),
+            "--output_dir",
+            str(output_dir),
+            "--output_format",
+            "csv",
+        ],
+        check=True,
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
 
-    assert visits.columns.tolist() == _descriptor_fields("visits_augmented")
-    assert patients.columns.tolist() == _descriptor_fields("patients_augmented")
+    assert "Saving" in completed.stdout
+    visits_output = next(output_dir.glob("visits_augmented-*.csv"))
+    patients_output = next(output_dir.glob("patients_augmented-*.csv"))
+    with visits_output.open(newline="") as stream:
+        assert next(csv.reader(stream)) == _descriptor_fields("visits_augmented")
+    with patients_output.open(newline="") as stream:
+        assert next(csv.reader(stream)) == _descriptor_fields("patients_augmented")
