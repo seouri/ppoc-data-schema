@@ -33,7 +33,7 @@
 
 - [ ] **Step 1: Write failing model tests**
 
-  Add tests for valid policy/prediction/cell/report construction, exact fixed registries, booleans and nonfinite-number rejection, positive/zero floor semantics, `minimum_evaluable_members`/`maximum_unevaluable_members`, supported `sex` subgroup validation, frozen dataclasses, mapping proxies, explicit metric target/support/null rules, cell/report status consistency, fixed scope/metric order, evaluator-safe `repr`, and exact canonical JSON/newline behavior. Test that unknown keys/metrics/reasons, patient-like scopes, mutable tuples/mappings, inconsistent counts, and numeric evidence on unevaluable metrics fail closed.
+  Add tests for valid policy/prediction/cell/report construction, exact fixed registries, booleans and nonfinite-number rejection, positive/zero floor semantics, `minimum_evaluable_members`/`maximum_unevaluable_members`, supported `sex` subgroup validation, frozen dataclasses, mapping proxies, explicit metric target/support/null rules, exact `member_count`/`evaluable_count`/`unevaluable_count` field names, cell/report status consistency, fixed scope/metric order, evaluator-safe `repr`, and exact canonical JSON/newline behavior. Test that unknown keys/metrics/reasons, patient-like scopes, mutable tuples/mappings, inconsistent counts, and numeric evidence on unevaluable metrics fail closed.
 
 - [ ] **Step 2: Run the model tests to verify they fail**
 
