@@ -187,6 +187,39 @@ def test_profile_requires_actual_artifact_and_exact_compatibility_metadata() -> 
         )
 
 
+def test_profile_rejects_artifact_subclasses_before_virtual_attribute_access() -> None:
+    sensitive = "/governed/real-patient.csv truth_hash"
+
+    class ArmedArtifact(CalibrationArtifact):
+        def __getattribute__(self, name: str) -> object:
+            if name == "source_partition":
+                try:
+                    armed = object.__getattribute__(self, "_armed")
+                except AttributeError:
+                    armed = False
+                if armed:
+                    raise RuntimeError(sensitive)
+            return super().__getattribute__(name)
+
+    artifact = aggregate_calibration_artifact()
+    armed = ArmedArtifact(
+        artifact.artifact_version,
+        artifact.artifact_id,
+        artifact.source_snapshot,
+        artifact.source_partition,
+        artifact.source_aggregate_sha256,
+        artifact.schema_fingerprint,
+        artifact.created_at,
+        artifact.disclosure_policy,
+        artifact.strata,
+    )
+    object.__setattr__(armed, "_armed", True)
+
+    with pytest.raises(TypeError, match="artifact") as error:
+        CalibrationSamplingProfile.from_artifact(armed)
+    assert sensitive not in str(error.value)
+
+
 def test_profile_requires_exactly_one_observed_outcome_stratum() -> None:
     mapping = aggregate_calibration_mapping()
     stratum = mapping["strata"][0]  # type: ignore[index]

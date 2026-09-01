@@ -29,15 +29,21 @@ from synthetic.native.age_regime_disorder import AgeRegimeDisorderKernel
 from synthetic.native.age_regimes import AgeRegimeConfig, AgeRegimeTrajectoryKernel
 from synthetic.native.clinical_modules import GrowthDisorderModule
 from synthetic.native.observations import (
+    MeasurementObservation,
     ObservationFrame,
     ObservationPolicy,
     ObservationValidationStatus,
+    ObservationWindow,
+    ObservedVisit,
+    RecordedEvent,
     generate_observation_frame,
     validate_observation_frame,
 )
 from synthetic.native.resources import (
     BASE_RESOURCE_NAMES,
+    ClinicalDescendant,
     ObservedResourceBundle,
+    ResourceRow,
     ResourceShape,
     ResourceValidationStatus,
     SyntheticDemographics,
@@ -446,7 +452,7 @@ class CalibrationSamplingProfile:
     ) -> CalibrationSamplingProfile:
         """Extract a complete sampling profile from released aggregate cells."""
 
-        if not isinstance(artifact, CalibrationArtifact):
+        if type(artifact) is not CalibrationArtifact:
             raise TypeError("artifact must be a CalibrationArtifact")
         if artifact.source_partition != "calibration":
             raise ValueError("source_partition must be calibration")
@@ -556,7 +562,69 @@ class CalibrationSamplingProfile:
         return "CalibrationSamplingProfile(<aggregate-only>)"
 
 
+def _require_exact_visible_frame(frame: ObservationFrame) -> None:
+    """Reject subtype-expanded serializers in one visible frame graph."""
+
+    if type(frame) is not ObservationFrame:
+        raise TypeError("frame must be exactly an ObservationFrame")
+    if type(frame.window) is not ObservationWindow:
+        raise TypeError("frame.window must be exactly an ObservationWindow")
+    if type(frame.visits) is not tuple:
+        raise TypeError("frame.visits must be exactly a tuple")
+    for visit in frame.visits:
+        if type(visit) is not ObservedVisit:
+            raise TypeError("frame.visits must contain exact ObservedVisit values")
+        if type(visit.measurements) is not tuple:
+            raise TypeError("frame.visits.measurements must be exactly tuples")
+        if not all(type(item) is MeasurementObservation for item in visit.measurements):
+            raise TypeError(
+                "frame.visits.measurements must contain exact "
+                "MeasurementObservation values"
+            )
+    if type(frame.events) is not tuple or not all(
+        type(event) is RecordedEvent for event in frame.events
+    ):
+        raise TypeError("frame.events must contain exact RecordedEvent values")
+
+
+def _require_exact_visible_bundle(bundle: ObservedResourceBundle) -> None:
+    """Reject subtype-expanded serializers in one visible resource graph."""
+
+    if type(bundle) is not ObservedResourceBundle:
+        raise TypeError("bundle must be exactly an ObservedResourceBundle")
+    if type(bundle.shape) is not ResourceShape:
+        raise TypeError("bundle.shape must be exactly a ResourceShape")
+    if type(bundle.source_frame) is not ObservationFrame:
+        raise TypeError("bundle.source_frame must be exactly an ObservationFrame")
+    _require_exact_visible_frame(bundle.source_frame)
+    for resource_name in BASE_RESOURCE_NAMES:
+        resource_rows = bundle.rows[resource_name]
+        if type(resource_rows) is not tuple or not all(
+            type(row) is ResourceRow for row in resource_rows
+        ):
+            raise TypeError("bundle.rows must contain exact ResourceRow values")
+    if type(bundle.clinical_descendants) is not tuple or not all(
+        type(item) is ClinicalDescendant for item in bundle.clinical_descendants
+    ):
+        raise TypeError(
+            "bundle.clinical_descendants must contain exact ClinicalDescendant values"
+        )
+
+
+def _require_exact_member_contract(member: CohortMember) -> None:
+    """Validate every object reachable by ordinary member serialization."""
+
+    if type(member.demographics) is not SyntheticDemographics:
+        raise TypeError("demographics must be exactly SyntheticDemographics")
+    if type(member.trajectory) is not AgeRegimeDisorderTrajectory:
+        raise TypeError("trajectory must be exactly an AgeRegimeDisorderTrajectory")
+    _require_exact_visible_frame(member.frame)
+    if member.bundle is not None:
+        _require_exact_visible_bundle(member.bundle)
+
+
 def _member_visible_mapping(member: CohortMember) -> dict[str, object]:
+    _require_exact_member_contract(member)
     mapping: dict[str, object] = {
         "demographics": member.demographics.to_mapping(),
         "frame": member.frame.to_mapping(),
@@ -576,14 +644,7 @@ class CohortMember:
     bundle: ObservedResourceBundle | None
 
     def __post_init__(self) -> None:
-        if not isinstance(self.demographics, SyntheticDemographics):
-            raise TypeError("demographics must be SyntheticDemographics")
-        if not isinstance(self.trajectory, AgeRegimeDisorderTrajectory):
-            raise TypeError("trajectory must be an AgeRegimeDisorderTrajectory")
-        if not isinstance(self.frame, ObservationFrame):
-            raise TypeError("frame must be an ObservationFrame")
-        if self.bundle is not None and not isinstance(self.bundle, ObservedResourceBundle):
-            raise TypeError("bundle must be an ObservedResourceBundle or None")
+        _require_exact_member_contract(self)
         patient_ids = {
             self.demographics.patient_id,
             self.trajectory.physiology.points[0].patient_id,
@@ -615,11 +676,11 @@ class NativeCohort:
     def __post_init__(self) -> None:
         require_aggregate_safe_token(self.profile, "profile")
         _require_nonnegative_integer(self.seed, "seed")
-        if not isinstance(self.members, tuple) or not all(
-            isinstance(member, CohortMember) for member in self.members
+        if type(self.members) is not tuple or not all(
+            type(member) is CohortMember for member in self.members
         ):
             raise TypeError("members must be a tuple of CohortMember values")
-        if not isinstance(self.calibration, CalibrationSamplingProfile):
+        if type(self.calibration) is not CalibrationSamplingProfile:
             raise TypeError("calibration must be a CalibrationSamplingProfile")
 
     def to_mapping(self) -> dict[str, str | int]:
@@ -648,9 +709,9 @@ def generate_native_cohort(
 ) -> NativeCohort:
     """Generate a deterministic evaluator-only cohort from aggregate weights."""
 
-    if not isinstance(config, CohortConfig):
+    if type(config) is not CohortConfig:
         raise TypeError("config must be a CohortConfig")
-    if not isinstance(calibration, CalibrationSamplingProfile):
+    if type(calibration) is not CalibrationSamplingProfile:
         raise TypeError("calibration must be a CalibrationSamplingProfile")
     try:
         reference_value = getattr(reference, "value", None)
