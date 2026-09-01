@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 
 from synthetic.base_resources import BASE_RESOURCES, build_base_rows
+from synthetic.cdc_reference import CDC_GENERATION_DOMAIN_POLICY
 from synthetic.derivation import DerivationOracle, DerivationUnavailable
 from synthetic.derivation_binding import DerivationBinding
 from synthetic.development_runtime import (
@@ -104,6 +105,7 @@ def generate_smoke(
     smoke_configuration = {
         "patient_count": patient_count,
         "ages_days": [730, 1095, 1460],
+        "generation_domain_policy": CDC_GENERATION_DOMAIN_POLICY,
         "profile": profile,
     }
     configuration_sha256 = hashlib.sha256(

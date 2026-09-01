@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pytest
 
+import synthetic.generate as generate_module
+from synthetic.cdc_reference import CDC_GENERATION_DOMAIN_POLICY
 from synthetic.derivation import DerivationUnavailable
 from synthetic.generate import _scan_tree, generate_smoke
 from synthetic.package_export import PackageExportMetadata
@@ -88,6 +90,39 @@ def test_smoke_profile_override_changes_only_profile_metadata(tmp_path: Path) ->
         path.name: hashlib.sha256(path.read_bytes()).hexdigest()
         for path in development.glob("*.csv")
     }
+
+
+def test_smoke_configuration_hash_commits_generation_domain_policy(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    hashes: list[str | None] = []
+
+    def capture_export(descriptor, base_rows, output, **kwargs):
+        del descriptor, base_rows
+        hashes.append(kwargs["metadata"].configuration_sha256)
+        return output
+
+    monkeypatch.setattr(generate_module, "export_exact_schema_package", capture_export)
+    arguments = {
+        "descriptor_path": ROOT / "datapackage.json",
+        "patient_count": 1,
+        "seed": 20260901,
+        "reference_time": "2026-09-01T00:00:00Z",
+        "software_revision": "test-revision",
+        "reference": LinearTestReference(),
+        "derivation_oracle": IdentityPreservingTestDerivationOracle(),
+        "derivation_binding": test_derivation_binding(),
+    }
+    generate_smoke(output=tmp_path / "baseline", **arguments)
+    monkeypatch.setattr(
+        generate_module,
+        "CDC_GENERATION_DOMAIN_POLICY",
+        f"{CDC_GENERATION_DOMAIN_POLICY}-changed",
+    )
+    generate_smoke(output=tmp_path / "changed", **arguments)
+
+    assert len(hashes) == 2
+    assert hashes[0] != hashes[1]
 
 
 @pytest.mark.parametrize("profile", ("patient-profile", "profile/path", "profile value"))

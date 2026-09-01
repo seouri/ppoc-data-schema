@@ -16,7 +16,7 @@ from synthetic.augmenter_oracle import (
     verify_source_matched_runtime,
 )
 from synthetic.calibration_targets import TARGET_REGISTRY_VERSION
-from synthetic.cdc_reference import CdcGrowthReference
+from synthetic.cdc_reference import CDC_GENERATION_DOMAIN_POLICY, CdcGrowthReference
 from synthetic.cohort import (
     CalibrationSamplingProfile,
     CohortConfig,
@@ -286,6 +286,7 @@ def _configuration_sha256(
 ) -> str:
     configuration = {
         "profile": config.profile,
+        "generation_domain_policy": CDC_GENERATION_DOMAIN_POLICY,
         "patient_count": config.patient_count,
         "ages_days": config.ages_days,
         "observation_policy": config.observation_policy.to_mapping(),

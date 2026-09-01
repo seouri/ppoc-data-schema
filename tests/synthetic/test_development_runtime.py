@@ -392,6 +392,24 @@ def test_development_cohort_configuration_is_fixed_and_aggregate_only() -> None:
     assert config == development_runtime.development_cohort_config(64, 20260901)
 
 
+def test_development_cohort_configuration_hash_commits_generation_domain_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime = build_development_runtime(ROOT)
+    config = development_runtime.development_cohort_config(1, 20260901)
+    calibration = development_runtime.development_calibration_profile()
+
+    baseline = development_runtime._configuration_sha256(runtime, config, calibration)
+    monkeypatch.setattr(
+        development_runtime,
+        "CDC_GENERATION_DOMAIN_POLICY",
+        "cdc-p3-p97-generation-domain-changed",
+    )
+    changed = development_runtime._configuration_sha256(runtime, config, calibration)
+
+    assert baseline != changed
+
+
 def test_development_cohort_runner_exports_only_visible_longitudinal_resources(
     tmp_path: Path,
 ) -> None:
