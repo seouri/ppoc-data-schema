@@ -112,6 +112,18 @@ def test_profile_mapping_is_aggregate_only_and_preserves_blank_cells() -> None:
         assert forbidden not in encoded
 
 
+def test_profile_mapping_revalidates_postconstruction_mutation() -> None:
+    sensitive = "/governed/real-patient.csv truth_hash"
+    profile = CalibrationSamplingProfile.from_artifact(
+        aggregate_calibration_artifact()
+    )
+    object.__setattr__(profile, "artifact_id", sensitive)
+
+    with pytest.raises((TypeError, ValueError), match="calibration") as error:
+        profile.to_mapping()
+    assert sensitive not in str(error.value)
+
+
 def test_profile_preserves_released_weights_and_normalizes_only_selection() -> None:
     mapping = aggregate_calibration_mapping()
     for name in ("sex_f", "sex_m", "sex_u"):

@@ -3,6 +3,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import math
+from collections.abc import Iterator, Mapping
 
 import pytest
 
@@ -349,6 +350,56 @@ def test_member_mapping_revalidates_frozen_visible_contracts() -> None:
     assert "postconstruction-secret" not in str(error.value)
 
 
+def test_member_mapping_rejects_mutated_exact_demographics() -> None:
+    sensitive = "/governed/real-patient.csv truth_hash"
+    member = _member(include_bundle=False)
+    object.__setattr__(member.demographics, "patient_id", sensitive)
+
+    with pytest.raises((TypeError, ValueError), match="demographics") as error:
+        member.to_mapping()
+    assert sensitive not in str(error.value)
+
+
+def test_member_mapping_rejects_mutated_rows_without_invoking_them() -> None:
+    sensitive = "/governed/real-patient.csv truth_hash"
+
+    class SensitiveRows(Mapping[str, tuple[ResourceRow, ...]]):
+        def __getitem__(self, key: str) -> tuple[ResourceRow, ...]:
+            del key
+            raise RuntimeError(sensitive)
+
+        def __iter__(self) -> Iterator[str]:
+            raise RuntimeError(sensitive)
+
+        def __len__(self) -> int:
+            raise RuntimeError(sensitive)
+
+    member = _member()
+    assert member.bundle is not None
+    object.__setattr__(member.bundle, "rows", SensitiveRows())
+
+    with pytest.raises((TypeError, ValueError), match="bundle.rows") as error:
+        member.to_mapping()
+    assert sensitive not in str(error.value)
+
+
+def test_member_mapping_rejects_mutated_exact_resource_row_values() -> None:
+    member = _member()
+    assert member.bundle is not None
+    row = member.bundle.rows["patients"][0]
+    object.__setattr__(
+        row,
+        "values",
+        (*row.values, ("truth", "/governed/real-patient.csv truth_hash")),
+    )
+
+    with pytest.raises((TypeError, ValueError), match="bundle.rows") as error:
+        member.to_mapping()
+    encoded_error = str(error.value)
+    assert "real-patient" not in encoded_error
+    assert "truth_hash" not in encoded_error
+
+
 def test_member_rejects_subclassed_nested_visible_serializers() -> None:
     class TruthWindow(ObservationWindow):
         def to_mapping(self) -> dict[str, object]:
@@ -490,6 +541,22 @@ def test_native_cohort_mapping_contains_only_visible_aggregate_counts() -> None:
     assert repr(cohort) == "NativeCohort(<evaluator-only>)"
     assert "syn-cohort-member" not in repr(cohort)
     assert "aggregate-artifact-v1" not in json.dumps(cohort.to_mapping())
+
+
+def test_native_cohort_mapping_revalidates_member_counts() -> None:
+    sensitive = "/governed/real-patient.csv truth_hash"
+
+    class SensitiveVisits(tuple[object, ...]):
+        def __len__(self) -> int:
+            raise RuntimeError(sensitive)
+
+    member = _member(include_bundle=False)
+    cohort = NativeCohort("development-v1", 7, (member,), _calibration())
+    object.__setattr__(member.frame, "visits", SensitiveVisits())
+
+    with pytest.raises((TypeError, ValueError), match="members") as error:
+        cohort.to_mapping()
+    assert sensitive not in str(error.value)
 
 
 def test_native_cohort_validates_container_types() -> None:
