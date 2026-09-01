@@ -58,6 +58,38 @@ def test_smoke_generation_is_exact_schema_and_reproducible(tmp_path: Path) -> No
     assert len(list(first.glob("*.csv"))) == 8
 
 
+def test_smoke_profile_override_changes_only_profile_metadata(tmp_path: Path) -> None:
+    """Catches ignoring the caller-selected aggregate-safe smoke profile."""
+    legacy = tmp_path / "legacy"
+    development = tmp_path / "development"
+    arguments = {
+        "descriptor_path": ROOT / "datapackage.json",
+        "patient_count": 1,
+        "seed": 20260901,
+        "reference_time": "2026-09-01T00:00:00Z",
+        "software_revision": "test-revision",
+        "reference": LinearTestReference(),
+        "derivation_oracle": IdentityPreservingTestDerivationOracle(),
+        "derivation_binding": test_derivation_binding(),
+    }
+
+    generate_smoke(output=legacy, **arguments)
+    generate_smoke(output=development, profile="development-smoke", **arguments)
+
+    legacy_manifest = json.loads((legacy / "manifest.json").read_text())
+    development_manifest = json.loads((development / "manifest.json").read_text())
+    assert legacy_manifest["profile"] == "smoke"
+    assert development_manifest["profile"] == "development-smoke"
+    assert development_manifest["configuration_sha256"] != legacy_manifest["configuration_sha256"]
+    assert {
+        path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in legacy.glob("*.csv")
+    } == {
+        path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in development.glob("*.csv")
+    }
+
+
 def test_smoke_manifest_records_injected_reference_digest(tmp_path: Path) -> None:
     class HashedLinearTestReference(LinearTestReference):
         source_sha256 = "a" * 64

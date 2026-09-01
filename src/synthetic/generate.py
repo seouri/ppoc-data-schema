@@ -6,8 +6,10 @@ import json
 from pathlib import Path
 
 from synthetic.base_resources import BASE_RESOURCES, build_base_rows
+from synthetic.calibration import require_aggregate_safe_token
 from synthetic.derivation import DerivationOracle, DerivationUnavailable
 from synthetic.derivation_binding import DerivationBinding
+from synthetic.development_runtime import build_development_runtime
 from synthetic.models import PatientState
 from synthetic.native.healthy import HealthyKernel
 from synthetic.package_export import (
@@ -19,6 +21,10 @@ from synthetic.package_export import (
 from synthetic.randomness import NamedRandomStreams, synthetic_id
 from synthetic.references import GrowthReference
 from synthetic.schema_contract import load_descriptor
+
+CLI_UNAVAILABLE_MESSAGE = "No production growth reference or authoritative derivation oracle is configured"
+_DEVELOPMENT_UNAVAILABLE_MESSAGE = "Synthetic development generation unavailable"
+_DEVELOPMENT_PROFILES = frozenset({"development-smoke", "development-cohort"})
 
 
 def generate_smoke(
@@ -32,18 +38,20 @@ def generate_smoke(
     reference: GrowthReference,
     derivation_oracle: DerivationOracle | None,
     derivation_binding: DerivationBinding,
+    profile: str = "smoke",
 ) -> Path:
     """Generate and atomically promote the exact-schema synthetic smoke package."""
     if patient_count < 1:
         raise ValueError("patient_count must be positive")
     if derivation_oracle is None:
         raise DerivationUnavailable("authoritative derivation oracle is not configured")
+    profile = require_aggregate_safe_token(profile, "profile")
     _require_output_available(output)
     descriptor = load_descriptor(descriptor_path)
     smoke_configuration = {
         "patient_count": patient_count,
         "ages_days": [730, 1095, 1460],
-        "profile": "smoke",
+        "profile": profile,
     }
     configuration_sha256 = hashlib.sha256(
         json.dumps(smoke_configuration, sort_keys=True, separators=(",", ":")).encode()
@@ -71,7 +79,7 @@ def generate_smoke(
         accumulated,
         output,
         metadata=PackageExportMetadata(
-            profile="smoke",
+            profile=profile,
             seed=seed,
             reference_time=reference_time,
             reference_id=reference.reference_id,
@@ -89,10 +97,38 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--patients", type=int, required=True)
     parser.add_argument("--seed", type=int, required=True)
-    parser.parse_args()
-    raise SystemExit(
-        "No production growth reference or authoritative derivation oracle is configured"
-    )
+    parser.add_argument("--profile", default=None)
+    parser.add_argument("--descriptor", type=Path, default=None)
+    parser.add_argument("--reference-time", default="2026-09-01T00:00:00Z")
+    parser.add_argument("--software-revision", default="development-generator-v1")
+    args = parser.parse_args()
+
+    if args.profile not in _DEVELOPMENT_PROFILES:
+        raise SystemExit(CLI_UNAVAILABLE_MESSAGE)
+
+    try:
+        repository_root = Path(__file__).resolve().parents[2]
+        descriptor_path = args.descriptor or repository_root / "datapackage.json"
+        runtime = build_development_runtime(repository_root)
+        if args.profile == "development-smoke":
+            generate_smoke(
+                descriptor_path=descriptor_path,
+                output=args.output,
+                patient_count=args.patients,
+                seed=args.seed,
+                reference_time=args.reference_time,
+                software_revision=args.software_revision,
+                reference=runtime.reference,
+                derivation_oracle=runtime.derivation_oracle,
+                derivation_binding=runtime.derivation_binding,
+                profile="development-smoke",
+            )
+        else:
+            raise RuntimeError("development cohort generation is not configured")
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except Exception:  # noqa: BLE001 - CLI failures must not expose implementation details.
+        raise SystemExit(_DEVELOPMENT_UNAVAILABLE_MESSAGE) from None
 
 
 if __name__ == "__main__":
