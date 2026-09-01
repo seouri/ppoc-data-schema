@@ -104,7 +104,8 @@ def test_documentation_describes_synthetic_only_import_boundary() -> None:
     for required_input in ("visits.csv", "patients.csv", "problem_list.csv"):
         assert required_input in guide
     assert "uv sync" in guide
-    assert "python scripts/augment.py fixtures/augment-input --output_dir artifacts/augment-output --output_format {csv,parquet}" in guide
+    assert "python scripts/augment.py fixtures/augment-input --output_dir artifacts/augment-output --output_format csv" in guide
+    assert "replace `csv` with `parquet`" in guide
     assert "visits_augmented-YYYYMMDDHHMMSS.csv" in guide
     assert "patients_augmented-YYYYMMDDHHMMSS.csv" in guide
     assert "augment-runtime-manifest.json" in guide

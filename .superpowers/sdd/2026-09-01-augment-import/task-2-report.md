@@ -15,3 +15,9 @@
 ## Concerns
 
 None. The guide deliberately does not bind the imported candidate as authoritative or alter the native generator, package exporter, calibration, privacy, counterfactual, Synthea, or release gates. Copied scripts, reference data, manifest bytes, and dependency metadata were not modified.
+
+## Fix round 1
+
+Replaced the shell-invalid `{csv,parquet}` brace notation with a runnable CSV command and explicit Parquet substitution guidance. The focused documentation assertion now validates the displayed shell-safe command and substitution text; the existing CLI smoke test continues to execute a valid CSV argv.
+
+Verification rerun: `PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/test_augment_import.py`, targeted Ruff, and `git diff --check`.
