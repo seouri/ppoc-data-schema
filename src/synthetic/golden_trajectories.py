@@ -12,7 +12,10 @@ from itertools import pairwise
 
 from synthetic.models import (
     AgeRegimeDisorderTrajectory,
+    AgeRegimePoint,
     AgeRegimeState,
+    AgeRegimeTrajectory,
+    ClinicalEvent,
     DisorderKind,
     GrowthRegime,
     LatentDisorderState,
@@ -56,9 +59,6 @@ _PUBERTY_ONSET_BOUNDS = (3287, 5114)
 _PUBERTY_TEMPO_BOUNDS = (730, 1460)
 _PUBERTY_HEIGHT_SPURT_BOUNDS = (0.2, 0.8)
 _PUBERTY_BMI_SHIFT_BOUNDS = (-0.2, 0.3)
-_CONSTITUTIONAL_DELAY_BOUNDS = (180, 720)
-_GHD_ONSET_BOUNDS = (730, 3652)
-_GHD_TREATMENT_OFFSET_DAYS = 510
 _AGE_TUPLE = (0, 700, 730, 760, 3000, 4379, 4380, 4740, 5470, 5475, 6575, 7305)
 _ALL_REGIMES = tuple(GrowthRegime)
 _DISEASE_EVENTS = (
@@ -168,9 +168,7 @@ def _exact_finite_float(value: object) -> bool:
 
 
 def _exact_optional_age(value: object) -> bool:
-    return value is None or (
-        type(value) is int and 0 <= value <= _MAX_AGE_DAYS
-    )
+    return value is None or (type(value) is int and 0 <= value <= _MAX_AGE_DAYS)
 
 
 def _validate_physiology_state(state: object, *, fixed: bool) -> None:
@@ -191,16 +189,12 @@ def _validate_physiology_state(state: object, *, fixed: bool) -> None:
         raise ValueError("physiology_state puberty offsets are unavailable")
     if (
         type(state.puberty_onset_age_days) is not int
-        or not _PUBERTY_ONSET_BOUNDS[0]
-        <= state.puberty_onset_age_days
-        <= _PUBERTY_ONSET_BOUNDS[1]
+        or not _PUBERTY_ONSET_BOUNDS[0] <= state.puberty_onset_age_days <= _PUBERTY_ONSET_BOUNDS[1]
     ):
         raise ValueError("physiology_state puberty onset is unavailable")
     if (
         type(state.puberty_tempo_days) is not int
-        or not _PUBERTY_TEMPO_BOUNDS[0]
-        <= state.puberty_tempo_days
-        <= _PUBERTY_TEMPO_BOUNDS[1]
+        or not _PUBERTY_TEMPO_BOUNDS[0] <= state.puberty_tempo_days <= _PUBERTY_TEMPO_BOUNDS[1]
         or state.puberty_onset_age_days + state.puberty_tempo_days > _MAX_AGE_DAYS
     ):
         raise ValueError("physiology_state puberty tempo is unavailable")
@@ -236,57 +230,8 @@ def _validate_disorder_state(state: object, *, case_id: str) -> None:
         raise ValueError("disorder_state puberty delay is unavailable")
     if not _exact_optional_age(state.treatment_start_age_days):
         raise ValueError("disorder_state treatment start is unavailable")
-    if (
-        not _exact_finite_float(state.treatment_response)
-        or not 0 <= state.treatment_response <= 1
-    ):
+    if not _exact_finite_float(state.treatment_response) or not 0 <= state.treatment_response <= 1:
         raise ValueError("disorder_state treatment response is unavailable")
-    if state.kind is DisorderKind.HEALTHY:
-        coherent = (
-            state.onset_age_days is None
-            and state.severity == 0
-            and state.puberty_delay_days == 0
-            and state.treatment_start_age_days is None
-            and state.treatment_response == 0
-        )
-    elif state.kind is DisorderKind.FAMILIAL_SHORT_STATURE:
-        coherent = (
-            state.onset_age_days == 0
-            and state.severity > 0
-            and state.puberty_delay_days == 0
-            and state.treatment_start_age_days is None
-            and state.treatment_response == 0
-        )
-    elif state.kind is DisorderKind.CONSTITUTIONAL_DELAY:
-        coherent = (
-            state.onset_age_days == 4380
-            and state.severity > 0
-            and _CONSTITUTIONAL_DELAY_BOUNDS[0]
-            <= state.puberty_delay_days
-            <= _CONSTITUTIONAL_DELAY_BOUNDS[1]
-            and state.treatment_start_age_days is None
-            and state.treatment_response == 0
-        )
-    else:
-        treatment_start = state.treatment_start_age_days
-        coherent = (
-            state.onset_age_days is not None
-            and _GHD_ONSET_BOUNDS[0] <= state.onset_age_days <= _GHD_ONSET_BOUNDS[1]
-            and state.severity > 0
-            and state.puberty_delay_days == 0
-            and (
-                (
-                    treatment_start is None
-                    and state.treatment_response == 0
-                )
-                or (
-                    treatment_start == state.onset_age_days + _GHD_TREATMENT_OFFSET_DAYS
-                    and 0 <= state.treatment_response <= 1
-                )
-            )
-        )
-    if not coherent:
-        raise ValueError("disorder_state is incoherent")
     expected = _FIXED_DISORDER_VALUES.get(case_id)
     values = (
         state.kind,
@@ -298,6 +243,47 @@ def _validate_disorder_state(state: object, *, case_id: str) -> None:
     )
     if expected is not None and values != expected:
         raise ValueError("fixed disorder_state does not match the golden contract")
+    if state.kind is DisorderKind.HEALTHY:
+        coherent = (
+            state.onset_age_days is None
+            and state.severity == 0
+            and state.puberty_delay_days == 0
+            and state.treatment_start_age_days is None
+            and state.treatment_response == 0
+        )
+    elif state.kind is DisorderKind.FAMILIAL_SHORT_STATURE:
+        coherent = (
+            state.onset_age_days is not None
+            and state.severity > 0
+            and state.puberty_delay_days == 0
+            and state.treatment_start_age_days is None
+            and state.treatment_response == 0
+        )
+    elif state.kind is DisorderKind.CONSTITUTIONAL_DELAY:
+        coherent = (
+            state.onset_age_days is not None
+            and state.severity > 0
+            and state.puberty_delay_days > 0
+            and state.treatment_start_age_days is None
+            and state.treatment_response == 0
+        )
+    else:
+        treatment_start = state.treatment_start_age_days
+        coherent = (
+            state.onset_age_days is not None
+            and state.severity > 0
+            and state.puberty_delay_days == 0
+            and (
+                (treatment_start is None and state.treatment_response == 0)
+                or (
+                    treatment_start is not None
+                    and treatment_start >= state.onset_age_days
+                    and 0 <= state.treatment_response <= 1
+                )
+            )
+        )
+    if not coherent:
+        raise ValueError("disorder_state is incoherent")
 
 
 @dataclass(frozen=True, repr=False)
@@ -334,9 +320,7 @@ class GoldenTrajectoryCase:
             raise ValueError("patient must contain fixed fictional values")
         if type(self.seed) is not int or self.seed < 0:
             raise ValueError("seed must be a nonnegative integer")
-        _validate_physiology_state(
-            self.physiology_state, fixed=self.case_id in GOLDEN_CASE_IDS
-        )
+        _validate_physiology_state(self.physiology_state, fixed=self.case_id in GOLDEN_CASE_IDS)
         _validate_disorder_state(self.disorder_state, case_id=self.case_id)
         ages = _validate_integer_ages(self.ages_days)
         probes = _validate_integer_ages(self.pattern_probe_ages_days)
@@ -368,9 +352,7 @@ class GoldenTrajectoryCase:
         _validate_pattern_size(self.bmi_pattern, probes)
         object.__setattr__(self, "ages_days", ages)
         object.__setattr__(self, "required_regimes", _copied_tuple(self.required_regimes))
-        object.__setattr__(
-            self, "required_event_types", _copied_tuple(self.required_event_types)
-        )
+        object.__setattr__(self, "required_event_types", _copied_tuple(self.required_event_types))
         object.__setattr__(self, "pattern_probe_ages_days", probes)
 
     def __repr__(self) -> str:
@@ -611,9 +593,7 @@ def _validated_modules(
         if not isinstance(modules, Mapping):
             raise TypeError("modules must be a mapping")
         copied = dict(modules)
-    if set(copied) != set(DisorderKind) or any(
-        type(kind) is not DisorderKind for kind in copied
-    ):
+    if set(copied) != set(DisorderKind) or any(type(kind) is not DisorderKind for kind in copied):
         raise ValueError("modules must contain exactly the disorder kinds")
     for kind, module in copied.items():
         if type(getattr(module, "kind", None)) is not DisorderKind or module.kind is not kind:
@@ -742,23 +722,78 @@ def _valid_trajectory(
     trajectory: object,
     case: GoldenTrajectoryCase,
 ) -> bool:
-    if type(trajectory) is not AgeRegimeDisorderTrajectory:
+    try:
+        if (
+            type(trajectory) is not AgeRegimeDisorderTrajectory
+            or type(trajectory.physiology) is not AgeRegimeTrajectory
+            or type(trajectory.physiology.state) is not AgeRegimeState
+            or type(trajectory.physiology.points) is not tuple
+            or not trajectory.physiology.points
+            or type(trajectory.disorder) is not LatentDisorderState
+            or trajectory.disorder != case.disorder_state
+            or type(trajectory.events) is not tuple
+        ):
+            return False
+        points = trajectory.physiology.points
+        if any(not _valid_point_shape(point, case.patient.patient_id) for point in points):
+            return False
+        if tuple(point.age_days for point in points) != case.ages_days:
+            return False
+        if any(left.age_days >= right.age_days for left, right in pairwise(points)):
+            return False
+        if any(
+            not _valid_event_shape(event, case.patient.patient_id) for event in trajectory.events
+        ):
+            return False
+        phases = tuple(_EVENT_PHASES.get(event.event_type, -1) for event in trajectory.events)
+        if any(phase < 0 for phase in phases):
+            return False
+        return not any(
+            (left.age_days, phases[index]) > (right.age_days, phases[index + 1])
+            for index, (left, right) in enumerate(zip(trajectory.events, trajectory.events[1:]))
+        )
+    except (AttributeError, ArithmeticError, TypeError, ValueError):
         return False
-    points = trajectory.physiology.points
-    if not points or any(point.patient_id != case.patient.patient_id for point in points):
+
+
+def _valid_point_shape(point: object, patient_id: str) -> bool:
+    if type(point) is not AgeRegimePoint:
         return False
-    if any(left.age_days >= right.age_days for left, right in pairwise(points)):
+    if (
+        type(point.patient_id) is not str
+        or point.patient_id != patient_id
+        or type(point.age_days) is not int
+        or not 0 <= point.age_days <= _MAX_AGE_DAYS
+        or type(point.regime) is not GrowthRegime
+        or not _exact_finite_float(point.weight_kg)
+    ):
         return False
-    if trajectory.disorder != case.disorder_state:
-        return False
-    if any(event.patient_id != case.patient.patient_id for event in trajectory.events):
-        return False
-    phases = tuple(_EVENT_PHASES.get(event.event_type, -1) for event in trajectory.events)
-    if any(phase < 0 for phase in phases):
-        return False
-    return not any(
-        (left.age_days, phases[index]) > (right.age_days, phases[index + 1])
-        for index, (left, right) in enumerate(zip(trajectory.events, trajectory.events[1:]))
+    optional_floats = (
+        point.length_cm,
+        point.height_cm,
+        point.bmi,
+        point.head_circumference_cm,
+        point.length_z,
+        point.height_z,
+        point.weight_z,
+        point.bmi_z,
+        point.height_velocity_cm_per_year,
+        point.weight_velocity_kg_per_year,
+    )
+    return all(value is None or _exact_finite_float(value) for value in optional_floats)
+
+
+def _valid_event_shape(event: object, patient_id: str) -> bool:
+    return (
+        type(event) is ClinicalEvent
+        and type(event.patient_id) is str
+        and event.patient_id == patient_id
+        and type(event.age_days) is int
+        and event.age_days >= 0
+        and type(event.event_type) is str
+        and _TOKEN.fullmatch(event.event_type) is not None
+        and (event.code is None or type(event.code) is str)
+        and type(event.hidden) is bool
     )
 
 
@@ -771,15 +806,11 @@ def _ordered_subset(required: tuple[str, ...], observed: tuple[str, ...]) -> boo
 
 
 def _finite_positive(value: object) -> bool:
-    return (
-        type(value) in (int, float)
-        and math.isfinite(value)
-        and value > 0
-    )
+    return _exact_finite_float(value) and value > 0
 
 
 def _finite(value: object) -> bool:
-    return type(value) in (int, float) and math.isfinite(value)
+    return _exact_finite_float(value)
 
 
 def _equal(left: float, right: float) -> bool:
@@ -787,67 +818,91 @@ def _equal(left: float, right: float) -> bool:
 
 
 def _valid_identities(trajectory: AgeRegimeDisorderTrajectory) -> bool:
-    points = trajectory.physiology.points
-    previous_age: int | None = None
-    previous_size: float | None = None
-    previous_weight: float | None = None
-    for point in points:
-        if not _finite_positive(point.weight_kg):
-            return False
-        size = point.height_cm
-        if size is None:
-            if not _finite_positive(point.length_cm):
+    try:
+        points = trajectory.physiology.points
+        previous_age: int | None = None
+        previous_size: float | None = None
+        previous_weight: float | None = None
+        for point in points:
+            if not _finite_positive(point.weight_kg):
                 return False
-            size = point.length_cm - 0.7
-        if not _finite_positive(size):
-            return False
-        if point.height_cm is not None and point.bmi is not None:
-            if not _finite_positive(point.bmi):
+            if point.regime is GrowthRegime.INFANCY:
+                if not (
+                    _finite_positive(point.length_cm)
+                    and point.height_cm is None
+                    and point.bmi is None
+                    and _finite_positive(point.head_circumference_cm)
+                    and _finite(point.length_z)
+                    and point.height_z is None
+                    and _finite(point.weight_z)
+                    and point.bmi_z is None
+                ):
+                    return False
+                size = point.length_cm - 0.7
+            elif point.regime is GrowthRegime.TRANSITION:
+                if not (
+                    _finite_positive(point.length_cm)
+                    and _finite_positive(point.height_cm)
+                    and _finite_positive(point.bmi)
+                    and _finite_positive(point.head_circumference_cm)
+                    and _finite(point.length_z)
+                    and _finite(point.height_z)
+                    and _finite(point.weight_z)
+                    and point.bmi_z is None
+                ):
+                    return False
+                if not _equal(point.height_cm, point.length_cm - 0.7):
+                    return False
+                size = point.height_cm
+            else:
+                if not (
+                    point.length_cm is None
+                    and _finite_positive(point.height_cm)
+                    and _finite_positive(point.bmi)
+                    and point.head_circumference_cm is None
+                    and point.length_z is None
+                    and _finite(point.height_z)
+                    and point.weight_z is None
+                    and _finite(point.bmi_z)
+                ):
+                    return False
+                size = point.height_cm
+            if not _finite_positive(size):
                 return False
-            expected_weight = point.bmi * (point.height_cm / 100.0) ** 2
-            if not _equal(point.weight_kg, expected_weight):
-                return False
-        if (
-            point.length_cm is not None
-            and point.height_cm is not None
-            and not _equal(point.height_cm, point.length_cm - 0.7)
-        ):
-            return False
-        optional_measurements = (
-            point.head_circumference_cm,
-            point.length_z,
-            point.height_z,
-            point.weight_z,
-            point.bmi_z,
-        )
-        if any(value is not None and not _finite(value) for value in optional_measurements):
-            return False
-        if previous_age is None:
-            if (
-                point.height_velocity_cm_per_year is not None
-                or point.weight_velocity_kg_per_year is not None
-            ):
-                return False
-        else:
-            expected_height_velocity = (size - previous_size) * 365.25 / (
-                point.age_days - previous_age
-            )
-            expected_weight_velocity = (point.weight_kg - previous_weight) * 365.25 / (
-                point.age_days - previous_age
-            )
-            if (
-                not _finite(point.height_velocity_cm_per_year)
-                or not _finite(point.weight_velocity_kg_per_year)
-                or not _equal(
-                    point.height_velocity_cm_per_year, expected_height_velocity
+            if point.height_cm is not None:
+                expected_weight = point.bmi * (point.height_cm / 100.0) ** 2
+                if not _finite_positive(expected_weight) or not _equal(
+                    point.weight_kg, expected_weight
+                ):
+                    return False
+            if previous_age is None:
+                if (
+                    point.height_velocity_cm_per_year is not None
+                    or point.weight_velocity_kg_per_year is not None
+                ):
+                    return False
+            else:
+                expected_height_velocity = (
+                    (size - previous_size) * 365.25 / (point.age_days - previous_age)
                 )
-                or not _equal(point.weight_velocity_kg_per_year, expected_weight_velocity)
-            ):
-                return False
-        previous_age = point.age_days
-        previous_size = size
-        previous_weight = point.weight_kg
-    return True
+                expected_weight_velocity = (
+                    (point.weight_kg - previous_weight) * 365.25 / (point.age_days - previous_age)
+                )
+                if (
+                    not _finite(expected_height_velocity)
+                    or not _finite(expected_weight_velocity)
+                    or not _finite(point.height_velocity_cm_per_year)
+                    or not _finite(point.weight_velocity_kg_per_year)
+                    or not _equal(point.height_velocity_cm_per_year, expected_height_velocity)
+                    or not _equal(point.weight_velocity_kg_per_year, expected_weight_velocity)
+                ):
+                    return False
+            previous_age = point.age_days
+            previous_size = size
+            previous_weight = point.weight_kg
+        return True
+    except (AttributeError, ArithmeticError, TypeError, ValueError):
+        return False
 
 
 def _zero(value: float) -> bool:
@@ -874,9 +929,5 @@ def _matches_pattern(
     if pattern is GoldenPattern.DELAYED_RECOVERY:
         return _zero(values[0]) and values[1] < 0 and _zero(values[2])
     if pattern is GoldenPattern.PROGRESSION_RESPONSE:
-        return (
-            _zero(values[0])
-            and values[1] < 0
-            and values[1] < values[2] <= values[3] < 0
-        )
+        return _zero(values[0]) and values[1] < 0 and values[1] < values[2] <= values[3]
     return _zero(values[0]) and all(value > 0 for value in values[1:])

@@ -31,6 +31,7 @@ from synthetic.native.age_regimes import AgeRegimeTrajectoryKernel
 from synthetic.native.clinical_modules import (
     ConstitutionalDelayModule,
     FamilialShortStatureModule,
+    GrowthHormoneDeficiencyConfig,
     GrowthHormoneDeficiencyModule,
     HealthyGrowthModule,
 )
@@ -102,9 +103,7 @@ def test_golden_catalog_has_fixed_metadata_states_and_patterns() -> None:
     assert [case.disorder_state for case in DEFAULT_GOLDEN_CASES] == [
         LatentDisorderState(DisorderKind.HEALTHY, None, 0.0),
         LatentDisorderState(DisorderKind.FAMILIAL_SHORT_STATURE, 0, 1.0),
-        LatentDisorderState(
-            DisorderKind.CONSTITUTIONAL_DELAY, 4380, 1.0, puberty_delay_days=360
-        ),
+        LatentDisorderState(DisorderKind.CONSTITUTIONAL_DELAY, 4380, 1.0, puberty_delay_days=360),
         LatentDisorderState(
             DisorderKind.GROWTH_HORMONE_DEFICIENCY,
             3000,
@@ -213,12 +212,8 @@ class TextSubclass(str):
         ("puberty_bmi_shift_z", 0.31),
     ],
 )
-def test_case_rejects_every_malformed_nested_physiology_field(
-    field: str, value: object
-) -> None:
-    source = dataclasses.replace(
-        DEFAULT_GOLDEN_CASES[0], case_id="golden-physiology-validation-v1"
-    )
+def test_case_rejects_every_malformed_nested_physiology_field(field: str, value: object) -> None:
+    source = dataclasses.replace(DEFAULT_GOLDEN_CASES[0], case_id="golden-physiology-validation-v1")
     state = dataclasses.replace(source.physiology_state)
     object.__setattr__(state, field, value)
 
@@ -241,12 +236,8 @@ def test_case_rejects_every_malformed_nested_physiology_field(
         ("treatment_response", math.inf),
     ],
 )
-def test_case_rejects_every_malformed_nested_disorder_field(
-    field: str, value: object
-) -> None:
-    source = dataclasses.replace(
-        DEFAULT_GOLDEN_CASES[0], case_id="golden-disorder-validation-v1"
-    )
+def test_case_rejects_every_malformed_nested_disorder_field(field: str, value: object) -> None:
+    source = dataclasses.replace(DEFAULT_GOLDEN_CASES[0], case_id="golden-disorder-validation-v1")
     state = dataclasses.replace(source.disorder_state)
     object.__setattr__(state, field, value)
 
@@ -261,9 +252,7 @@ def test_case_rejects_every_malformed_nested_disorder_field(
         (1, LatentDisorderState(DisorderKind.FAMILIAL_SHORT_STATURE, 1, 1.0)),
         (
             2,
-            LatentDisorderState(
-                DisorderKind.CONSTITUTIONAL_DELAY, 4380, 1.0, puberty_delay_days=0
-            ),
+            LatentDisorderState(DisorderKind.CONSTITUTIONAL_DELAY, 4380, 1.0, puberty_delay_days=0),
         ),
         (
             3,
@@ -398,9 +387,7 @@ def test_default_cases_generate_all_regimes_physical_identities_and_ordered_even
     modules = _modules()
     for case in DEFAULT_GOLDEN_CASES:
         module = modules[case.disorder_state.kind]
-        result = AgeRegimeDisorderKernel(
-            AgeRegimeTrajectoryKernel(reference), module
-        ).generate(
+        result = AgeRegimeDisorderKernel(AgeRegimeTrajectoryKernel(reference), module).generate(
             case.patient,
             case.ages_days,
             NamedRandomStreams(case.seed, 0),
@@ -417,9 +404,7 @@ def test_default_cases_generate_all_regimes_physical_identities_and_ordered_even
             assert math.isfinite(point.weight_kg) and point.weight_kg > 0
             if point.height_cm is not None and point.bmi is not None:
                 assert point.height_cm > 0 and point.bmi > 0
-                assert point.weight_kg == pytest.approx(
-                    point.bmi * (point.height_cm / 100) ** 2
-                )
+                assert point.weight_kg == pytest.approx(point.bmi * (point.height_cm / 100) ** 2)
             if index == 0:
                 assert point.height_velocity_cm_per_year is None
                 assert point.weight_velocity_kg_per_year is None
@@ -433,12 +418,10 @@ def test_each_declared_directional_pattern_matches_direct_module_effects() -> No
     for case in DEFAULT_GOLDEN_CASES:
         module = modules[case.disorder_state.kind]
         height = tuple(
-            module.height_z_delta(case.disorder_state, age)
-            for age in case.pattern_probe_ages_days
+            module.height_z_delta(case.disorder_state, age) for age in case.pattern_probe_ages_days
         )
         bmi = tuple(
-            module.bmi_z_delta(case.disorder_state, age)
-            for age in case.pattern_probe_ages_days
+            module.bmi_z_delta(case.disorder_state, age) for age in case.pattern_probe_ages_days
         )
         if case.height_pattern is GoldenPattern.ZERO:
             assert height == tuple(0.0 for _ in height)
@@ -471,9 +454,7 @@ def test_nondeterministic_reference_returns_only_fixed_failure_reason() -> None:
 
     assert report.status is GoldenStatus.FAIL
     assert report.case_results == (
-        GoldenCaseResult(
-            "golden-healthy-v1", GoldenStatus.FAIL, ("NONDETERMINISTIC",)
-        ),
+        GoldenCaseResult("golden-healthy-v1", GoldenStatus.FAIL, ("NONDETERMINISTIC",)),
     )
 
 
@@ -501,11 +482,55 @@ def test_hostile_physical_output_returns_identity_violation(
         return trajectory
 
     monkeypatch.setattr(AgeRegimeDisorderKernel, "generate", hostile_generate)
-    report = run_golden_trajectory_suite(
-        RegimeLinearTestReference(), cases=(case,)
-    )
+    report = run_golden_trajectory_suite(RegimeLinearTestReference(), cases=(case,))
 
     assert report.case_results[0].reason_codes == ("IDENTITY_VIOLATION",)
+
+
+@pytest.mark.parametrize(
+    ("point_index", "field", "value"),
+    [
+        (0, "head_circumference_cm", -1.0),
+        (4, "bmi", None),
+        (0, "height_cm", 50.0),
+        (2, "height_cm", None),
+        (4, "length_cm", 100.0),
+        (4, "head_circumference_cm", 50.0),
+        (4, "height_z", None),
+        (0, "weight_kg", True),
+        (1, "height_velocity_cm_per_year", math.nan),
+    ],
+)
+def test_hostile_malformed_measurements_never_pass(
+    monkeypatch: pytest.MonkeyPatch,
+    point_index: int,
+    field: str,
+    value: object,
+) -> None:
+    case = DEFAULT_GOLDEN_CASES[0]
+    trajectory = AgeRegimeDisorderKernel(
+        AgeRegimeTrajectoryKernel(RegimeLinearTestReference()), HealthyGrowthModule()
+    ).generate(
+        case.patient,
+        case.ages_days,
+        NamedRandomStreams(case.seed, 0),
+        physiology_state=case.physiology_state,
+        disorder_state=case.disorder_state,
+    )
+    object.__setattr__(trajectory.physiology.points[point_index], field, value)
+
+    def hostile_generate(*args: object, **kwargs: object) -> AgeRegimeDisorderTrajectory:
+        del args, kwargs
+        return trajectory
+
+    monkeypatch.setattr(AgeRegimeDisorderKernel, "generate", hostile_generate)
+    report = run_golden_trajectory_suite(RegimeLinearTestReference(), cases=(case,))
+
+    assert report.status is GoldenStatus.FAIL
+    assert report.case_results[0].reason_codes in (
+        ("IDENTITY_VIOLATION",),
+        ("INVALID_TRAJECTORY",),
+    )
 
 
 def test_hostile_wrong_patient_output_returns_invalid_trajectory(
@@ -528,18 +553,14 @@ def test_hostile_wrong_patient_output_returns_invalid_trajectory(
         return trajectory
 
     monkeypatch.setattr(AgeRegimeDisorderKernel, "generate", hostile_generate)
-    report = run_golden_trajectory_suite(
-        RegimeLinearTestReference(), cases=(case,)
-    )
+    report = run_golden_trajectory_suite(RegimeLinearTestReference(), cases=(case,))
 
     assert report.case_results[0].reason_codes == ("INVALID_TRAJECTORY",)
 
 
 def test_missing_regime_event_and_broken_pattern_are_fixed_case_failures() -> None:
     sparse = dataclasses.replace(DEFAULT_GOLDEN_CASES[0], ages_days=(1000, 3000))
-    sparse_report = run_golden_trajectory_suite(
-        RegimeLinearTestReference(), cases=(sparse,)
-    )
+    sparse_report = run_golden_trajectory_suite(RegimeLinearTestReference(), cases=(sparse,))
     assert sparse_report.case_results[0].reason_codes == ("MISSING_REGIME",)
 
     class EmptyFamilialEvents(FamilialShortStatureModule):
@@ -574,6 +595,68 @@ def test_missing_regime_event_and_broken_pattern_are_fixed_case_failures() -> No
     assert broken_pattern.case_results[0].reason_codes == ("HEIGHT_PATTERN",)
 
 
+def test_progression_response_accepts_complete_nonregressing_recovery() -> None:
+    class CompleteRecoveryModule(GrowthHormoneDeficiencyModule):
+        module_version = "growth-hormone-deficiency-complete-recovery-test-v1"
+
+        def height_z_delta(self, state: LatentDisorderState, age_days: int) -> float:
+            assert state.onset_age_days is not None
+            if age_days <= state.onset_age_days:
+                return 0.0
+            assert state.treatment_start_age_days is not None
+            if age_days <= state.treatment_start_age_days:
+                return -(age_days - state.onset_age_days) / (
+                    state.treatment_start_age_days - state.onset_age_days
+                )
+            return min(
+                -1.0 + (age_days - state.treatment_start_age_days) / 365.0,
+                0.1,
+            )
+
+        def bmi_z_delta(self, state: LatentDisorderState, age_days: int) -> float:
+            assert state.onset_age_days is not None
+            return 0.0 if age_days <= state.onset_age_days else 0.1
+
+    modules = _modules()
+    modules[DisorderKind.GROWTH_HORMONE_DEFICIENCY] = CompleteRecoveryModule()
+
+    report = run_golden_trajectory_suite(
+        RegimeLinearTestReference(),
+        modules=modules,
+        cases=(DEFAULT_GOLDEN_CASES[3],),
+    )
+
+    assert report.status is GoldenStatus.PASS
+    assert report.case_results[0].reason_codes == ("OK",)
+
+
+def test_custom_case_accepts_matching_alternate_module_timing() -> None:
+    config = GrowthHormoneDeficiencyConfig(treatment_delay_days=100)
+    treatment_start = 3520
+    state = LatentDisorderState(
+        DisorderKind.GROWTH_HORMONE_DEFICIENCY,
+        3000,
+        1.0,
+        treatment_start_age_days=treatment_start,
+        treatment_response=0.6,
+    )
+    case = dataclasses.replace(
+        DEFAULT_GOLDEN_CASES[3],
+        case_id="golden-ghd-alternate-timing-v1",
+        disorder_state=state,
+        pattern_probe_ages_days=(3000, treatment_start, treatment_start + 365, 5000),
+    )
+    modules = _modules()
+    modules[DisorderKind.GROWTH_HORMONE_DEFICIENCY] = GrowthHormoneDeficiencyModule(config)
+
+    report = run_golden_trajectory_suite(
+        RegimeLinearTestReference(), modules=modules, cases=(case,)
+    )
+
+    assert report.status is GoldenStatus.PASS
+    assert report.case_results[0] == GoldenCaseResult(case.case_id, GoldenStatus.PASS, ("OK",))
+
+
 @pytest.mark.parametrize(
     ("modules", "cases"),
     [
@@ -588,7 +671,9 @@ def test_invalid_suite_inputs_raise_fixed_unavailable_without_sensitive_context(
 ) -> None:
     with pytest.raises(GoldenTrajectoryUnavailable) as captured:
         run_golden_trajectory_suite(
-            RegimeLinearTestReference(), modules=modules, cases=cases  # type: ignore[arg-type]
+            RegimeLinearTestReference(),
+            modules=modules,
+            cases=cases,  # type: ignore[arg-type]
         )
     assert str(captured.value) == "golden trajectory suite unavailable"
     assert captured.value.__cause__ is None
@@ -617,12 +702,8 @@ def test_result_and_report_reject_inconsistent_or_overridable_values() -> None:
     with pytest.raises((TypeError, ValueError)):
         GoldenCaseResult("golden-safe-v1", GoldenStatus.FAIL, ("BMI_PATTERN", "HEIGHT_PATTERN"))
     passing = GoldenCaseResult("golden-safe-v1", GoldenStatus.PASS, ("OK",))
-    report = GoldenTrajectoryReport(
-        GOLDEN_TRAJECTORY_VERSION, GoldenStatus.PASS, (passing,)
-    )
+    report = GoldenTrajectoryReport(GOLDEN_TRAJECTORY_VERSION, GoldenStatus.PASS, (passing,))
     assert repr(passing) == "<GoldenCaseResult redacted>"
     assert repr(report) == "<GoldenTrajectoryReport aggregate>"
     with pytest.raises((TypeError, ValueError)):
-        GoldenTrajectoryReport(
-            GOLDEN_TRAJECTORY_VERSION, GoldenStatus.FAIL, (passing,)
-        )
+        GoldenTrajectoryReport(GOLDEN_TRAJECTORY_VERSION, GoldenStatus.FAIL, (passing,))
