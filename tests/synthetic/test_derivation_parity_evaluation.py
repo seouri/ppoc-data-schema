@@ -2,6 +2,7 @@ import base64
 import copy
 import gzip
 import json
+import math
 
 import pytest
 
@@ -297,6 +298,149 @@ def test_underpowered_support_is_unevaluable():
     assert report.status is DerivationParityStatus.UNEVALUABLE
     assert check(report, "support").status is DerivationParityStatus.UNEVALUABLE
     assert check(report, "support").reason_code == "INSUFFICIENT_SUPPORT"
+
+
+@pytest.mark.parametrize(
+    ("resource", "field", "candidate_value", "reference_value"),
+    [
+        ("patients_augmented", "chronic_dx_flag", 0, 1),
+        ("visits_augmented", "weight_outlier_flag", 0, 1),
+        ("visits_augmented", "height_outlier_flag", 0, 1),
+    ],
+)
+def test_reference_tolerance_does_not_relax_exact_flags(resource, field, candidate_value, reference_value):
+    package, base, candidate_rows, reference_rows = fixtures()
+    candidate_rows[resource][0][field] = candidate_value
+    reference_rows[resource][0][field] = reference_value
+    report = evaluate(package, base, candidate_rows, reference_rows, reference_tolerance=1)
+    assert check(report, "reference_field_parity").status is DerivationParityStatus.FAIL
+
+
+@pytest.mark.parametrize("field", ("age_in_days", "weight_oz", "height_in"))
+def test_nonzero_deterministic_tolerance_does_not_relax_copied_visit_fields(field):
+    package, base, candidate_rows, reference_rows = fixtures()
+    candidate_rows["visits_augmented"][0][field] += 1
+    report = evaluate(package, base, candidate_rows, reference_rows, deterministic_tolerance=10)
+    assert check(report, "visit_identity_projection").status is DerivationParityStatus.FAIL
+
+
+@pytest.mark.parametrize(
+    ("converted_field", "score_field", "score", "converted_value"),
+    [
+        ("weight_kg", "weight_z_score", 0, ""),
+        ("height_cm", "height_z_score", 0, ""),
+        ("weight_kg", "weight_z_score", 6, 2),
+        ("height_cm", "height_z_score", 4, 50.8),
+    ],
+)
+def test_visible_biv_evidence_rejects_jointly_wrong_conversion_presence(converted_field, score_field, score, converted_value):
+    package, base, candidate_rows, reference_rows = fixtures()
+    for rows in (candidate_rows["visits_augmented"], reference_rows["visits_augmented"]):
+        rows[0][score_field] = score
+        rows[0][converted_field] = converted_value
+        if converted_value == "":
+            rows[0]["bmi"] = ""
+    report = evaluate(package, base, candidate_rows, reference_rows)
+    assert check(report, "deterministic_unit_conversion").status is DerivationParityStatus.FAIL
+    assert check(report, "reference_field_parity").status is DerivationParityStatus.PASS
+
+
+@pytest.mark.parametrize(
+    ("target", "operation", "shape_name"),
+    [
+        ("base", "missing", "base_shape"),
+        ("candidate", "extra", "candidate_shape"),
+        ("reference", "reordered", "reference_shape"),
+    ],
+)
+def test_top_level_resource_mapping_errors_fail_the_owning_shape_check(target, operation, shape_name):
+    package, base, candidate_rows, reference_rows = fixtures()
+    rows = {"base": base, "candidate": candidate_rows, "reference": reference_rows}[target]
+    if operation == "missing":
+        rows.pop(next(iter(rows)))
+    elif operation == "extra":
+        rows["unexpected"] = []
+    else:
+        rows = {name: rows[name] for name in reversed(rows)}
+        if target == "reference":
+            reference_rows = rows
+    report = evaluate(package, base, candidate_rows, reference_rows)
+    assert check(report, "schema_contract").status is DerivationParityStatus.PASS
+    assert check(report, shape_name).status is DerivationParityStatus.FAIL
+    assert all(item.status is DerivationParityStatus.UNEVALUABLE for item in report.checks[4:])
+
+
+def test_invalid_descriptor_does_not_fabricate_downstream_pass_checks():
+    package, base, candidate_rows, reference_rows = fixtures()
+    package["resources"].reverse()
+    report = evaluate(package, base, candidate_rows, reference_rows)
+    assert check(report, "schema_contract").status is DerivationParityStatus.FAIL
+    assert all(item.status is DerivationParityStatus.UNEVALUABLE for item in report.checks[1:])
+
+
+@pytest.mark.parametrize("value", (True, math.nan))
+def test_noncanonical_numeric_scalars_fail_candidate_shape(value):
+    package, base, candidate_rows, reference_rows = fixtures()
+    candidate_rows["patients_augmented"][0]["visits_count"] = value
+    report = evaluate(package, base, candidate_rows, reference_rows)
+    assert check(report, "candidate_shape").status is DerivationParityStatus.FAIL
+
+
+def test_large_integer_strings_are_parsed_losslessly_for_exact_parity():
+    package, base, candidate_rows, reference_rows = fixtures()
+    candidate_rows["patients_augmented"][0]["visits_count"] = "9007199254740993"
+    reference_rows["patients_augmented"][0]["visits_count"] = "9007199254740992"
+    report = evaluate(package, base, candidate_rows, reference_rows)
+    assert check(report, "candidate_shape").status is DerivationParityStatus.PASS
+    assert check(report, "reference_shape").status is DerivationParityStatus.PASS
+    assert check(report, "reference_field_parity").status is DerivationParityStatus.FAIL
+
+
+def test_overflowing_native_number_fails_candidate_shape_without_an_unavailable_error():
+    package, base, candidate_rows, reference_rows = fixtures()
+    candidate_rows["visits_augmented"][0]["weight_kg"] = 10**400
+    report = evaluate(package, base, candidate_rows, reference_rows)
+    assert check(report, "candidate_shape").status is DerivationParityStatus.FAIL
+
+
+def test_hostile_numeric_scalars_fail_candidate_shape_without_invoking_user_methods():
+    class HostileScalar:
+        def __eq__(self, other):
+            raise AssertionError("comparison must not be called")
+
+        def __float__(self):
+            raise AssertionError("conversion must not be called")
+
+    package, base, candidate_rows, reference_rows = fixtures()
+    candidate_rows["patients_augmented"][0]["visits_count"] = HostileScalar()
+    report = evaluate(package, base, candidate_rows, reference_rows)
+    assert check(report, "candidate_shape").status is DerivationParityStatus.FAIL
+
+
+def test_orphan_declared_base_foreign_key_fails_before_diagnosis_evidence_is_used():
+    package, base, candidate_rows, reference_rows = fixtures()
+    base["problem_list"].append(
+        row(
+            package,
+            "problem_list",
+            patient_id="fictional-orphan",
+            problem_list_id="fictional-problem",
+            noted_date_age_in_days=730,
+            pl_diag="E10.9",
+        )
+    )
+    report = evaluate(package, base, candidate_rows, reference_rows)
+    assert check(report, "base_shape").status is DerivationParityStatus.FAIL
+    assert check(report, "deterministic_patient_summaries").status is DerivationParityStatus.UNEVALUABLE
+
+
+def test_permuted_valid_rows_produce_a_byte_identical_aggregate_report():
+    package, base, candidate_rows, reference_rows = fixtures()
+    expected = evaluate(package, base, candidate_rows, reference_rows).to_json_bytes()
+    for rows in (base, candidate_rows, reference_rows):
+        for values in rows.values():
+            values.reverse()
+    assert evaluate(package, base, candidate_rows, reference_rows).to_json_bytes() == expected
 
 
 def test_blank_diagnosis_slots_do_not_create_diagnosis_age_summaries():

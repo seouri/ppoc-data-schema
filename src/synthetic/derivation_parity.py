@@ -24,7 +24,10 @@ DERIVATION_PARITY_CHECK_NAMES = (
 )
 _SAFE_TOKEN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
+_INTEGER_STRING = re.compile(r"-?(?:0|[1-9][0-9]*)\Z")
+_NUMBER_STRING = re.compile(r"[-+]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][-+]?[0-9]+)?\Z")
 _TOLERANCE_CAP = 1_000_000.0
+_INTEGER_LIMIT = 2**63 - 1
 _REASONS = MappingProxyType({
     "PASS": frozenset({"OK", "WITHIN_TOLERANCE"}),
     "FAIL": frozenset({"OUTSIDE_TOLERANCE", "STRUCTURAL_INVALID"}),
@@ -273,6 +276,10 @@ _ADVERSE_PATIENT_FLAGS = (
     "chronic_dx_flag", "growth_dx_flag", "ever_stunting_flag", "ever_wasting_flag",
     "ever_underweight_flag", "ever_obesity_flag",
 )
+_COPIED_AUGMENTED_VISIT_FIELDS = frozenset({
+    "patient_id", "visit_id", "sex", "ethnicity", "race_1", "age_in_days", "weight_oz", "height_in",
+    "head_circ_cm", "encounter_type", "orig_enc_source_Epic_yn", *(f"enc_diag_{index}" for index in range(1, 34)),
+})
 _INFORMATIVE_ETHNICITY = frozenset({"Not Hispanic or Latino", "Hispanic or Latino"})
 _NONRESPONSE_RACE = frozenset({"Choose not to answer", "Patient does not know", "Unable to collect", "Unknown"})
 _GROWTH_PREFIXES = (
@@ -288,6 +295,7 @@ class _Resource:
     fields: tuple[str, ...]
     primary_key: str | None
     field_specs: Mapping[str, Mapping[str, object]]
+    foreign_keys: tuple[tuple[str, str, str], ...]
 
 
 def _status(failed: bool, unevaluable: bool) -> DerivationParityStatus:
@@ -330,42 +338,81 @@ def _descriptor_resources(descriptor: Mapping[str, object]) -> tuple[dict[str, _
         primary_key = schema.get("primaryKey")
         if primary_key is not None and (not isinstance(primary_key, str) or primary_key not in names):
             return {}, False
-        result[item["name"]] = _Resource(names, primary_key, MappingProxyType({field["name"]: field for field in fields}))
+        raw_foreign_keys = schema.get("foreignKeys", [])
+        if not isinstance(raw_foreign_keys, list):
+            return {}, False
+        foreign_keys: list[tuple[str, str, str]] = []
+        for key in raw_foreign_keys:
+            reference = key.get("reference") if isinstance(key, Mapping) else None
+            field = key.get("fields") if isinstance(key, Mapping) else None
+            target_resource = reference.get("resource") if isinstance(reference, Mapping) else None
+            target_field = reference.get("fields") if isinstance(reference, Mapping) else None
+            if not all(isinstance(value, str) and value for value in (field, target_resource, target_field)) or field not in names:
+                return {}, False
+            foreign_keys.append((field, target_resource, target_field))
+        result[item["name"]] = _Resource(
+            names, primary_key, MappingProxyType({field["name"]: field for field in fields}), tuple(foreign_keys),
+        )
     return result, set(result) == set(_RESOURCE_ORDER)
 
 
-def _materialize(rows: Mapping[str, Iterable[Mapping[str, object]]], expected: tuple[str, ...]) -> dict[str, tuple[Mapping[str, object], ...]]:
-    if not isinstance(rows, Mapping) or set(rows) != set(expected):
-        raise TypeError("invalid aggregate input")
-    result: dict[str, tuple[Mapping[str, object], ...]] = {}
+def _materialize(rows: Mapping[str, Iterable[Mapping[str, object]]], expected: tuple[str, ...]) -> tuple[dict[str, tuple[Mapping[str, object], ...]], bool]:
+    result: dict[str, tuple[Mapping[str, object], ...]] = {name: () for name in expected}
+    if not isinstance(rows, Mapping) or tuple(rows) != expected:
+        return result, False
+    valid = True
     for name in expected:
         value = rows[name]
         if isinstance(value, (str, bytes, Mapping)) or not isinstance(value, Iterable):
-            raise TypeError("invalid aggregate input")
+            valid = False
+            continue
         result[name] = tuple(value)
-    return result
+    return result, valid
 
 
 def _canonical(value: object, spec: Mapping[str, object]) -> object | None:
-    if value is None or value == "":
+    if value is None:
         return None
     kind = spec.get("type")
     if kind == "string":
-        if not isinstance(value, str):
+        if type(value) is not str:
             raise TypeError("invalid scalar")
-        return value
-    if kind not in _NUMERIC_TYPES or isinstance(value, bool):
+        return None if value == "" else value
+    if kind not in _NUMERIC_TYPES:
         raise TypeError("invalid scalar")
-    try:
+    if kind == "integer":
+        if type(value) is int:
+            number = value
+        elif type(value) is str:
+            if value == "":
+                return None
+            if _INTEGER_STRING.fullmatch(value) is None:
+                raise ValueError("invalid scalar")
+            number = int(value)
+        elif type(value) is float and math.isfinite(value) and value.is_integer():
+            number = int(value)
+        else:
+            raise ValueError("invalid scalar")
+        if not -_INTEGER_LIMIT <= number <= _INTEGER_LIMIT:
+            raise ValueError("invalid scalar")
+        return number
+    if type(value) is int:
+        try:
+            number = float(value)
+        except OverflowError as exc:
+            raise ValueError("invalid scalar") from exc
+    elif type(value) is float:
+        number = value
+    elif type(value) is str:
+        if value == "":
+            return None
+        if _NUMBER_STRING.fullmatch(value) is None:
+            raise ValueError("invalid scalar")
         number = float(value)
-    except (TypeError, ValueError) as exc:
-        raise TypeError("invalid scalar") from exc
+    else:
+        raise TypeError("invalid scalar")
     if not math.isfinite(number):
         raise ValueError("invalid scalar")
-    if kind == "integer":
-        if not number.is_integer():
-            raise ValueError("invalid scalar")
-        return int(number)
     return number
 
 
@@ -405,6 +452,8 @@ def _validate_rows(rows: tuple[Mapping[str, object], ...], resource: _Resource) 
                 continue
             seen.add(key)
         canonical.append(MappingProxyType(values))
+    if resource.primary_key is not None:
+        canonical.sort(key=lambda item: item[resource.primary_key])
     return tuple(canonical), valid
 
 
@@ -412,10 +461,10 @@ def _by_key(rows: tuple[Mapping[str, object], ...], key: str) -> dict[object, Ma
     return {item[key]: item for item in rows}
 
 
-def _match(actual: object, expected: object, tolerance: float) -> tuple[bool, float]:
+def _match(actual: object, expected: object, tolerance: float, *, numeric: bool = False) -> tuple[bool, float]:
     if actual is None or expected is None:
         return actual is expected, 0.0
-    if isinstance(actual, (int, float)) and not isinstance(actual, bool) and isinstance(expected, (int, float)) and not isinstance(expected, bool):
+    if numeric:
         difference = abs(float(actual) - float(expected))
         return difference <= tolerance, difference
     return actual == expected, 0.0
@@ -513,7 +562,13 @@ def _parity(candidate: tuple[Mapping[str, object], ...], reference: tuple[Mappin
     for identity in set(candidate_by_key) & set(reference_by_key):
         for field in resource.fields:
             compared += 1
-            matched, difference = _match(candidate_by_key[identity][field], reference_by_key[identity][field], tolerance)
+            spec = resource.field_specs[field]
+            numeric = (
+                spec.get("type") == "number"
+                and not spec.get("constraints", {}).get("enum")
+                and field not in _COPIED_AUGMENTED_VISIT_FIELDS
+            )
+            matched, difference = _match(candidate_by_key[identity][field], reference_by_key[identity][field], tolerance, numeric=numeric)
             maximum = max(maximum, difference)
             if not matched:
                 failed = True
@@ -531,15 +586,32 @@ def _evaluate(base_rows: Mapping[str, Iterable[Mapping[str, object]]],
     )):
         raise DerivationParityUnavailable()
     resources, schema_valid = _descriptor_resources(descriptor)
-    base_raw = _materialize(base_rows, _BASE_RESOURCES)
-    candidate_raw = _materialize(candidate_rows, _AUGMENTED_RESOURCES)
-    reference_raw = _materialize(reference_rows, _AUGMENTED_RESOURCES)
+    base_raw, base_materialized = _materialize(base_rows, _BASE_RESOURCES)
+    candidate_raw, candidate_materialized = _materialize(candidate_rows, _AUGMENTED_RESOURCES)
+    reference_raw, reference_materialized = _materialize(reference_rows, _AUGMENTED_RESOURCES)
     if not schema_valid:
-        checks = tuple(_check(name, failed=name == "schema_contract") for name in DERIVATION_PARITY_CHECK_NAMES)
-        return _report(candidate, reference, policy, 0, 0, checks)
-    base, base_valid = _validated_group(base_raw, resources)
-    output_candidate, candidate_valid = _validated_group(candidate_raw, resources)
-    output_reference, reference_valid = _validated_group(reference_raw, resources)
+        checks = [_check("schema_contract", failed=True)]
+        checks.extend(_check(name, failed=not valid, unevaluable=valid) for name, valid in (
+            ("base_shape", base_materialized), ("candidate_shape", candidate_materialized),
+            ("reference_shape", reference_materialized),
+        ))
+        checks.extend(_check(name, unevaluable=True) for name in DERIVATION_PARITY_CHECK_NAMES[4:])
+        return _report(candidate, reference, policy, len(candidate_raw["patients_augmented"]), len(candidate_raw["visits_augmented"]), tuple(checks))
+    base, base_rows_valid = _validated_group(base_raw, resources)
+    output_candidate, candidate_rows_valid = _validated_group(candidate_raw, resources)
+    output_reference, reference_rows_valid = _validated_group(reference_raw, resources)
+    base_valid = base_materialized and base_rows_valid and _foreign_keys_valid(base, resources)
+    candidate_valid = candidate_materialized and candidate_rows_valid
+    reference_valid = reference_materialized and reference_rows_valid
+    if not all((base_valid, candidate_valid, reference_valid)):
+        checks = [
+            _check("schema_contract"),
+            _check("base_shape", failed=not base_valid),
+            _check("candidate_shape", failed=not candidate_valid),
+            _check("reference_shape", failed=not reference_valid),
+        ]
+        checks.extend(_check(name, unevaluable=True) for name in DERIVATION_PARITY_CHECK_NAMES[4:])
+        return _report(candidate, reference, policy, len(output_candidate["patients_augmented"]), len(output_candidate["visits_augmented"]), tuple(checks))
     patients = _by_key(base["patients"], "patient_id")
     visits = _by_key(base["visits"], "visit_id")
     candidate_patients = _by_key(output_candidate["patients_augmented"], "patient_id")
@@ -587,6 +659,18 @@ def _validated_group(raw: Mapping[str, tuple[Mapping[str, object], ...]], resour
         result[name], item_valid = _validate_rows(items, resources[name])
         valid &= item_valid
     return result, valid
+
+
+def _foreign_keys_valid(rows: Mapping[str, tuple[Mapping[str, object], ...]], resources: Mapping[str, _Resource]) -> bool:
+    for name in _BASE_RESOURCES:
+        for field, target_resource, target_field in resources[name].foreign_keys:
+            target = rows.get(target_resource)
+            if target is None:
+                return False
+            target_values = {item[target_field] for item in target}
+            if any(item[field] is not None and item[field] not in target_values for item in rows[name]):
+                return False
+    return True
 
 
 def _patient_projection(base: Mapping[str, Mapping[str, object]], candidate: Mapping[str, Mapping[str, object]],
@@ -648,7 +732,7 @@ def _age_check(base: Mapping[str, Mapping[str, object]], candidate: Mapping[str,
                 continue
             for field, divisor, decimals in (("age_in_months", 30.4375, 2), ("age_in_years", 365.25, 3)):
                 compared += 1
-                matched, difference = _match(item[field], round(int(age) / divisor, decimals), tolerance)
+                matched, difference = _match(item[field], round(int(age) / divisor, decimals), tolerance, numeric=True)
                 maximum = max(maximum, difference)
                 if not matched:
                     failed = True
@@ -667,14 +751,29 @@ def _unit_check(base: Mapping[str, Mapping[str, object]], candidate: Mapping[str
             if source is None:
                 failed = True
                 continue
-            for field, raw, conversion in (("weight_kg", source["weight_oz"], lambda x: float(x) / 35.274), ("height_cm", source["height_in"], lambda x: round(float(x) * 2.54, 3))):
+            for field, score_field, raw, conversion, filtered in (
+                ("weight_kg", "weight_z_score", source["weight_oz"], lambda x: float(x) / 35.274, lambda score: abs(score) > 5),
+                ("height_cm", "height_z_score", source["height_in"], lambda x: round(float(x) * 2.54, 3), lambda score: score < -5 or score > 3),
+            ):
                 if raw is None:
                     unevaluable = True
                     continue
+                score = item[score_field]
                 if item[field] is None:
+                    if score is None:
+                        unevaluable = True
+                    elif not filtered(float(score)):
+                        compared += 1
+                        failed = True
+                        mismatches += 1
+                    continue
+                if score is not None and filtered(float(score)):
+                    compared += 1
+                    failed = True
+                    mismatches += 1
                     continue
                 compared += 1
-                matched, difference = _match(item[field], conversion(raw), tolerance)
+                matched, difference = _match(item[field], conversion(raw), tolerance, numeric=True)
                 maximum = max(maximum, difference)
                 if not matched:
                     failed = True
@@ -696,7 +795,7 @@ def _bmi_check(base: Mapping[str, Mapping[str, object]], candidate: Mapping[str,
             weight, height = item["weight_kg"], item["height_cm"]
             expected = None if age / 30.4375 < 24 or weight is None or height is None or weight <= 0 or height <= 0 else weight / (height / 100) ** 2
             compared += 1
-            matched, difference = _match(item["bmi"], expected, tolerance)
+            matched, difference = _match(item["bmi"], expected, tolerance, numeric=True)
             maximum = max(maximum, difference)
             if not matched:
                 failed = True
@@ -730,7 +829,10 @@ def _summary_check(patients: Mapping[str, Mapping[str, object]], visits: Mapping
                 if field.startswith(("count_", "mean_", "std_", "min_", "max_")):
                     value = augmented_expected[field]
                 compared += 1
-                matched, difference = _match(item[field], value, tolerance)
+                numeric = field not in {
+                    "visits_count", "visits_count_pre_dx", "min_visit_age_days", "max_visit_age_days", "visits_span_days",
+                } and not field.startswith("count_")
+                matched, difference = _match(item[field], value, tolerance, numeric=numeric)
                 maximum = max(maximum, difference)
                 if not matched:
                     failed = True
