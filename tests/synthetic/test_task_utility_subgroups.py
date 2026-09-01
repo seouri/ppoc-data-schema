@@ -135,6 +135,51 @@ def test_present_subgroups_below_class_support_block_and_are_redacted() -> None:
         )
 
 
+def test_under_supported_subgroup_redacts_before_threshold_failure() -> None:
+    cohort = task_cohort(
+        *balanced_task_cohort().members,
+        task_member(7, DisorderKind.HEALTHY, sex="U"),
+    )
+    predictions = (
+        TaskPrediction(True, 0.9),
+        TaskPrediction(True, 0.9),
+        TaskPrediction(False, 0.1),
+        TaskPrediction(False, 0.1),
+        TaskPrediction(True, 0.9),
+    )
+    report = evaluate_task_utility(
+        cohort,
+        predictions,
+        task_policy(subgroup_dimensions=("sex",)),
+    )
+    subgroup = _cell(report, "sex:U")
+
+    assert _cell(report, "overall").status is TaskUtilityStatus.PASS
+    assert subgroup.status is TaskUtilityStatus.UNEVALUABLE
+    assert subgroup.reason_code == "INSUFFICIENT_SUPPORT"
+    assert (
+        subgroup.positive_count,
+        subgroup.negative_count,
+        subgroup.true_positive,
+        subgroup.true_negative,
+        subgroup.false_positive,
+        subgroup.false_negative,
+    ) == (None, None, None, None, None, None)
+    assert all(
+        metric.status is TaskUtilityStatus.UNEVALUABLE
+        and metric.reason_code == "INSUFFICIENT_SUPPORT"
+        and metric.observed is None
+        and metric.target is None
+        and metric.support_count is None
+        for metric in subgroup.metrics
+    )
+    assert report.status is TaskUtilityStatus.UNEVALUABLE
+    assert report.reason_code == "INSUFFICIENT_SUPPORT"
+    serialized = report.canonical_json()
+    assert "syn-task-utility-7" not in serialized
+    assert "healthy" not in serialized
+
+
 def test_one_subgroup_threshold_failure_blocks_passing_overall() -> None:
     predictions = (
         TaskPrediction(True, 0.9),

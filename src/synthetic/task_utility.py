@@ -884,6 +884,43 @@ def _task_cell(
 
     unevaluable_count = len(members) - evaluable_count
     minimum_support = policy.minimum_class_support
+    if positive_count < minimum_support or negative_count < minimum_support:
+        if unevaluable_count:
+            reason_code = "MISSING_PREDICTION"
+        elif policy.require_probability_scores and missing_score_count:
+            reason_code = "MISSING_SCORE"
+        else:
+            reason_code = "INSUFFICIENT_SUPPORT"
+
+        def metric_reason(name: str) -> str:
+            if reason_code == "MISSING_SCORE":
+                return (
+                    "MISSING_SCORE"
+                    if name in {"auroc", "brier_score"}
+                    else "INSUFFICIENT_SUPPORT"
+                )
+            return reason_code
+
+        return TaskUtilityCell(
+            scope=scope,
+            status=TaskUtilityStatus.UNEVALUABLE,
+            reason_code=reason_code,
+            member_count=len(members),
+            evaluable_count=evaluable_count,
+            unevaluable_count=unevaluable_count,
+            missing_score_count=missing_score_count,
+            positive_count=None,
+            negative_count=None,
+            true_positive=None,
+            true_negative=None,
+            false_positive=None,
+            false_negative=None,
+            metrics=tuple(
+                _unevaluable_metric(name, metric_reason(name))
+                for name in TASK_METRICS
+            ),
+        )
+
     if positive_count >= minimum_support:
         sensitivity = _evaluated_metric(
             "sensitivity",

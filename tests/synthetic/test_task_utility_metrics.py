@@ -359,6 +359,36 @@ def test_singleton_floor_never_exposes_truth_derived_metric_evidence(
     _assert_null_metric_evidence(report)
 
 
+def test_singleton_threshold_failure_is_redacted_before_cohort_floor_status() -> None:
+    cohort = task_cohort(task_member(9, DisorderKind.HEALTHY))
+    report = evaluate_task_utility(
+        cohort,
+        (TaskPrediction(True, 0.9),),
+        task_policy(
+            minimum_cohort_size=2,
+            minimum_evaluable_members=1,
+        ),
+    )
+    cell = report.cells[0]
+
+    assert report.status is TaskUtilityStatus.UNEVALUABLE
+    assert report.reason_code == "COHORT_TOO_SMALL"
+    assert cell.status is TaskUtilityStatus.UNEVALUABLE
+    assert cell.reason_code == "INSUFFICIENT_SUPPORT"
+    assert (
+        cell.positive_count,
+        cell.negative_count,
+        cell.true_positive,
+        cell.true_negative,
+        cell.false_positive,
+        cell.false_negative,
+    ) == (None, None, None, None, None, None)
+    _assert_null_metric_evidence(report)
+    serialized = report.canonical_json()
+    assert "syn-task-utility-9" not in serialized
+    assert "healthy" not in serialized
+
+
 def test_below_cohort_floor_nulls_even_otherwise_evaluable_metrics() -> None:
     report = evaluate_task_utility(
         balanced_task_cohort(),
