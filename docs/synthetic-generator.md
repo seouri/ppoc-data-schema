@@ -327,7 +327,7 @@ A passing report is qualified, policy-bound privacy evidence only: under the app
 
 ## Evaluator-only trajectory counterfactual validation
 
-The native counterfactual layer replays one completely fictional `AgeRegimeDisorderKernel` patient into a baseline world and one intervention world. It is the trajectory component of the counterfactual roadmap: it does not read visible CSV rows, alter the eight-resource descriptor, or turn the fail-closed smoke command into a cohort generator. Package-level counterfactual EHR worlds remain deferred until observation, diagnosis, treatment, and ancillary-resource generation are available.
+The native counterfactual layer replays one completely fictional `AgeRegimeDisorderKernel` patient into a baseline world and one intervention world. It is the trajectory component of the counterfactual roadmap: it does not read visible CSV rows, alter the eight-resource descriptor, or turn the fail-closed smoke command into a cohort generator. The in-memory resource-level paired EHR-world composition is documented below; pair-aware package export remains a separate gate.
 
 Use the paired API with a test or separately approved fictional kernel and a new external truth-manifest destination whose parent already exists:
 
@@ -529,7 +529,52 @@ assert validate_observed_resources(enriched_bundle).status is ResourceValidation
 
 `validate_ghd_ancillary_bundle` returns a separate aggregate-only `AncillaryBundleValidationReport` with fixed `bundle_identity`, `base_resources`, `ancillary_resources`, and `truth_boundary` checks. It re-runs the current validators against a zeroed base view and an extracted ancillary projection; `FAIL` wins over `UNEVALUABLE`, which wins over `PASS`. A typed visible row, identity, shape, link, causal-timing, or nested truth-boundary violation is `FAIL`; absent or malformed private source evidence is `UNEVALUABLE` only when no independently visible violation is demonstrable. The report contains fixed statuses, reason codes, and counts only: no rows, IDs, source frame, latent trajectory, hidden event, or truth payload is serialized or rendered.
 
-This synthetic-only, evaluator-only seam is in-memory only: there is no file input, package/file export, manifest, descriptor mutation, or CLI. It does not implement augmented derivation or paired counterfactual worlds, and it is not evidence of prevalence or demographic calibration, held-out validation, clinical review, task utility, privacy or non-matchability, release approval, other disorders, or Synthea conformance. Those remain separately governed roadmap gates.
+This synthetic-only, evaluator-only seam is in-memory only: there is no file input, package/file export, manifest, descriptor mutation, or CLI. It is the reviewed ancillary merge used by the paired counterfactual EHR-world composer below; it does not itself implement augmented derivation or package export. It is not evidence of prevalence or demographic calibration, held-out validation, clinical review, task utility, privacy or non-matchability, release approval, other disorders, or Synthea conformance. Those remain separately governed roadmap gates.
+
+## In-memory paired counterfactual EHR worlds
+
+`assemble_counterfactual_ehr_worlds` composes one existing validated `CounterfactualPair` into an immutable `CounterfactualEhrWorldPair` of baseline and intervention `CohortMember` values. It accepts only shared `SyntheticDemographics`, one `ObservationPolicy`, an already-loaded descriptor mapping, and a `GhdAncillaryPolicy`; all inputs and results stay evaluator-only and in-memory. The composer replays the observation process with `NamedRandomStreams` using the same seed and patient index in both worlds, rather than independently resampling it, so assembly is deterministic for the same typed inputs.
+
+The current base visits resource cannot project an observed `LENGTH` measurement. Use a base-compatible policy with `length_availability_probability=0.0` (or otherwise ensure no observed `LENGTH`) when composing resource rows. This is a fail-closed schema boundary, not a dropped value or an inferred height substitute.
+
+```python
+from synthetic.native.ancillary import GhdAncillaryPolicy
+from synthetic.native.counterfactual_worlds import (
+    CounterfactualWorldValidationStatus,
+    assemble_counterfactual_ehr_worlds,
+    validate_counterfactual_ehr_worlds,
+)
+from synthetic.native.observations import ObservationPolicy
+from synthetic.native.resources import SyntheticDemographics
+
+# `pair` is an existing validated CounterfactualPair from fictional native replay.
+# `descriptor_mapping` is an already-loaded descriptor mapping supplied by this caller.
+demographics = SyntheticDemographics(pair.baseline_context.patient.patient_id, sex="F")
+observation_policy = ObservationPolicy(
+    policy_version="counterfactual-world-v1",
+    window_start_age_days=0,
+    window_end_age_days=4000,
+    length_availability_probability=0.0,
+)
+ancillary_policy = GhdAncillaryPolicy("ghd-ancillary-v1", "1", result_delay_days=7)
+worlds = assemble_counterfactual_ehr_worlds(
+    pair,
+    demographics,
+    observation_policy,
+    descriptor_mapping,
+    ancillary_policy,
+)
+report = validate_counterfactual_ehr_worlds(worlds)
+assert report.status is CounterfactualWorldValidationStatus.PASS
+print(worlds.to_mapping())
+print(report.to_mapping())
+```
+
+The aggregate validator has exactly seven checks, in fixed order: `pair_binding`, `shared_demographics`, `shared_observation`, `observation_invariants`, `resource_invariants`, `permitted_changes`, and `truth_boundary`. Its only statuses are `PASS`, `FAIL`, and `UNEVALUABLE`, with precedence `FAIL > UNEVALUABLE > PASS`. Reports and assembly failures are fixed and redacted: they contain no patient or visit identifiers, row values, ages, latent trajectory states, hidden event payloads, seed/index, stream identities, descriptor contents, or private exception text. Hidden truth remains an evaluator boundary even though the validator rechecks it internally.
+
+The visible resource-level intervention matrix is deliberately narrow. `PHYSIOLOGY_SEVERITY` may change only recorded growth measurement values; visit structure, availability, visible event trace, clinical descendants, and ancillary rows stay invariant. `EARLIER_RECOGNITION` preserves growth measurement values, availability, patient rows, and visits, while the visible event trace plus event-derived clinical descendants and ancillary rows may differ through the reviewed recognition pathway. `TREATMENT_ADHERENCE` preserves event trace, clinical descendants, ancillary rows, and measurement availability; growth values may differ only at or after the private `treatment_start`, and remain invariant when no treatment start exists. `UTILIZATION_INTENSITY` and `MEASUREMENT_ERROR_REMOVAL` remain rejected until their own reviewed resource descendants and matrices exist.
+
+This has no file input or output: it is not a file writer, package exporter, manifest workflow, CLI, real-data or governed-data interface, calibration or held-out evaluator, privacy or non-matchability proof, clinical model, prevalence or demographic calibration, task utility experiment, or release approval. Pair-aware exact-schema export is the next gate. A Synthea implementation is an optional later adapter only after conformance to this native contract; it does not replace the resource-level validator or hidden-truth boundary.
 
 ## Exact-schema observed-resource package export
 
