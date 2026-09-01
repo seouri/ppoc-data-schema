@@ -65,7 +65,7 @@ The approved design is in [the synthetic growth fixture specification](docs/supe
 
 Until the authoritative augmentation implementation or an approved parity harness is supplied, the production synthetic-generator command-line entry point fails closed. The smoke-profile package must not be labeled a development fixture, golden fixture, or validated output.
 
-See [`docs/synthetic-generator.md`](docs/synthetic-generator.md) for the Python usage example, output contract, safety checks, and verification commands. See [`docs/augment-import.md`](docs/augment-import.md) to run and verify the imported augmenter against a wholly synthetic input directory.
+See [`docs/synthetic-generator.md`](docs/synthetic-generator.md) for the Python usage example, output contract, safety checks, and verification commands. See [`docs/augment-import.md`](docs/augment-import.md) to run and verify the imported augmenter against a wholly synthetic input directory, and the [candidate augmenter-oracle guide](docs/augmenter-oracle.md) for its explicit test-only package-export adapter. This candidate does not change the fail-closed boundary: the production command has no configured authoritative oracle.
 
 ## Evaluator-only augmented-derivation parity gate
 
