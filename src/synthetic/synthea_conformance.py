@@ -158,6 +158,9 @@ class SyntheaEngineManifest:
     review_status: str
     test_only: bool
 
+    def __init_subclass__(cls, **_: object) -> None:
+        raise TypeError(_ERROR_MESSAGE)
+
     def __post_init__(self) -> None:
         try:
             _validate_mapping(self.to_mapping())

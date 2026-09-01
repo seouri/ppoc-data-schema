@@ -98,6 +98,44 @@ def test_direct_construction_cannot_retain_non_scalar_state() -> None:
     assert_unavailable(lambda: SyntheaEngineManifest(**value), "mutable-secret")  # type: ignore[arg-type]
 
 
+def test_hostile_subclass_cannot_bypass_direct_construction_validation() -> None:
+    def attempt_bypass() -> None:
+        class ConstructionBypass(SyntheaEngineManifest):
+            def to_mapping(self) -> dict[str, object]:
+                return manifest_mapping()
+
+        value = manifest_mapping()
+        value["engine_revision"] = ["patient-secret"]
+        ConstructionBypass(**value)  # type: ignore[arg-type]
+
+    with pytest.raises(TypeError) as caught:
+        attempt_bypass()
+
+    assert str(caught.value) == ERROR_MESSAGE
+    assert caught.value.__cause__ is None
+
+
+def test_hostile_subclass_cannot_inject_undeclared_json_content() -> None:
+    def attempt_bypass() -> None:
+        class SerializationBypass(SyntheaEngineManifest):
+            inject = False
+
+            def to_mapping(self) -> dict[str, object]:
+                if type(self).inject:
+                    return {"undeclared": "patient-secret"}
+                return super().to_mapping()
+
+        value = SerializationBypass(**manifest_mapping())  # type: ignore[arg-type]
+        SerializationBypass.inject = True
+        value.to_json_bytes()
+
+    with pytest.raises(TypeError) as caught:
+        attempt_bypass()
+
+    assert str(caught.value) == ERROR_MESSAGE
+    assert caught.value.__cause__ is None
+
+
 @pytest.mark.parametrize(
     "field",
     [
