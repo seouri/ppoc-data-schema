@@ -116,7 +116,7 @@ The pair exporter is all-or-nothing at the public output boundary:
    - contract token `counterfactual-ehr-package-pair-v1`;
    - exact schema fingerprint;
    - matrix version and intervention token;
-   - serialization projection token
+   - `serialization_projection` set to the fixed token
      `ghd-result-flag-empty-v1`;
    - aggregate world-validation status and fixed status counts;
    - the caller-supplied visible profile/reference/configuration/software
