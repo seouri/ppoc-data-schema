@@ -237,6 +237,6 @@ git status --short --branch
 
 Confirm the feature diff contains only temporal-drift source/tests/docs/spec/plan changes, no generated packages, real data, keys, or temporary outputs, and that the report/repr/error probes contain no patient/visit IDs or hidden event values.
 
-- [ ] **Step 4: Merge, push, and verify parity**
+- [x] **Step 4: Merge, push, and verify parity**
 
 Fast-forward local `main` from the reviewed branch, rerun the full verification matrix on merged `main`, push `origin main`, and verify `git rev-parse HEAD` equals `git rev-parse origin/main`. Preserve the temporal-drift worktree and ignored SDD reports when they contain review evidence; leave unrelated worktrees untouched.
