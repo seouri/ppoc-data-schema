@@ -95,6 +95,30 @@ def test_reference_headers_match_runtime_contract() -> None:
     assert {"diag_name", "chronic"}.issubset(icd10_header)
 
 
+def test_documentation_describes_synthetic_only_import_boundary() -> None:
+    """Keep the runnable guide and the non-authoritative boundary explicit."""
+    guide = (ROOT / "docs" / "augment-import.md").read_text()
+    readme = (ROOT / "README.md").read_text()
+    synthetic_guide = (ROOT / "docs" / "synthetic-generator.md").read_text()
+
+    for required_input in ("visits.csv", "patients.csv", "problem_list.csv"):
+        assert required_input in guide
+    assert "uv sync" in guide
+    assert "python scripts/augment.py fixtures/augment-input --output_dir artifacts/augment-output --output_format {csv,parquet}" in guide
+    assert "visits_augmented-YYYYMMDDHHMMSS.csv" in guide
+    assert "patients_augmented-YYYYMMDDHHMMSS.csv" in guide
+    assert "augment-runtime-manifest.json" in guide
+    assert "SHA-256" in guide
+    assert "Do not point this script at governed data, real patient data" in guide
+    assert "not bound as authoritative" in guide
+    assert "does not change the native generator, package exporter, calibration, privacy, counterfactual, Synthea, or release gates" in guide
+
+    for document in (readme, synthetic_guide):
+        assert "source-matched growth augmenter" in document
+        assert "not bound as authoritative" in document
+        assert "no production growth reference or authoritative augmentation oracle is shipped" not in document
+
+
 def test_documented_cli_preserves_descriptor_output_headers_for_synthetic_input(tmp_path) -> None:
     """Detect a documented CLI run that no longer satisfies the package schemas."""
     visits_fields = _descriptor_fields("visits")
