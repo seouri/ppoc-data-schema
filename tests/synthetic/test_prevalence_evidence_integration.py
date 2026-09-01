@@ -35,7 +35,7 @@ from synthetic.prevalence_evidence import (
     evaluate_prevalence_evidence,
     verify_package_identity,
 )
-from synthetic.schema_contract import schema_fingerprint
+from synthetic.schema_contract import EXPECTED_SCHEMA_FINGERPRINT, schema_fingerprint
 from synthetic.validate import validate_structure
 from tests.synthetic.calibration_fixtures import write_mock_snapshot
 from tests.synthetic.heldout_fixtures import descriptor_for
@@ -125,7 +125,7 @@ def _controlled_heldout_result(
     report = SimpleNamespace(
         source_snapshot=template.source_snapshot,
         synthetic_artifact_id="synthetic-v1",
-        schema_fingerprint="f" * 64,
+        schema_fingerprint=EXPECTED_SCHEMA_FINGERPRINT,
         partition_policy=template.partition_policy.to_report_mapping(),
         disclosure_policy={
             "policy_id": template.disclosure_policy.policy_id,
@@ -462,6 +462,20 @@ def test_evidence_ignores_latent_and_observable_comparisons_from_a_controlled_he
     assert report.status == "PASS"
     assert all(item.family in {"demographics", "recorded_outcome"} for item in report.comparisons)
     assert all(not item.target_name.startswith("diagnosis_age_years_") for item in report.comparisons)
+
+
+def test_evidence_rejects_heldout_schema_identity_mismatching_generation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Allowing held-out and generated schema identities to differ would compare incompatible evidence."""
+    config = _config(tmp_path)
+    module = __import__("synthetic.prevalence_evidence", fromlist=["validate_heldout"])
+    controlled = _controlled_heldout_result(config.heldout_template)
+    controlled.report.schema_fingerprint = "e" * 64
+    monkeypatch.setattr(module, "validate_heldout", lambda _config: controlled)
+
+    with pytest.raises(PrevalenceEvidenceUnavailable, match="unavailable"):
+        evaluate_prevalence_evidence(config)
 
 
 def test_report_rejects_aggregate_comparisons_that_do_not_match_run_evidence(tmp_path: Path) -> None:

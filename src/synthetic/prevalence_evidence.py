@@ -829,6 +829,8 @@ class PrevalenceEvidenceReport:
             _generation_identity(run.identity) != expected_generation_identity for run in self.runs[1:]
         ):
             raise ValueError("runs must share one generation identity")
+        if self.heldout_identity.schema_fingerprint != expected_generation_identity["schema_fingerprint"]:
+            raise ValueError("held-out and generation schema identities must match")
         if not isinstance(self.comparisons, tuple) or not all(
             isinstance(comparison, PrevalenceComparison) for comparison in self.comparisons
         ):
@@ -1059,6 +1061,8 @@ def evaluate_prevalence_evidence(config: PrevalenceEvidenceConfig) -> Prevalence
             if _verify_package_identity(spec, configured_root_identity=root_identity) != identity:
                 raise _unavailable()
             report_identity = _HeldoutIdentity.from_report(result.report)
+            if report_identity.schema_fingerprint != generation["schema_fingerprint"]:
+                raise _unavailable()
             if heldout_identity is None:
                 heldout_identity = report_identity
             elif report_identity != heldout_identity:
@@ -1310,6 +1314,8 @@ def _parse_prevalence_evidence_report(value: object) -> dict[str, object]:
         raise ValueError("prevalence evidence report is invalid")
     generation = _validate_generation_identity(mapping["generation_identity"])
     heldout = _validate_heldout_identity(mapping["heldout_identity"])
+    if heldout["schema_fingerprint"] != generation["schema_fingerprint"]:
+        raise ValueError("prevalence evidence report is invalid")
     raw_runs = mapping["runs"]
     raw_comparisons = mapping["comparisons"]
     if not isinstance(raw_runs, list) or len(raw_runs) < 3 or not isinstance(raw_comparisons, list):

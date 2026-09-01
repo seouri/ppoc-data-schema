@@ -175,6 +175,7 @@ def test_result_canonical_report_and_summary_round_trip_without_governed_details
         "pass-with-missing-run",
         "unevaluable-with-failure",
         "fail-without-positive-exceedance",
+        "heldout-schema-mismatch",
     ),
 )
 def test_strict_report_parser_rejects_cross_field_invalid_public_evidence(
@@ -210,13 +211,17 @@ def test_strict_report_parser_rejects_cross_field_invalid_public_evidence(
         comparison["fail_count"] = 1
         mapping["status"] = "UNEVALUABLE"
         run["status"] = "UNEVALUABLE"
-    else:
+    elif mutation == "fail-without-positive-exceedance":
         comparison["status"] = "FAIL"
         comparison["pass_count"] = 2
         comparison["fail_count"] = 1
         comparison["maximum_tolerance_exceedance"] = 0.0
         mapping["status"] = "FAIL"
         run["status"] = "FAIL"
+    else:
+        heldout_identity = mapping["heldout_identity"]
+        assert isinstance(heldout_identity, dict)
+        heldout_identity["schema_fingerprint"] = "e" * 64
 
     with pytest.raises(ValueError, match="report is invalid"):
         module._parse_prevalence_evidence_report(mapping)
@@ -383,6 +388,27 @@ def test_cli_returns_zero_only_after_a_pass_report(
     module.main()
 
     assert json.loads((tmp_path / "output" / "prevalence-evidence-report.json").read_text(encoding="ascii"))["status"] == "PASS"
+
+
+def test_cli_does_not_promote_a_heldout_schema_identity_mismatch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Publishing a schema-mismatched report would bypass the shared evidence identity gate."""
+    output = tmp_path / "output"
+    command = _operational_command(tmp_path, output)
+    module = __import__("synthetic.prevalence_evidence", fromlist=["main"])
+    template = _config(tmp_path / "second-config").heldout_template
+    assert template is not None
+    controlled = _controlled_heldout_result(template)
+    controlled.report.schema_fingerprint = "e" * 64
+    monkeypatch.setattr(sys, "argv", command[2:])
+    monkeypatch.setattr(module, "validate_heldout", lambda _config: controlled)
+
+    with pytest.raises(SystemExit) as exit_info:
+        module.main()
+
+    assert exit_info.value.code == 1
+    assert not output.exists()
 
 
 def test_writer_rejects_invalid_result_type(tmp_path: Path) -> None:

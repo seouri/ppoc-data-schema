@@ -118,9 +118,14 @@ def _transitive_imports(roots: tuple[Path, ...]) -> set[str]:
             continue
         visited.add(path)
         direct = _imports(path)
+        dynamic = _dynamic_module_literals(path)
         names.update(direct)
-        names.update(_dynamic_module_literals(path))
-        pending.extend(candidate for name in direct if (candidate := _module_path(name)) is not None)
+        names.update(dynamic)
+        pending.extend(
+            candidate
+            for name in direct | dynamic
+            if (candidate := _module_path(name)) is not None
+        )
     return names
 
 
@@ -226,6 +231,24 @@ def test_transitive_import_scan_detects_dynamic_governed_literal(
     root = tmp_path / "src" / "synthetic"
     root.mkdir(parents=True)
     (root / "generate.py").write_text("from . import support\n", encoding="utf-8")
+    (root / "support.py").write_text(
+        'importlib.import_module("synthetic.prevalence_evidence")\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
+
+    assert GOVERNED_IMPORT in _transitive_imports((root / "generate.py",))
+
+
+def test_transitive_import_scan_follows_dynamic_import_chains(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "src" / "synthetic"
+    root.mkdir(parents=True)
+    (root / "generate.py").write_text(
+        'importlib.import_module("synthetic.support")\n',
+        encoding="utf-8",
+    )
     (root / "support.py").write_text(
         'importlib.import_module("synthetic.prevalence_evidence")\n',
         encoding="utf-8",
