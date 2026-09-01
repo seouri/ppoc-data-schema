@@ -11,6 +11,17 @@ from enum import Enum
 from types import MappingProxyType
 
 DERIVATION_BINDING_VERSION = "derivation-binding-v1"
+DERIVATION_BINDING_CHECK_NAMES = (
+    "contract",
+    "schema_contract",
+    "oracle_identity",
+    "reference_standard",
+    "golden_coverage",
+    "parity_evidence",
+    "synthetic_fuzz_evidence",
+    "review",
+    "classification",
+)
 REQUIRED_GOLDEN_CATEGORIES = (
     "filter_order", "age_boundaries", "missingness", "harrall_outlier",
     "biv_filtering", "velocity_variants", "rounding",
@@ -36,6 +47,14 @@ class DerivationBindingStatus(Enum):
     PASS = "PASS"
     FAIL = "FAIL"
     UNEVALUABLE = "UNEVALUABLE"
+
+
+_EVALUATION_STATUSES = {
+    DerivationBindingStatus.PASS,
+    DerivationBindingStatus.FAIL,
+    DerivationBindingStatus.UNEVALUABLE,
+}
+_CHECK_REASON_CODES = {"OK", "MISSING_EVIDENCE", "OUTSIDE_POLICY", "STRUCTURAL_INVALID"}
 
 
 def _mapping(value: object, field: str) -> Mapping[str, object]:
@@ -242,3 +261,327 @@ class DerivationBinding:
 
     def to_json_bytes(self) -> bytes:
         return json.dumps(self.to_mapping(), ensure_ascii=True, separators=(",", ":"), sort_keys=True, allow_nan=False).encode("ascii") + b"\n"
+
+
+def _is_token(value: object) -> bool:
+    return isinstance(value, str) and _TOKEN.fullmatch(value) is not None and not any(
+        word in value.lower() for word in _UNSAFE
+    )
+
+
+def _is_digest(value: object) -> bool:
+    return isinstance(value, str) and _SHA.fullmatch(value) is not None
+
+
+def _is_timestamp(value: object) -> bool:
+    if not isinstance(value, str) or _UTC.fullmatch(value) is None:
+        return False
+    try:
+        datetime.fromisoformat(value)
+    except ValueError:
+        return False
+    return True
+
+
+def _is_count(value: object) -> bool:
+    return not isinstance(value, bool) and isinstance(value, int) and value >= 0
+
+
+def _safe_token_or_none(value: object) -> str | None:
+    return value if _is_token(value) else None
+
+
+@dataclass(frozen=True)
+class DerivationBindingCheck:
+    """One aggregate-only evaluation result for a fixed binding check."""
+
+    name: str
+    status: DerivationBindingStatus
+    reason_code: str
+    compared_count: int | None
+    mismatch_count: int | None
+
+    def __post_init__(self) -> None:
+        if self.name not in DERIVATION_BINDING_CHECK_NAMES:
+            raise ValueError("check name is fixed")
+        if self.status not in _EVALUATION_STATUSES:
+            raise ValueError("check status is invalid")
+        if self.reason_code not in _CHECK_REASON_CODES:
+            raise ValueError("check reason_code is invalid")
+        if self.status is DerivationBindingStatus.UNEVALUABLE:
+            if self.compared_count is not None or self.mismatch_count is not None:
+                raise ValueError("unevaluable check counts must be absent")
+            if self.reason_code != "MISSING_EVIDENCE":
+                raise ValueError("unevaluable check reason_code is invalid")
+            return
+        _count(self.compared_count, "compared_count")
+        _count(self.mismatch_count, "mismatch_count")
+        if self.mismatch_count > self.compared_count:
+            raise ValueError("mismatch_count cannot exceed compared_count")
+        if self.status is DerivationBindingStatus.PASS:
+            if self.reason_code != "OK" or self.mismatch_count != 0:
+                raise ValueError("passing check must have no mismatches")
+        elif self.reason_code not in {"OUTSIDE_POLICY", "STRUCTURAL_INVALID"} or self.mismatch_count == 0:
+            raise ValueError("failing check must have a positive policy or structural mismatch")
+
+    def to_mapping(self) -> dict[str, object]:
+        return {
+            "name": self.name,
+            "status": self.status.value,
+            "reason_code": self.reason_code,
+            "compared_count": self.compared_count,
+            "mismatch_count": self.mismatch_count,
+        }
+
+
+@dataclass(frozen=True)
+class DerivationBindingReport:
+    """Fixed aggregate report that never serializes evidence contents."""
+
+    binding_version: str
+    binding_id: str
+    schema_fingerprint: str
+    oracle_id: str | None
+    reference_standard_id: str | None
+    parity_report_id: str | None
+    status: DerivationBindingStatus
+    status_counts: Mapping[str, int]
+    checks: tuple[DerivationBindingCheck, ...]
+
+    def __post_init__(self) -> None:
+        if self.binding_version != DERIVATION_BINDING_VERSION:
+            raise ValueError("binding_version is fixed")
+        _token(self.binding_id, "binding_id")
+        _digest(self.schema_fingerprint, "schema_fingerprint")
+        for name in ("oracle_id", "reference_standard_id", "parity_report_id"):
+            _optional_token(getattr(self, name), name)
+        if self.status not in _EVALUATION_STATUSES:
+            raise ValueError("report status is invalid")
+        if not isinstance(self.checks, tuple) or len(self.checks) != len(DERIVATION_BINDING_CHECK_NAMES):
+            raise ValueError("report checks are fixed")
+        if tuple(check.name for check in self.checks) != DERIVATION_BINDING_CHECK_NAMES:
+            raise ValueError("report check order is fixed")
+        if not all(isinstance(check, DerivationBindingCheck) for check in self.checks):
+            raise TypeError("report checks are invalid")
+        counts = _mapping(self.status_counts, "status_counts")
+        _keys(counts, {"PASS", "FAIL", "UNEVALUABLE"}, "status_counts")
+        for value in counts.values():
+            _count(value, "status_counts")
+        computed = {name: sum(check.status.value == name for check in self.checks) for name in counts}
+        if dict(counts) != computed:
+            raise ValueError("status_counts must match checks")
+        computed_status = (
+            DerivationBindingStatus.FAIL if computed["FAIL"] else
+            DerivationBindingStatus.UNEVALUABLE if computed["UNEVALUABLE"] else
+            DerivationBindingStatus.PASS
+        )
+        if self.status is not computed_status:
+            raise ValueError("report status must match checks")
+        object.__setattr__(self, "status_counts", MappingProxyType(dict(counts)))
+
+    def to_mapping(self) -> dict[str, object]:
+        return {
+            "binding_version": self.binding_version,
+            "binding_id": self.binding_id,
+            "schema_fingerprint": self.schema_fingerprint,
+            "oracle_id": self.oracle_id,
+            "reference_standard_id": self.reference_standard_id,
+            "parity_report_id": self.parity_report_id,
+            "status": self.status.value,
+            "status_counts": dict(self.status_counts),
+            "checks": [check.to_mapping() for check in self.checks],
+        }
+
+    def to_json_bytes(self) -> bytes:
+        return json.dumps(
+            self.to_mapping(), ensure_ascii=True, separators=(",", ":"), sort_keys=True, allow_nan=False
+        ).encode("ascii") + b"\n"
+
+
+def _passing(name: str, compared_count: int = 1) -> DerivationBindingCheck:
+    return DerivationBindingCheck(name, DerivationBindingStatus.PASS, "OK", compared_count, 0)
+
+
+def _failing(name: str, reason_code: str, compared_count: int = 1) -> DerivationBindingCheck:
+    return DerivationBindingCheck(name, DerivationBindingStatus.FAIL, reason_code, max(1, compared_count), 1)
+
+
+def _unevaluable(name: str) -> DerivationBindingCheck:
+    return DerivationBindingCheck(name, DerivationBindingStatus.UNEVALUABLE, "MISSING_EVIDENCE", None, None)
+
+
+def _identity_status(values: tuple[object, ...], valid: tuple[bool, ...], name: str) -> DerivationBindingCheck:
+    if any(value is None for value in values):
+        return _unevaluable(name)
+    if not all(valid):
+        return _failing(name, "STRUCTURAL_INVALID", len(values))
+    return _passing(name, len(values))
+
+
+def validate_derivation_binding(
+    binding: DerivationBinding, *, expected_schema_fingerprint: str
+) -> DerivationBindingReport:
+    """Evaluate aggregate derivation evidence without opening evidence bytes."""
+    if not isinstance(binding, DerivationBinding):
+        raise TypeError("binding must be a DerivationBinding")
+    _digest(expected_schema_fingerprint, "expected_schema_fingerprint")
+
+    oracle = binding.oracle
+    standard = binding.reference_standard
+    evidence = binding.golden_evidence
+    review = binding.review
+
+    contract = _passing("contract") if binding.binding_version == DERIVATION_BINDING_VERSION else _failing(
+        "contract", "STRUCTURAL_INVALID"
+    )
+    schema_contract = _passing("schema_contract") if binding.schema_fingerprint == expected_schema_fingerprint else _failing(
+        "schema_contract", "OUTSIDE_POLICY"
+    )
+    oracle_values = (
+        getattr(oracle, "oracle_id", None), getattr(oracle, "implementation_fingerprint", None),
+        getattr(oracle, "source_revision", None), getattr(oracle, "dependency_fingerprint", None),
+        getattr(oracle, "source_kind", None),
+    )
+    oracle_identity = _identity_status(
+        oracle_values,
+        (_is_token(oracle_values[0]), _is_digest(oracle_values[1]), _is_token(oracle_values[2]),
+         _is_digest(oracle_values[3]), oracle_values[4] in {"authoritative_implementation", "approved_parity_harness"}),
+        "oracle_identity",
+    )
+    standard_values = (
+        getattr(standard, "standard_id", None), getattr(standard, "standard_fingerprint", None),
+        getattr(standard, "version", None),
+    )
+    reference_standard = _identity_status(
+        standard_values,
+        (_is_token(standard_values[0]), _is_digest(standard_values[1]), _is_token(standard_values[2])),
+        "reference_standard",
+    )
+
+    categories = getattr(evidence, "covered_categories", None)
+    count = getattr(evidence, "bidirectional_case_count", None)
+    manifest_values = (getattr(evidence, "manifest_id", None), getattr(evidence, "manifest_fingerprint", None))
+    if not isinstance(categories, tuple) or len(set(categories)) != len(categories) or not all(
+        isinstance(category, str) for category in categories
+    ):
+        golden_coverage = _failing("golden_coverage", "STRUCTURAL_INVALID")
+    elif set(categories) - set(REQUIRED_GOLDEN_CATEGORIES):
+        golden_coverage = _failing("golden_coverage", "OUTSIDE_POLICY", len(categories))
+    elif set(categories) != set(REQUIRED_GOLDEN_CATEGORIES) or not _is_count(count) or count < 7 or any(
+        value is None for value in manifest_values
+    ):
+        golden_coverage = _unevaluable("golden_coverage")
+    elif not _is_token(manifest_values[0]) or not _is_digest(manifest_values[1]):
+        golden_coverage = _failing("golden_coverage", "STRUCTURAL_INVALID", count)
+    else:
+        golden_coverage = _passing("golden_coverage", count)
+
+    parity_status = getattr(evidence, "parity_status", None)
+    parity_values = (
+        getattr(evidence, "parity_contract", None), getattr(evidence, "parity_report_id", None),
+        getattr(evidence, "parity_report_fingerprint", None),
+        getattr(evidence, "candidate_implementation_fingerprint", None),
+        getattr(evidence, "reference_implementation_fingerprint", None),
+        getattr(evidence, "parity_schema_fingerprint", None),
+    )
+    if parity_status == "FAIL":
+        parity_evidence = _failing("parity_evidence", "OUTSIDE_POLICY")
+    elif parity_status not in {"PASS", "UNEVALUABLE"} or (
+        parity_status == "PASS" and any(value is None for value in parity_values)
+    ):
+        parity_evidence = _failing("parity_evidence", "STRUCTURAL_INVALID")
+    elif parity_status == "UNEVALUABLE" or any(value is None for value in parity_values):
+        parity_evidence = _unevaluable("parity_evidence")
+    elif parity_values[0] != "derivation-parity-v1" or not _is_token(parity_values[1]) or not all(
+        _is_digest(value) for value in parity_values[2:]
+    ):
+        parity_evidence = _failing("parity_evidence", "STRUCTURAL_INVALID")
+    elif parity_values[3] != oracle_values[1] or parity_values[5] != binding.schema_fingerprint:
+        parity_evidence = _failing("parity_evidence", "OUTSIDE_POLICY")
+    else:
+        parity_evidence = _passing("parity_evidence")
+
+    fuzz_count = getattr(evidence, "synthetic_fuzz_case_count", None)
+    fuzz_fingerprint = getattr(evidence, "fuzz_corpus_fingerprint", None)
+    if not _is_count(fuzz_count):
+        synthetic_fuzz_evidence = _failing("synthetic_fuzz_evidence", "STRUCTURAL_INVALID")
+    elif fuzz_count == 0:
+        synthetic_fuzz_evidence = _unevaluable("synthetic_fuzz_evidence")
+    elif fuzz_fingerprint is None or not _is_digest(fuzz_fingerprint):
+        synthetic_fuzz_evidence = _failing("synthetic_fuzz_evidence", "STRUCTURAL_INVALID", fuzz_count)
+    else:
+        synthetic_fuzz_evidence = _passing("synthetic_fuzz_evidence", fuzz_count)
+
+    review_status = getattr(review, "status", None)
+    review_values = (
+        getattr(review, "review_id", None), getattr(review, "review_fingerprint", None),
+        getattr(review, "reviewed_at", None), getattr(review, "reviewer_role", None),
+    )
+    complete_review = all(value is not None for value in review_values)
+    if review_status == "REJECTED":
+        review_check = _failing("review", "OUTSIDE_POLICY")
+    elif review_status == "PENDING" and not complete_review:
+        review_check = _unevaluable("review")
+    elif review_status == "PENDING":
+        review_check = _unevaluable("review") if binding.test_only else _failing("review", "OUTSIDE_POLICY")
+    elif review_status != "APPROVED":
+        review_check = _failing("review", "STRUCTURAL_INVALID")
+    elif not complete_review:
+        review_check = _unevaluable("review")
+    elif not (_is_token(review_values[0]) and _is_digest(review_values[1]) and _is_timestamp(review_values[2]) and _is_token(review_values[3])):
+        review_check = _failing("review", "STRUCTURAL_INVALID")
+    else:
+        review_check = _passing("review", len(review_values))
+
+    prior_checks = (
+        contract, schema_contract, oracle_identity, reference_standard, golden_coverage, parity_evidence,
+        synthetic_fuzz_evidence, review_check,
+    )
+    if binding.test_only:
+        classification = _failing("classification", "OUTSIDE_POLICY") if any(
+            check.status is DerivationBindingStatus.FAIL for check in prior_checks
+        ) else _passing("classification")
+    elif any(check.status is DerivationBindingStatus.FAIL for check in prior_checks):
+        classification = _failing("classification", "OUTSIDE_POLICY")
+    elif any(check.status is DerivationBindingStatus.UNEVALUABLE for check in prior_checks):
+        classification = _unevaluable("classification")
+    else:
+        classification = _passing("classification")
+
+    checks = (*prior_checks, classification)
+    status_counts = {status.value: sum(check.status is status for check in checks) for status in _EVALUATION_STATUSES}
+    status = (
+        DerivationBindingStatus.FAIL if status_counts["FAIL"] else
+        DerivationBindingStatus.UNEVALUABLE if status_counts["UNEVALUABLE"] else
+        DerivationBindingStatus.PASS
+    )
+    return DerivationBindingReport(
+        DERIVATION_BINDING_VERSION,
+        binding.binding_id,
+        binding.schema_fingerprint,
+        _safe_token_or_none(oracle_values[0]) if oracle_identity.status is not DerivationBindingStatus.UNEVALUABLE else None,
+        _safe_token_or_none(standard_values[0]) if reference_standard.status is not DerivationBindingStatus.UNEVALUABLE else None,
+        _safe_token_or_none(parity_values[1]),
+        status,
+        status_counts,
+        checks,
+    )
+
+
+def require_approved_derivation_binding(
+    binding: DerivationBinding, *, expected_schema_fingerprint: str
+) -> None:
+    """Require a complete, non-test binding with approved parity and review evidence."""
+    report = validate_derivation_binding(binding, expected_schema_fingerprint=expected_schema_fingerprint)
+    evidence = binding.golden_evidence
+    approved = (
+        report.status is DerivationBindingStatus.PASS and
+        not binding.test_only and
+        evidence.parity_status == "PASS" and
+        binding.review.status == "APPROVED" and
+        evidence.candidate_implementation_fingerprint == binding.oracle.implementation_fingerprint and
+        evidence.parity_schema_fingerprint == binding.schema_fingerprint and
+        binding.schema_fingerprint == expected_schema_fingerprint
+    )
+    if not approved:
+        raise DerivationBindingUnavailable()
