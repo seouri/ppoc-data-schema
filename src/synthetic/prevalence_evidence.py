@@ -1352,10 +1352,19 @@ def _parse_prevalence_evidence_report(value: object) -> dict[str, object]:
     if {item.canonical_key for item in comparisons} != set(V1_REQUIRED_TARGET_KEYS):
         raise ValueError("prevalence evidence report is invalid")
     run_count = len(raw_runs)
+    failed_run_count = run_statuses.count("FAIL")
+    unevaluable_run_count = run_statuses.count("UNEVALUABLE")
+    pass_run_count = run_statuses.count("PASS")
     for comparison in comparisons:
         if comparison.evaluable_count > run_count:
             raise ValueError("prevalence evidence report is invalid")
         missing_count = run_count - comparison.evaluable_count
+        if (
+            comparison.fail_count > failed_run_count
+            or missing_count > failed_run_count + unevaluable_run_count
+            or comparison.pass_count < pass_run_count
+        ):
+            raise ValueError("prevalence evidence report is invalid")
         expected_status = (
             "FAIL"
             if comparison.fail_count
@@ -1370,9 +1379,6 @@ def _parse_prevalence_evidence_report(value: object) -> dict[str, object]:
     if mapping["status"] != comparison_status or mapping["status"] != run_status:
         raise ValueError("prevalence evidence report is invalid")
     target_count = len(comparisons)
-    failed_run_count = run_statuses.count("FAIL")
-    unevaluable_run_count = run_statuses.count("UNEVALUABLE")
-    pass_run_count = run_statuses.count("PASS")
     failed_cell_count = sum(item.fail_count for item in comparisons)
     missing_cell_count = sum(run_count - item.evaluable_count for item in comparisons)
     passed_cell_count = sum(item.pass_count for item in comparisons)

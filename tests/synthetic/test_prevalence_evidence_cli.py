@@ -176,6 +176,9 @@ def test_result_canonical_report_and_summary_round_trip_without_governed_details
         "unevaluable-with-failure",
         "fail-without-positive-exceedance",
         "heldout-schema-mismatch",
+        "too-many-failures-for-failed-runs",
+        "too-many-missing-for-nonpass-runs",
+        "too-few-passes-for-passing-runs",
     ),
 )
 def test_strict_report_parser_rejects_cross_field_invalid_public_evidence(
@@ -218,10 +221,32 @@ def test_strict_report_parser_rejects_cross_field_invalid_public_evidence(
         comparison["maximum_tolerance_exceedance"] = 0.0
         mapping["status"] = "FAIL"
         run["status"] = "FAIL"
-    else:
+    elif mutation == "heldout-schema-mismatch":
         heldout_identity = mapping["heldout_identity"]
         assert isinstance(heldout_identity, dict)
         heldout_identity["schema_fingerprint"] = "e" * 64
+    elif mutation == "too-many-failures-for-failed-runs":
+        run["status"] = "FAIL"
+        comparison["status"] = "FAIL"
+        comparison["pass_count"] = 1
+        comparison["fail_count"] = 2
+        comparison["maximum_tolerance_exceedance"] = 0.01
+        mapping["status"] = "FAIL"
+    elif mutation == "too-many-missing-for-nonpass-runs":
+        run["status"] = "UNEVALUABLE"
+        comparison["status"] = "UNEVALUABLE"
+        comparison["evaluable_count"] = 1
+        comparison["pass_count"] = 1
+        mapping["status"] = "UNEVALUABLE"
+    else:
+        runs[1]["status"] = "FAIL"
+        runs[2]["status"] = "UNEVALUABLE"
+        comparison["status"] = "FAIL"
+        comparison["evaluable_count"] = 1
+        comparison["pass_count"] = 0
+        comparison["fail_count"] = 1
+        comparison["maximum_tolerance_exceedance"] = 0.01
+        mapping["status"] = "FAIL"
 
     with pytest.raises(ValueError, match="report is invalid"):
         module._parse_prevalence_evidence_report(mapping)

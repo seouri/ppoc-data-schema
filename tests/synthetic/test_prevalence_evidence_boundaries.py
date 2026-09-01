@@ -86,15 +86,80 @@ def _imports(path: Path) -> set[str]:
     return names
 
 
+def _literal_string(node: ast.AST | None) -> str | None:
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    return None
+
+
+def _resolve_dynamic_name(name: str, package: str | None) -> str | None:
+    if not name.startswith("."):
+        return name if name.startswith("synthetic.") else None
+    if package is None:
+        return None
+    level = len(name) - len(name.lstrip("."))
+    package_parts = package.split(".")
+    if not package_parts or level > len(package_parts):
+        return None
+    suffix = name[level:]
+    resolved = package_parts[: len(package_parts) - level + 1]
+    if suffix:
+        resolved.extend(suffix.split("."))
+    value = ".".join(resolved)
+    return value if value.startswith("synthetic.") else None
+
+
 def _dynamic_module_literals(path: Path) -> set[str]:
+    """Return literal dynamic edges; computed module/package names are intentionally out of scope."""
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    return {
+    names = {
         node.value
         for node in ast.walk(tree)
         if isinstance(node, ast.Constant)
         and isinstance(node.value, str)
         and node.value.startswith("synthetic.")
     }
+    module, is_package = _module_context(path)
+    current_package = module if is_package else module.rpartition(".")[0]
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not node.args:
+            continue
+        importlib_call = (
+            isinstance(node.func, ast.Attribute)
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "importlib"
+            and node.func.attr == "import_module"
+        )
+        dunder_call = isinstance(node.func, ast.Name) and node.func.id == "__import__"
+        if not importlib_call and not dunder_call:
+            continue
+        name = _literal_string(node.args[0])
+        if name is None:
+            continue
+        package: str | None = None
+        if importlib_call:
+            package_node = node.args[1] if len(node.args) > 1 else next(
+                (keyword.value for keyword in node.keywords if keyword.arg == "package"),
+                None,
+            )
+            package = current_package if package_node is None else _literal_string(package_node)
+        else:
+            level_node = node.args[4] if len(node.args) > 4 else next(
+                (keyword.value for keyword in node.keywords if keyword.arg == "level"),
+                None,
+            )
+            level = level_node.value if isinstance(level_node, ast.Constant) else 0
+            if isinstance(level, bool) or not isinstance(level, int) or level < 0:
+                continue
+            if level:
+                name = f"{'.' * level}{name.lstrip('.')}"
+                package = current_package
+            elif name.startswith("."):
+                package = current_package
+        resolved = _resolve_dynamic_name(name, package)
+        if resolved is not None:
+            names.add(resolved)
+    return names
 
 
 def _module_path(name: str) -> Path | None:
@@ -256,6 +321,40 @@ def test_transitive_import_scan_follows_dynamic_import_chains(
     monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
 
     assert GOVERNED_IMPORT in _transitive_imports((root / "generate.py",))
+
+
+def test_transitive_import_scan_follows_relative_dynamic_import_chains(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "src" / "synthetic"
+    root.mkdir(parents=True)
+    (root / "generate.py").write_text(
+        'importlib.import_module(".support", "synthetic")\n',
+        encoding="utf-8",
+    )
+    (root / "support.py").write_text(
+        'importlib.import_module(".prevalence_evidence", "synthetic")\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
+
+    assert GOVERNED_IMPORT in _transitive_imports((root / "generate.py",))
+
+
+def test_dynamic_import_scan_normalizes_relative_dunder_import(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "src" / "synthetic"
+    root.mkdir(parents=True)
+    module = root / "generate.py"
+    module.write_text(
+        '__import__("support", globals(), locals(), (), 1)\n',
+        encoding="utf-8",
+    )
+    (root / "support.py").write_text("", encoding="utf-8")
+    monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
+
+    assert "synthetic.support" in _dynamic_module_literals(module)
 
 
 @pytest.mark.parametrize(
