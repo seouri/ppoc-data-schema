@@ -18,6 +18,12 @@ from synthetic.base_resources import BASE_RESOURCES
 from synthetic.csv_package import write_resource, write_synthetic_descriptor
 from synthetic.derivation import DerivationOracle, DerivationUnavailable
 from synthetic.manifest import RunManifest
+from synthetic.native.ancillary import GHD_LAB_COMPONENT_NAMES, GHD_LAB_RESULT_FLAG
+from synthetic.native.counterfactual_worlds import (
+    CounterfactualEhrWorldPair,
+    CounterfactualWorldValidationStatus,
+    validate_counterfactual_ehr_worlds,
+)
 from synthetic.native.resources import (
     ObservedResourceBundle,
     ResourceShape,
@@ -36,6 +42,7 @@ from synthetic.validate import validate_structure
 
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 _FAILURE_REASON = "observed package export failed"
+_PAIR_FAILURE_REASON = "counterfactual package export failed"
 _AUGMENTED_RESOURCES = ("patients_augmented", "visits_augmented")
 _PACKAGE_ARTIFACTS = {"datapackage.json", "validation-report.json", "manifest.json"}
 _DIRECTORY_OPEN_FLAGS = (
@@ -48,6 +55,10 @@ _FILE_OPEN_FLAGS = (
 
 class PackageExportUnavailable(DerivationUnavailable):
     """Raised when an exact-schema package cannot be safely exported."""
+
+
+class CounterfactualPackageExportUnavailable(PackageExportUnavailable):
+    """Fixed redacted pair-export failure."""
 
 
 def _require_output_available(output: Path) -> None:
@@ -81,6 +92,18 @@ def _start_run(output: Path, run_id: str) -> RunDirectory:
         raise PackageExportUnavailable(_FAILURE_REASON) from None
     except Exception:  # noqa: BLE001 - startup errors are deliberately redacted.
         raise PackageExportUnavailable(_FAILURE_REASON) from None
+
+
+def _start_pair_run(output: Path, run_id: str) -> RunDirectory:
+    """Start a pair run while preserving only deterministic lifecycle collisions."""
+    try:
+        return RunDirectory.start(output, run_id)
+    except FileExistsError:
+        if _is_run_lifecycle_collision(output, run_id):
+            raise
+        raise CounterfactualPackageExportUnavailable(_PAIR_FAILURE_REASON) from None
+    except Exception:  # noqa: BLE001 - startup errors are deliberately redacted.
+        raise CounterfactualPackageExportUnavailable(_PAIR_FAILURE_REASON) from None
 
 
 @dataclass(frozen=True)
@@ -338,6 +361,191 @@ def _sha256(path: Path) -> str:
 def _write_json(path: Path, payload: object) -> None:
     with path.open("x", encoding="utf-8") as handle:
         handle.write(json.dumps(payload, indent=2) + "\n")
+
+
+def _write_canonical_json(path: Path, payload: object) -> None:
+    with path.open("x", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload, sort_keys=True, indent=2, ensure_ascii=False) + "\n")
+
+
+def _pair_run_id(metadata: PackageExportMetadata, worlds: CounterfactualEhrWorldPair) -> str:
+    payload = {
+        "metadata": dataclasses.asdict(metadata),
+        "matrix_version": worlds.matrix.version,
+        "intervention": worlds.matrix.intervention.value,
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+    ).hexdigest()[:12]
+
+
+def _pair_base_rows(
+    worlds: CounterfactualEhrWorldPair, descriptor: dict[str, Any]
+) -> tuple[
+    dict[str, list[dict[str, object]]], dict[str, list[dict[str, object]]]
+]:
+    lab_resource = resource_spec(descriptor, "labs")
+    result_flag = next(
+        field for field in lab_resource["schema"]["fields"] if field["name"] == "result_flag"
+    )
+    allowed_lab_flags = {str(value) for value in result_flag.get("constraints", {}).get("enum", [])}
+    rows: list[dict[str, list[dict[str, object]]]] = []
+    for member in (worlds.baseline, worlds.intervention):
+        if not isinstance(member.bundle, ObservedResourceBundle):
+            raise TypeError("counterfactual world is missing its resource bundle")
+        member_rows = {
+            name: [row.to_mapping() for row in member.bundle.rows[name]] for name in BASE_RESOURCES
+        }
+        for row in member_rows["labs"]:
+            if (
+                row["result_component_name"] in GHD_LAB_COMPONENT_NAMES
+                and row["result_flag"] == GHD_LAB_RESULT_FLAG
+            ):
+                row["result_flag"] = ""
+            elif row["result_flag"] not in {"", *allowed_lab_flags}:
+                raise ValueError("lab result flag is not permitted by the exact schema")
+        rows.append(member_rows)
+    return rows[0], rows[1]
+
+
+def _pair_allowed_tree(descriptor: dict[str, Any]) -> tuple[set[str], set[str]]:
+    resource_paths = {
+        Path(resource["path"]).as_posix()
+        for resource in descriptor["resources"]
+    }
+    files = {"pair-manifest.json"}
+    directories = {"baseline", "intervention"}
+    for child in ("baseline", "intervention"):
+        child_files = resource_paths | _PACKAGE_ARTIFACTS
+        files.update((Path(child) / path).as_posix() for path in child_files)
+        directories.update(
+            (Path(child) / parent).as_posix()
+            for path in child_files
+            for parent in Path(path).parents
+            if parent.as_posix() != "."
+        )
+    return files, directories
+
+
+def _scan_exact_tree(root: Path, files: set[str], dirs: set[str]) -> None:
+    _scan_tree(root, files, dirs)
+    actual_files = {
+        path.relative_to(root).as_posix()
+        for path in root.rglob("*")
+        if path.is_file() and not path.is_symlink()
+    }
+    actual_dirs = {
+        path.relative_to(root).as_posix()
+        for path in root.rglob("*")
+        if path.is_dir() and not path.is_symlink()
+    }
+    if actual_files != files or actual_dirs != dirs:
+        raise DerivationUnavailable("pair export tree inventory does not match")
+
+
+def _pair_manifest(
+    worlds: CounterfactualEhrWorldPair,
+    metadata: PackageExportMetadata,
+    report: object,
+    child_manifest_sha256: Mapping[str, str],
+) -> dict[str, object]:
+    check_counts = getattr(report, "check_counts", None)
+    if not isinstance(check_counts, Mapping):
+        raise TypeError("counterfactual world report is malformed")
+    return {
+        "contract": "counterfactual-ehr-package-pair-v1",
+        "schema_fingerprint": EXPECTED_SCHEMA_FINGERPRINT,
+        "matrix_version": worlds.matrix.version,
+        "intervention": worlds.matrix.intervention.value,
+        "validation_status": CounterfactualWorldValidationStatus.PASS.value,
+        "validation_check_counts": dict(check_counts),
+        "metadata": dataclasses.asdict(metadata),
+        "children": {
+            name: {"path": name, "manifest_sha256": child_manifest_sha256[name]}
+            for name in ("baseline", "intervention")
+        },
+    }
+
+
+def export_counterfactual_ehr_world_pair(
+    worlds: CounterfactualEhrWorldPair,
+    descriptor: Mapping[str, object],
+    output: Path,
+    *,
+    metadata: PackageExportMetadata,
+    derivation_oracle: DerivationOracle,
+    trusted_derivation_fingerprint: str,
+    trusted_derivation_test_only: bool,
+) -> Path:
+    """Export a validated fictional world pair as two exact-schema child packages."""
+    try:
+        _require_output_available(output)
+    except FileExistsError:
+        raise
+    except Exception:  # noqa: BLE001 - pair boundary errors are deliberately redacted.
+        raise CounterfactualPackageExportUnavailable(_PAIR_FAILURE_REASON) from None
+
+    try:
+        if not isinstance(worlds, CounterfactualEhrWorldPair):
+            raise TypeError("worlds must be a CounterfactualEhrWorldPair")
+        report = validate_counterfactual_ehr_worlds(worlds)
+        if report.status is not CounterfactualWorldValidationStatus.PASS:
+            raise ValueError("counterfactual world validation did not pass")
+        copied_descriptor = _copy_descriptor(descriptor)
+        baseline_rows, intervention_rows = _pair_base_rows(worlds, copied_descriptor)
+    except Exception:  # noqa: BLE001 - pair pre-creation errors are deliberately redacted.
+        raise CounterfactualPackageExportUnavailable(_PAIR_FAILURE_REASON) from None
+
+    try:
+        with tempfile.TemporaryDirectory(prefix="counterfactual-package-export-") as temporary:
+            staging = Path(temporary)
+            try:
+                baseline = export_exact_schema_package(
+                    copied_descriptor,
+                    baseline_rows,
+                    staging / "baseline",
+                    metadata=metadata,
+                    derivation_oracle=derivation_oracle,
+                    trusted_derivation_fingerprint=trusted_derivation_fingerprint,
+                    trusted_derivation_test_only=trusted_derivation_test_only,
+                )
+                intervention = export_exact_schema_package(
+                    copied_descriptor,
+                    intervention_rows,
+                    staging / "intervention",
+                    metadata=metadata,
+                    derivation_oracle=derivation_oracle,
+                    trusted_derivation_fingerprint=trusted_derivation_fingerprint,
+                    trusted_derivation_test_only=trusted_derivation_test_only,
+                )
+            except Exception:  # noqa: BLE001 - pair pre-creation errors are deliberately redacted.
+                raise CounterfactualPackageExportUnavailable(_PAIR_FAILURE_REASON) from None
+
+            run = _start_pair_run(output, _pair_run_id(metadata, worlds))
+            try:
+                for child_name, child_package in (("baseline", baseline), ("intervention", intervention)):
+                    shutil.copytree(child_package, run.partial_path / child_name)
+                child_manifest_sha256 = {
+                    child_name: _sha256(run.partial_path / child_name / "manifest.json")
+                    for child_name in ("baseline", "intervention")
+                }
+                _write_canonical_json(
+                    run.partial_path / "pair-manifest.json",
+                    _pair_manifest(worlds, metadata, report, child_manifest_sha256),
+                )
+                allowed_files, allowed_dirs = _pair_allowed_tree(copied_descriptor)
+                _scan_exact_tree(run.partial_path, allowed_files, allowed_dirs)
+                return run.promote()
+            except Exception:  # noqa: BLE001 - archive every post-creation failure safely.
+                try:
+                    run.fail(_PAIR_FAILURE_REASON)
+                except Exception:  # noqa: BLE001 - retain the redacted public failure if archival fails.
+                    raise CounterfactualPackageExportUnavailable(_PAIR_FAILURE_REASON) from None
+                raise CounterfactualPackageExportUnavailable(_PAIR_FAILURE_REASON) from None
+    except (FileExistsError, CounterfactualPackageExportUnavailable):
+        raise
+    except Exception:  # noqa: BLE001 - private staging failures are deliberately redacted.
+        raise CounterfactualPackageExportUnavailable(_PAIR_FAILURE_REASON) from None
 
 
 def export_exact_schema_package(
