@@ -1,0 +1,19 @@
+{
+  "manifest_version": 1,
+  "files": [
+    {"path": "scripts/__init__.py", "bytes": 0, "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "role": "python", "source_relative_name": "scripts/__init__.py"},
+    {"path": "scripts/augment.py", "bytes": 75312, "sha256": "e7fe76af5840dabcd7a461b37a4ef768c6a64834b2c4f9b8ae1cc4ee9eae9934", "role": "python", "source_relative_name": "scripts/augment.py"},
+    {"path": "scripts/harrall_outliers.py", "bytes": 17657, "sha256": "13086acbfe9f675427d0fe6688df1ab32c4fdf576ebaeb752da47994e8ecce34", "role": "python", "source_relative_name": "scripts/harrall_outliers.py"},
+    {"path": "data/statage_combined.csv", "bytes": 73599, "sha256": "65f5211e7495c4283d9658977a2fac280d5b956648e3f194502427885e0ec303", "role": "cdc_reference", "source_relative_name": "data/statage_combined.csv"},
+    {"path": "data/wtage_combined.csv", "bytes": 73941, "sha256": "716144bfdc78b12b0f6587e552cd6687b6d9c8eee8ab21543cc0d4f4c84dc3fd", "role": "cdc_reference", "source_relative_name": "data/wtage_combined.csv"},
+    {"path": "data/bmiagerev.csv", "bytes": 71966, "sha256": "06682e252c68657d7c6c42f41a19bc8825e3b6f7ca425c5933e79c4a5d79211c", "role": "cdc_reference", "source_relative_name": "data/bmiagerev.csv"},
+    {"path": "data/hcageinf.csv", "bytes": 11486, "sha256": "bf7e2d7af8fdb336f0b159e480414842136da960ea6a730b7e73d1060b4549e9", "role": "cdc_reference", "source_relative_name": "data/hcageinf.csv"},
+    {"path": "data/wtstat.csv", "bytes": 15145, "sha256": "0f75b6ef7ac725c311bd3ff9d50c5b3b415b7faa00c99126b04f4f9a1c773db3", "role": "cdc_reference", "source_relative_name": "data/wtstat.csv"},
+    {"path": "data/wtleninf.csv", "bytes": 18242, "sha256": "3dd616c8d11ad8ad5470929477609e6fc44cb2e5f7b95494061e1413a0034249", "role": "cdc_reference", "source_relative_name": "data/wtleninf.csv"},
+    {"path": "data/hvage_no_pub.csv", "bytes": 4414, "sha256": "1060a2707d7c5064519155478c2f6d78f50d677cbc5cf06cc1c5a55a3abfe2ac", "role": "cdc_reference", "source_relative_name": "data/hvage_no_pub.csv"},
+    {"path": "data/hvage_earlier_pub.csv", "bytes": 3306, "sha256": "e7840ee988da0740e7c211640d2216773a812f55ea1bb6b86917ee5214c8c846", "role": "cdc_reference", "source_relative_name": "data/hvage_earlier_pub.csv"},
+    {"path": "data/hvage_average_pub.csv", "bytes": 3724, "sha256": "6a5fb73a8fb9e06ca41ca72053231c90df9a9de450df30df1bee387063487900", "role": "cdc_reference", "source_relative_name": "data/hvage_average_pub.csv"},
+    {"path": "data/hvage_later_pub.csv", "bytes": 4030, "sha256": "b233a08df6b809b62cfbce6af2a1b74667be77a9ffcceab4260403f0dfdb304a", "role": "cdc_reference", "source_relative_name": "data/hvage_later_pub.csv"},
+    {"path": "data/icd10cm-tabular-2026.csv", "bytes": 9332915, "sha256": "34fbc7b2fcd46b8849c40c6664598f51fbd6318934ce1d059ad1ceacbf25004d", "role": "icd10_reference", "source_relative_name": "data/icd10cm-tabular-2026.csv"}
+  ]
+}
