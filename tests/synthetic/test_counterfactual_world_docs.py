@@ -33,6 +33,8 @@ def test_guide_documents_the_typed_in_memory_paired_world_api_and_usage() -> Non
         "in-memory",
     ):
         assert term in section, f"paired-world section is missing {term}"
+    assert "baseline_context" not in section
+    assert "intervention_context" not in section
 
 
 def test_guide_documents_fixed_aggregate_validation_and_visible_change_matrix() -> None:

@@ -548,8 +548,9 @@ from synthetic.native.observations import ObservationPolicy
 from synthetic.native.resources import SyntheticDemographics
 
 # `pair` is an existing validated CounterfactualPair from fictional native replay.
+# This caller already knows the fictional identifier used when it created `pair`.
 # `descriptor_mapping` is an already-loaded descriptor mapping supplied by this caller.
-demographics = SyntheticDemographics(pair.baseline_context.patient.patient_id, sex="F")
+demographics = SyntheticDemographics("syn-counterfactual", sex="F")
 observation_policy = ObservationPolicy(
     policy_version="counterfactual-world-v1",
     window_start_age_days=0,
@@ -569,6 +570,8 @@ assert report.status is CounterfactualWorldValidationStatus.PASS
 print(worlds.to_mapping())
 print(report.to_mapping())
 ```
+
+The assembler independently validates that the supplied demographics identify the paired fictional patient; the example does not retrieve that identity through evaluator-only pair context.
 
 The aggregate validator has exactly seven checks, in fixed order: `pair_binding`, `shared_demographics`, `shared_observation`, `observation_invariants`, `resource_invariants`, `permitted_changes`, and `truth_boundary`. Its only statuses are `PASS`, `FAIL`, and `UNEVALUABLE`, with precedence `FAIL > UNEVALUABLE > PASS`. Reports and assembly failures are fixed and redacted: they contain no patient or visit identifiers, row values, ages, latent trajectory states, hidden event payloads, seed/index, stream identities, descriptor contents, or private exception text. Hidden truth remains an evaluator boundary even though the validator rechecks it internally.
 
