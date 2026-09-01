@@ -5,7 +5,7 @@ from numbers import Real
 
 from synthetic.models import LatentPoint, PatientState
 from synthetic.randomness import NamedRandomStreams
-from synthetic.references import GrowthReference
+from synthetic.references import GrowthReference, generation_z_score
 
 
 class HealthyKernel:
@@ -61,6 +61,20 @@ class HealthyKernel:
         for age_days in ages_days:
             height_z = 0.96 * height_z + float(growth.normal(0.0, 0.08))
             bmi_z = 0.85 * bmi_z + float(growth.normal(0.0, 0.20))
+            height_z = generation_z_score(
+                self.reference,
+                "height_cm",
+                age_days,
+                patient.reference_sex,
+                height_z,
+            )
+            bmi_z = generation_z_score(
+                self.reference,
+                "bmi",
+                age_days,
+                patient.reference_sex,
+                bmi_z,
+            )
             height_cm = self.reference.value(
                 "height_cm", age_days, patient.reference_sex, height_z
             )

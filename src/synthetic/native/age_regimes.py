@@ -14,7 +14,7 @@ from synthetic.models import (
     PatientState,
 )
 from synthetic.randomness import NamedRandomStreams
-from synthetic.references import GrowthReference
+from synthetic.references import GrowthReference, generation_z_score
 
 
 def _nonnegative_int(name: str, value: object) -> None:
@@ -395,6 +395,28 @@ class AgeRegimeTrajectoryKernel:
             head.normal(0.0, self.config.residual_sd)
         )
 
+        length_z = generation_z_score(
+            self.reference,
+            "length_cm",
+            age_days,
+            patient.reference_sex,
+            length_z,
+        )
+        weight_z = generation_z_score(
+            self.reference,
+            "weight_kg",
+            age_days,
+            patient.reference_sex,
+            weight_z,
+        )
+        head_z = generation_z_score(
+            self.reference,
+            "head_circumference_cm",
+            age_days,
+            patient.reference_sex,
+            head_z,
+        )
+
         length_cm = self._reference_value("length_cm", age_days, patient, length_z)
         weight_kg = self._reference_value("weight_kg", age_days, patient, weight_z)
         head_circumference_cm = self._reference_value(
@@ -447,6 +469,20 @@ class AgeRegimeTrajectoryKernel:
             + mass_residual
             + puberty_progress * state.puberty_bmi_shift_z
         )
+        height_z = generation_z_score(
+            self.reference,
+            "height_cm",
+            age_days,
+            patient.reference_sex,
+            height_z,
+        )
+        bmi_z = generation_z_score(
+            self.reference,
+            "bmi",
+            age_days,
+            patient.reference_sex,
+            bmi_z,
+        )
         height_cm = self._reference_value("height_cm", age_days, patient, height_z)
         bmi = self._reference_value("bmi", age_days, patient, bmi_z)
         weight_kg = _derived_weight(bmi, height_cm)
@@ -482,21 +518,35 @@ class AgeRegimeTrajectoryKernel:
         for previous, current in pairwise(points):
             if previous.age_days <= transition_end < current.age_days:
                 comparison_age = transition_end + 1
+                length_z = generation_z_score(
+                    self.reference,
+                    "length_cm",
+                    comparison_age,
+                    patient.reference_sex,
+                    state.childhood_height_z,
+                )
                 length_cm = self._reference_value(
                     "length_cm",
                     comparison_age,
                     patient,
-                    state.childhood_height_z,
+                    length_z,
                 )
                 converted_height = _positive_value(
                     "converted standing height",
                     length_cm - self.config.length_to_height_offset_cm,
                 )
+                height_z = generation_z_score(
+                    self.reference,
+                    "height_cm",
+                    comparison_age,
+                    patient.reference_sex,
+                    state.childhood_height_z,
+                )
                 standing_height = self._reference_value(
                     "height_cm",
                     comparison_age,
                     patient,
-                    state.childhood_height_z,
+                    height_z,
                 )
                 if (
                     abs(standing_height - converted_height)

@@ -23,6 +23,14 @@ PATIENT = PatientState("syn-patient-a", "F", "F")
 AGES = (730, 1095, 1460, 4000, 5000)
 
 
+class ZeroGenerationZReference(LinearTestReference):
+    def generation_z_score(
+        self, metric: str, age_days: int, reference_sex: str, z: float
+    ) -> float:
+        del metric, age_days, reference_sex, z
+        return 0.0
+
+
 class EventModule:
     kind = DisorderKind.HEALTHY
 
@@ -88,6 +96,16 @@ def test_healthy_module_matches_existing_healthy_kernel() -> None:
     assert result.disorder.kind is DisorderKind.HEALTHY
     assert result.points == baseline
     assert result.events == ()
+
+
+def test_generation_hook_records_effective_z_scores_after_legacy_disorder_composition() -> None:
+    result = DisorderTrajectoryKernel(
+        HealthyKernel(ZeroGenerationZReference()), HealthyGrowthModule()
+    ).generate(PATIENT, AGES, NamedRandomStreams(20260830, 0))
+
+    for point in result.points:
+        assert point.height_z == 0.0
+        assert point.bmi_z == 0.0
 
 
 def test_familial_short_stature_is_constant_height_shift_and_keeps_weight_identity() -> None:

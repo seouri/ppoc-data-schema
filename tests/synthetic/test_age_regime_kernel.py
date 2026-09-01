@@ -30,6 +30,14 @@ class RegimeReference:
         raise KeyError(metric)
 
 
+class ZeroGenerationZReference(RegimeReference):
+    def generation_z_score(
+        self, metric: str, age_days: int, reference_sex: str, z: float
+    ) -> float:
+        del metric, age_days, reference_sex, z
+        return 0.0
+
+
 PATIENT = PatientState("syn-patient-a", "F", "F")
 
 
@@ -120,6 +128,18 @@ def test_kernel_generates_all_regimes_with_two_dimension_identities() -> None:
         or math.isfinite(point.weight_velocity_kg_per_year)
         for point in trajectory.points
     )
+
+
+def test_generation_hook_records_effective_z_scores_across_age_regimes() -> None:
+    ages = (0, 365, 730, 761, 4380, 7305)
+    trajectory = AgeRegimeTrajectoryKernel(ZeroGenerationZReference()).generate(
+        PATIENT, ages, NamedRandomStreams(20260830, 0)
+    )
+
+    for point in trajectory.points:
+        for score in (point.length_z, point.height_z, point.weight_z, point.bmi_z):
+            if score is not None:
+                assert score == 0.0
 
 
 def test_transition_uses_explicit_length_to_height_conversion_without_jump() -> None:

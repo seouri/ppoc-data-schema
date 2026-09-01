@@ -17,6 +17,14 @@ class LinearTestReference:
         raise KeyError(metric)
 
 
+class ClampingReference(LinearTestReference):
+    def generation_z_score(
+        self, metric: str, age_days: int, reference_sex: str, z: float
+    ) -> float:
+        del metric, age_days, reference_sex
+        return z / 2.0
+
+
 def test_height_and_bmi_determine_weight() -> None:
     patient = PatientState("syn-patient-a", "F", "F")
     points = HealthyKernel(LinearTestReference()).generate(
@@ -50,3 +58,21 @@ def test_foundation_rejects_infant_ages() -> None:
         HealthyKernel(LinearTestReference()).generate(
             patient, (365,), NamedRandomStreams(5, 0)
         )
+
+
+def test_generation_hook_records_effective_z_scores_without_changing_legacy_references() -> None:
+    patient = PatientState("syn-patient-a", "F", "F")
+    hooked = HealthyKernel(ClampingReference()).generate(
+        patient, (730,), NamedRandomStreams(20260830, 0)
+    )
+    legacy = HealthyKernel(LinearTestReference()).generate(
+        patient, (730,), NamedRandomStreams(20260830, 0)
+    )
+
+    for effective, original in zip(hooked, legacy, strict=True):
+        assert effective.height_z == pytest.approx(original.height_z / 2.0)
+        assert effective.bmi_z == pytest.approx(original.bmi_z / 2.0)
+
+    assert legacy == HealthyKernel(LinearTestReference()).generate(
+        patient, (730,), NamedRandomStreams(20260830, 0)
+    )

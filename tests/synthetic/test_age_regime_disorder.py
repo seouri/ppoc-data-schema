@@ -28,6 +28,14 @@ PATIENT = PatientState("syn-patient-a", "F", "F")
 AGES = (0, 365, 699, 730, 760, 761, 3000, 4380, 5281, 7000)
 
 
+class ZeroGenerationZReference(RegimeLinearTestReference):
+    def generation_z_score(
+        self, metric: str, age_days: int, reference_sex: str, z: float
+    ) -> float:
+        del metric, age_days, reference_sex, z
+        return 0.0
+
+
 class FixedModule:
     module_version = "fixed-test-v1"
 
@@ -75,6 +83,17 @@ def test_healthy_composition_matches_age_regime_physiology() -> None:
     assert result.physiology == baseline
     assert result.disorder.kind is DisorderKind.HEALTHY
     assert result.events == ()
+
+
+def test_generation_hook_records_effective_z_scores_after_disorder_composition() -> None:
+    result = AgeRegimeDisorderKernel(
+        AgeRegimeTrajectoryKernel(ZeroGenerationZReference()), HealthyGrowthModule()
+    ).generate(PATIENT, AGES, NamedRandomStreams(7, 0))
+
+    for point in result.physiology.points:
+        for score in (point.length_z, point.height_z, point.weight_z, point.bmi_z):
+            if score is not None:
+                assert score == 0.0
 
 
 def test_familial_effect_preserves_identities_across_regimes() -> None:

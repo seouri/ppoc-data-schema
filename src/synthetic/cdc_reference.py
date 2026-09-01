@@ -19,6 +19,7 @@ from synthetic.augmenter_oracle import AUGMENTER_RUNTIME_MANIFEST_SHA256
 
 _REFERENCE_ID = "cdc-lms-reference-v1"
 _MAPPING_TOKEN = "cdc-lms-mapping-v1"
+CDC_GENERATION_DOMAIN_POLICY = "cdc-p3-p97-generation-domain-v1"
 _TABLES = {
     "length_cm": "statage_combined.csv",
     "height_cm": "statage_combined.csv",
@@ -39,6 +40,8 @@ class _LmsRow:
     l: float
     m: float
     s: float
+    p3: float | None = None
+    p97: float | None = None
 
 
 def _inverse_lms(l: float, m: float, s: float, z: float) -> float:
@@ -60,6 +63,24 @@ def _inverse_lms(l: float, m: float, s: float, z: float) -> float:
     return result
 
 
+def _lms_z_score(l: float, m: float, s: float, value: float) -> float:
+    """Convert a positive measurement to its LMS z-score."""
+
+    if not math.isfinite(value) or value <= 0:
+        raise ValueError("LMS measurement must be finite and positive")
+    try:
+        ratio = value / m
+        if abs(l) < 1e-6:
+            result = math.log(ratio) / s
+        else:
+            result = (math.pow(ratio, l) - 1.0) / (l * s)
+    except (OverflowError, ValueError, ZeroDivisionError) as exc:
+        raise ValueError("LMS measurement cannot be converted to z-score") from exc
+    if not math.isfinite(result):
+        raise ValueError("LMS measurement cannot be converted to z-score")
+    return result
+
+
 def _parse_lms_table(source_bytes: bytes, metric: str) -> tuple[_LmsRow, ...]:
     try:
         text = source_bytes.decode("utf-8-sig")
@@ -70,7 +91,13 @@ def _parse_lms_table(source_bytes: bytes, metric: str) -> tuple[_LmsRow, ...]:
         header = next(reader)
     except StopIteration as exc:
         raise ValueError("CDC table is empty") from exc
-    if len(header) != len(set(header)) or not set(_REQUIRED_COLUMNS).issubset(header):
+    has_p3 = "P3" in header
+    has_p97 = "P97" in header
+    if (
+        len(header) != len(set(header))
+        or not set(_REQUIRED_COLUMNS).issubset(header)
+        or has_p3 != has_p97
+    ):
         raise ValueError(f"CDC table has invalid columns for {metric}")
     rows: list[_LmsRow] = []
     for fields in reader:
@@ -79,15 +106,28 @@ def _parse_lms_table(source_bytes: bytes, metric: str) -> tuple[_LmsRow, ...]:
         try:
             values_by_name = dict(zip(header, fields))
             sex = {"1": "M", "2": "F"}[values_by_name["Sex"].strip()]
-            values = [float(values_by_name[name].strip()) for name in ("Agemos", "L", "M", "S")]
+            values = [
+                float(values_by_name[name].strip())
+                for name in ("Agemos", "L", "M", "S")
+            ]
+            bounds = (
+                float(values_by_name["P3"].strip()),
+                float(values_by_name["P97"].strip()),
+            ) if has_p3 else (None, None)
         except (KeyError, ValueError) as exc:
             raise ValueError("CDC table has an invalid LMS row") from exc
-        if not all(math.isfinite(value) for value in values):
+        if not all(math.isfinite(value) for value in values) or any(
+            bound is not None and (not math.isfinite(bound) or bound <= 0)
+            for bound in bounds
+        ):
             raise ValueError("CDC table has non-finite LMS values")
         agemos, l, m, s = values
         if m <= 0 or s <= 0:
             raise ValueError("CDC table M and S must be positive")
-        rows.append(_LmsRow(sex, agemos, l, m, s))
+        p3, p97 = bounds
+        if p3 is not None and p97 is not None and p3 >= p97:
+            raise ValueError("CDC table generation bounds must be ordered")
+        rows.append(_LmsRow(sex, agemos, l, m, s, p3, p97))
     if not rows:
         raise ValueError("CDC table has no rows")
     for sex in ("M", "F"):
@@ -150,7 +190,21 @@ def _manifest(root: Path) -> dict[str, tuple[str, int]]:
 
 
 class CdcGrowthReference:
-    def __init__(self, series: dict[tuple[str, str], tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]], source_sha256: str) -> None:
+    def __init__(
+        self,
+        series: dict[
+            tuple[str, str],
+            tuple[
+                np.ndarray,
+                np.ndarray,
+                np.ndarray,
+                np.ndarray,
+                np.ndarray,
+                np.ndarray,
+            ],
+        ],
+        source_sha256: str,
+    ) -> None:
         self._series = series
         self._source_sha256 = source_sha256
 
@@ -172,8 +226,21 @@ class CdcGrowthReference:
             source_bytes = _read_regular(path)
             if len(source_bytes) != manifest_bytes or hashlib.sha256(source_bytes).hexdigest() != manifest_digest:
                 raise ValueError("runtime source digest mismatch")
-            parsed[table] = _parse_lms_table(source_bytes, table)
-        series: dict[tuple[str, str], tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]] = {}
+            table_rows = _parse_lms_table(source_bytes, table)
+            if any(row.p3 is None or row.p97 is None for row in table_rows):
+                raise ValueError("CDC table generation bounds are incomplete")
+            parsed[table] = table_rows
+        series: dict[
+            tuple[str, str],
+            tuple[
+                np.ndarray,
+                np.ndarray,
+                np.ndarray,
+                np.ndarray,
+                np.ndarray,
+                np.ndarray,
+            ],
+        ] = {}
         for metric, table in _TABLES.items():
             for sex in ("M", "F"):
                 rows = tuple(row for row in parsed[table] if row.sex == sex)
@@ -181,7 +248,9 @@ class CdcGrowthReference:
                 ls = np.array([row.l for row in rows], dtype=float)
                 ms = np.array([row.m for row in rows], dtype=float)
                 ss = np.array([row.s for row in rows], dtype=float)
-                series[(metric, sex)] = (ages, ls, ms, ss)
+                p3s = np.array([row.p3 for row in rows], dtype=float)
+                p97s = np.array([row.p97 for row in rows], dtype=float)
+                series[(metric, sex)] = (ages, ls, ms, ss, p3s, p97s)
         fingerprint = {"mapping": _MAPPING_TOKEN, "reference_id": _REFERENCE_ID, "tables": [{"name": name, "sha256": manifest[f"data/{name}"][0]} for name in _TABLE_NAMES]}
         canonical = json.dumps(fingerprint, sort_keys=True, separators=(",", ":")).encode()
         return cls(series, hashlib.sha256(canonical).hexdigest())
@@ -206,7 +275,19 @@ class CdcGrowthReference:
     def max_age_days(self) -> int:
         return 7305
 
-    def value(self, metric: str, age_days: int, reference_sex: str, z: float) -> float:
+    @staticmethod
+    def _score(z: object) -> float:
+        try:
+            score = float(z)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("z must be finite") from exc
+        if not math.isfinite(score):
+            raise ValueError("z must be finite")
+        return score
+
+    def _interpolated_lms(
+        self, metric: str, age_days: int, reference_sex: str
+    ) -> tuple[float, float, float, float | None, float | None]:
         if metric not in self.metrics:
             raise KeyError(metric)
         if not isinstance(age_days, int) or isinstance(age_days, bool):
@@ -215,15 +296,32 @@ class CdcGrowthReference:
             raise ValueError("age_days must be nonnegative")
         if reference_sex not in {"M", "F"}:
             raise ValueError("reference_sex must be M or F")
-        try:
-            score = float(z)
-        except (TypeError, ValueError) as exc:
-            raise ValueError("z must be finite") from exc
-        if not math.isfinite(score):
-            raise ValueError("z must be finite")
         months = 24.0 if metric == "bmi" and age_days == 730 else age_days / 30.4375
-        ages, ls, ms, ss = self._series[(metric, reference_sex)]
+        ages, ls, ms, ss, p3s, p97s = self._series[(metric, reference_sex)]
         if months < ages[0] or months > ages[-1]:
             raise ValueError("age_days is outside the domain")
-        l, m, s = (float(np.interp(months, ages, values)) for values in (ls, ms, ss))
+        values = tuple(float(np.interp(months, ages, values)) for values in (ls, ms, ss))
+        bounds = tuple(
+            float(np.interp(months, ages, values)) for values in (p3s, p97s)
+        )
+        return (*values, *bounds)
+
+    def value(self, metric: str, age_days: int, reference_sex: str, z: float) -> float:
+        l, m, s, _, _ = self._interpolated_lms(metric, age_days, reference_sex)
+        score = self._score(z)
         return _inverse_lms(l, m, s, score)
+
+    def generation_z_score(
+        self, metric: str, age_days: int, reference_sex: str, z: float
+    ) -> float:
+        """Clamp only generation scores to the source P3/P97 interval."""
+
+        l, m, s, p3, p97 = self._interpolated_lms(metric, age_days, reference_sex)
+        score = self._score(z)
+        if p3 is None or p97 is None:
+            raise ValueError("CDC generation bounds are unavailable")
+        lower = _lms_z_score(l, m, s, p3)
+        upper = _lms_z_score(l, m, s, p97)
+        if lower > upper:
+            raise ValueError("CDC generation bounds are not ordered")
+        return min(max(score, lower), upper)

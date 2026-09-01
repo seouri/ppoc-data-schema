@@ -22,6 +22,23 @@ class GrowthReference(Protocol):
     ) -> float: ...
 
 
+def generation_z_score(
+    reference: GrowthReference,
+    metric: str,
+    age_days: int,
+    reference_sex: str,
+    z: float,
+) -> float:
+    """Return a reference-specific generation score when one is available."""
+
+    hook = getattr(reference, "generation_z_score", None)
+    if hook is None:
+        return z
+    if not callable(hook):
+        raise TypeError("generation_z_score hook must be callable")
+    return hook(metric, age_days, reference_sex, z)
+
+
 @dataclass(frozen=True)
 class LmsRow:
     metric: str

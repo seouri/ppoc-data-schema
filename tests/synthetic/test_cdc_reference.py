@@ -1,4 +1,5 @@
 import ast
+import csv
 import math
 import shutil
 from pathlib import Path
@@ -48,7 +49,32 @@ def test_inverse_lms_branches_and_tiny_parser() -> None:
     parsed = _parse_lms_table(tiny, "tiny")
     assert len(parsed) == 4
     assert {row.sex for row in parsed} == {"M", "F"}
+    assert all(row.p3 is None and row.p97 is None for row in parsed)
     assert math.isclose(_inverse_lms(parsed[0].l, parsed[0].m, parsed[0].s, 1), 12.0)
+
+
+def test_generation_z_score_clamps_to_source_bounds_while_value_stays_strict() -> None:
+    reference = CdcGrowthReference.from_repository(ROOT)
+    invalid_z = 2.848750895036074
+
+    with pytest.raises(ValueError, match="LMS base"):
+        reference.value("bmi", 7305, "F", invalid_z)
+
+    effective_z = reference.generation_z_score("bmi", 7305, "F", invalid_z)
+    assert effective_z < invalid_z
+
+    with (ROOT / "data/bmiagerev.csv").open(
+        encoding="utf-8-sig", newline=""
+    ) as source:
+        source_rows = list(csv.DictReader(source))
+    source_row = next(
+        row for row in source_rows if row["Sex"] == "2" and row["Agemos"] == "240"
+    )
+    expected = float(source_row["P97"])
+    assert reference.value("bmi", 7305, "F", effective_z) == pytest.approx(
+        expected, rel=1e-12
+    )
+    assert reference.generation_z_score("bmi", 7305, "F", -invalid_z) < -1.8
 
 
 @pytest.mark.parametrize(

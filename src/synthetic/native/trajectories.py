@@ -14,6 +14,7 @@ from synthetic.models import (
 from synthetic.native.clinical_modules import GrowthDisorderModule
 from synthetic.native.healthy import HealthyKernel
 from synthetic.randomness import NamedRandomStreams
+from synthetic.references import generation_z_score
 
 _EVENT_PHASE_ORDER = {
     "latent_onset": 0,
@@ -151,6 +152,20 @@ class DisorderTrajectoryKernel:
                     "module BMI z-score delta must be finite",
                 ),
                 "adjusted BMI z-score must be finite",
+            )
+            height_z = generation_z_score(
+                self.healthy.reference,
+                "height_cm",
+                point.age_days,
+                patient.reference_sex,
+                height_z,
+            )
+            bmi_z = generation_z_score(
+                self.healthy.reference,
+                "bmi",
+                point.age_days,
+                patient.reference_sex,
+                bmi_z,
             )
             height_cm = _positive_reference_value(
                 self.healthy.reference.value(

@@ -24,6 +24,7 @@ from synthetic.native.trajectories import (
     validate_growth_disorder_module,
 )
 from synthetic.randomness import NamedRandomStreams
+from synthetic.references import generation_z_score
 
 
 def _finite_real(value: object, message: str) -> float:
@@ -292,11 +293,25 @@ class AgeRegimeDisorderKernel:
             point.age_days,
             metric="height",
         )
+        length_z = generation_z_score(
+            self.physiology.reference,
+            "length_cm",
+            point.age_days,
+            patient.reference_sex,
+            length_z,
+        )
         weight_z = self._adjusted_z(
             point.weight_z,
             disorder_state,
             point.age_days,
             metric="BMI",
+        )
+        weight_z = generation_z_score(
+            self.physiology.reference,
+            "weight_kg",
+            point.age_days,
+            patient.reference_sex,
+            weight_z,
         )
         length_cm = self._reference_value(
             "length_cm",
@@ -353,11 +368,25 @@ class AgeRegimeDisorderKernel:
             point.age_days,
             metric="height",
         )
+        height_z = generation_z_score(
+            self.physiology.reference,
+            "height_cm",
+            point.age_days,
+            patient.reference_sex,
+            height_z,
+        )
         bmi_z = self._adjusted_z(
             point.bmi_z,
             disorder_state,
             point.age_days,
             metric="BMI",
+        )
+        bmi_z = generation_z_score(
+            self.physiology.reference,
+            "bmi",
+            point.age_days,
+            patient.reference_sex,
+            bmi_z,
         )
         height_cm = self._reference_value(
             "height_cm",
@@ -468,11 +497,18 @@ class AgeRegimeDisorderKernel:
                     comparison_age,
                     metric="height",
                 )
+                length_z = generation_z_score(
+                    self.physiology.reference,
+                    "length_cm",
+                    comparison_age,
+                    patient.reference_sex,
+                    adjusted_z,
+                )
                 length_cm = self._reference_value(
                     "length_cm",
                     comparison_age,
                     patient,
-                    adjusted_z,
+                    length_z,
                     label="length",
                 )
                 message = "converted standing height must be finite and positive"
@@ -485,7 +521,13 @@ class AgeRegimeDisorderKernel:
                     "height_cm",
                     comparison_age,
                     patient,
-                    adjusted_z,
+                    generation_z_score(
+                        self.physiology.reference,
+                        "height_cm",
+                        comparison_age,
+                        patient.reference_sex,
+                        adjusted_z,
+                    ),
                     label="height",
                 )
                 try:

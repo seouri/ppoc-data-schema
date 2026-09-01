@@ -480,6 +480,35 @@ def test_development_cohort_runner_exports_only_visible_longitudinal_resources(
         assert forbidden not in published.lower()
 
 
+def test_source_backed_cohort_generation_handles_the_observed_lms_tail_case() -> None:
+    """Catches CDC inverse-LMS domain failures in the first 434 deterministic members."""
+    runtime = build_development_runtime(ROOT)
+    descriptor = load_descriptor(ROOT / "datapackage.json")
+
+    cohort = development_runtime.build_development_cohort(
+        runtime,
+        descriptor=descriptor,
+        patient_count=434,
+        seed=20260901,
+    )
+
+    assert len(cohort.members) == 434
+    assert all(
+        all(
+            value is None or value > 0
+            for value in (
+                point.length_cm,
+                point.height_cm,
+                point.weight_kg,
+                point.bmi,
+                point.head_circumference_cm,
+            )
+        )
+        for member in cohort.members
+        for point in member.trajectory.physiology.points
+    )
+
+
 @pytest.mark.parametrize("failure", ("missing", "non-pass"))
 def test_development_cohort_runner_redacts_invalid_resource_bundles(
     tmp_path: Path,
