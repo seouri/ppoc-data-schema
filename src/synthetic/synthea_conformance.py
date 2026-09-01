@@ -17,6 +17,10 @@ _DIGEST_PATTERN = re.compile(r"[0-9a-f]{64}\Z")
 _UNSAFE_IDENTIFIER_PARTS = (
     "patient",
     "visit",
+    "mrn",
+    "encounter",
+    "subject",
+    "person",
     "clinical",
     "value",
     "truth",
@@ -38,7 +42,7 @@ _UNSAFE_IDENTIFIER_PARTS = (
     "socket",
     "endpoint",
 )
-_UNSAFE_IDENTIFIER_COMPONENTS = frozenset({"row"})
+_UNSAFE_IDENTIFIER_COMPONENT_PREFIXES = ("row",)
 _TOKEN_FIELDS = (
     "engine_revision",
     "growth_extension_id",
@@ -93,16 +97,20 @@ def _reject_json_constant(_: str) -> object:
 
 def _is_safe_token(value: object) -> bool:
     return (
-        isinstance(value, str)
+        type(value) is str
         and _TOKEN_PATTERN.fullmatch(value) is not None
         and not any(part in value for part in _UNSAFE_IDENTIFIER_PARTS)
-        and _UNSAFE_IDENTIFIER_COMPONENTS.isdisjoint(value.split("-"))
+        and not any(
+            component.startswith(prefix)
+            for component in value.split("-")
+            for prefix in _UNSAFE_IDENTIFIER_COMPONENT_PREFIXES
+        )
     )
 
 
 def _is_digest(value: object) -> bool:
     return (
-        isinstance(value, str)
+        type(value) is str
         and _DIGEST_PATTERN.fullmatch(value) is not None
         and value != "0" * 64
     )
@@ -111,15 +119,18 @@ def _is_digest(value: object) -> bool:
 def _validate_mapping(value: dict[str, object]) -> None:
     if set(value) != _FIELD_NAME_SET:
         raise ValueError
-    if value["manifest_version"] != SYNTHEA_CONFORMANCE_VERSION:
+    if (
+        type(value["manifest_version"]) is not str
+        or value["manifest_version"] != SYNTHEA_CONFORMANCE_VERSION
+    ):
         raise ValueError
-    if value["engine_id"] != _ENGINE_ID:
+    if type(value["engine_id"]) is not str or value["engine_id"] != _ENGINE_ID:
         raise ValueError
     if not all(_is_safe_token(value[field]) for field in _TOKEN_FIELDS):
         raise ValueError
     if not all(_is_digest(value[field]) for field in _DIGEST_FIELDS):
         raise ValueError
-    if not isinstance(value["review_status"], str):
+    if type(value["review_status"]) is not str:
         raise TypeError
     if value["review_status"] not in _REVIEW_STATUSES:
         raise ValueError

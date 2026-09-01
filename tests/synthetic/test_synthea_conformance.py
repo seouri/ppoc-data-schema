@@ -16,6 +16,16 @@ from synthetic.synthea_conformance import (
 ERROR_MESSAGE = "synthea conformance manifest unavailable"
 
 
+class MutableString(str):
+    def __init__(self, _: str) -> None:
+        self.mutable_state: list[str] = []
+
+
+class SpoofedFixedValue:
+    def __ne__(self, _: object) -> bool:
+        return False
+
+
 def manifest_mapping() -> dict[str, object]:
     """Return fictional, aggregate-only repository fixture metadata."""
     return {
@@ -86,6 +96,42 @@ def test_direct_construction_cannot_retain_non_scalar_state() -> None:
     value["engine_revision"] = submitted
 
     assert_unavailable(lambda: SyntheaEngineManifest(**value), "mutable-secret")  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "manifest_version",
+        "engine_id",
+        "engine_revision",
+        "engine_sha256",
+        "module_manifest_sha256",
+        "growth_extension_id",
+        "growth_extension_sha256",
+        "event_adapter_id",
+        "event_adapter_sha256",
+        "ppoc_exporter_id",
+        "ppoc_exporter_sha256",
+        "configuration_sha256",
+        "license_notice_id",
+        "review_status",
+    ],
+)
+def test_manifest_rejects_mutable_string_subclasses(field: str) -> None:
+    value = manifest_mapping()
+    submitted = MutableString(str(value[field]))
+    value[field] = submitted
+
+    assert_unavailable(lambda: SyntheaEngineManifest.from_mapping(value), submitted)
+
+
+@pytest.mark.parametrize("field", ["manifest_version", "engine_id"])
+def test_manifest_rejects_objects_that_spoof_fixed_value_equality(field: str) -> None:
+    value = manifest_mapping()
+    submitted = SpoofedFixedValue()
+    value[field] = submitted
+
+    assert_unavailable(lambda: SyntheaEngineManifest.from_mapping(value), submitted)
 
 
 def test_manifest_json_is_canonical_ascii_sorted_and_newline_terminated() -> None:
@@ -178,8 +224,19 @@ def test_manifest_rejects_wrong_fixed_or_enumerated_values(
         "https://example.test",
         ".hidden-component",
         "patient-aggregate",
+        "patients-v1",
+        "patientid-123",
         "visit-aggregate",
+        "visits-v1",
+        "visitid-123",
         "row-count",
+        "rows-v1",
+        "rowcount-v1",
+        "mrn-123",
+        "encounter-123",
+        "encounterid-123",
+        "subject-123",
+        "person-123",
         "clinical-value-v1",
         "hidden-truth-v1",
         "secret-key-v1",
