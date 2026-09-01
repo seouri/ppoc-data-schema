@@ -116,9 +116,10 @@ Each case must satisfy all of these aggregate checks:
    the probe ages: `ZERO` requires all values to be zero;
    `CONSTANT_NEGATIVE` requires height to be negative and BMI zero;
    `DELAYED_RECOVERY` requires zero, negative, then zero height effects;
-   `PROGRESSION_RESPONSE` requires zero, negative, then strictly improving
-   height effects; and `POSITIVE_AFTER_ONSET` requires zero at onset and
-   positive values thereafter. Healthy effects are zero; familial short
+   `PROGRESSION_RESPONSE` requires zero at onset, a negative treatment-age
+   effect, strict improvement during the response interval, and no later
+   regression at the post-response probe; and `POSITIVE_AFTER_ONSET` requires
+   zero at onset and positive values thereafter. Healthy effects are zero; familial short
    stature uses constant-negative height and zero BMI; constitutional delay
    uses delayed recovery; and growth-hormone deficiency uses progression/
    response height and positive-after-onset BMI.
