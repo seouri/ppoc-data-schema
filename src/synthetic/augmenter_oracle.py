@@ -19,6 +19,7 @@ AUGMENTER_ORACLE_ID = "augmenter-cli-v1"
 AUGMENTER_RUNTIME_MANIFEST_SHA256 = (
     "b50afc36eca61684380154129cdacf484e62d56fa6da55914adab18c2d94d1d6"
 )
+UV_LOCK_SHA256 = "d17f8c2613da7c59dd858fe1e39025ce72e0241fb0bbc400772ab4273a694810"
 
 _UNAVAILABLE_MESSAGE = "source-matched augmenter unavailable"
 _MANIFEST_PATH = Path("data/augment-runtime-manifest.json")
@@ -162,6 +163,26 @@ def _verify_manifest(root: Path) -> tuple[tuple[Path, int, str], ...]:
     if seen != _EXPECTED_RUNTIME_PATHS:
         raise _AdapterFailure
     return tuple(verified)
+
+
+def verify_source_matched_runtime(repository_root: Path) -> None:
+    """Verify the manifest-listed runtime and locked environment without leaking details."""
+    failed = False
+    try:
+        if not isinstance(repository_root, Path):
+            raise _AdapterFailure
+        lock_path = repository_root / "uv.lock"
+        _require_regular_file(lock_path)
+        lock_bytes = _read_regular_bytes(lock_path)
+        if hashlib.sha256(lock_bytes).hexdigest() != UV_LOCK_SHA256:
+            raise _AdapterFailure
+        _verify_manifest(repository_root)
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except Exception:  # noqa: BLE001 - public closure failures are deliberately redacted.
+        failed = True
+    if failed:
+        _unavailable()
 
 
 def _snapshot_runtime(
@@ -397,6 +418,7 @@ class SourceMatchedAugmenterOracle:
     ) -> DerivationResult:
         failed = False
         try:
+            verify_source_matched_runtime(self._repository_root)
             if not isinstance(package_root, Path):
                 raise _AdapterFailure
             package_root = Path(os.path.abspath(package_root))

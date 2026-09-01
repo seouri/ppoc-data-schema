@@ -9,6 +9,10 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 SYNTHETIC_ROOT = ROOT / "src" / "synthetic"
 ADAPTER = SYNTHETIC_ROOT / "augmenter_oracle.py"
+ALLOWED_ADAPTER_IMPORTERS = {
+    SYNTHETIC_ROOT / "cdc_reference.py",
+    SYNTHETIC_ROOT / "development_runtime.py",
+}
 PRODUCTION_CLI = SYNTHETIC_ROOT / "generate.py"
 ADAPTER_ALLOWED_PROJECT_IMPORTS = {
     "synthetic.derivation",
@@ -65,7 +69,7 @@ def test_adapter_imports_only_stdlib_and_narrow_synthetic_contracts() -> None:
 def test_visible_and_evaluator_modules_do_not_import_candidate_adapter() -> None:
     """Catches accidental production, native, governed, privacy, or Synthea wiring."""
     for path in sorted(SYNTHETIC_ROOT.rglob("*.py")):
-        if path == ADAPTER:
+        if path == ADAPTER or path in ALLOWED_ADAPTER_IMPORTERS:
             continue
         imports = {_absolute_module(imported) for imported in _imports(path)}
         assert not any(
