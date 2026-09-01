@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ast
-import sys
 from pathlib import Path
 
 import pytest
@@ -10,7 +9,15 @@ ROOT = Path(__file__).resolve().parents[2]
 SYNTHETIC_ROOT = ROOT / "src" / "synthetic"
 GOLDEN_MODULE = SYNTHETIC_ROOT / "golden_trajectories.py"
 
-_ALLOWED_PROJECT_IMPORT_BASES = {
+_ALLOWED_IMPORT_BASES = {
+    "__future__",
+    "collections.abc",
+    "dataclasses",
+    "enum",
+    "itertools",
+    "json",
+    "math",
+    "re",
     "synthetic.models",
     "synthetic.native.age_regime_disorder",
     "synthetic.native.age_regimes",
@@ -162,6 +169,10 @@ def _tree(path: Path) -> ast.Module:
     return ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
 
 
+def _unexpected_import_bases(imports: set[str]) -> set[str]:
+    return imports - _ALLOWED_IMPORT_BASES
+
+
 def _argument_names(arguments: ast.arguments) -> set[str]:
     names = {
         argument.arg
@@ -198,14 +209,30 @@ def test_golden_module_imports_only_stdlib_and_named_evaluator_contracts() -> No
     tree = _tree(GOLDEN_MODULE)
     bases = _import_bases(tree, "synthetic.golden_trajectories", is_package=False)
 
+    assert _unexpected_import_bases(bases) == set()
     for imported in bases:
         root = imported.split(".", maxsplit=1)[0]
-        assert (
-            root in sys.stdlib_module_names
-            or root == "__future__"
-            or imported in _ALLOWED_PROJECT_IMPORT_BASES
-        ), imported
         assert root.lower() not in _FORBIDDEN_IMPORT_ROOTS
+
+
+@pytest.mark.parametrize(
+    "source",
+    (
+        "import socket\nsocket.socket()",
+        "import http.client\nhttp.client.HTTPConnection('fictional.invalid')",
+        "import sqlite3\nsqlite3.connect('fictional.sqlite')",
+        "import zipfile\nzipfile.ZipFile('fictional.zip')",
+    ),
+)
+def test_import_allowlist_rejects_representative_network_and_file_clients(source: str) -> None:
+    """Catches the stdlib allowlist admitting network, database, or archive clients."""
+    bases = _import_bases(
+        ast.parse(source),
+        "synthetic.golden_trajectories",
+        is_package=False,
+    )
+
+    assert _unexpected_import_bases(bases) == bases
 
 
 def test_every_other_synthetic_module_remains_independent_of_golden_runner() -> None:

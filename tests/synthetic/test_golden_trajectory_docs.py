@@ -80,6 +80,7 @@ def test_guide_documents_aggregate_report_failure_and_hidden_state_boundary() ->
     for field in ("report_version", "status", "case_results", "case_id", "reason_codes"):
         assert f"`{field}`" in guide
     assert 'GoldenTrajectoryUnavailable("golden trajectory suite unavailable")' in guide
+    assert "without exception chaining" in guide
     for boundary in (
         "evaluator-only",
         "in-memory",
@@ -89,6 +90,23 @@ def test_guide_documents_aggregate_report_failure_and_hidden_state_boundary() ->
         "does not generate a package",
     ):
         assert boundary in guide
+
+
+def test_guide_documents_unobserved_probe_ages_and_exact_ghd_sequence() -> None:
+    """Breaks if sampled ages and directional probes are presented as interchangeable."""
+    guide = _guide_text()
+
+    assert "Pattern probes may be unobserved ages between trajectory samples" in guide
+    assert "`(4380, 4740, 5470)`" in guide
+    assert "`(3000, 3510, 3875, 5000)`" in guide
+    for semantic in (
+        "zero at onset",
+        "negative at treatment",
+        "strict improvement during the active response interval",
+        "no later regression at the post-response probe",
+        "plateau is allowed after response completion",
+    ):
+        assert semantic in guide
 
 
 def test_guide_explicitly_disclaims_every_deferred_evidence_gate() -> None:

@@ -12,6 +12,8 @@ Every case contains hidden explicit states for physiology and disorder timing. T
 
 The evaluator checks anthropometric identities, positive finite measurements, finite derived velocities, strictly ordered points, required regimes, required causal event types, and repeated-run equality. It also probes the development modules directly for `zero`, `constant_negative`, `delayed_recovery`, `progression_response`, and `positive_after_onset` directional patterns. The healthy case uses zero height and BMI effects; familial short stature uses a constant-negative height effect and zero BMI effect; constitutional delay uses delayed recovery in height and zero BMI effect; treated growth-hormone deficiency uses progression/response in height and positive-after-onset BMI.
 
+Pattern probes may be unobserved ages between trajectory samples because they evaluate a module's direct effect channel rather than add visible measurements. Constitutional delay uses probes `(4380, 4740, 5470)` to require zero, negative, then recovered height effect. Treated growth-hormone deficiency uses probes `(3000, 3510, 3875, 5000)` to require zero at onset, negative at treatment, strict improvement during the active response interval, and no later regression at the post-response probe; a plateau is allowed after response completion.
+
 ## Repository-root example
 
 The following copy-pasteable example uses only the repository's fictional `RegimeLinearTestReference`; it is not a clinical growth reference. Run it from the repository root after `uv sync`:
@@ -28,7 +30,7 @@ report = run_golden_trajectory_suite(reference, cases=DEFAULT_GOLDEN_CASES)
 print(report.to_json_bytes().decode("ascii"), end="")
 ```
 
-The top-level aggregate-only report fields are `report_version`, `status`, and `case_results`. Each item in `case_results` contains only `case_id`, `status`, and fixed `reason_codes`; a passing case has `reason_codes` equal to `("OK",)`. Repeating the call with the same injected reference and catalog produces identical report bytes. Invalid reference, module, or case inputs raise exactly `GoldenTrajectoryUnavailable("golden trajectory suite unavailable")` without echoing submitted values.
+The top-level aggregate-only report fields are `report_version`, `status`, and `case_results`. Each item in `case_results` contains only `case_id`, `status`, and fixed `reason_codes`; a passing case has `reason_codes` equal to `("OK",)`. Repeating the call with the same injected reference and catalog produces identical report bytes. Invalid reference, module, or case inputs raise exactly `GoldenTrajectoryUnavailable("golden trajectory suite unavailable")` without echoing submitted values and without exception chaining.
 
 ## Evidence boundary
 
