@@ -14,11 +14,11 @@
 
 - Accept only a typed `CounterfactualEhrWorldPair`, an already-loaded descriptor mapping, a new output `Path`, explicit `PackageExportMetadata`, and explicit derivation-oracle trust values; never accept a descriptor path, real/governed data root, calibration, held-out, privacy, model, Synthea, or network input.
 - Require `validate_counterfactual_ehr_worlds(worlds).status is PASS` before creating any caller-visible target, partial path, failed path, or pair manifest.
-- Project only visible six-resource row mappings from the baseline/intervention bundles; never pass pair objects, frames, truth, trajectories, reports, source objects, seeds/indexes, stream identities, or descriptors to the oracle or visible pair manifest.
+- Project only visible six-resource row mappings from the baseline/intervention bundles; for serialization, map only the exact GHD evaluator marker `labs.result_flag="Synthetic"` on GHD component rows to the descriptor missing-value sentinel `""` under fixed `serialization_projection` token `ghd-result-flag-empty-v1`; never mutate worlds or silently normalize any other value. Never pass pair objects, frames, truth, trajectories, reports, source objects, seeds/indexes, stream identities, or descriptors to the oracle or visible pair manifest.
 - Do not call `export_observed_resource_package`; valid counterfactual bundles may contain nonempty GHD ancillary rows that its generic validator rejects. Reuse `export_exact_schema_package` so the six visible rows and the two oracle-owned augmented resources use the existing exact-schema lifecycle.
 - Public output is exactly `pair-manifest.json`, `baseline/`, and `intervention/`; each child contains the existing eight descriptor-named CSVs plus `datapackage.json`, `validation-report.json`, and `manifest.json`.
 - Use one outer no-replace `RunDirectory`; private child staging is temporary and removed automatically. Post-creation failures use fixed redacted `counterfactual package export failed` content and never overwrite an existing target.
-- Pair manifests contain only fixed contract/matrix/aggregate status, visible caller metadata, relative child paths, and child manifest SHA-256 digests. No patient/visit IDs, row values, ages, latent states, event payloads, truth hashes, or evaluator representations may appear.
+- Pair manifests contain only fixed contract/matrix/`serialization_projection`/aggregate status, visible caller metadata, relative child paths, and child manifest SHA-256 digests. No patient/visit IDs, row values, ages, latent states, event payloads, truth hashes, or evaluator representations may appear.
 - The exporter performs no random draws, leaves the existing smoke/observed exporters and generic validators behaviorally unchanged, and makes no prevalence, clinical, privacy, non-matchability, release, or Synthea claim.
 - Controller edits only this plan/spec and ignored SDD evidence; all source, test, and user-facing documentation edits are delegated.
 
@@ -52,7 +52,7 @@
   ) -> Path: ...
   ```
 
-- [ ] **Step 1: Write failing API, output, and deterministic tests.**
+- [x] **Step 1: Write failing API, output, and deterministic tests.**
 
   Build one valid physiology pair with the existing fictional fixture and
   `IdentityPreservingTestDerivationOracle`. Assert that the function returns a
@@ -60,7 +60,8 @@
   `intervention/`; each child contains the exact eleven existing package
   files; both children pass `validate_structure`; and the pair manifest has
   the fixed contract token, exact schema fingerprint, matrix/intervention,
-  `PASS` aggregate status/counts, visible metadata, fixed child paths, and
+  `PASS` aggregate status/counts, the fixed GHD serialization projection,
+  visible metadata, fixed child paths, and
   child manifest digests. Export the same pair to two fresh destinations and
   compare every byte recursively.
 
@@ -80,7 +81,7 @@
   assert result == tmp_path / "pair"
   ```
 
-- [ ] **Step 2: Run the new tests and verify the expected failure.**
+- [x] **Step 2: Run the new tests and verify the expected failure.**
 
   Run:
 
@@ -90,13 +91,14 @@
 
   Expected: collection fails because the pair-export API is not implemented.
 
-- [ ] **Step 3: Implement the minimal pair lifecycle.**
+- [x] **Step 3: Implement the minimal pair lifecycle.**
 
   Add a fixed pair failure reason and a pair-specific run-start helper that
   preserves `FileExistsError` for the final target and deterministic partial/
   failed collisions while redacting all other lifecycle errors. Require a
   typed pair and aggregate `PASS`, extract only
-  `member.bundle.rows[name]` mappings for each name in `BASE_RESOURCES`, and
+  `member.bundle.rows[name]` mappings for each name in `BASE_RESOURCES`, apply
+  only the fixed GHD evaluator-marker-to-missing serialization projection, and
   derive a stable outer run token from the visible metadata and matrix
   version/intervention. Do not read hidden pair seed/index values.
 
@@ -113,7 +115,7 @@
   `{"status":"FAILED","reason":"counterfactual package export failed"}`
   before raising the fixed pair exception.
 
-- [ ] **Step 4: Run the lifecycle tests and commit.**
+- [x] **Step 4: Run the lifecycle tests and commit.**
 
   Run:
 
@@ -144,7 +146,7 @@
   the oracle exactly twice with visible child staging only, and fails closed
   before or after public run creation with fixed redaction.
 
-- [ ] **Step 1: Add failing safety and matrix tests.**
+- [x] **Step 1: Add failing safety and matrix tests.**
 
   Parameterize valid physiology, earlier-recognition, and treatment-adherence
   pairs. Assert each child retains its correct visible matrix differences and
@@ -163,7 +165,7 @@
   no raw exception, identifier, temporary path, or hidden token, and the final
   target is absent.
 
-- [ ] **Step 2: Run the tests and confirm each new regression fails.**
+- [x] **Step 2: Run the tests and confirm each new regression fails.**
 
   Run:
 
@@ -171,19 +173,20 @@
   UV_CACHE_DIR=/tmp/ppoc-uv-cache PYTHONDONTWRITEBYTECODE=1 uv run pytest -q tests/synthetic/test_counterfactual_package_export.py
   ```
 
-- [ ] **Step 3: Harden implementation without changing existing exporters.**
+- [x] **Step 3: Harden implementation without changing existing exporters.**
 
   Ensure pair preflight rejects non-PASS aggregate validation before any
   public lifecycle path, maps each visible `ResourceRow.to_mapping()` in
-  descriptor/base order, and passes all six resources—including nonempty GHD
-  ancillary rows—through `export_exact_schema_package`. Keep the child oracle
+  descriptor/base order, applies only the fixed GHD evaluator-marker-to-missing
+  projection, and passes all six resources—including nonempty GHD ancillary
+  rows—through `export_exact_schema_package`. Keep the child oracle
   boundary and child structural validation delegated to the existing
   lifecycle. Scan copied child trees for symlinks, special files, missing
   resources, or arbitrary entries before writing the pair manifest. Preserve
   deterministic bytes, fixed child order, no-replace promotion, and fixed
   redacted errors.
 
-- [ ] **Step 4: Run integration tests and commit.**
+- [x] **Step 4: Run integration tests and commit.**
 
   Run:
 
@@ -218,7 +221,7 @@
   filesystem, real/governed-data, calibration, held-out, privacy, model,
   network, Synthea, or hidden-truth leakage through the pair API.
 
-- [ ] **Step 1: Write failing documentation and boundary tests.**
+- [x] **Step 1: Write failing documentation and boundary tests.**
 
   Assert the guide and README name the exact function/class, explain the
   `baseline/` and `intervention/` child layout, list the pair manifest's
@@ -230,7 +233,7 @@
   lifecycle helpers, path-like public arguments, hidden truth object names in
   mappings/reprs, or calls to `export_observed_resource_package`.
 
-- [ ] **Step 2: Run the new tests to verify they fail before documentation/guards.**
+- [x] **Step 2: Run the new tests to verify they fail before documentation/guards.**
 
   Run:
 
@@ -238,7 +241,7 @@
   UV_CACHE_DIR=/tmp/ppoc-uv-cache PYTHONDONTWRITEBYTECODE=1 uv run pytest -q tests/synthetic/test_counterfactual_package_export_boundaries.py
   ```
 
-- [ ] **Step 3: Implement documentation and boundary coverage.**
+- [x] **Step 3: Implement documentation and boundary coverage.**
 
   Add a concise example that receives a previously assembled pair and a
   caller-loaded descriptor, invokes the pair exporter with explicit metadata
@@ -249,7 +252,7 @@
   privacy, non-matchability, release, or Synthea evidence. Extend existing
   static allowlists only for the new in-memory world validator and API.
 
-- [ ] **Step 4: Run docs/boundary tests and commit.**
+- [x] **Step 4: Run docs/boundary tests and commit.**
 
   Run:
 
@@ -274,14 +277,14 @@
 - Modify: this plan (checkbox/evidence metadata only)
 - Create/modify: ignored `.superpowers/sdd/2026-08-31-counterfactual-package-export/` evidence
 
-- [ ] **Step 1: Create the SDD ledger and run fresh scoped review after each task.**
+- [x] **Step 1: Create the SDD ledger and run fresh scoped review after each task.**
 
   Record the plan identity, non-overlapping file ownership, implementation
   commits, review findings, fix rounds, exact fix ranges, and PASS verdicts.
   Every Critical/Important finding goes to an implementer for a bounded fix;
   the reviewer then rechecks only that exact range before the next task.
 
-- [ ] **Step 2: Run a fresh broad review over the complete feature range.**
+- [x] **Step 2: Run a fresh broad review over the complete feature range.**
 
   Review matrix preservation, nonempty ancillary export, child exact-schema
   inventories, oracle/staging boundaries, deterministic bytes, pair-manifest
@@ -290,7 +293,7 @@
   Important findings through one consolidated implementer fix wave and one
   scoped re-review.
 
-- [ ] **Step 3: Run final feature verification.**
+- [x] **Step 3: Run final feature verification.**
 
   From the feature worktree run:
 
