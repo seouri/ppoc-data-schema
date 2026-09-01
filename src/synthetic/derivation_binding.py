@@ -484,26 +484,32 @@ def validate_derivation_binding(
         getattr(evidence, "reference_implementation_fingerprint", None),
         getattr(evidence, "parity_schema_fingerprint", None),
     )
+    parity_identities_valid = (
+        (parity_values[0] is None or parity_values[0] == "derivation-parity-v1") and
+        (parity_values[1] is None or _is_token(parity_values[1])) and
+        all(value is None or _is_digest(value) for value in parity_values[2:])
+    )
+    parity_identity_mismatch = (
+        parity_values[3] is not None and parity_values[3] != oracle_values[1]
+    ) or (parity_values[5] is not None and parity_values[5] != binding.schema_fingerprint)
     if parity_status == "FAIL":
         parity_evidence = _failing("parity_evidence", "OUTSIDE_POLICY")
-    elif parity_status not in {"PASS", "UNEVALUABLE"} or (
-        parity_status == "PASS" and any(value is None for value in parity_values)
-    ):
+    elif parity_status not in {"PASS", "UNEVALUABLE"} or not parity_identities_valid:
+        parity_evidence = _failing("parity_evidence", "STRUCTURAL_INVALID")
+    elif parity_identity_mismatch:
+        parity_evidence = _failing("parity_evidence", "OUTSIDE_POLICY")
+    elif parity_status == "PASS" and any(value is None for value in parity_values):
         parity_evidence = _failing("parity_evidence", "STRUCTURAL_INVALID")
     elif parity_status == "UNEVALUABLE" or any(value is None for value in parity_values):
         parity_evidence = _unevaluable("parity_evidence")
-    elif parity_values[0] != "derivation-parity-v1" or not _is_token(parity_values[1]) or not all(
-        _is_digest(value) for value in parity_values[2:]
-    ):
-        parity_evidence = _failing("parity_evidence", "STRUCTURAL_INVALID")
-    elif parity_values[3] != oracle_values[1] or parity_values[5] != binding.schema_fingerprint:
-        parity_evidence = _failing("parity_evidence", "OUTSIDE_POLICY")
     else:
         parity_evidence = _passing("parity_evidence")
 
     fuzz_count = getattr(evidence, "synthetic_fuzz_case_count", None)
     fuzz_fingerprint = getattr(evidence, "fuzz_corpus_fingerprint", None)
-    if not _is_count(fuzz_count):
+    if fuzz_count is None:
+        synthetic_fuzz_evidence = _unevaluable("synthetic_fuzz_evidence")
+    elif not _is_count(fuzz_count):
         synthetic_fuzz_evidence = _failing("synthetic_fuzz_evidence", "STRUCTURAL_INVALID")
     elif fuzz_count == 0:
         synthetic_fuzz_evidence = _unevaluable("synthetic_fuzz_evidence")
@@ -561,7 +567,7 @@ def validate_derivation_binding(
         binding.schema_fingerprint,
         _safe_token_or_none(oracle_values[0]) if oracle_identity.status is not DerivationBindingStatus.UNEVALUABLE else None,
         _safe_token_or_none(standard_values[0]) if reference_standard.status is not DerivationBindingStatus.UNEVALUABLE else None,
-        _safe_token_or_none(parity_values[1]),
+        _safe_token_or_none(parity_values[1]) if parity_evidence.status is not DerivationBindingStatus.UNEVALUABLE else None,
         status,
         status_counts,
         checks,

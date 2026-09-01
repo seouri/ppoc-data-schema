@@ -125,6 +125,16 @@ def test_test_only_pending_binding_keeps_absent_evidence_unevaluable_and_is_not_
         require_approved_derivation_binding(value, expected_schema_fingerprint=SHA)
 
 
+def test_unevaluable_parity_evidence_suppresses_its_report_identity():
+    value = binding(test_only=True)
+    corrupt(value.golden_evidence, parity_status="UNEVALUABLE")
+
+    report = validate_derivation_binding(value, expected_schema_fingerprint=SHA)
+
+    assert by_name(report)["parity_evidence"].status is DerivationBindingStatus.UNEVALUABLE
+    assert report.parity_report_id is None
+
+
 @pytest.mark.parametrize(
     ("field", "value", "check"),
     [
@@ -141,6 +151,19 @@ def test_missing_or_zero_evidence_is_unevaluable_not_a_fabricated_pass(field, va
     result = validate_derivation_binding(value_binding, expected_schema_fingerprint=SHA)
 
     item = by_name(result)[check]
+    assert item.status is DerivationBindingStatus.UNEVALUABLE
+    assert item.reason_code == "MISSING_EVIDENCE"
+    assert item.compared_count is None
+    assert item.mismatch_count is None
+
+
+def test_null_fuzz_count_is_unevaluable_not_structurally_invalid():
+    value = binding(test_only=True)
+    corrupt(value.golden_evidence, synthetic_fuzz_case_count=None)
+
+    result = validate_derivation_binding(value, expected_schema_fingerprint=SHA)
+
+    item = by_name(result)["synthetic_fuzz_evidence"]
     assert item.status is DerivationBindingStatus.UNEVALUABLE
     assert item.reason_code == "MISSING_EVIDENCE"
     assert item.compared_count is None
@@ -184,6 +207,18 @@ def test_contradictory_evidence_fails_its_own_check(mutate, check):
     assert item.reason_code in {"OUTSIDE_POLICY", "STRUCTURAL_INVALID"}
     assert item.compared_count is not None
     assert item.mismatch_count is not None and item.mismatch_count > 0
+
+
+@pytest.mark.parametrize("field", ["candidate_implementation_fingerprint", "parity_schema_fingerprint"])
+def test_unevaluable_parity_with_a_supplied_fingerprint_mismatch_fails(field):
+    value = binding(test_only=True)
+    corrupt(value.golden_evidence, parity_status="UNEVALUABLE", **{field: SHA3})
+
+    result = validate_derivation_binding(value, expected_schema_fingerprint=SHA)
+
+    item = by_name(result)["parity_evidence"]
+    assert item.status is DerivationBindingStatus.FAIL
+    assert item.reason_code == "OUTSIDE_POLICY"
 
 
 def test_report_is_fixed_aggregate_only_and_exception_is_redacted():
