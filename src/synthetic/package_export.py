@@ -466,6 +466,11 @@ def _remove_tree_entry_at(directory_descriptor: int, name: str) -> None:
 def _clear_pair_partial_tree(partial_path: Path) -> None:
     directory_descriptor, identity = _open_pinned_directory(partial_path)
     try:
+        directory_status = os.fstat(directory_descriptor)
+        os.fchmod(
+            directory_descriptor,
+            stat.S_IMODE(directory_status.st_mode) | stat.S_IWUSR | stat.S_IXUSR,
+        )
         with os.scandir(directory_descriptor) as entries:
             for entry in entries:
                 _remove_tree_entry_at(directory_descriptor, entry.name)
