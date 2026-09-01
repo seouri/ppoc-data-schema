@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import ast
+import dataclasses
+import inspect
 from collections.abc import Mapping, Sequence
 
 import pytest
 
+import synthetic.task_utility as task_utility_module
+from synthetic.models import DisorderKind
 from synthetic.task_utility import (
     TASK_METRICS,
     TaskPrediction,
@@ -14,6 +19,8 @@ from synthetic.task_utility import (
 from tests.synthetic.task_utility_fixtures import (
     balanced_task_cohort,
     scored_task_predictions,
+    task_cohort,
+    task_member,
     task_policy,
 )
 
@@ -33,6 +40,56 @@ def _scalar_values(value: object) -> tuple[object, ...]:
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
         return tuple(item for nested in value for item in _scalar_values(nested))
     return (value,)
+
+
+def _assert_null_metric_evidence(report: object) -> None:
+    cell = report.cells[0]  # type: ignore[attr-defined]
+    assert all(metric.status is TaskUtilityStatus.UNEVALUABLE for metric in cell.metrics)
+    assert all(
+        (metric.observed, metric.target, metric.support_count) == (None, None, None)
+        for metric in cell.metrics
+    )
+
+
+def _assert_static_fallback(report: object, hostile_value: object) -> None:
+    mapping = report.to_mapping()  # type: ignore[attr-defined]
+    assert mapping["status"] == "FAIL"
+    assert mapping["reason_code"] == "STRUCTURAL_INVALID"
+    assert mapping["policy_id"] == "unavailable"
+    assert mapping["cohort_profile"] == "unavailable"
+    assert mapping["cohort_seed"] == 0
+    assert mapping["cohort_size"] == 0
+    assert str(hostile_value) not in report.canonical_json()  # type: ignore[attr-defined]
+
+
+def test_metric_extraction_does_not_collect_score_truth_pairs() -> None:
+    tree = ast.parse(inspect.getsource(task_utility_module))
+    pair_annotations = tuple(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.AnnAssign)
+        and ast.unparse(node.annotation) == "list[tuple[float, bool]]"
+    )
+    pair_appends = tuple(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "append"
+        and node.args
+        and isinstance(node.args[0], ast.Tuple)
+        and any(
+            isinstance(item, ast.Attribute) and item.attr == "risk_score"
+            for item in ast.walk(node.args[0])
+        )
+        and any(
+            isinstance(item, ast.Name) and item.id == "truth"
+            for item in ast.walk(node.args[0])
+        )
+    )
+
+    assert pair_annotations == ()
+    assert pair_appends == ()
 
 
 def test_evaluator_computes_exact_overall_confusion_and_rates() -> None:
@@ -131,6 +188,7 @@ def test_required_missing_scores_make_report_unevaluable() -> None:
     assert report.cells[0].reason_code == "MISSING_SCORE"
     assert report.cells[0].positive_count is None
     assert report.cells[0].true_positive is None
+    _assert_null_metric_evidence(report)
 
 
 def test_allowed_missing_decision_does_not_hide_required_missing_score() -> None:
@@ -149,6 +207,7 @@ def test_allowed_missing_decision_does_not_hide_required_missing_score() -> None
     assert report.status is TaskUtilityStatus.UNEVALUABLE
     assert report.reason_code == "MISSING_SCORE"
     assert report.cells[0].reason_code == "MISSING_PREDICTION"
+    _assert_null_metric_evidence(report)
 
 
 def test_allowed_missing_decision_does_not_hide_insufficient_support() -> None:
@@ -170,6 +229,7 @@ def test_allowed_missing_decision_does_not_hide_insufficient_support() -> None:
     assert report.status is TaskUtilityStatus.UNEVALUABLE
     assert report.reason_code == "INSUFFICIENT_SUPPORT"
     assert report.cells[0].reason_code == "MISSING_PREDICTION"
+    _assert_null_metric_evidence(report)
 
 
 def test_allowed_missing_decision_preserves_explicit_report_pass() -> None:
@@ -192,6 +252,7 @@ def test_allowed_missing_decision_preserves_explicit_report_pass() -> None:
     assert report.cells[0].status is TaskUtilityStatus.UNEVALUABLE
     assert report.cells[0].reason_code == "MISSING_PREDICTION"
     assert report.cells[0].positive_count is None
+    _assert_null_metric_evidence(report)
 
 
 def test_excess_missing_decisions_make_report_unevaluable() -> None:
@@ -237,6 +298,7 @@ def test_cohort_and_evaluable_floors_use_report_level_reason(
 
     assert report.status is TaskUtilityStatus.UNEVALUABLE
     assert report.reason_code == "COHORT_TOO_SMALL"
+    _assert_null_metric_evidence(report)
 
 
 def test_minimum_class_support_nulls_only_unsupported_metrics() -> None:
@@ -250,12 +312,137 @@ def test_minimum_class_support_nulls_only_unsupported_metrics() -> None:
     assert report.status is TaskUtilityStatus.UNEVALUABLE
     assert report.reason_code == "INSUFFICIENT_SUPPORT"
     assert report.cells[0].status is TaskUtilityStatus.UNEVALUABLE
-    assert metrics["sensitivity"].observed is None
-    assert metrics["specificity"].observed is None
-    assert metrics["balanced_accuracy"].observed is None
-    assert metrics["precision"].observed == 0.5
-    assert metrics["auroc"].observed == 0.875
-    assert metrics["brier_score"].observed == 0.15625
+    assert set(metrics) == set(TASK_METRICS)
+    _assert_null_metric_evidence(report)
+
+
+@pytest.mark.parametrize(
+    "kind",
+    (DisorderKind.HEALTHY, DisorderKind.GROWTH_HORMONE_DEFICIENCY),
+)
+def test_singleton_floor_never_exposes_truth_derived_metric_evidence(
+    kind: DisorderKind,
+) -> None:
+    cohort = task_cohort(task_member(8, kind))
+    report = evaluate_task_utility(
+        cohort,
+        (TaskPrediction(False, 0.25),),
+        task_policy(
+            minimum_cohort_size=2,
+            minimum_evaluable_members=1,
+            minimum_sensitivity=0.0,
+            minimum_specificity=0.0,
+            minimum_auroc=0.0,
+            maximum_brier_score=1.0,
+        ),
+    )
+
+    assert report.status is TaskUtilityStatus.UNEVALUABLE
+    assert report.reason_code == "COHORT_TOO_SMALL"
+    assert report.cells[0].positive_count is None
+    assert report.cells[0].negative_count is None
+    _assert_null_metric_evidence(report)
+
+
+def test_below_cohort_floor_nulls_even_otherwise_evaluable_metrics() -> None:
+    report = evaluate_task_utility(
+        balanced_task_cohort(),
+        scored_task_predictions(),
+        task_policy(minimum_cohort_size=5),
+    )
+
+    assert report.status is TaskUtilityStatus.UNEVALUABLE
+    assert report.reason_code == "COHORT_TOO_SMALL"
+    _assert_null_metric_evidence(report)
+
+
+def test_required_mixed_evidence_has_one_canonical_report_reason() -> None:
+    predictions = (
+        TaskPrediction(True),
+        TaskPrediction(None),
+        TaskPrediction(False, 0.5),
+        TaskPrediction(False, 0.25),
+    )
+    report = evaluate_task_utility(
+        balanced_task_cohort(),
+        predictions,
+        task_policy(
+            maximum_unevaluable_members=1,
+            minimum_class_support=2,
+        ),
+    )
+
+    assert report.reason_code == "MISSING_SCORE"
+    with pytest.raises(ValueError, match="reason_code"):
+        dataclasses.replace(report, reason_code="INSUFFICIENT_SUPPORT")
+
+
+def test_optional_score_does_not_override_support_as_canonical_reason() -> None:
+    predictions = (
+        TaskPrediction(True),
+        TaskPrediction(None),
+        TaskPrediction(False, 0.5),
+        TaskPrediction(False, 0.25),
+    )
+    report = evaluate_task_utility(
+        balanced_task_cohort(),
+        predictions,
+        task_policy(
+            maximum_unevaluable_members=1,
+            minimum_class_support=2,
+            require_probability_scores=False,
+        ),
+    )
+
+    assert report.reason_code == "INSUFFICIENT_SUPPORT"
+    with pytest.raises(ValueError, match="reason_code"):
+        dataclasses.replace(report, reason_code="MISSING_SCORE")
+
+
+def test_corrupted_latent_state_returns_static_fallback() -> None:
+    cohort = balanced_task_cohort()
+    hostile_age = -999
+    object.__setattr__(
+        cohort.members[0].trajectory.disorder,
+        "onset_age_days",
+        hostile_age,
+    )
+
+    report = evaluate_task_utility(cohort, scored_task_predictions(), task_policy())
+
+    _assert_static_fallback(report, hostile_age)
+
+
+@pytest.mark.parametrize(
+    ("target", "field", "hostile_value"),
+    (
+        ("point", "age_days", -777),
+        ("trajectory", "events", ["hostile-event-secret"]),
+        ("member", "frame", "hostile-frame-secret"),
+        ("cohort", "profile", "patient-hostile-profile"),
+        ("cohort", "seed", -333),
+        ("calibration", "recorded_healthy_probability", 2.0),
+        ("cohort", "members", ["hostile-member-secret"]),
+    ),
+)
+def test_corrupted_nested_cohort_returns_static_fallback(
+    target: str,
+    field: str,
+    hostile_value: object,
+) -> None:
+    cohort = balanced_task_cohort()
+    targets = {
+        "point": cohort.members[0].trajectory.physiology.points[0],
+        "trajectory": cohort.members[0].trajectory,
+        "member": cohort.members[0],
+        "cohort": cohort,
+        "calibration": cohort.calibration,
+    }
+    object.__setattr__(targets[target], field, hostile_value)
+
+    report = evaluate_task_utility(cohort, scored_task_predictions(), task_policy())
+
+    _assert_static_fallback(report, hostile_value)
 
 
 @pytest.mark.parametrize(

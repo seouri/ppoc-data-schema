@@ -123,10 +123,14 @@ def balanced_task_cohort() -> NativeCohort:
         task_member(3, DisorderKind.HEALTHY, sex="F"),
         task_member(4, DisorderKind.HEALTHY, sex="M"),
     )
+    return task_cohort(*members)
+
+
+def task_cohort(*members: CohortMember) -> NativeCohort:
     calibration = CalibrationSamplingProfile.from_artifact(
         aggregate_calibration_artifact()
     )
-    return NativeCohort("development-v1", 7, members, calibration)
+    return NativeCohort("development-v1", 7, tuple(members), calibration)
 
 
 def scored_task_predictions() -> tuple[TaskPrediction, ...]:

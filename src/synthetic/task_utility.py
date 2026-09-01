@@ -14,9 +14,15 @@ from synthetic.calibration import require_aggregate_safe_token
 from synthetic.cohort import CalibrationSamplingProfile, CohortMember, NativeCohort
 from synthetic.models import (
     AgeRegimeDisorderTrajectory,
+    AgeRegimePoint,
+    AgeRegimeState,
+    AgeRegimeTrajectory,
+    ClinicalEvent,
     DisorderKind,
     LatentDisorderState,
 )
+from synthetic.native.observations import ObservationFrame
+from synthetic.native.resources import ObservedResourceBundle, SyntheticDemographics
 
 TASK_UTILITY_REPORT_VERSION = "task-utility-report-v1"
 
@@ -641,16 +647,19 @@ class TaskUtilityReport:
                 for metric in cell.metrics
                 if metric.status is TaskUtilityStatus.UNEVALUABLE
             )
-            if "MISSING_SCORE" in cell_reasons:
+            if "MISSING_SCORE" in metric_reasons:
+                evidenced_reason = "MISSING_SCORE"
+            elif "INSUFFICIENT_SUPPORT" in metric_reasons:
+                evidenced_reason = "INSUFFICIENT_SUPPORT"
+            elif "MISSING_SCORE" in cell_reasons:
                 evidenced_reason = "MISSING_SCORE"
             elif "INSUFFICIENT_SUPPORT" in cell_reasons:
                 evidenced_reason = "INSUFFICIENT_SUPPORT"
-            elif "MISSING_PREDICTION" in cell_reasons:
-                evidenced_reason = (
-                    reason
-                    if reason in metric_reasons
-                    else "MISSING_PREDICTION"
-                )
+            elif (
+                "MISSING_PREDICTION" in cell_reasons
+                or "MISSING_PREDICTION" in metric_reasons
+            ):
+                evidenced_reason = "MISSING_PREDICTION"
             else:
                 evidenced_reason = None
             if (
@@ -736,8 +745,10 @@ def _evaluated_metric(
 
 
 def _score_metrics(
-    scored_truth: list[tuple[float, bool]],
+    score_groups: Mapping[float, tuple[int, int]],
     *,
+    brier_total: float,
+    scored_count: int,
     evaluable_count: int,
     positive_count: int,
     negative_count: int,
@@ -755,24 +766,21 @@ def _score_metrics(
             _unevaluable_metric("brier_score", "INSUFFICIENT_SUPPORT"),
         )
 
-    ordered = sorted(scored_truth, key=lambda item: item[0])
     positive_rank_sum = 0.0
-    lower = 0
-    while lower < evaluable_count:
-        upper = lower + 1
-        while upper < evaluable_count and ordered[upper][0] == ordered[lower][0]:
-            upper += 1
-        midrank = ((lower + 1) + upper) / 2
-        positive_rank_sum += midrank * sum(
-            truth for _, truth in ordered[lower:upper]
-        )
-        lower = upper
+    lower_rank = 1
+    for score in sorted(score_groups):
+        group_positive, group_negative = score_groups[score]
+        group_count = group_positive + group_negative
+        upper_rank = lower_rank + group_count - 1
+        midrank = (lower_rank + upper_rank) / 2
+        positive_rank_sum += midrank * group_positive
+        lower_rank = upper_rank + 1
     auroc = (
         positive_rank_sum - positive_count * (positive_count + 1) / 2
     ) / (positive_count * negative_count)
-    brier_score = sum(
-        (score - int(truth)) ** 2 for score, truth in scored_truth
-    ) / evaluable_count
+    if scored_count != evaluable_count:
+        raise ValueError("score aggregates must match evaluable count")
+    brier_score = brier_total / scored_count
     return (
         _evaluated_metric(
             "auroc",
@@ -802,7 +810,9 @@ def _overall_cell(
     true_negative = 0
     false_positive = 0
     false_negative = 0
-    scored_truth: list[tuple[float, bool]] = []
+    score_groups: dict[float, tuple[int, int]] = {}
+    brier_total = 0.0
+    scored_count = 0
 
     for member, prediction in zip(members, predictions, strict=True):
         if type(member) is not CohortMember:
@@ -836,7 +846,14 @@ def _overall_cell(
         if prediction.risk_score is None:
             missing_score_count += 1
         else:
-            scored_truth.append((prediction.risk_score, truth))
+            score = prediction.risk_score
+            group_positive, group_negative = score_groups.get(score, (0, 0))
+            score_groups[score] = (
+                group_positive + int(truth),
+                group_negative + int(not truth),
+            )
+            brier_total += (score - int(truth)) ** 2
+            scored_count += 1
 
     unevaluable_count = len(members) - evaluable_count
     minimum_support = policy.minimum_class_support
@@ -888,7 +905,9 @@ def _overall_cell(
             "balanced_accuracy", "INSUFFICIENT_SUPPORT"
         )
     auroc, brier_score = _score_metrics(
-        scored_truth,
+        score_groups,
+        brier_total=brier_total,
+        scored_count=scored_count,
         evaluable_count=evaluable_count,
         positive_count=positive_count,
         negative_count=negative_count,
@@ -975,6 +994,204 @@ def _overall_cell(
     )
 
 
+def _validated_disorder(value: object) -> LatentDisorderState:
+    if type(value) is not LatentDisorderState:
+        raise TypeError("cohort contains malformed typed evidence")
+    return LatentDisorderState(
+        kind=value.kind,
+        onset_age_days=value.onset_age_days,
+        severity=value.severity,
+        puberty_delay_days=value.puberty_delay_days,
+        treatment_start_age_days=value.treatment_start_age_days,
+        treatment_response=value.treatment_response,
+    )
+
+
+def _validated_age_state(value: object) -> AgeRegimeState:
+    if type(value) is not AgeRegimeState:
+        raise TypeError("cohort contains malformed typed evidence")
+    return AgeRegimeState(
+        module_version=value.module_version,
+        birth_length_z=value.birth_length_z,
+        birth_weight_z=value.birth_weight_z,
+        head_circumference_z=value.head_circumference_z,
+        childhood_height_z=value.childhood_height_z,
+        childhood_bmi_z=value.childhood_bmi_z,
+        puberty_onset_age_days=value.puberty_onset_age_days,
+        puberty_tempo_days=value.puberty_tempo_days,
+        puberty_height_spurt_z=value.puberty_height_spurt_z,
+        puberty_bmi_shift_z=value.puberty_bmi_shift_z,
+    )
+
+
+def _validated_age_point(value: object) -> AgeRegimePoint:
+    if type(value) is not AgeRegimePoint:
+        raise TypeError("cohort contains malformed typed evidence")
+    return AgeRegimePoint(
+        patient_id=value.patient_id,
+        age_days=value.age_days,
+        regime=value.regime,
+        length_cm=value.length_cm,
+        height_cm=value.height_cm,
+        weight_kg=value.weight_kg,
+        bmi=value.bmi,
+        head_circumference_cm=value.head_circumference_cm,
+        length_z=value.length_z,
+        height_z=value.height_z,
+        weight_z=value.weight_z,
+        bmi_z=value.bmi_z,
+        height_velocity_cm_per_year=value.height_velocity_cm_per_year,
+        weight_velocity_kg_per_year=value.weight_velocity_kg_per_year,
+    )
+
+
+def _validated_event(value: object) -> ClinicalEvent:
+    if type(value) is not ClinicalEvent:
+        raise TypeError("cohort contains malformed typed evidence")
+    if (
+        not isinstance(value.patient_id, str)
+        or not value.patient_id
+        or isinstance(value.age_days, bool)
+        or not isinstance(value.age_days, int)
+        or value.age_days < 0
+        or not isinstance(value.event_type, str)
+        or not value.event_type
+        or (value.code is not None and not isinstance(value.code, str))
+        or type(value.hidden) is not bool
+    ):
+        raise ValueError("cohort contains malformed typed evidence")
+    return ClinicalEvent(
+        patient_id=value.patient_id,
+        age_days=value.age_days,
+        event_type=value.event_type,
+        code=value.code,
+        hidden=value.hidden,
+    )
+
+
+def _validated_member(value: object) -> CohortMember:
+    if type(value) is not CohortMember:
+        raise TypeError("cohort contains malformed typed evidence")
+    trajectory = value.trajectory
+    if type(trajectory) is not AgeRegimeDisorderTrajectory:
+        raise TypeError("cohort contains malformed typed evidence")
+    physiology = trajectory.physiology
+    if type(physiology) is not AgeRegimeTrajectory or type(physiology.points) is not tuple:
+        raise TypeError("cohort contains malformed typed evidence")
+    validated_physiology = AgeRegimeTrajectory(
+        tuple(_validated_age_point(point) for point in physiology.points),
+        _validated_age_state(physiology.state),
+    )
+    if type(trajectory.events) is not tuple:
+        raise TypeError("cohort contains malformed typed evidence")
+    validated_trajectory = AgeRegimeDisorderTrajectory(
+        validated_physiology,
+        _validated_disorder(trajectory.disorder),
+        tuple(_validated_event(event) for event in trajectory.events),
+    )
+    if type(value.demographics) is not SyntheticDemographics:
+        raise TypeError("cohort contains malformed typed evidence")
+    validated_demographics = SyntheticDemographics(
+        patient_id=value.demographics.patient_id,
+        sex=value.demographics.sex,
+        ethnicity=value.demographics.ethnicity,
+        races=value.demographics.races,
+    )
+    if type(value.frame) is not ObservationFrame:
+        raise TypeError("cohort contains malformed typed evidence")
+    validated_frame = ObservationFrame(
+        patient_id=value.frame.patient_id,
+        policy_version=value.frame.policy_version,
+        window=value.frame.window,
+        visits=value.frame.visits,
+        events=value.frame.events,
+        truth=value.frame.truth,
+    )
+    if value.bundle is not None and type(value.bundle) is not ObservedResourceBundle:
+        raise TypeError("cohort contains malformed typed evidence")
+    return CohortMember(
+        demographics=validated_demographics,
+        trajectory=validated_trajectory,
+        frame=validated_frame,
+        bundle=value.bundle,
+    )
+
+
+def _validated_calibration(value: object) -> CalibrationSamplingProfile:
+    if type(value) is not CalibrationSamplingProfile:
+        raise TypeError("cohort contains malformed typed evidence")
+    return CalibrationSamplingProfile(
+        artifact_id=value.artifact_id,
+        target_registry_version=value.target_registry_version,
+        sex_weights=value.sex_weights,
+        ethnicity_weights=value.ethnicity_weights,
+        race_weights=value.race_weights,
+        race_multiselect_probability=value.race_multiselect_probability,
+        recorded_healthy_probability=value.recorded_healthy_probability,
+        recorded_growth_dx_probability=value.recorded_growth_dx_probability,
+    )
+
+
+def _validated_cohort(value: object) -> NativeCohort:
+    if type(value) is not NativeCohort or type(value.members) is not tuple:
+        raise TypeError("cohort contains malformed typed evidence")
+    return NativeCohort(
+        profile=value.profile,
+        seed=value.seed,
+        members=tuple(_validated_member(member) for member in value.members),
+        calibration=_validated_calibration(value.calibration),
+    )
+
+
+def _redacted_unevaluable_cell(
+    cell: TaskUtilityCell,
+    *,
+    report_reason: str,
+) -> TaskUtilityCell:
+    if cell.status is TaskUtilityStatus.UNEVALUABLE:
+        cell_reason = cell.reason_code
+    elif cell.missing_score_count:
+        cell_reason = "MISSING_SCORE"
+    else:
+        cell_reason = "INSUFFICIENT_SUPPORT"
+
+    def metric_reason(name: str) -> str:
+        if report_reason == "MISSING_PREDICTION":
+            return "MISSING_PREDICTION"
+        if report_reason == "MISSING_SCORE":
+            return (
+                "MISSING_SCORE"
+                if name in {"auroc", "brier_score"}
+                else "INSUFFICIENT_SUPPORT"
+            )
+        if report_reason == "INSUFFICIENT_SUPPORT":
+            return "INSUFFICIENT_SUPPORT"
+        if cell_reason == "MISSING_PREDICTION":
+            return "MISSING_PREDICTION"
+        if cell_reason == "MISSING_SCORE" and name in {"auroc", "brier_score"}:
+            return "MISSING_SCORE"
+        return "INSUFFICIENT_SUPPORT"
+
+    return TaskUtilityCell(
+        scope=cell.scope,
+        status=TaskUtilityStatus.UNEVALUABLE,
+        reason_code=cell_reason,
+        member_count=cell.member_count,
+        evaluable_count=cell.evaluable_count,
+        unevaluable_count=cell.unevaluable_count,
+        missing_score_count=cell.missing_score_count,
+        positive_count=None,
+        negative_count=None,
+        true_positive=None,
+        true_negative=None,
+        false_positive=None,
+        false_negative=None,
+        metrics=tuple(
+            _unevaluable_metric(name, metric_reason(name)) for name in TASK_METRICS
+        ),
+    )
+
+
 def _validated_policy(policy: TaskUtilityPolicy) -> TaskUtilityPolicy:
     return TaskUtilityPolicy(
         policy_id=policy.policy_id,
@@ -1006,13 +1223,11 @@ def evaluate_task_utility(
             or type(predictions) is not tuple
         ):
             return _structural_fallback_report()
-        members = cohort.members
+        validated_cohort = _validated_cohort(cohort)
+        members = validated_cohort.members
         if (
-            type(members) is not tuple
-            or len(predictions) != len(members)
+            len(predictions) != len(members)
             or not all(type(item) is TaskPrediction for item in predictions)
-            or not all(type(member) is CohortMember for member in members)
-            or type(cohort.calibration) is not CalibrationSamplingProfile
         ):
             return _structural_fallback_report()
         validated_predictions = tuple(
@@ -1062,12 +1277,21 @@ def evaluate_task_utility(
                 status = TaskUtilityStatus.PASS
                 reason_code = "WITHIN_BOUND"
 
+        if cell.status is TaskUtilityStatus.UNEVALUABLE or (
+            status is TaskUtilityStatus.UNEVALUABLE
+            and cell.status is not TaskUtilityStatus.FAIL
+        ):
+            cell = _redacted_unevaluable_cell(
+                cell,
+                report_reason=reason_code,
+            )
+
         return TaskUtilityReport(
             report_version=TASK_UTILITY_REPORT_VERSION,
             policy_id=validated_policy.policy_id,
             policy_version=validated_policy.policy_version,
-            cohort_profile=cohort.profile,
-            cohort_seed=cohort.seed,
+            cohort_profile=validated_cohort.profile,
+            cohort_seed=validated_cohort.seed,
             cohort_size=len(members),
             status=status,
             reason_code=reason_code,
