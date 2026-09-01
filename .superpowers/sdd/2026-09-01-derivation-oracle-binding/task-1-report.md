@@ -53,3 +53,40 @@ The required red-phase command was also run before implementation and failed at 
 ## Concerns
 
 None for the Task 1 scope. The implementation intentionally does not alter parity/export contracts or implement later roadmap tasks.
+
+## Fix round 1
+
+Addressed reviewer findings by retaining `golden_evidence.parity_status` and `review.status` as validated public `str` fields (the exported `DerivationBindingStatus` vocabulary remains available), and by routing count/parity mutations to `golden_evidence` in the tests.
+
+Command:
+
+```text
+PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_derivation_binding_models.py
+```
+
+Output:
+
+```text
+............................                                             [100%]
+28 passed in 0.03s
+```
+
+Command:
+
+```text
+PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run ruff check src/synthetic/derivation_binding.py tests/synthetic/test_derivation_binding_models.py
+```
+
+Output:
+
+```text
+All checks passed!
+```
+
+Command:
+
+```text
+git diff --check
+```
+
+Output: no output (success).

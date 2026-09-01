@@ -77,10 +77,10 @@ def _optional_token(value: object, field: str) -> str | None:
     return None if value is None else _token(value, field)
 
 
-def _status(value: object, allowed: set[str], field: str) -> DerivationBindingStatus:
+def _status(value: object, allowed: set[str], field: str) -> str:
     if not isinstance(value, str) or value not in allowed:
         raise ValueError(f"{field} has an invalid status")
-    return DerivationBindingStatus(value)
+    return value
 
 
 def _timestamp(value: object, field: str) -> str:
@@ -129,7 +129,7 @@ class DerivationGoldenEvidence:
     parity_contract: str | None
     parity_report_id: str | None
     parity_report_fingerprint: str | None
-    parity_status: DerivationBindingStatus
+    parity_status: str
     candidate_implementation_fingerprint: str | None
     reference_implementation_fingerprint: str | None
     parity_schema_fingerprint: str | None
@@ -144,7 +144,7 @@ class DerivationGoldenEvidence:
         for name in ("manifest_fingerprint", "parity_report_fingerprint", "candidate_implementation_fingerprint",
                      "reference_implementation_fingerprint", "parity_schema_fingerprint", "fuzz_corpus_fingerprint"):
             _digest(getattr(self, name), name, nullable=True)
-        if not isinstance(self.parity_status, DerivationBindingStatus) or self.parity_status.value not in {"PASS", "FAIL", "UNEVALUABLE"}:
+        if not isinstance(self.parity_status, str) or self.parity_status not in {"PASS", "FAIL", "UNEVALUABLE"}:
             raise ValueError("parity_status has an invalid status")
         if not isinstance(self.covered_categories, tuple) or len(set(self.covered_categories)) != len(self.covered_categories) or set(self.covered_categories) != set(REQUIRED_GOLDEN_CATEGORIES):
             raise ValueError("covered_categories must contain required categories exactly once")
@@ -160,7 +160,7 @@ class DerivationReview:
     review_fingerprint: str | None
     reviewed_at: str | None
     reviewer_role: str | None
-    status: DerivationBindingStatus
+    status: str
 
     def __post_init__(self) -> None:
         _optional_token(self.review_id, "review_id")
@@ -168,7 +168,7 @@ class DerivationReview:
         if self.reviewed_at is not None:
             _timestamp(self.reviewed_at, "reviewed_at")
         _optional_token(self.reviewer_role, "reviewer_role")
-        if not isinstance(self.status, DerivationBindingStatus) or self.status.value not in {"PENDING", "APPROVED", "REJECTED"}:
+        if not isinstance(self.status, str) or self.status not in {"PENDING", "APPROVED", "REJECTED"}:
             raise ValueError("status has an invalid status")
 
 

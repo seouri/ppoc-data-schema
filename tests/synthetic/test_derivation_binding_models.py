@@ -45,6 +45,8 @@ def test_valid_fixture_is_frozen_and_round_trips_without_aliasing():
     assert is_dataclass(binding)
     assert isinstance(binding, DerivationBinding)
     assert isinstance(binding.oracle, DerivationBindingOracle)
+    assert binding.golden_evidence.parity_status == "PASS"
+    assert binding.review.status == "APPROVED"
     assert isinstance(binding.golden_evidence.covered_categories, tuple)
     with pytest.raises(FrozenInstanceError):
         binding.binding_id = "changed"
@@ -104,12 +106,12 @@ def test_rejects_invalid_tokens_and_digests(field, value):
                                           ("parity_status", "UNKNOWN"), ("status", "UNKNOWN")])
 def test_rejects_invalid_timestamps_counts_and_statuses(field, value):
     data = fixture()
-    if field in {"reviewed_at", "bidirectional_case_count", "synthetic_fuzz_case_count", "parity_status"}:
-        data["review"]["reviewed_at" if field == "reviewed_at" else field] = value
-    else:
-        data["review"][field] = value
     if field in {"bidirectional_case_count", "synthetic_fuzz_case_count", "parity_status"}:
         data["golden_evidence"][field] = value
+    elif field == "reviewed_at":
+        data["review"][field] = value
+    else:
+        data["review"][field] = value
     with pytest.raises((TypeError, ValueError)):
         DerivationBinding.from_mapping(data)
 
