@@ -29,6 +29,7 @@ from synthetic.native.counterfactual import (
 )
 from synthetic.native.observations import (
     OBSERVATION_STREAM_NAMES,
+    ObservationFrame,
     ObservationPolicy,
     ObservationValidationStatus,
     generate_observation_frame,
@@ -36,9 +37,13 @@ from synthetic.native.observations import (
     validate_observation_frame,
 )
 from synthetic.native.resources import (
+    BASE_RESOURCE_NAMES,
+    ObservedResourceBundle,
     ResourceShape,
+    ResourceValidationStatus,
     SyntheticDemographics,
     project_observed_resources,
+    validate_observed_resources,
 )
 from synthetic.randomness import NamedRandomStreams
 
@@ -371,6 +376,348 @@ def assemble_counterfactual_ehr_worlds(
         raise CounterfactualWorldUnavailable("counterfactual EHR worlds unavailable") from None
 
 
+def _world_check(
+    name: str,
+    evaluator: object,
+) -> CounterfactualWorldCheck:
+    """Convert one closed evaluator outcome into a fixed aggregate check."""
+
+    try:
+        status = evaluator()  # type: ignore[operator]
+        if not isinstance(status, CounterfactualWorldValidationStatus):
+            raise TypeError("counterfactual world check returned an invalid status")
+    except (ArithmeticError, AttributeError, IndexError, KeyError, TypeError, ValueError):
+        status = CounterfactualWorldValidationStatus.UNEVALUABLE
+    reason = {
+        CounterfactualWorldValidationStatus.PASS: "OK",
+        CounterfactualWorldValidationStatus.FAIL: "MALFORMED_WORLDS",
+        CounterfactualWorldValidationStatus.UNEVALUABLE: "INSUFFICIENT_EVIDENCE",
+    }[status]
+    return CounterfactualWorldCheck(name, status, reason)
+
+
+def _members(worlds: CounterfactualEhrWorldPair) -> tuple[CohortMember, CohortMember]:
+    if not isinstance(worlds.baseline, CohortMember) or not isinstance(
+        worlds.intervention, CohortMember
+    ):
+        raise TypeError("world members must be typed")
+    return worlds.baseline, worlds.intervention
+
+
+def _bundles(worlds: CounterfactualEhrWorldPair) -> tuple[ObservedResourceBundle, ObservedResourceBundle]:
+    baseline, intervention = _members(worlds)
+    if not isinstance(baseline.bundle, ObservedResourceBundle) or not isinstance(
+        intervention.bundle, ObservedResourceBundle
+    ):
+        raise TypeError("world members must retain typed resource bundles")
+    return baseline.bundle, intervention.bundle
+
+
+def _report_status(report: object, expected: type[Enum]) -> CounterfactualWorldValidationStatus:
+    status = getattr(report, "status", None)
+    if status is CounterfactualValidationStatus.PASS or status is ObservationValidationStatus.PASS or status is AncillaryBundleValidationStatus.PASS or status is ResourceValidationStatus.PASS:
+        return CounterfactualWorldValidationStatus.PASS
+    if status is CounterfactualValidationStatus.FAIL or status is ObservationValidationStatus.FAIL or status is AncillaryBundleValidationStatus.FAIL or status is ResourceValidationStatus.FAIL:
+        return CounterfactualWorldValidationStatus.FAIL
+    if isinstance(status, expected):
+        return CounterfactualWorldValidationStatus.UNEVALUABLE
+    return CounterfactualWorldValidationStatus.UNEVALUABLE
+
+
+def _check_pair_binding(worlds: CounterfactualEhrWorldPair) -> CounterfactualWorldValidationStatus:
+    if not isinstance(worlds, CounterfactualEhrWorldPair):
+        return CounterfactualWorldValidationStatus.UNEVALUABLE
+    baseline, intervention = _members(worlds)
+    pair = worlds._pair
+    if not isinstance(pair, CounterfactualPair) or not isinstance(
+        worlds.matrix, CounterfactualChangeMatrix
+    ):
+        return CounterfactualWorldValidationStatus.UNEVALUABLE
+    if (
+        worlds.matrix != pair.matrix
+        or baseline.trajectory is not pair.baseline
+        or intervention.trajectory is not pair.intervention
+        or pair.baseline_context.world != "baseline"
+        or pair.intervention_context.world != "intervention"
+    ):
+        return CounterfactualWorldValidationStatus.FAIL
+    return _report_status(validate_counterfactual_pair(pair), CounterfactualValidationStatus)
+
+
+def _check_shared_demographics(worlds: CounterfactualEhrWorldPair) -> CounterfactualWorldValidationStatus:
+    baseline, intervention = _members(worlds)
+    bundles = _bundles(worlds)
+    if not isinstance(baseline.demographics, SyntheticDemographics) or not isinstance(
+        intervention.demographics, SyntheticDemographics
+    ):
+        return CounterfactualWorldValidationStatus.UNEVALUABLE
+    if baseline.demographics != intervention.demographics:
+        return CounterfactualWorldValidationStatus.FAIL
+    demographics = baseline.demographics.to_mapping()
+    patient_rows: list[object] = []
+    for bundle in bundles:
+        rows = bundle.rows.get("patients")
+        if not isinstance(rows, tuple) or len(rows) != 1:
+            return CounterfactualWorldValidationStatus.FAIL
+        patient_rows.append(rows[0].to_mapping())
+    if patient_rows[0] != demographics or patient_rows[1] != demographics or patient_rows[0] != patient_rows[1]:
+        return CounterfactualWorldValidationStatus.FAIL
+    return CounterfactualWorldValidationStatus.PASS
+
+
+def _check_shared_observation(worlds: CounterfactualEhrWorldPair) -> CounterfactualWorldValidationStatus:
+    baseline, intervention = _members(worlds)
+    pair = worlds._pair
+    if not isinstance(worlds.observation_policy, ObservationPolicy) or not isinstance(
+        pair, CounterfactualPair
+    ):
+        return CounterfactualWorldValidationStatus.UNEVALUABLE
+    if not isinstance(baseline.frame, ObservationFrame) or not isinstance(
+        intervention.frame, ObservationFrame
+    ):
+        return CounterfactualWorldValidationStatus.UNEVALUABLE
+    expected_streams = tuple(observation_stream_identity(name) for name in OBSERVATION_STREAM_NAMES)
+    if (
+        worlds._observation_stream_identities != expected_streams
+        or worlds._observation_stream_seed != pair.baseline_context.run_seed
+        or worlds._observation_stream_patient_index != pair.baseline_context.patient_index
+        or pair.baseline_context.run_seed != pair.intervention_context.run_seed
+        or pair.baseline_context.patient_index != pair.intervention_context.patient_index
+    ):
+        return CounterfactualWorldValidationStatus.FAIL
+    try:
+        if (
+            baseline.frame.policy_version != worlds.observation_policy.policy_version
+            or intervention.frame.policy_version != worlds.observation_policy.policy_version
+            or baseline.frame.window != intervention.frame.window
+            or baseline.frame.truth.policy != worlds.observation_policy
+            or intervention.frame.truth.policy != worlds.observation_policy
+        ):
+            return CounterfactualWorldValidationStatus.FAIL
+    except (AttributeError, TypeError):
+        return CounterfactualWorldValidationStatus.UNEVALUABLE
+    return CounterfactualWorldValidationStatus.PASS
+
+
+def _visit_structure(member: CohortMember) -> tuple[tuple[object, ...], ...]:
+    return tuple(
+        (visit.patient_id, visit.visit_id, visit.age_days, visit.encounter_type)
+        for visit in member.frame.visits
+    )
+
+
+def _availability(member: CohortMember) -> tuple[tuple[object, ...], ...]:
+    return tuple(
+        tuple((measurement.channel, measurement.availability) for measurement in visit.measurements)
+        for visit in member.frame.visits
+    )
+
+
+def _check_observation_invariants(worlds: CounterfactualEhrWorldPair) -> CounterfactualWorldValidationStatus:
+    baseline, intervention = _members(worlds)
+    baseline_status = _report_status(validate_observation_frame(baseline.frame), ObservationValidationStatus)
+    intervention_status = _report_status(validate_observation_frame(intervention.frame), ObservationValidationStatus)
+    if CounterfactualWorldValidationStatus.FAIL in (baseline_status, intervention_status):
+        return CounterfactualWorldValidationStatus.FAIL
+    try:
+        if _visit_structure(baseline) != _visit_structure(intervention) or _availability(
+            baseline
+        ) != _availability(intervention):
+            return CounterfactualWorldValidationStatus.FAIL
+    except (AttributeError, TypeError, ValueError):
+        return CounterfactualWorldValidationStatus.FAIL
+    if CounterfactualWorldValidationStatus.UNEVALUABLE in (baseline_status, intervention_status):
+        return CounterfactualWorldValidationStatus.UNEVALUABLE
+    return CounterfactualWorldValidationStatus.PASS
+
+
+def _isolated_base_status(bundle: ObservedResourceBundle) -> CounterfactualWorldValidationStatus:
+    try:
+        rows = dict(bundle.rows)
+        for name in BASE_RESOURCE_NAMES[2:]:
+            rows[name] = ()
+        base = ObservedResourceBundle(
+            bundle.patient_id,
+            bundle.shape,
+            rows,
+            bundle.clinical_descendants,
+            bundle.source_frame,
+        )
+        return _report_status(validate_observed_resources(base), ResourceValidationStatus)
+    except (AttributeError, KeyError, TypeError, ValueError):
+        return CounterfactualWorldValidationStatus.FAIL
+
+
+def _check_resource_invariants(worlds: CounterfactualEhrWorldPair) -> CounterfactualWorldValidationStatus:
+    baseline, intervention = _members(worlds)
+    bundles = _bundles(worlds)
+    if not isinstance(worlds.shape, ResourceShape) or not isinstance(
+        worlds._ancillary_policy, GhdAncillaryPolicy
+    ):
+        return CounterfactualWorldValidationStatus.UNEVALUABLE
+    statuses: list[CounterfactualWorldValidationStatus] = []
+    for member, bundle in zip((baseline, intervention), bundles, strict=True):
+        if bundle.source_frame is not member.frame or bundle.shape != worlds.shape:
+            return CounterfactualWorldValidationStatus.FAIL
+        statuses.append(
+            _report_status(
+                validate_ghd_ancillary_bundle(bundle, member, worlds._ancillary_policy),
+                AncillaryBundleValidationStatus,
+            )
+        )
+        statuses.append(_isolated_base_status(bundle))
+    if CounterfactualWorldValidationStatus.FAIL in statuses:
+        return CounterfactualWorldValidationStatus.FAIL
+    if CounterfactualWorldValidationStatus.UNEVALUABLE in statuses:
+        return CounterfactualWorldValidationStatus.UNEVALUABLE
+    return CounterfactualWorldValidationStatus.PASS
+
+
+def _measurement_values(member: CohortMember) -> tuple[tuple[object, ...], ...]:
+    return tuple(
+        tuple(
+            (visit.age_days, measurement.channel, measurement.recorded_value)
+            for measurement in visit.measurements
+        )
+        for visit in member.frame.visits
+    )
+
+
+def _projected_measurement_values(bundle: ObservedResourceBundle) -> tuple[tuple[object, ...], ...]:
+    fields = ("weight_oz", "height_in", "head_circ_cm", "BMI")
+    return tuple(
+        (row.to_mapping()["age_in_days"], *(row.to_mapping()[field] for field in fields))
+        for row in bundle.rows["visits"]
+    )
+
+
+def _events(member: CohortMember) -> tuple[tuple[tuple[str, object], ...], ...]:
+    return tuple(tuple(event.to_mapping().items()) for event in member.frame.events)
+
+
+def _descendants(bundle: ObservedResourceBundle) -> tuple[tuple[tuple[str, object], ...], ...]:
+    return tuple(tuple(item.to_mapping().items()) for item in bundle.clinical_descendants)
+
+
+def _ancillary_rows(bundle: ObservedResourceBundle) -> tuple[tuple[tuple[tuple[str, object], ...], ...], ...]:
+    return tuple(
+        tuple(tuple(row.to_mapping().items()) for row in bundle.rows[name])
+        for name in BASE_RESOURCE_NAMES[2:]
+    )
+
+
+def _check_permitted_changes(worlds: CounterfactualEhrWorldPair) -> CounterfactualWorldValidationStatus:
+    baseline, intervention = _members(worlds)
+    baseline_bundle, intervention_bundle = _bundles(worlds)
+    try:
+        baseline_values = _measurement_values(baseline)
+        intervention_values = _measurement_values(intervention)
+        baseline_projected = _projected_measurement_values(baseline_bundle)
+        intervention_projected = _projected_measurement_values(intervention_bundle)
+        baseline_events = _events(baseline)
+        intervention_events = _events(intervention)
+        baseline_descendants = _descendants(baseline_bundle)
+        intervention_descendants = _descendants(intervention_bundle)
+        baseline_ancillary = _ancillary_rows(baseline_bundle)
+        intervention_ancillary = _ancillary_rows(intervention_bundle)
+    except (AttributeError, KeyError, TypeError, ValueError):
+        return CounterfactualWorldValidationStatus.FAIL
+    intervention_kind = worlds.matrix.intervention
+    if intervention_kind is InterventionKind.PHYSIOLOGY_SEVERITY:
+        if (
+            baseline_events != intervention_events
+            or baseline_descendants != intervention_descendants
+            or baseline_ancillary != intervention_ancillary
+        ):
+            return CounterfactualWorldValidationStatus.FAIL
+        return CounterfactualWorldValidationStatus.PASS
+    if intervention_kind is InterventionKind.EARLIER_RECOGNITION:
+        return (
+            CounterfactualWorldValidationStatus.PASS
+            if baseline_values == intervention_values and baseline_projected == intervention_projected
+            else CounterfactualWorldValidationStatus.FAIL
+        )
+    if intervention_kind is InterventionKind.TREATMENT_ADHERENCE:
+        if (
+            baseline_events != intervention_events
+            or baseline_descendants != intervention_descendants
+            or baseline_ancillary != intervention_ancillary
+        ):
+            return CounterfactualWorldValidationStatus.FAIL
+        try:
+            treatment_start = worlds._pair.baseline.disorder.treatment_start_age_days
+        except (AttributeError, TypeError):
+            return CounterfactualWorldValidationStatus.UNEVALUABLE
+        for baseline_visit, intervention_visit in zip(
+            baseline_values, intervention_values, strict=True
+        ):
+            for left, right in zip(baseline_visit, intervention_visit, strict=True):
+                if left[:2] != right[:2]:
+                    return CounterfactualWorldValidationStatus.FAIL
+                if (treatment_start is None or left[0] < treatment_start) and left[2] != right[2]:
+                    return CounterfactualWorldValidationStatus.FAIL
+        for left, right in zip(baseline_projected, intervention_projected, strict=True):
+            if left[0] != right[0] or (
+                treatment_start is None or left[0] < treatment_start
+            ) and left[1:] != right[1:]:
+                return CounterfactualWorldValidationStatus.FAIL
+        return CounterfactualWorldValidationStatus.PASS
+    return CounterfactualWorldValidationStatus.FAIL
+
+
+def _is_visible_value(value: object) -> bool:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return True
+    if isinstance(value, (list, tuple)):
+        return all(_is_visible_value(item) for item in value)
+    if isinstance(value, Mapping):
+        return all(isinstance(key, str) and _is_visible_value(item) for key, item in value.items())
+    return False
+
+
+def _check_truth_boundary(worlds: CounterfactualEhrWorldPair) -> CounterfactualWorldValidationStatus:
+    if not isinstance(worlds, CounterfactualEhrWorldPair):
+        return CounterfactualWorldValidationStatus.UNEVALUABLE
+    try:
+        visible = worlds.to_mapping()
+        if not _is_visible_value(visible):
+            return CounterfactualWorldValidationStatus.FAIL
+        for bundle in _bundles(worlds):
+            for resource_name in BASE_RESOURCE_NAMES:
+                for row in bundle.rows[resource_name]:
+                    if any(not isinstance(value, (str, int, float)) for _, value in row.values):
+                        return CounterfactualWorldValidationStatus.FAIL
+        rendered = repr(worlds)
+        if rendered != "CounterfactualEhrWorldPair(<evaluator-only>)" or any(
+            token in rendered for token in ("truth", "trajectory", "seed", "stream", "context")
+        ):
+            return CounterfactualWorldValidationStatus.FAIL
+    except (AttributeError, KeyError, TypeError, ValueError):
+        return CounterfactualWorldValidationStatus.FAIL
+    return CounterfactualWorldValidationStatus.PASS
+
+
+def validate_counterfactual_ehr_worlds(
+    worlds: CounterfactualEhrWorldPair,
+) -> CounterfactualWorldValidationReport:
+    """Revalidate paired fictional EHR worlds with fixed aggregate output."""
+
+    evaluators = {
+        "pair_binding": _check_pair_binding,
+        "shared_demographics": _check_shared_demographics,
+        "shared_observation": _check_shared_observation,
+        "observation_invariants": _check_observation_invariants,
+        "resource_invariants": _check_resource_invariants,
+        "permitted_changes": _check_permitted_changes,
+        "truth_boundary": _check_truth_boundary,
+    }
+    checks = tuple(
+        _world_check(name, lambda evaluator=evaluators[name]: evaluator(worlds))
+        for name in COUNTERFACTUAL_WORLD_CHECK_NAMES
+    )
+    return CounterfactualWorldValidationReport(_status_for_checks(checks), checks)
+
+
 __all__ = [
     "COUNTERFACTUAL_WORLD_CHECK_NAMES",
     "COUNTERFACTUAL_WORLD_REASON_CODES",
@@ -381,4 +728,5 @@ __all__ = [
     "CounterfactualWorldValidationReport",
     "CounterfactualWorldValidationStatus",
     "assemble_counterfactual_ehr_worlds",
+    "validate_counterfactual_ehr_worlds",
 ]
