@@ -144,6 +144,7 @@ def test_result_canonical_report_and_summary_round_trip_without_governed_details
         str(tmp_path),
         "heldout_aggregate_sha256",
         "synthetic_aggregate_sha256",
+        "comparison_sha256",
         "support",
         "denominator",
         "PREV101-P-001",

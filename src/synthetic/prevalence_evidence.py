@@ -729,18 +729,10 @@ class PrevalenceRunResult:
         object.__setattr__(self, "comparisons", sorted_comparisons)
 
     def to_mapping(self) -> dict[str, object]:
-        comparison_payload = json.dumps(
-            [comparison.to_mapping() for comparison in self.comparisons],
-            sort_keys=True,
-            separators=(",", ":"),
-            ensure_ascii=True,
-            allow_nan=False,
-        ).encode("ascii")
         return {
             "identity": self.identity.to_mapping(),
             "status": self.status,
             "comparison_count": len(self.comparisons),
-            "comparison_sha256": hashlib.sha256(comparison_payload).hexdigest(),
         }
 
 
@@ -1274,17 +1266,13 @@ def _parse_prevalence_evidence_report(value: object) -> dict[str, object]:
     for item in raw_runs:
         run = _require_exact_mapping(
             item,
-            frozenset({"identity", "status", "comparison_count", "comparison_sha256"}),
+            frozenset({"identity", "status", "comparison_count"}),
         )
         identity = _parse_public_identity(run["identity"])
         if run["status"] not in _EVIDENCE_STATUSES or isinstance(run["comparison_count"], bool) or not isinstance(
             run["comparison_count"], int
         ) or run["comparison_count"] < 0:
             raise ValueError("prevalence evidence report is invalid")
-        try:
-            _require_digest(run["comparison_sha256"])
-        except PrevalenceEvidenceUnavailable:
-            raise ValueError("prevalence evidence report is invalid") from None
         if _generation_identity(identity) != generation:
             raise ValueError("prevalence evidence report is invalid")
         identities.append(identity)

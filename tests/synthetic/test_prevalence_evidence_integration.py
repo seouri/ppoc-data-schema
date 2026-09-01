@@ -279,10 +279,11 @@ def test_evidence_evaluates_only_observed_demographic_and_recorded_outcome_targe
     assert [run["identity"]["package_sha256"] for run in public_report["runs"]] == [
         run.identity.package_sha256 for run in report.runs
     ]
-    assert all(set(run) == {"identity", "status", "comparison_count", "comparison_sha256"} for run in public_report["runs"])
+    assert all(set(run) == {"identity", "status", "comparison_count"} for run in public_report["runs"])
     serialized_runs = json.dumps(public_report["runs"], sort_keys=True)
     for field in (
         "comparisons",
+        "comparison_sha256",
         "heldout_value",
         "synthetic_value",
         "difference",
@@ -293,6 +294,33 @@ def test_evidence_evaluates_only_observed_demographic_and_recorded_outcome_targe
         "synthetic_aggregate_sha256",
     ):
         assert field not in serialized_runs
+
+
+def test_public_run_mapping_cannot_commit_per_run_comparison_values(tmp_path: Path) -> None:
+    """Adding a per-run comparison digest would create a hidden value commitment in public output."""
+    report = evaluate_prevalence_evidence(_config(tmp_path))
+    original_run = report.runs[0]
+    original = next(item for item in original_run.comparisons if item.status == "PASS")
+    replacement = HeldoutComparison(
+        original.stratum_id,
+        original.target_name,
+        original.family,
+        original.statistic,
+        original.unit,
+        original.quantile_level,
+        "PASS",
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+    )
+    altered = replace(
+        original_run,
+        comparisons=tuple(replacement if item == original else item for item in original_run.comparisons),
+    )
+
+    assert altered.to_mapping() == original_run.to_mapping()
+    assert set(altered.to_mapping()) == {"identity", "status", "comparison_count"}
 
 
 def test_evidence_uses_fail_over_unevaluable_over_pass_across_runs(tmp_path: Path) -> None:
