@@ -11,6 +11,20 @@ ROOT = Path(__file__).resolve().parents[2]
 GUIDE = ROOT / "docs" / "augmenter-oracle.md"
 README = ROOT / "README.md"
 SYNTHETIC_GUIDE = ROOT / "docs" / "synthetic-generator.md"
+SPEC = (
+    ROOT
+    / "docs"
+    / "superpowers"
+    / "specs"
+    / "2026-09-01-augmenter-oracle-adapter-design.md"
+)
+PLAN = (
+    ROOT
+    / "docs"
+    / "superpowers"
+    / "plans"
+    / "2026-09-01-augmenter-oracle-adapter.md"
+)
 
 
 def _guide_text() -> str:
@@ -104,3 +118,19 @@ def test_synthetic_generator_guide_documents_explicit_development_profiles() -> 
         "release authorization",
     ):
         assert required in guide
+
+
+def test_adapter_docs_describe_the_private_descriptor_relative_input_snapshot() -> None:
+    """Breaks if docs reintroduce the package-root child input race."""
+    documents = {
+        "guide": _guide_text(),
+        "spec": SPEC.read_text(encoding="utf-8"),
+        "plan": PLAN.read_text(encoding="utf-8"),
+    }
+
+    for name, document in documents.items():
+        normalized = " ".join(document.split())
+        assert "private descriptor-relative synthetic input snapshot" in normalized, name
+        assert "the staged package as the only input directory" not in normalized, name
+        assert "package root as `input_dir`" not in normalized, name
+        assert "<staged-package-root>" not in normalized, name

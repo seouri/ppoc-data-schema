@@ -15,7 +15,7 @@
 - The adapter is development-only and always returns `DerivationResult(..., test_only=True)`; it must not change `generate.py`, the production CLI, or any authoritative binding.
 - The copied runtime closure remains byte-identical; the adapter executes only a verified private snapshot of `scripts/augment.py`, `scripts/harrall_outliers.py`, the ten growth-reference CSVs, and `data/icd10cm-tabular-2026.csv`.
 - The checked-in `data/augment-runtime-manifest.json` must match the fixed manifest SHA-256 `b50afc36eca61684380154129cdacf484e62d56fa6da55914adab18c2d94d1d6`; every listed file must be a regular non-symlink with the recorded size and digest.
-- The supported subprocess command uses the current `sys.executable`, `-E -s`, no shell, private runtime `cwd`, staged package root as `input_dir`, private output directory, and fixed `--output_format csv`.
+- The supported subprocess command uses the current `sys.executable`, `-E -s`, no shell, private runtime `cwd`, private descriptor-relative synthetic input snapshot as `input_dir`, private output directory, and fixed `--output_format csv`.
 - The output directory must contain exactly one `visits_augmented-YYYYMMDDHHMMSS.csv` and one `patients_augmented-YYYYMMDDHHMMSS.csv`, both regular non-symlink files; any other entry or duplicate fails closed.
 - Only descriptor-named `visits_augmented` and `patients_augmented` destinations may be created, with exclusive creation and safe relative paths; base resources must remain byte-for-byte unchanged.
 - Public failures use fixed `DerivationUnavailable` text and never expose subprocess output, input/output paths, rows, identifiers, diagnosis values, or runtime exception details.
@@ -88,7 +88,10 @@
   Implement `derive` to reject a missing, symlinked, or non-directory package
   root; load and validate the descriptor paths for the two augmented resources
   as safe relative paths; verify and snapshot the runtime in a
-  `TemporaryDirectory`; create a second private output directory; and invoke:
+  `TemporaryDirectory`; copy the descriptor-named `visits`, `patients`, and
+  `problem_list` base resources through a pinned package-root descriptor into
+  a private descriptor-relative synthetic input snapshot; create a second
+  private output directory; and invoke the CLI with that input snapshot:
 
   ```python
   subprocess.run(
@@ -97,7 +100,7 @@
           "-E",
           "-s",
           str(runtime_root / "scripts" / "augment.py"),
-          str(package_root),
+          str(input_root),
           "--output_dir",
           str(output_root),
           "--output_format",

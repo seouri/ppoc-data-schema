@@ -63,14 +63,19 @@ runtime cannot silently retain the same binding identity.
 
 `derive` accepts only the package root supplied by the exporter. It rejects a
 missing, non-directory, or symlink package root and never accepts a separate
-input or output data root. It runs the preserved CLI without a shell using
-the current Python interpreter, `-E -s` isolation flags, the private runtime
-root as `cwd`, the package root as `input_dir`, a private temporary output
-directory, and the fixed `--output_format csv` option. The command is
-equivalent to:
+caller-selected input or output data root. It reads the descriptor-named
+`visits`, `patients`, and `problem_list` base resources through a pinned
+package-root directory descriptor and copies their bytes into a private
+descriptor-relative synthetic input snapshot. The child receives only that
+snapshot, not the staged package pathname. It runs the preserved CLI without a
+shell using the current Python interpreter, `-E -s` isolation flags, the
+private runtime root as `cwd`, the private descriptor-relative synthetic input
+snapshot as `input_dir`, a private temporary output directory, and the fixed
+`--output_format csv` option. The command is equivalent to:
 
 ```text
-<interpreter> -E -s <runtime-root>/scripts/augment.py <staged-package-root> \
+<interpreter> -E -s <runtime-root>/scripts/augment.py \
+  <private-descriptor-relative-synthetic-input-snapshot> \
   --output_dir <private-temporary-output> --output_format csv
 ```
 
