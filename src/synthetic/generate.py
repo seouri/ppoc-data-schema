@@ -13,6 +13,7 @@ from synthetic.derivation_binding import DerivationBinding
 from synthetic.development_runtime import (
     build_development_runtime,
     generate_development_cohort,
+    generate_development_realistic_cohort,
 )
 from synthetic.models import PatientState
 from synthetic.native.healthy import HealthyKernel
@@ -28,7 +29,9 @@ from synthetic.schema_contract import load_descriptor
 
 CLI_UNAVAILABLE_MESSAGE = "No production growth reference or authoritative derivation oracle is configured"
 _DEVELOPMENT_UNAVAILABLE_MESSAGE = "Synthetic development generation unavailable"
-_DEVELOPMENT_PROFILES = frozenset({"development-smoke", "development-cohort"})
+_DEVELOPMENT_PROFILES = frozenset(
+    {"development-smoke", "development-cohort", "development-realistic"}
+)
 _AGGREGATE_TOKEN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
 _AGGREGATE_IDENTIFIER_RE = re.compile(r"\b[A-Za-z][A-Za-z0-9]*-[PV]-[0-9]{3,}\b", re.IGNORECASE)
 _AGGREGATE_PATH_EXTENSION_RE = re.compile(
@@ -180,6 +183,16 @@ def main() -> None:
             )
         elif args.profile == "development-cohort":
             generate_development_cohort(
+                runtime,
+                descriptor_path=descriptor_path,
+                output=args.output,
+                patient_count=args.patients,
+                seed=args.seed,
+                reference_time=args.reference_time,
+                software_revision=args.software_revision,
+            )
+        elif args.profile == "development-realistic":
+            generate_development_realistic_cohort(
                 runtime,
                 descriptor_path=descriptor_path,
                 output=args.output,

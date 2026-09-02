@@ -39,7 +39,7 @@ This is the first of five independently reviewable plans:
 4. **Privacy audit:** shadow-model membership inference, linkage, attribute disclosure, controls, composition, policy decisions, and optional differential privacy.
 5. **Synthea backend:** pinned Synthea extension, event adapter, PPOC exporter, and engine-conformance suite.
 
-The foundation's original generated output was a `smoke` profile. The current CLI adds explicitly named `development-smoke` and `development-cohort` profiles using the pinned test-only runtime; those packages remain development artifacts and are not clinical, prevalence, privacy, or release evidence.
+The foundation's original generated output was a `smoke` profile. The current CLI adds explicitly named `development-smoke`, `development-cohort`, and `development-realistic` profiles using the pinned test-only runtime; those packages remain development artifacts and are not clinical, prevalence, privacy, or release evidence.
 
 ## Planned file structure
 

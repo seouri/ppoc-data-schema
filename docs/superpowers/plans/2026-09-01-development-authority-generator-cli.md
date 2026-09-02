@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add an explicit, reproducible development CLI that uses the pinned CDC tables and source-matched augmenter to emit exact-schema smoke and healthy-plus-GHD cohort packages while retaining test-only classification and all real-data/release gates.
+**Goal:** Add an explicit, reproducible development CLI that uses the pinned CDC tables and source-matched augmenter to emit exact-schema smoke, healthy-plus-GHD coverage, and target-shaped cohort packages while retaining test-only classification and all real-data/release gates.
 
 **Architecture:** Keep `scripts/augment.py` byte-for-byte unchanged and add a strict `CdcGrowthReference` adapter plus a small development runtime factory. The CLI composes those identities with the existing smoke generator, native cohort/resource projection, and atomic exact-schema exporter; no-profile invocation remains fail-closed and every successful package is marked `test_only_derivation=true`.
 
@@ -16,7 +16,7 @@
 - Treat the CDC/augmenter pair as development-authoritative only: reproducibility within the explicit profiles is in scope; clinical validity, prevalence, demographic representativeness, privacy/non-matchability, and release approval are not.
 - Set `test_only=true` in the development binding and never call `require_approved_derivation_binding` or mark a package clinically valid.
 - Read no patient, visit, governed calibration, held-out, privacy, network, Synthea, model, or arbitrary diagnosis input; only the repository descriptor, pinned runtime/reference files, source metadata, and wholly generated rows are allowed.
-- Use exact mapping/version tokens `cdc-lms-reference-v1`, `cdc-lms-mapping-v1`, `development-generator-v1`, `development-cohort-v1`, `development-augmenter-v1`, and `augment-runtime-v1` where their corresponding identities are required.
+- Use exact mapping/version tokens `cdc-lms-reference-v1`, `cdc-lms-mapping-v1`, `development-generator-v1`, `development-cohort-v1`, `development-realistic-v1`, `development-augmenter-v1`, and `augment-runtime-v1` where their corresponding identities are required.
 - Resolve the descriptor from the repository checkout by default, use metadata defaults `2026-09-01T00:00:00Z` and `development-generator-v1`, and reject output collisions without overwriting.
 - Support only CDC reference sex `M` and `F`; keep the required `F/M/U` mapping structurally complete but assign the development cohort zero probability for visible `U`.
 - Use the exact age schedules, observation probabilities, module prior, demographic weights, BMI 730-day boundary rule, `abs(L) < 1e-6` branch, `age_days / 30.4375` coordinate, and dependency digest stated in the spec.
@@ -183,7 +183,7 @@ git commit -m "feat: compose development derivation runtime"
 
 **Interfaces:**
 - Consumes: `DevelopmentRuntime`, `build_development_runtime`, existing `generate_smoke`, `PackageExportMetadata`, and the fixed CLI constants.
-- Produces: `generate_smoke(..., profile: str = "smoke") -> Path`; `CLI_UNAVAILABLE_MESSAGE = "No production growth reference or authoritative derivation oracle is configured"`; and a `main()` that dispatches only `development-smoke` or `development-cohort` after parsing required operational arguments.
+- Produces: `generate_smoke(..., profile: str = "smoke") -> Path`; `CLI_UNAVAILABLE_MESSAGE = "No production growth reference or authoritative derivation oracle is configured"`; and a `main()` that dispatches only the explicit development profiles after parsing required operational arguments.
 
 - [x] **Step 1: Write failing smoke/CLI tests**
 
@@ -229,7 +229,7 @@ parser.add_argument("--reference-time", default="2026-09-01T00:00:00Z")
 parser.add_argument("--software-revision", default="development-generator-v1")
 ```
 
-Resolve a missing descriptor to `Path(__file__).resolve().parents[2] / "datapackage.json"`. If `args.profile` is absent or not one of the two supported names, raise `SystemExit(CLI_UNAVAILABLE_MESSAGE)` before building a runtime or checking the output. For `development-smoke`, call `build_development_runtime(repository_root)` and `generate_smoke(..., reference=runtime.reference, derivation_oracle=runtime.derivation_oracle, derivation_binding=runtime.derivation_binding, profile="development-smoke")`. Catch ordinary generation/reference/binding/lifecycle errors at the CLI boundary and raise the fixed redacted `SystemExit("Synthetic development generation unavailable")`; preserve the no-profile message exactly. Do not add a real-data, calibration, held-out, privacy, Synthea, network, model, or arbitrary diagnosis argument.
+Resolve a missing descriptor to `Path(__file__).resolve().parents[2] / "datapackage.json"`. If `args.profile` is absent or not one of the supported names, raise `SystemExit(CLI_UNAVAILABLE_MESSAGE)` before building a runtime or checking the output. For `development-smoke`, call `build_development_runtime(repository_root)` and `generate_smoke(..., reference=runtime.reference, derivation_oracle=runtime.derivation_oracle, derivation_binding=runtime.derivation_binding, profile="development-smoke")`; dispatch the cohort and target-shaped profiles to their corresponding runtime bridges. Catch ordinary generation/reference/binding/lifecycle errors at the CLI boundary and raise the fixed redacted `SystemExit("Synthetic development generation unavailable")`; preserve the no-profile message exactly. Do not add a real-data, calibration, held-out, privacy, Synthea, network, model, or arbitrary diagnosis argument.
 
 - [x] **Step 4: Run focused tests, lint, and commit**
 
@@ -291,9 +291,9 @@ In `development_runtime.py`, add immutable builders for `CalibrationSamplingProf
 
 Implement `build_development_cohort()` as the in-memory composition seam: call `generate_native_cohort(config, runtime.reference, calibration, modules={...}, descriptor=descriptor)`, require every member bundle to be present and `validate_observed_resources(bundle).status is PASS`, and return the typed `NativeCohort` for evaluator-only tests. Implement `generate_development_cohort()` to preflight `_require_output_available(output)` before cohort sampling, load the exact descriptor, call the builder, and flatten rows in member order into exactly `BASE_RESOURCE_NAMES`. Compute a canonical JSON configuration hash over the profile version, all fixed policy/weight mappings, ages, module versions, and reference identity/fingerprint; do not include patient IDs or truth. Call `export_exact_schema_package()` with `PackageExportMetadata(profile="development-cohort", reference_id=runtime.reference.reference_id, reference_sha256=runtime.reference.source_sha256, configuration_sha256=hash, ...)`, the source-matched oracle, and the test-only binding.
 
-Wrap reference, cohort, projection, and export failures in the existing redacted package failure contract. Never call `to_mapping()` on latent trajectories for export and never place a disorder label in any public package artifact.
+Wrap reference, cohort, projection, and export failures in the existing redacted package failure contract. Never call `to_mapping()` on latent trajectories for export or expose module names/severity/truth. The target-shaped profile may add only its fixed synthetic `E23.0` diagnosis token at sampled GHD diagnosis visits so the pinned augmenter derives the intended visible synthetic flag; no arbitrary diagnosis payload is accepted.
 
-In `generate.py`, add the `development-cohort` branch that builds the same runtime and calls `generate_development_cohort()` with parsed metadata. Keep both profile names explicit; no profile continues to raise `CLI_UNAVAILABLE_MESSAGE`.
+In `generate.py`, add the `development-cohort` branch that builds the same runtime and calls `generate_development_cohort()` with parsed metadata. Keep all supported profile names explicit; no profile continues to raise `CLI_UNAVAILABLE_MESSAGE`.
 
 - [x] **Step 4: Run focused tests, lint, and commit**
 
@@ -314,16 +314,17 @@ git commit -m "feat: add development cohort package profile"
 - Modify: `tests/synthetic/test_cohort_boundaries.py` only to include new explicit runtime allow-list assertions
 
 **Interfaces:**
-- Consumes: the two working CLI profiles, `build_development_runtime`, the source-matched candidate/oracle guides, and the existing exact-schema output contract.
+- Consumes: the explicit working CLI profiles, `build_development_runtime`, the source-matched candidate/oracle guides, and the existing exact-schema output contract.
 - Produces: copy-pasteable development commands and tests proving that explicit development composition is enabled without turning the default/no-profile path into a production route.
 
 - [x] **Step 1: Write failing documentation and boundary tests**
 
-Require the guide to contain both exact commands:
+Require the guide to contain the exact commands for all explicit profiles:
 
 ```text
 uv run python -m synthetic.generate --profile development-smoke --output /tmp/ppoc-development-smoke --patients 1000 --seed 20260901
 uv run python -m synthetic.generate --profile development-cohort --output /tmp/ppoc-development-cohort --patients 1000 --seed 20260901
+uv run python -m synthetic.generate --profile development-realistic --output /tmp/ppoc-development-realistic --patients 1000 --seed 20260901
 ```
 
 Also require `development-authoritative`, `cdc-lms-reference-v1`, `test_only_derivation=true`, the fixed age schedule, the zero-U rationale, the 730-day BMI boundary, exact eight-resource output, no-profile fixed message, no real/governed inputs, and explicit deferred clinical/prevalence/privacy/non-matchability/held-out/Synthea/release gates. Update the candidate-guide cross-document test to accept the new statement that only explicit development profiles compose the candidate while retaining the exact no-profile failure string.
@@ -342,7 +343,7 @@ Expected: missing CLI documentation or an overly strict candidate-import boundar
 
 - [x] **Step 3: Document the explicit development route and preserve the no-profile boundary**
 
-Add a `## Explicit development CLI profiles` section near the current-scope material. Explain that `development-smoke` preserves the three-visit smoke contract and that `development-cohort` emits the fixed healthy/GHD, full-age, visible-resource profile. Document the defaults, collision behavior, deterministic rerun rule (compare distinct output roots), manifest fields, source/runtime lock pins, the BMI 730-day boundary, zero-U mapping, empty ancillary resources, and the fact that all outputs remain test-only.
+Add a `## Explicit development CLI profiles` section near the current-scope material. Explain that `development-smoke` preserves the three-visit smoke contract, `development-cohort` emits the fixed healthy/GHD full-age visible-resource profile, and `development-realistic` emits the aggregate target-shaped healthy/GHD profile with fictional event descendants plus the fixed synthetic `E23.0` token at GHD diagnosis visits. Document the defaults, collision behavior, deterministic rerun rule (compare distinct output roots), manifest fields, source/runtime lock pins, the BMI 730-day boundary, zero-U mapping, empty ancillary resources, and the fact that all outputs remain test-only.
 
 Rewrite stale sentences that say the command is entirely unavailable to say precisely: the default/no-profile invocation remains fail-closed with `No production growth reference or authoritative derivation oracle is configured`; explicit development profiles use the pinned source-matched runtime and do not establish production authority. Keep the existing candidate augmenter and optional Synthea links, and preserve every deferred-gate/non-claim statement.
 
@@ -366,7 +367,7 @@ git commit -m "docs: document development generator profiles"
 - Modify: `docs/synthetic-generator.md` to distinguish the existing native direct scale test from the new CLI composition scale test
 
 **Interfaces:**
-- Consumes: both explicit profile runners, the pinned CDC reference/oracle, the existing `SYNTHETIC_RUN_SCALE=1` marker, and all repository validators.
+- Consumes: the explicit profile runners, the pinned CDC reference/oracle, the existing `SYNTHETIC_RUN_SCALE=1` marker, and all repository validators.
 - Produces: opt-in 10,000-patient evidence that the development route can sustain the existing exact-schema/trajectory/derivation composition without adding multi-minute work to ordinary CI.
 
 - [x] **Step 1: Write the opt-in scale assertions**
@@ -410,10 +411,20 @@ git add tests/synthetic/test_development_scale.py tests/synthetic/test_generate_
 git commit -m "test: exercise development generator at scale"
 ```
 
+### Task 6a: Add the target-shaped development-realistic profile
+
+**Status:** Implemented and verified as a bounded follow-on to the original CLI slice.
+
+The opt-in `development-realistic` route reuses the exact-schema native cohort and source-matched augmenter bridge while freezing the checked-in `schema/stats.json` snapshot `2026-08-24` in its configuration hash. It uses the observed `growth_dx_flag` count `35907/250588` only as a healthy/GHD latent module prior, folds source-missing ethnicity/race cells into visible `Unknown`, retains zero U weight because the CDC reference has only F/M series, enables the existing fictional recognition/workup/diagnosis descendants, and adds fixed synthetic `E23.0` at each sampled GHD diagnosis visit for source-oracle flag derivation. The fixed token is not caller input or a clinical claim; generated flag counts are synthetic scenario outcomes rather than observed prevalence.
+
+- [x] Added frozen configuration, cohort builder, package bridge, and explicit CLI dispatch.
+- [x] Added test-first configuration, deterministic module-mix, configuration-hash, package, and documentation coverage.
+- [x] Synchronized the development, augmenter-import, augmenter-oracle, and foundation companion documentation.
+
 ### Task 7: Fresh review, integration, and publication
 
 **Files:**
-- Review: all files changed by Tasks 1–6 and `docs/superpowers/specs/2026-09-01-development-authority-generator-cli-design.md`
+- Review: all files changed by Tasks 1–6a and `docs/superpowers/specs/2026-09-01-development-authority-generator-cli-design.md`
 - Modify: only the responsible task files if a review finding is confirmed
 
 **Interfaces:**
@@ -453,7 +464,7 @@ git status --short --branch
 
 ## Completion evidence
 
-- Tasks 1–6 were implemented and covered by focused reviews and fix rounds. The CDC adapter hardening covered four-table-only reads, intermediate and terminal symlink rejection, digest/manifest drift, strict LMS domains, BMI day-730 handling, P3/P97 generation-only clamping, and constructor compatibility.
+- Tasks 1–6a were implemented and covered by focused reviews and fix rounds. The CDC adapter hardening covered four-table-only reads, intermediate and terminal symlink rejection, digest/manifest drift, strict LMS domains, BMI day-730 handling, P3/P97 generation-only clamping, and constructor compatibility.
 - Runtime/binding reviews covered locked source closure, exact identity/fingerprint/classification invariants, direct-oracle lock drift, binding-version enforcement, and visible-generator/deferred-import boundaries. CLI, cohort, documentation, and scale reviews approved the explicit profiles and test-only claims.
 - The final CLI advisory was resolved by `b930e56`; its subprocess test now uses a runtime root without the default descriptor and exercises custom descriptor, reference-time, and software-revision forwarding. The advisory re-review approved it with no findings.
 - Current-main focused verification: `160 passed` for CDC/reference/kernel/runtime contracts, `27 passed, 4 skipped` for smoke/CLI/scale-focused tests, and `29 passed` for augmenter/privacy boundaries; Ruff passed. The repository-wide suite is `2492 passed, 4 skipped`, schema validation and `uv lock --check` pass, and source/runtime/lock hashes remain `e7fe76af...`, `b50afc36...`, and `d17f8c26...` respectively.

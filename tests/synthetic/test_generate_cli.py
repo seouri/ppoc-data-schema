@@ -233,6 +233,48 @@ def test_development_cohort_cli_exports_exact_visible_package(tmp_path: Path) ->
         assert forbidden not in published.lower()
 
 
+def test_development_realistic_cli_exports_target_shaped_package(tmp_path: Path) -> None:
+    """Catches the opt-in target-shaped profile bypassing exact-schema export."""
+    output = tmp_path / "development-realistic"
+
+    result = _run(_command(output, profile="development-realistic", patient_count=128))
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == ""
+    assert result.stderr == ""
+    descriptor = load_descriptor(ROOT / "datapackage.json")
+    expected_resources = {resource["path"] for resource in descriptor["resources"]}
+    assert {path.name for path in output.glob("*.csv")} == expected_resources
+    assert len(expected_resources) == 8
+    assert not validate_structure(output, descriptor).errors
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["profile"] == "development-realistic"
+    assert manifest["reference_id"] == "cdc-lms-reference-v1"
+    assert manifest["reference_sha256"] == CdcGrowthReference.from_repository(ROOT).source_sha256
+    assert manifest["derivation_fingerprint"] == AUGMENTER_RUNTIME_MANIFEST_SHA256
+    assert manifest["test_only_derivation"] is True
+    assert manifest["status"] == "STRUCTURE_VALIDATED_TEST_ORACLE"
+    visits_path = _resource_path(descriptor, "visits")
+    diagnosis_codes = [
+        value
+        for row in _csv_rows(output / visits_path)
+        for field_name, value in row.items()
+        if field_name.startswith("enc_diag_") and value
+    ]
+    assert {code: diagnosis_codes.count(code) for code in set(diagnosis_codes)} == {
+        "SYN-GROWTH-RECOGNITION": 20,
+        "SYN-GROWTH-WORKUP": 20,
+        "SYN-GROWTH-DIAGNOSIS": 20,
+        "E23.0": 20,
+    }
+    augmented_path = _resource_path(descriptor, "patients_augmented")
+    augmented_patients = _csv_rows(output / augmented_path)
+    assert sum(int(row["growth_dx_flag"]) for row in augmented_patients) == 20
+    published = b"".join(path.read_bytes() for path in sorted(output.iterdir()) if path.is_file())
+    for forbidden in (b"latent", b"severity", b"truth", b"growth_hormone_deficiency"):
+        assert forbidden not in published.lower()
+
+
 @pytest.mark.scale
 @pytest.mark.skipif(
     not _SCALE_ENABLED,

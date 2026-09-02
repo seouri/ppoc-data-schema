@@ -99,6 +99,7 @@ def test_synthetic_generator_guide_documents_explicit_development_profiles() -> 
     for required in (
         "uv run python -m synthetic.generate --profile development-smoke --output /tmp/ppoc-development-smoke --patients 1000 --seed 20260901",
         "uv run python -m synthetic.generate --profile development-cohort --output /tmp/ppoc-development-cohort --patients 1000 --seed 20260901",
+        "uv run python -m synthetic.generate --profile development-realistic --output /tmp/ppoc-development-realistic --patients 1000 --seed 20260901",
         "development-authoritative",
         "cdc-lms-reference-v1",
         "test_only_derivation=true",
@@ -116,6 +117,10 @@ def test_synthetic_generator_guide_documents_explicit_development_profiles() -> 
         "held-out validation",
         "Synthea",
         "release authorization",
+        "development-realistic",
+        "target-shaped",
+        "14.3291%",
+        "synthetic `E23.0`",
     ):
         assert required in guide
 

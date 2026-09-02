@@ -34,7 +34,7 @@ from synthetic.native.clinical_modules import (
     GrowthHormoneDeficiencyModule,
     HealthyGrowthModule,
 )
-from synthetic.native.observations import CensoringMode, ObservationPolicy
+from synthetic.native.observations import CensoringMode, ObservationPolicy, RecordedEventKind
 from synthetic.native.resources import (
     BASE_RESOURCE_NAMES,
     ResourceValidationStatus,
@@ -57,6 +57,45 @@ _RUNTIME_MISMATCH = "development runtime identities are inconsistent"
 _COHORT_PROFILE = "development-cohort-v1"
 _COHORT_PACKAGE_PROFILE = "development-cohort"
 _OBSERVATION_POLICY_VERSION = "development-cohort-observation-v1"
+_REALISTIC_PROFILE = "development-realistic-v1"
+_REALISTIC_PACKAGE_PROFILE = "development-realistic"
+_REALISTIC_OBSERVATION_POLICY_VERSION = "development-realistic-observation-v1"
+_REALISTIC_TARGET_SNAPSHOT = "schema-stats-2026-08-24"
+_REALISTIC_GROWTH_DIAGNOSIS_CODE = "E23.0"
+_REALISTIC_DENOMINATOR = 250_588
+_REALISTIC_GROWTH_DX_COUNT = 35_907
+_REALISTIC_SEX_WEIGHTS = (
+    ("F", 122_883 / _REALISTIC_DENOMINATOR),
+    ("M", 127_699 / _REALISTIC_DENOMINATOR),
+    ("U", 0.0),
+)
+_REALISTIC_ETHNICITY_WEIGHTS = (
+    ("", 0.0),
+    ("Not Hispanic or Latino", 170_594 / _REALISTIC_DENOMINATOR),
+    ("Hispanic or Latino", 28_549 / _REALISTIC_DENOMINATOR),
+    ("Choose not to Answer", 24_566 / _REALISTIC_DENOMINATOR),
+    ("Unknown", (20_834 + 5_464) / _REALISTIC_DENOMINATOR),
+    ("Unable to collect", 450 / _REALISTIC_DENOMINATOR),
+    ("Patient does not know", 131 / _REALISTIC_DENOMINATOR),
+)
+_REALISTIC_RACE_WEIGHTS = (
+    ("", 0.0),
+    ("American Indian or Alaska Native", 625 / _REALISTIC_DENOMINATOR),
+    ("Another Race", 15_950 / _REALISTIC_DENOMINATOR),
+    ("Asian", 15_661 / _REALISTIC_DENOMINATOR),
+    ("Black or African American", 12_162 / _REALISTIC_DENOMINATOR),
+    ("Choose not to answer", 17_534 / _REALISTIC_DENOMINATOR),
+    ("Middle Eastern or Northern African", 512 / _REALISTIC_DENOMINATOR),
+    ("Native Hawaiian or Other Pacific Islander", 248 / _REALISTIC_DENOMINATOR),
+    ("Patient does not know", 126 / _REALISTIC_DENOMINATOR),
+    ("Unable to collect", 492 / _REALISTIC_DENOMINATOR),
+    ("Unknown", (23_085 + 8_818) / _REALISTIC_DENOMINATOR),
+    ("White", 155_375 / _REALISTIC_DENOMINATOR),
+)
+_REALISTIC_GHD_PRIOR = _REALISTIC_GROWTH_DX_COUNT / _REALISTIC_DENOMINATOR
+_REALISTIC_RACE_MULTISELECT_PROBABILITY = (
+    _REALISTIC_DENOMINATOR - 237_397
+) / _REALISTIC_DENOMINATOR
 _COHORT_AGES_DAYS = (0, 365, 730, 1460, 2190, 3650, 4380, 5114, 5475, 6200, 7305)
 _REFERENCE_SEX_MAPPING = (("F", "F"), ("M", "M"), ("U", "U"))
 _PACKAGE_EXPORT_FAILURE = "observed package export failed"
@@ -246,6 +285,66 @@ def development_cohort_config(patient_count: int, seed: int) -> CohortConfig:
     )
 
 
+def development_realistic_calibration_profile() -> CalibrationSamplingProfile:
+    """Return the frozen aggregate target shape for realistic development data.
+
+    Missing source demographic cells are folded into the visible ``Unknown``
+    category because the synthetic patient contract does not expose null
+    demographic values.  The U sex cell is deliberately zero: the pinned CDC
+    reference has only F/M series and cannot generate a U reference trajectory.
+    """
+    return CalibrationSamplingProfile(
+        artifact_id=_REALISTIC_PROFILE,
+        target_registry_version=TARGET_REGISTRY_VERSION,
+        sex_weights=_REALISTIC_SEX_WEIGHTS,
+        ethnicity_weights=_REALISTIC_ETHNICITY_WEIGHTS,
+        race_weights=_REALISTIC_RACE_WEIGHTS,
+        race_multiselect_probability=_REALISTIC_RACE_MULTISELECT_PROBABILITY,
+        # The observed source flag is a target-shaped latent module prior for
+        # this profile, not a recorded-outcome allocation or clinical claim.
+        recorded_healthy_probability=0.0,
+        recorded_growth_dx_probability=0.0,
+    )
+
+
+def development_realistic_config(patient_count: int, seed: int) -> CohortConfig:
+    """Return the frozen target-shaped healthy/GHD development configuration."""
+    return CohortConfig(
+        profile=_REALISTIC_PROFILE,
+        patient_count=patient_count,
+        seed=seed,
+        ages_days=_COHORT_AGES_DAYS,
+        observation_policy=ObservationPolicy(
+            policy_version=_REALISTIC_OBSERVATION_POLICY_VERSION,
+            window_start_age_days=0,
+            window_end_age_days=7306,
+            censoring_mode=CensoringMode.NONE,
+            censor_age_days=None,
+            visit_probability=1.0,
+            length_availability_probability=0.0,
+            height_availability_probability=1.0,
+            weight_availability_probability=1.0,
+            head_circumference_availability_probability=1.0,
+            length_error_sd_cm=0.0,
+            height_error_sd_cm=0.0,
+            weight_error_sd_kg=0.0,
+            head_circumference_error_sd_cm=0.0,
+            rounding_digits=None,
+            recognition_probability=1.0,
+            diagnosis_probability=1.0,
+            recognition_delay_days=0,
+        ),
+        module_weights=(
+            CohortModuleWeight(DisorderKind.HEALTHY, 1.0 - _REALISTIC_GHD_PRIOR),
+            CohortModuleWeight(
+                DisorderKind.GROWTH_HORMONE_DEFICIENCY,
+                _REALISTIC_GHD_PRIOR,
+            ),
+        ),
+        reference_sex_mapping=_REFERENCE_SEX_MAPPING,
+    )
+
+
 def build_development_cohort(
     runtime: DevelopmentRuntime,
     *,
@@ -254,13 +353,28 @@ def build_development_cohort(
     seed: int,
 ) -> NativeCohort:
     """Build the evaluator-held native cohort before its visible rows are exported."""
+    return _build_development_native_cohort(
+        runtime,
+        config=development_cohort_config(patient_count, seed),
+        calibration=development_calibration_profile(),
+        descriptor=descriptor,
+    )
+
+
+def _build_development_native_cohort(
+    runtime: DevelopmentRuntime,
+    *,
+    config: CohortConfig,
+    calibration: CalibrationSamplingProfile,
+    descriptor: Mapping[str, object],
+) -> NativeCohort:
+    """Build and validate a native cohort for an explicit development profile."""
     if not isinstance(runtime, DevelopmentRuntime):
         raise TypeError("runtime must be a DevelopmentRuntime")
-    config = development_cohort_config(patient_count, seed)
     cohort = generate_native_cohort(
         config,
         runtime.reference,
-        development_calibration_profile(),
+        calibration,
         modules={
             DisorderKind.HEALTHY: HealthyGrowthModule(),
             DisorderKind.GROWTH_HORMONE_DEFICIENCY: GrowthHormoneDeficiencyModule(),
@@ -277,6 +391,22 @@ def build_development_cohort(
         ):
             raise ValueError("observed resource bundle did not pass validation")
     return cohort
+
+
+def build_development_realistic_cohort(
+    runtime: DevelopmentRuntime,
+    *,
+    descriptor: Mapping[str, object],
+    patient_count: int,
+    seed: int,
+) -> NativeCohort:
+    """Build the target-shaped healthy-plus-GHD development cohort."""
+    return _build_development_native_cohort(
+        runtime,
+        config=development_realistic_config(patient_count, seed),
+        calibration=development_realistic_calibration_profile(),
+        descriptor=descriptor,
+    )
 
 
 def _configuration_sha256(
@@ -317,20 +447,66 @@ def _configuration_sha256(
             "source_sha256": runtime.reference.source_sha256,
         },
     }
+    if config.profile == _REALISTIC_PROFILE:
+        configuration["realistic_target_snapshot"] = _REALISTIC_TARGET_SNAPSHOT
+        configuration["realistic_growth_diagnosis_code"] = _REALISTIC_GROWTH_DIAGNOSIS_CODE
     payload = json.dumps(configuration, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(payload).hexdigest()
 
 
-def _visible_base_rows(cohort: NativeCohort) -> dict[str, list[dict[str, object]]]:
+def _visible_base_rows(
+    cohort: NativeCohort,
+    *,
+    include_realistic_growth_diagnosis: bool = False,
+) -> dict[str, list[dict[str, object]]]:
     rows = {resource_name: [] for resource_name in BASE_RESOURCE_NAMES}
     for member in cohort.members:
         bundle = member.bundle
         if bundle is None:
             raise ValueError("observed resource bundle did not pass validation")
-        for resource_name in BASE_RESOURCE_NAMES:
-            rows[resource_name].extend(
-                row.to_mapping() for row in bundle.rows[resource_name]
+        member_rows = {
+            resource_name: [row.to_mapping() for row in bundle.rows[resource_name]]
+            for resource_name in BASE_RESOURCE_NAMES
+        }
+        if (
+            include_realistic_growth_diagnosis
+            and member.trajectory.disorder.kind
+            is DisorderKind.GROWTH_HORMONE_DEFICIENCY
+        ):
+            diagnosis_event = next(
+                (
+                    event
+                    for event in member.frame.events
+                    if event.event_kind is RecordedEventKind.DIAGNOSIS
+                ),
+                None,
             )
+            if diagnosis_event is None:
+                raise ValueError("realistic growth diagnosis event is missing")
+            diagnosis_visit = next(
+                (
+                    row
+                    for row in member_rows["visits"]
+                    if row.get("age_in_days") == diagnosis_event.age_days
+                ),
+                None,
+            )
+            if diagnosis_visit is None:
+                raise ValueError("realistic growth diagnosis visit is missing")
+            diagnosis_slot = next(
+                (
+                    field_name
+                    for field_name in diagnosis_visit
+                    if field_name.startswith("enc_diag_")
+                    and diagnosis_visit[field_name] == ""
+                ),
+                None,
+            )
+            if diagnosis_slot is None:
+                raise ValueError("realistic growth diagnosis slot is missing")
+            diagnosis_visit[diagnosis_slot] = _REALISTIC_GROWTH_DIAGNOSIS_CODE
+        for resource_name in BASE_RESOURCE_NAMES:
+            rows[resource_name].extend(member_rows[resource_name])
     return rows
 
 
@@ -362,6 +538,50 @@ def generate_development_cohort(
             output,
             metadata=PackageExportMetadata(
                 profile=_COHORT_PACKAGE_PROFILE,
+                seed=seed,
+                reference_time=reference_time,
+                reference_id=runtime.reference.reference_id,
+                reference_sha256=runtime.reference.source_sha256,
+                configuration_sha256=_configuration_sha256(runtime, config, calibration),
+                software_revision=software_revision,
+            ),
+            derivation_oracle=runtime.derivation_oracle,
+            derivation_binding=runtime.derivation_binding,
+        )
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except Exception:  # noqa: BLE001 - package failures must expose only the fixed contract.
+        raise PackageExportUnavailable(_PACKAGE_EXPORT_FAILURE) from None
+
+
+def generate_development_realistic_cohort(
+    runtime: DevelopmentRuntime,
+    *,
+    descriptor_path: Path,
+    output: Path,
+    patient_count: int,
+    seed: int,
+    reference_time: str,
+    software_revision: str,
+) -> Path:
+    """Generate and promote an exact-schema target-shaped cohort package."""
+    try:
+        _require_output_available(output)
+        descriptor = load_descriptor(descriptor_path)
+        cohort = build_development_realistic_cohort(
+            runtime,
+            descriptor=descriptor,
+            patient_count=patient_count,
+            seed=seed,
+        )
+        config = development_realistic_config(patient_count, seed)
+        calibration = development_realistic_calibration_profile()
+        return export_exact_schema_package(
+            descriptor,
+            _visible_base_rows(cohort, include_realistic_growth_diagnosis=True),
+            output,
+            metadata=PackageExportMetadata(
+                profile=_REALISTIC_PACKAGE_PROFILE,
                 seed=seed,
                 reference_time=reference_time,
                 reference_id=runtime.reference.reference_id,

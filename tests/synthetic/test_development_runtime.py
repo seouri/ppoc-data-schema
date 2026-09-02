@@ -30,7 +30,11 @@ from synthetic.derivation_binding import (
 )
 from synthetic.development_runtime import DevelopmentRuntime, build_development_runtime
 from synthetic.models import DisorderKind
-from synthetic.native.resources import BASE_RESOURCE_NAMES, ResourceValidationStatus
+from synthetic.native.resources import (
+    BASE_RESOURCE_NAMES,
+    ResourceValidationStatus,
+    validate_observed_resources,
+)
 from synthetic.package_export import PackageExportUnavailable
 from synthetic.schema_contract import EXPECTED_SCHEMA_FINGERPRINT, field_names, load_descriptor
 from synthetic.validate import validate_structure
@@ -390,6 +394,83 @@ def test_development_cohort_configuration_is_fixed_and_aggregate_only() -> None:
     assert calibration.recorded_healthy_probability == 0.0
     assert calibration.recorded_growth_dx_probability == 0.0
     assert config == development_runtime.development_cohort_config(64, 20260901)
+
+
+def test_development_realistic_configuration_is_frozen_and_target_shaped() -> None:
+    """Catches realistic-profile drift from the checked-in aggregate target shape."""
+    config = development_runtime.development_realistic_config(128, 20260901)
+    calibration = development_runtime.development_realistic_calibration_profile()
+
+    assert config.profile == "development-realistic-v1"
+    assert config.ages_days == development_runtime.development_cohort_config(1, 1).ages_days
+    assert config.observation_policy.recognition_probability == 1.0
+    assert config.observation_policy.diagnosis_probability == 1.0
+    assert tuple((item.kind, item.probability) for item in config.module_weights) == (
+        (DisorderKind.HEALTHY, pytest.approx(214681 / 250588)),
+        (DisorderKind.GROWTH_HORMONE_DEFICIENCY, pytest.approx(35907 / 250588)),
+    )
+    assert config.reference_sex_mapping == (("F", "F"), ("M", "M"), ("U", "U"))
+    assert calibration.artifact_id == "development-realistic-v1"
+    assert dict(calibration.sex_weights) == {
+        "F": pytest.approx(122883 / 250588),
+        "M": pytest.approx(127699 / 250588),
+        "U": 0.0,
+    }
+    assert dict(calibration.ethnicity_weights)["Unknown"] == pytest.approx(
+        (20834 + 5464) / 250588
+    )
+    assert dict(calibration.race_weights)["Unknown"] == pytest.approx(
+        (23085 + 8818) / 250588
+    )
+    assert calibration.race_multiselect_probability == pytest.approx(13191 / 250588)
+    assert calibration.recorded_healthy_probability == 0.0
+    assert calibration.recorded_growth_dx_probability == 0.0
+
+
+def test_development_realistic_cohort_has_reproducible_target_shaped_module_mix() -> None:
+    """Catches a realistic profile that silently falls back to the 50/50 coverage mix."""
+    runtime = build_development_runtime(ROOT)
+    descriptor = load_descriptor(ROOT / "datapackage.json")
+
+    cohort = development_runtime.build_development_realistic_cohort(
+        runtime,
+        descriptor=descriptor,
+        patient_count=128,
+        seed=20260901,
+    )
+
+    ghd_members = [
+        member
+        for member in cohort.members
+        if member.trajectory.disorder.kind is DisorderKind.GROWTH_HORMONE_DEFICIENCY
+    ]
+    assert len(ghd_members) == 20
+    assert all(len(member.frame.events) == 3 for member in ghd_members)
+    assert all(not member.frame.events for member in cohort.members if member not in ghd_members)
+    assert all(
+        member.bundle is not None
+        and validate_observed_resources(member.bundle).status is ResourceValidationStatus.PASS
+        for member in cohort.members
+    )
+
+
+def test_development_realistic_configuration_hash_commits_target_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Catches aggregate target updates that leave the package identity unchanged."""
+    runtime = build_development_runtime(ROOT)
+    config = development_runtime.development_realistic_config(1, 20260901)
+    calibration = development_runtime.development_realistic_calibration_profile()
+
+    baseline = development_runtime._configuration_sha256(runtime, config, calibration)
+    monkeypatch.setattr(
+        development_runtime,
+        "_REALISTIC_TARGET_SNAPSHOT",
+        "schema-stats-2026-08-25",
+    )
+    changed = development_runtime._configuration_sha256(runtime, config, calibration)
+
+    assert baseline != changed
 
 
 def test_development_cohort_configuration_hash_commits_generation_domain_policy(
