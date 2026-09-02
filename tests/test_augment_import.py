@@ -121,7 +121,12 @@ def test_documentation_describes_synthetic_only_import_boundary() -> None:
     assert "the CLI cannot enforce input provenance" in guide
     assert "opt-in, test-only `SourceMatchedAugmenterOracle`" in guide
     assert "through the exact-schema exporter" in guide
-    assert "does not alter the default/native/production generator path or confer authority" in guide
+    assert "The default/no-profile and production generator paths do not invoke the imported CLI" in guide
+    assert (
+        "Explicit `development-smoke` and `development-cohort` profiles may use the separately "
+        "documented, opt-in, test-only `SourceMatchedAugmenterOracle`"
+    ) in guide
+    assert "does not alter the default/native/production generator path or confer authority" not in guide
     assert "Production `synthetic.generate` remains fail-closed" in guide
     assert "does not change the native generator, package exporter, calibration, privacy, counterfactual, Synthea, or release gates" not in guide
 
@@ -142,8 +147,13 @@ def test_documentation_describes_synthetic_only_import_boundary() -> None:
         assert "import `scripts.augment`" not in document
         assert "SourceMatchedAugmenterOracle" in document
         assert "through the exact-schema exporter" in document
-        assert "not invoked automatically" in document
-        assert "does not alter the default/native/production generator path or confer authority" in document
+        assert "The default/no-profile and production generator paths do not invoke the imported CLI" in document
+        assert (
+            "Explicit `development-smoke` and `development-cohort` profiles may use the separately "
+            "documented, opt-in, test-only `SourceMatchedAugmenterOracle`"
+        ) in document
+        assert "not invoked automatically" not in document
+        assert "does not alter the default/native/production generator path or confer authority" not in document
         assert "The script is not called by the native generator, visible package exporter" not in document
         assert "must not import or execute it" not in document
 

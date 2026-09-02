@@ -4,7 +4,7 @@
 
 **Goal:** Vendor the supplied growth augmenter and its complete non-patient runtime closure for synthetic exact-schema development runs.
 
-**Architecture:** Keep the supplied `scripts/augment.py` and `scripts/harrall_outliers.py` byte-identical and preserve their `data/` relative lookup contract. Vendor only the ten CDC/LMS/velocity reference tables and the ICD-10-CM chronic-code table that the CLI reads, record their hashes in a manifest, and expose only the repo-root CLI-only contract while keeping the augmenter outside the native generator and authoritative derivation boundary.
+**Architecture:** Keep the supplied `scripts/augment.py` and `scripts/harrall_outliers.py` byte-identical and preserve their `data/` relative lookup contract. Vendor only the ten CDC/LMS/velocity reference tables and the ICD-10-CM chronic-code table that the CLI reads, record their hashes in a manifest, and expose only the repo-root CLI-only contract while keeping the raw CLI outside the default/no-profile and production generator paths and outside the authoritative derivation boundary. Explicit development profiles may use the separately documented, opt-in, test-only adapter through the exact-schema exporter for wholly synthetic packages.
 
 **Tech Stack:** Python 3.12+, pandas, NumPy, SciPy, PyArrow, pytest, Ruff, uv, Frictionless-style `datapackage.json` headers.
 
@@ -16,7 +16,7 @@
 - Runtime reference files are exactly the ten CDC LMS/height-velocity CSVs and `icd10cm-tabular-2026.csv`; no patient or generated-output files are copied.
 - The command expects `visits.csv`, `patients.csv`, and `problem_list.csv` in an explicit caller-provided input directory and uses `data/` references.
 - The supported interface is CLI-only: run `uv run python scripts/augment.py ...` from the repository root; ordinary `import scripts.augment` is not supported by the byte-identical source.
-- The raw CLI import is a development derivation candidate, not an authoritative oracle; it is not invoked automatically by the native generator, calibration, privacy, counterfactual, Synthea, or production paths. A separately documented, opt-in, test-only `SourceMatchedAugmenterOracle` may execute this CLI through the exact-schema exporter for staged wholly synthetic packages; this explicit adapter does not alter the default/native/production generator path or confer authority.
+- The raw CLI import is a development derivation candidate, not an authoritative oracle. The default/no-profile and production generator paths do not invoke the imported CLI. Explicit `development-smoke` and `development-cohort` profiles may use the separately documented, opt-in, test-only `SourceMatchedAugmenterOracle` through the exact-schema exporter for staged wholly synthetic packages. This explicit development adapter remains outside authoritative, calibration, privacy, counterfactual, Synthea, and release decisions; it does not alter production fail-closed behavior or confer authority.
 - Tests use only temporary wholly synthetic input rows and must verify augmented output headers against `datapackage.json`.
 - `pandas`, `scipy`, and `pyarrow` are direct project dependencies alongside the existing NumPy dependency because the copied CLI imports or executes them.
 - Do not add real patient, visit, problem-list, laboratory, medication, referral, output, notebook, cache, virtual-environment, credential, or source-repository metadata files.
