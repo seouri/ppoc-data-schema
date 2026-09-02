@@ -36,7 +36,7 @@
 - Consumes: `data/augment-runtime-manifest.json`, the checked-in runtime closure, `synthetic.derivation.DerivationResult`, and descriptor `resource_spec` values.
 - Produces: `AUGMENTER_ORACLE_ID = "augmenter-cli-v1"`, `AUGMENTER_RUNTIME_MANIFEST_SHA256 = "b50afc36eca61684380154129cdacf484e62d56fa6da55914adab18c2d94d1d6"`, and `SourceMatchedAugmenterOracle(repository_root: Path | None = None, *, timeout_seconds: float = 300.0)` with `oracle_id`, `implementation_fingerprint`, and `derive(package_root: Path, descriptor: dict[str, Any]) -> DerivationResult`.
 
-- [ ] **Step 1: Write the failing synthetic oracle tests.**
+- [x] **Step 1: Write the failing synthetic oracle tests.**
 
   Add a local helper that writes only `visits.csv`, `patients.csv`, and
   `problem_list.csv` with the exact descriptor headers and one or two fictional
@@ -58,7 +58,7 @@
   subprocess command contains `-E`, `-s`, `--output_format`, and `csv`, uses
   `shell=False`, and runs with the private runtime root as `cwd`.
 
-- [ ] **Step 2: Run the focused tests to verify the red state.**
+- [x] **Step 2: Run the focused tests to verify the red state.**
 
   Run:
 
@@ -69,7 +69,7 @@
   Expected: collection fails because `synthetic.augmenter_oracle` and
   `SourceMatchedAugmenterOracle` do not yet exist.
 
-- [ ] **Step 3: Implement the minimal verified runtime bridge.**
+- [x] **Step 3: Implement the minimal verified runtime bridge.**
 
   In `src/synthetic/augmenter_oracle.py`, define the fixed constants and a
   safe internal `DerivationUnavailable` helper that always raises
@@ -124,7 +124,7 @@
   succeed. Do not import `synthetic.package_export`, the native generator, or
   any governed/evaluator module.
 
-- [ ] **Step 4: Run the focused tests and lint.**
+- [x] **Step 4: Run the focused tests and lint.**
 
   Run:
 
@@ -135,7 +135,7 @@
 
   Expected: all focused oracle tests pass and Ruff reports no errors.
 
-- [ ] **Step 5: Commit the core adapter task.**
+- [x] **Step 5: Commit the core adapter task.**
 
   ```sh
   git add src/synthetic/augmenter_oracle.py tests/synthetic/test_augmenter_oracle.py
@@ -159,7 +159,7 @@
 - Consumes: `SourceMatchedAugmenterOracle`, the existing exact-schema package-export API, the imported-augmenter guide, and the fail-closed production CLI contract.
 - Produces: a copy-pasteable synthetic-only candidate-oracle example, explicit test-only/non-authoritative language, and static regression checks that visible generation does not import the adapter.
 
-- [ ] **Step 1: Write failing documentation and boundary assertions.**
+- [x] **Step 1: Write failing documentation and boundary assertions.**
 
   Assert the new guide names `SourceMatchedAugmenterOracle`, the fixed oracle
   identity/fingerprint, the explicit staged-package contract, the private
@@ -175,7 +175,7 @@
   prevalence, and Synthea modules do not import `synthetic.augmenter_oracle`.
   Assert the existing production CLI failure text remains unchanged.
 
-- [ ] **Step 2: Run the documentation/boundary tests to verify the red state.**
+- [x] **Step 2: Run the documentation/boundary tests to verify the red state.**
 
   Run:
 
@@ -186,7 +186,7 @@
   Expected: assertions fail because the guide, links, and boundary tests do
   not yet exist.
 
-- [ ] **Step 3: Add the guide and cross-document boundary language.**
+- [x] **Step 3: Add the guide and cross-document boundary language.**
 
   Create `docs/augmenter-oracle.md` with `uv sync`, a wholly synthetic input
   package requirement, a Python example that constructs the oracle and passes
@@ -203,7 +203,7 @@
   as a candidate that cannot become authoritative without the existing parity,
   golden, review, clinical, and release gates.
 
-- [ ] **Step 4: Run documentation/boundary tests and commit.**
+- [x] **Step 4: Run documentation/boundary tests and commit.**
 
   ```sh
   PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_augmenter_oracle_docs.py tests/synthetic/test_augmenter_oracle_boundaries.py
@@ -226,7 +226,7 @@
 - Consumes: Task 1 and Task 2 commits, their focused reports, the source-matched runtime manifest, and the existing exact-schema test suite.
 - Produces: a reviewed branch ready to merge without changing source bytes, patient data boundaries, native generation behavior, or remote branch state.
 
-- [ ] **Step 1: Run the complete verification matrix.**
+- [x] **Step 1: Run the complete verification matrix.**
 
   Run:
 
@@ -244,7 +244,7 @@
   visible synthetic modules for forbidden adapter imports. Record the exact
   outputs in the ignored ledger and report files.
 
-- [ ] **Step 2: Review each task and the whole branch.**
+- [x] **Step 2: Review each task and the whole branch.**
 
   Generate a review package from the merge base through `HEAD` and dispatch a
   fresh reviewer for each task plus one broad reviewer. Route every Critical
@@ -254,16 +254,26 @@
   validation, failure redaction, synthetic-only boundaries, exact source-byte
   preservation, docs, and unchanged production fail-closed behavior.
 
-- [ ] **Step 3: Merge, verify, push, and confirm parity.**
+- [x] **Step 3: Merge, verify, push, and confirm parity.**
 
   Use the finishing workflow to fast-forward `main` from the reviewed feature
   branch, rerun the full test suite and required checks on merged `main`, push
   `origin main`, fetch, and verify:
 
   ```sh
-  test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
-  ```
+test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+```
 
-  Remove only this plan's temporary worktree after the clean final review and
-  merge; leave unrelated worktrees, caches, and pre-existing untracked files
-  untouched.
+Remove only this plan's temporary worktree after the clean final review and
+merge; leave unrelated worktrees, caches, and pre-existing untracked files
+untouched.
+
+## Completion evidence
+
+- Runtime implementation and tests were already merged into `main`; fixes `31dab99` (descriptor-relative private input snapshot) and `4e26fa7` (literal dynamic-import boundary scan) were independently re-reviewed and merged.
+- Documentation/spec/plan reconciliation `0769e6c` records the private input snapshot contract and was independently re-reviewed with approval.
+- Current main targeted matrix: adapter, docs, boundary, development-runtime, and CLI tests — `102 passed, 1 skipped`; final broad review focused matrix — `119 passed, 1 skipped`.
+- Current main full suite: `2503 passed, 4 skipped`; `uv run ruff check src tests` passed; `python3 schema/build.py --check` validated 8 resources; `uv lock --check` resolved 17 packages; CRLF-safe diff checks passed.
+- Security/identity checks: child input is snapshot-derived through the pinned package-root descriptor; output writes remain descriptor-relative and exclusive; fixed public failure redaction and traceback-local tests pass; all 14 manifest-listed runtime files remain byte-identical to `/Users/joon/w/growth-ai`; manifest and lock fingerprints match the pinned values; no patient-like data paths are tracked.
+- Boundary: explicit `development-smoke`/`development-cohort` profiles may compose this test-only, wholly synthetic, non-authoritative adapter; default/no-profile and production `synthetic.generate` remain fail-closed. Vendor Ruff’s 10 inherited findings were recorded as informational and the byte-preserved sources were not modified.
+- Review: Task 1, Task 2, and final broad review packages, plus all fix/re-review reports, are preserved under `.superpowers/sdd/2026-09-01-augmenter-oracle-adapter/` in the local ignored evidence paths.
