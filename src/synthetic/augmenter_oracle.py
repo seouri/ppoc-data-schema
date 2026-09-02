@@ -226,6 +226,9 @@ def _safe_output_parts(
     return pure.parts
 
 
+_INPUT_RESOURCES = ("visits", "patients", "problem_list")
+
+
 def _directory_open_flags() -> int:
     return (
         os.O_RDONLY
@@ -274,6 +277,53 @@ def _open_parent_directory(root_descriptor: int, parts: tuple[str, ...]) -> int:
     except Exception:
         os.close(current)
         raise
+
+
+def _read_descriptor_relative_bytes(
+    root_descriptor: int,
+    parts: tuple[str, ...],
+) -> bytes:
+    parent_descriptor = _open_parent_directory(root_descriptor, parts)
+    try:
+        flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0)
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        descriptor = os.open(parts[-1], flags, dir_fd=parent_descriptor)
+        try:
+            if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+                raise _AdapterFailure
+            chunks: list[bytes] = []
+            while chunk := os.read(descriptor, 1024 * 1024):
+                chunks.append(chunk)
+            return b"".join(chunks)
+        finally:
+            os.close(descriptor)
+    finally:
+        os.close(parent_descriptor)
+
+
+def _snapshot_package_inputs(
+    package_descriptor: int,
+    descriptor: dict[str, Any],
+    input_root: Path,
+) -> None:
+    """Copy descriptor-named base resources through the pinned root descriptor."""
+    input_root.mkdir(mode=0o700)
+    source_paths: set[tuple[str, ...]] = set()
+    for resource_name in _INPUT_RESOURCES:
+        source_parts = _safe_output_parts(descriptor, resource_name)
+        if source_parts in source_paths:
+            raise _AdapterFailure
+        source_paths.add(source_parts)
+        source_bytes = _read_descriptor_relative_bytes(
+            package_descriptor,
+            source_parts,
+        )
+        destination = input_root / f"{resource_name}.csv"
+        with destination.open("xb") as stream:
+            stream.write(source_bytes)
+        if _read_regular_bytes(destination) != source_bytes:
+            raise _AdapterFailure
 
 
 def _require_output_absent(
@@ -438,15 +488,17 @@ class SourceMatchedAugmenterOracle:
                 ) as temporary:
                     temporary_root = Path(temporary)
                     runtime_root = temporary_root / "runtime"
+                    input_root = temporary_root / "inputs"
                     output_root = temporary_root / "outputs"
                     _snapshot_runtime(self._repository_root, runtime_root, entries)
+                    _snapshot_package_inputs(package_descriptor, descriptor, input_root)
                     output_root.mkdir(mode=0o700)
                     command = [
                         sys.executable,
                         "-E",
                         "-s",
                         str(runtime_root / "scripts" / "augment.py"),
-                        str(package_root),
+                        str(input_root),
                         "--output_dir",
                         str(output_root),
                         "--output_format",

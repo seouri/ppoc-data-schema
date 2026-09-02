@@ -220,9 +220,14 @@ def test_subprocess_uses_isolated_snapshot_and_fixed_csv_command(
         captured["command"] = command
         captured["kwargs"] = kwargs
         runtime_root = Path(str(kwargs["cwd"]))
+        input_root = Path(command[4])
         assert runtime_root != ROOT
         assert Path(command[3]) == runtime_root / "scripts" / "augment.py"
         assert Path(command[3]).read_bytes() == (ROOT / "scripts" / "augment.py").read_bytes()
+        captured["input_names"] = {path.name for path in input_root.iterdir()}
+        captured["input_bytes"] = {
+            path.name: path.read_bytes() for path in input_root.iterdir()
+        }
         _write_fake_outputs(Path(command[command.index("--output_dir") + 1]))
         return subprocess.CompletedProcess(command, 0, stdout=b"", stderr=b"")
 
@@ -235,12 +240,23 @@ def test_subprocess_uses_isolated_snapshot_and_fixed_csv_command(
     assert isinstance(command, list)
     assert command[1:3] == ["-E", "-s"]
     assert command[-2:] == ["--output_format", "csv"]
-    assert command[4] == str(tmp_path)
+    input_root = Path(command[4])
+    assert input_root != tmp_path
+    assert input_root != ROOT
+    assert captured["input_names"] == {
+        "visits.csv",
+        "patients.csv",
+        "problem_list.csv",
+    }
+    for name in ("visits", "patients", "problem_list"):
+        source = tmp_path / resource_spec(descriptor, name)["path"]
+        assert captured["input_bytes"][f"{name}.csv"] == source.read_bytes()
     assert kwargs["shell"] is False
     assert kwargs["check"] is False
     assert kwargs["capture_output"] is True
     assert kwargs["timeout"] == 300.0
     assert not Path(str(kwargs["cwd"])).exists()
+    assert not input_root.exists()
 
 
 @pytest.mark.parametrize("mode", ["nonzero", "timeout"])
@@ -510,3 +526,40 @@ def test_replaced_package_root_cannot_redirect_augmented_writes(
         relative = resource_spec(descriptor, name)["path"]
         assert not (outside_directory / relative).exists()
         assert not (original_directory / relative).exists()
+
+
+def test_child_reads_pinned_input_snapshot_after_package_root_replacement(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Catch a package-path swap redirecting the child to outside input bytes."""
+    package_root = tmp_path / "package"
+    package_root.mkdir()
+    descriptor = _descriptor()
+    _write_synthetic_package(package_root, descriptor)
+    original_visits = (package_root / "visits.csv").read_bytes()
+    original_directory = tmp_path / "renamed-original-package"
+    outside_directory = tmp_path / "outside"
+    outside_directory.mkdir()
+    (outside_directory / "visits.csv").write_bytes(b"outside-input-must-not-be-read\n")
+
+    observed: dict[str, bytes] = {}
+
+    def race_run(
+        command: list[str],
+        **_: object,
+    ) -> subprocess.CompletedProcess[bytes]:
+        # Simulate the child resolving input_dir after the caller-selected path
+        # has been replaced.  A pathname-based invocation reads outside bytes.
+        input_root = Path(command[4])
+        package_root.rename(original_directory)
+        package_root.symlink_to(outside_directory, target_is_directory=True)
+        observed["visits"] = (input_root / "visits.csv").read_bytes()
+        _write_fake_outputs(Path(command[command.index("--output_dir") + 1]))
+        return subprocess.CompletedProcess(command, 0, stdout=b"", stderr=b"")
+
+    monkeypatch.setattr(augmenter_oracle.subprocess, "run", race_run)
+
+    _assert_unavailable(package_root, descriptor)
+    assert observed["visits"] == original_visits
+    assert observed["visits"] != b"outside-input-must-not-be-read\n"
