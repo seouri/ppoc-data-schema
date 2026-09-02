@@ -35,7 +35,7 @@
 - Produces frozen `LatentTrajectory(points: tuple[LatentPoint, ...], disorder: LatentDisorderState, events: tuple[ClinicalEvent, ...])`.
 - Consumes the existing `LatentPoint` and `ClinicalEvent` models without changing their existing fields or positional construction behavior.
 
-- [ ] **Step 1: Write the failing model tests**
+- [x] **Step 1: Write the failing model tests**
 
 Create `tests/synthetic/test_latent_models.py`:
 
@@ -101,13 +101,13 @@ def test_latent_trajectory_is_frozen_and_keeps_hidden_events_separate() -> None:
         trajectory.points = ()
 ```
 
-- [ ] **Step 2: Run the model tests to verify they fail**
+- [x] **Step 2: Run the model tests to verify they fail**
 
 Run: `uv run pytest -q tests/synthetic/test_latent_models.py`
 
 Expected: collection fails because `DisorderKind`, `LatentDisorderState`, and `LatentTrajectory` are not defined.
 
-- [ ] **Step 3: Implement the validated model types**
+- [x] **Step 3: Implement the validated model types**
 
 In `src/synthetic/models.py`:
 
@@ -116,13 +116,13 @@ In `src/synthetic/models.py`:
 3. Add frozen `LatentTrajectory` after `ClinicalEvent`, storing the exact tuple types in the interface. Reject no additional values; module-specific schedule validation belongs to each module configuration.
 4. Leave all existing dataclasses and field ordering intact so existing positional tests continue to work.
 
-- [ ] **Step 4: Run the model tests and existing suite**
+- [x] **Step 4: Run the model tests and existing suite**
 
 Run: `uv run pytest -q tests/synthetic/test_latent_models.py && uv run pytest -q tests/synthetic`
 
 Expected: the new model tests and all existing tests pass.
 
-- [ ] **Step 5: Run lint and commit**
+- [x] **Step 5: Run lint and commit**
 
 Run: `uv run ruff check src/synthetic/models.py tests/synthetic/test_latent_models.py`
 
@@ -145,7 +145,7 @@ git commit -m "feat: add latent disorder trajectory models"
 - Each module has a frozen configuration with finite, validated parameters; defaults are uncalibrated development scenarios.
 - Consumes `PatientState`, `ClinicalEvent`, `DisorderKind`, `LatentDisorderState`, and `NamedRandomStreams` from earlier tasks.
 
-- [ ] **Step 1: Write failing module behavior tests**
+- [x] **Step 1: Write failing module behavior tests**
 
 Create `tests/synthetic/test_clinical_modules.py`:
 
@@ -234,13 +234,13 @@ def test_module_sampling_is_reproducible_and_uses_named_streams() -> None:
         assert left == right
 ```
 
-- [ ] **Step 2: Run module tests to verify they fail**
+- [x] **Step 2: Run module tests to verify they fail**
 
 Run: `uv run pytest -q tests/synthetic/test_clinical_modules.py`
 
 Expected: collection fails because `clinical_modules.py` is not present.
 
-- [ ] **Step 3: Implement validated module configurations and effects**
+- [x] **Step 3: Implement validated module configurations and effects**
 
 In `src/synthetic/native/clinical_modules.py`:
 
@@ -252,13 +252,13 @@ In `src/synthetic/native/clinical_modules.py`:
 6. Use `ClinicalEvent.hidden=True` only for latent onset; observable phenotype and downstream events are visible in the latent event trace but are not exported by this plan. Keep `code=None` until terminology mapping is separately reviewed.
 7. Validate every configuration’s integer ages/durations, ordered bounds, probabilities in `[0,1]`, and finite nonnegative magnitudes. Sort events by age and a fixed causal phase order, rejecting impossible schedules.
 
-- [ ] **Step 4: Run focused tests, full suite, and lint**
+- [x] **Step 4: Run focused tests, full suite, and lint**
 
 Run: `uv run pytest -q tests/synthetic/test_clinical_modules.py && uv run pytest -q tests/synthetic && uv run ruff check src/synthetic/native/clinical_modules.py tests/synthetic/test_clinical_modules.py`
 
 Expected: all module and existing tests pass, with no Ruff findings.
 
-- [ ] **Step 5: Commit the modules**
+- [x] **Step 5: Commit the modules**
 
 ```bash
 git add src/synthetic/native/clinical_modules.py tests/synthetic/test_clinical_modules.py
@@ -279,7 +279,7 @@ git commit -m "feat: add growth disorder clinical modules"
 - Consumes `HealthyKernel`, `GrowthDisorderModule`, `LatentDisorderState`, `LatentPoint`, `LatentTrajectory`, and the existing reference guard semantics.
 - Does not change `generate_smoke`, CSV mapping, visible descriptors, or ordinary loader APIs.
 
-- [ ] **Step 1: Write failing trajectory tests**
+- [x] **Step 1: Write failing trajectory tests**
 
 Create `tests/synthetic/test_disorder_trajectories.py`:
 
@@ -346,13 +346,13 @@ def test_constitutional_delay_has_no_effect_before_puberty_and_returns_after_rec
     assert puberty_age >= 3650
 ```
 
-- [ ] **Step 2: Run trajectory tests to verify they fail**
+- [x] **Step 2: Run trajectory tests to verify they fail**
 
 Run: `uv run pytest -q tests/synthetic/test_disorder_trajectories.py`
 
 Expected: collection fails because `native/trajectories.py` is not present.
 
-- [ ] **Step 3: Implement the minimal disorder-aware kernel**
+- [x] **Step 3: Implement the minimal disorder-aware kernel**
 
 In `src/synthetic/native/trajectories.py`:
 
@@ -362,13 +362,13 @@ In `src/synthetic/native/trajectories.py`:
 4. Verify module event patient IDs match the requested patient and event ages are nonnegative and nondecreasing; reject an event after an impossible treatment/response schedule with `ValueError`.
 5. Keep the baseline `growth` stream untouched by requiring modules to use their own named streams; identical healthy module output must equal `HealthyKernel.generate` exactly.
 
-- [ ] **Step 4: Run focused tests, full suite, and checks**
+- [x] **Step 4: Run focused tests, full suite, and checks**
 
 Run: `uv run pytest -q tests/synthetic/test_disorder_trajectories.py && uv run pytest -q && uv run ruff check src tests && python3 schema/build.py --check && git diff --check`
 
 Expected: all tests pass, Ruff is clean, the eight schema resources validate, and Git reports no whitespace errors.
 
-- [ ] **Step 5: Commit the trajectory kernel**
+- [x] **Step 5: Commit the trajectory kernel**
 
 ```bash
 git add src/synthetic/native/trajectories.py tests/synthetic/test_disorder_trajectories.py
@@ -386,17 +386,17 @@ git commit -m "feat: add disorder-aware latent trajectories"
 - Consumes: `DisorderTrajectoryKernel`, the four module names, and `LatentTrajectory` from Tasks 1–3.
 - Produces: a concise development-only usage section that explains hidden truth/event traces, directionally coherent but uncalibrated scenarios, and the fact that visible CSV generation remains unchanged.
 
-- [ ] **Step 1: Add the development-module section**
+- [x] **Step 1: Add the development-module section**
 
 Document a Python example that constructs a `DisorderTrajectoryKernel` from the existing injected test reference and a module, then states that `LatentTrajectory.disorder` and `.events` are evaluator-only and are not exported. List the four modules and their directional signatures without calling their defaults clinically representative. State that prevalence, demographic calibration, disorder-critical labs/medications/referrals, held-out validation, and privacy auditing remain later gates.
 
-- [ ] **Step 2: Verify the repository**
+- [x] **Step 2: Verify the repository**
 
 Run: `uv run pytest -q && uv run ruff check src tests && python3 schema/build.py --check && git diff --check`
 
 Expected: all tests pass, Ruff is clean, eight schema resources validate, and Git reports no whitespace errors.
 
-- [ ] **Step 3: Commit the documentation**
+- [x] **Step 3: Commit the documentation**
 
 ```bash
 git add docs/synthetic-generator.md
@@ -415,3 +415,10 @@ Before merging this plan, verify that:
 - Anthropometric identities, reference guards, age ordering, and named random-stream isolation pass independent tests.
 - No latent truth, event trace, clinical data, prevalence claim, or privacy claim enters the visible eight-resource fixture package.
 - Full pytest, Ruff, schema, and whitespace checks pass, and the documentation labels defaults as uncalibrated development scenarios.
+
+## Completion evidence
+
+- Implementation and review commits integrated on `main`: `b081a6d` (latent-boundary hardening), `6772c7d` (review-gap closure), and `f383a01` (observation-entry boundary hardening).
+- Fresh adversarial review approved the final implementation after validating malformed states, event metadata, nested ages, regimes, channel applicability, treatment consistency, and direct observation-entry tampering.
+- Integrated verification passed: `2634 passed, 4 skipped`; Ruff passed; `python schema/build.py --check` validated 8 resources; `uv lock --check` passed; and `git diff --check` was clean.
+- The disorder layer remains evaluator-only: hidden state and event traces are not exported to the visible eight-resource package, ordinary loaders, descriptors, or manifests. Module defaults remain explicitly uncalibrated development scenarios, with prevalence, clinical validity, privacy, and release gates deferred.
