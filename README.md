@@ -4,6 +4,20 @@ This repository describes eight de-identified pediatric EHR CSV resources with a
 
 [The Pediatric Physicians’ Organization at Children’s (PPOC)](https://www.ppochildrens.org/) is an independent pediatric physician association and primary-care network affiliated with Boston Children’s Hospital, serving practices across Massachusetts. This data is provided by PPOC to the Isaac Kohane Lab in the [Department of Biomedical Informatics](https://dbmi.hms.harvard.edu/) at Harvard Medical School under an IRB protocol and Data Use Agreement.
 
+## Project governance and funding
+
+The project *Artificial Intelligence Analysis of Growth Charts to Identify Abnormal Growth Patterns* is conducted at Harvard Medical School under the following protocols and agreement:
+
+| Instrument | Identifier | Parties or institution |
+| --- | --- | --- |
+| IRB protocol | `IRB24-0638` | Harvard Medical School |
+| Data Safety and Security protocol | `DAT24-0223` | Harvard Medical School |
+| Data Use Agreement | `DUA24-0257` | Harvard Medical School and Pediatric Physicians' Organization, LLC (PPOC) |
+
+Access to project data is restricted to authorized study personnel who have completed all required IRB and information-security training, obtained certificates documenting completion, and been formally listed as study personnel on the approved IRB protocol.
+
+Funding sponsors are the **Charles H. Hood Foundation** and **Yosemite** for the project *Using Large Language Models for Pediatric Diagnosis*.
+
 ## Contents
 
 - [`datapackage.json`](datapackage.json): field types, nullability, constraints, keys, encodings, and resource metadata.
