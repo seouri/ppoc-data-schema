@@ -48,7 +48,7 @@
 - Consumes: `data/augment-runtime-manifest.json`, its four LMS table entries (`statage_combined.csv`, `wtage_combined.csv`, `bmiagerev.csv`, `hcageinf.csv`), and the manifest digest constants in `synthetic.augmenter_oracle`.
 - Produces: `CdcGrowthReference.from_repository(repository_root: Path) -> CdcGrowthReference`; `reference_id == "cdc-lms-reference-v1"`; `source_sha256: str`; `metrics`, `min_age_days`, `max_age_days`; and `value(metric: str, age_days: int, reference_sex: str, z: float) -> float`.
 
-- [ ] **Step 1: Write the failing reference tests**
+- [x] **Step 1: Write the failing reference tests**
 
 Add tests with a repository-root fixture and no patient files:
 
@@ -75,7 +75,7 @@ Add contract tests that source sex `1` maps to `M`, source sex `2` maps to `F`, 
 
 Finally, parse the module source with `ast` and assert it does not import `scripts.augment`, `pandas`, `synthetic.generate`, or any governed input module.
 
-- [ ] **Step 2: Run the reference tests to verify they fail**
+- [x] **Step 2: Run the reference tests to verify they fail**
 
 Run:
 
@@ -85,7 +85,7 @@ uv run pytest -q tests/synthetic/test_cdc_reference.py
 
 Expected: collection or attribute failures because `synthetic.cdc_reference` and `CdcGrowthReference` do not yet exist. Correct only test-fixture syntax before implementation.
 
-- [ ] **Step 3: Implement the source-matched adapter**
+- [x] **Step 3: Implement the source-matched adapter**
 
 Verify the manifest bytes against `AUGMENTER_RUNTIME_MANIFEST_SHA256`, resolve only the four expected relative table paths, reject absolute paths, traversal, backslashes, symlinks, nonregular files, duplicate entries, and digest/byte-count mismatches, then decode with strict UTF-8 while accepting the single source BOM through `utf-8-sig`. Require the source columns `Sex`, `Agemos`, `L`, `M`, and `S`; map integer `1`/`2` to `M`/`F`; reject unknown values; require finite `L`, positive finite `M`/`S`; and require unique, increasing ages for every sex series.
 
@@ -93,7 +93,7 @@ Store the source-month coordinate and LMS arrays per `(metric, reference_sex)`. 
 
 Compute `source_sha256` as SHA-256 over canonical JSON containing `reference_id="cdc-lms-reference-v1"`, mapping token `cdc-lms-mapping-v1`, the ordered table names, and their exact manifest digests. Expose `min_age_days=0` and `max_age_days=7305` for the age-regime kernel while enforcing each metric's own source domain inside `value()`.
 
-- [ ] **Step 4: Run focused tests, lint, and commit**
+- [x] **Step 4: Run focused tests, lint, and commit**
 
 ```sh
 uv run pytest -q tests/synthetic/test_cdc_reference.py
@@ -115,7 +115,7 @@ git commit -m "feat: add pinned CDC growth reference"
 - Consumes: `CdcGrowthReference`, `SourceMatchedAugmenterOracle`, `DerivationBinding`, `DerivationBindingReport`, `EXPECTED_SCHEMA_FINGERPRINT`, `AUGMENTER_RUNTIME_MANIFEST_SHA256`, and `uv.lock`.
 - Produces: `verify_source_matched_runtime(repository_root: Path) -> None`; frozen `DevelopmentRuntime(reference, derivation_oracle, derivation_binding, dependency_fingerprint)`; and `build_development_runtime(repository_root: Path) -> DevelopmentRuntime`.
 
-- [ ] **Step 1: Write failing runtime and boundary tests**
+- [x] **Step 1: Write failing runtime and boundary tests**
 
 Test the verification helper with the repository root, a copied root whose `uv.lock` byte differs, a missing lock, a modified manifest, a modified runtime file, and a symlinked runtime file. The success case returns `None`; every failure raises only `DerivationUnavailable("source-matched augmenter unavailable")` without path or subprocess text.
 
@@ -138,7 +138,7 @@ def test_development_runtime_binds_reference_and_test_only_oracle() -> None:
 
 Assert `validate_derivation_binding(...).status` is not `FAIL`, the binding schema fingerprint is exact, all required golden categories occur once, the dependency fingerprint equals `sha256((ROOT / "uv.lock").read_bytes()).hexdigest()`, and a runtime with a mismatched reference standard or oracle identity/fingerprint is rejected before composition. Have `DevelopmentRuntime.__post_init__` enforce the reference fingerprint/standard identity and oracle identity/fingerprint/classification invariants explicitly; `BoundDerivationOracle` must still reject a mismatched derivation result at derive time. Extend the boundary scanner so only `development_runtime.py` and `cdc_reference.py` may import `synthetic.augmenter_oracle`; all other visible/evaluator modules remain forbidden from importing the candidate adapter.
 
-- [ ] **Step 2: Run the runtime tests to verify they fail**
+- [x] **Step 2: Run the runtime tests to verify they fail**
 
 Run:
 
@@ -148,7 +148,7 @@ uv run pytest -q tests/synthetic/test_development_runtime.py tests/synthetic/tes
 
 Expected: missing-helper, missing-factory, or boundary failures. Correct only fixture setup before implementation.
 
-- [ ] **Step 3: Implement redacted runtime verification and binding construction**
+- [x] **Step 3: Implement redacted runtime verification and binding construction**
 
 Add the fixed lock digest and helper in `augmenter_oracle.py`:
 
@@ -164,7 +164,7 @@ Require an exact `Path`, verify `uv.lock` as a regular non-symlink file with the
 
 In `development_runtime.py`, define frozen `DevelopmentRuntime` and `build_development_runtime()`. Verify the runtime, load `CdcGrowthReference.from_repository()`, and construct `SourceMatchedAugmenterOracle(repository_root)`. Build `DerivationBinding.from_mapping()` with exact schema, `binding_id="development-augmenter-v1"`, oracle identity `augmenter-cli-v1`, implementation fingerprint `AUGMENTER_RUNTIME_MANIFEST_SHA256`, source revision `augment-runtime-v1`, `source_kind="authoritative_implementation"`, the locked digest, reference standard `cdc-lms-reference-v1`/the adapter fingerprint/`cdc-lms-mapping-v1`, all `REQUIRED_GOLDEN_CATEGORIES`, null evidence identifiers, zero evidence counts, `parity_status="UNEVALUABLE"`, pending review, and `test_only=True`. Make `DevelopmentRuntime.__post_init__` require the bound reference standard to equal the loaded adapter identity/fingerprint and the bound oracle identity/fingerprint/source kind to equal the constructed oracle/runtime constants. Do not serialize paths, table names, rows, or source prose into the binding.
 
-- [ ] **Step 4: Run focused tests, lint, and commit**
+- [x] **Step 4: Run focused tests, lint, and commit**
 
 ```sh
 uv run pytest -q tests/synthetic/test_development_runtime.py tests/synthetic/test_augmenter_oracle_boundaries.py
@@ -185,7 +185,7 @@ git commit -m "feat: compose development derivation runtime"
 - Consumes: `DevelopmentRuntime`, `build_development_runtime`, existing `generate_smoke`, `PackageExportMetadata`, and the fixed CLI constants.
 - Produces: `generate_smoke(..., profile: str = "smoke") -> Path`; `CLI_UNAVAILABLE_MESSAGE = "No production growth reference or authoritative derivation oracle is configured"`; and a `main()` that dispatches only `development-smoke` or `development-cohort` after parsing required operational arguments.
 
-- [ ] **Step 1: Write failing smoke/CLI tests**
+- [x] **Step 1: Write failing smoke/CLI tests**
 
 Extend existing smoke tests to pass no profile and assert the manifest remains `profile == "smoke"`; add a profile override test that passes `profile="development-smoke"` and asserts the metadata profile/configuration hash change while all existing direct API behavior remains intact.
 
@@ -206,7 +206,7 @@ def test_no_profile_remains_fail_closed(tmp_path: Path) -> None:
 
 Test an unknown profile with the same fixed message and no output. Test `development-smoke` with a small count (3) and assert the exact eight descriptor resources, `manifest.json` profile/reference/fingerprint/status fields, augmented headers, structural validation success, and no latent fields. Run the same seed into two different output roots and compare every non-manifest file hash. Test an existing target and an altered runtime through the CLI: neither may promote a package or expose a path/subprocess traceback.
 
-- [ ] **Step 2: Run smoke/CLI tests to verify they fail**
+- [x] **Step 2: Run smoke/CLI tests to verify they fail**
 
 Run:
 
@@ -216,7 +216,7 @@ uv run pytest -q tests/synthetic/test_generate_smoke.py tests/synthetic/test_gen
 
 Expected: the profile parameter, CLI selector, and development route are absent. Correct only test command/fixture errors before implementation.
 
-- [ ] **Step 3: Implement the smoke profile parameter and CLI**
+- [x] **Step 3: Implement the smoke profile parameter and CLI**
 
 Add `profile: str = "smoke"` to `generate_smoke()` after the required binding argument. Validate it with the existing aggregate-safe token rule, include it in the canonical smoke configuration hash, and pass it to `PackageExportMetadata(profile=profile)`. Existing callers and tests must retain `profile="smoke"`.
 
@@ -231,7 +231,7 @@ parser.add_argument("--software-revision", default="development-generator-v1")
 
 Resolve a missing descriptor to `Path(__file__).resolve().parents[2] / "datapackage.json"`. If `args.profile` is absent or not one of the two supported names, raise `SystemExit(CLI_UNAVAILABLE_MESSAGE)` before building a runtime or checking the output. For `development-smoke`, call `build_development_runtime(repository_root)` and `generate_smoke(..., reference=runtime.reference, derivation_oracle=runtime.derivation_oracle, derivation_binding=runtime.derivation_binding, profile="development-smoke")`. Catch ordinary generation/reference/binding/lifecycle errors at the CLI boundary and raise the fixed redacted `SystemExit("Synthetic development generation unavailable")`; preserve the no-profile message exactly. Do not add a real-data, calibration, held-out, privacy, Synthea, network, model, or arbitrary diagnosis argument.
 
-- [ ] **Step 4: Run focused tests, lint, and commit**
+- [x] **Step 4: Run focused tests, lint, and commit**
 
 ```sh
 uv run pytest -q tests/synthetic/test_generate_smoke.py tests/synthetic/test_generate_cli.py
@@ -253,7 +253,7 @@ git commit -m "feat: enable development smoke CLI profile"
 - Consumes: `DevelopmentRuntime`, `CohortConfig`, `CalibrationSamplingProfile`, `generate_native_cohort`, `HealthyGrowthModule`, `GrowthHormoneDeficiencyModule`, `ObservationPolicy`, `export_exact_schema_package`, and the exact descriptor contract.
 - Produces: `development_cohort_config(patient_count: int, seed: int) -> CohortConfig`; `development_calibration_profile() -> CalibrationSamplingProfile`; `build_development_cohort(runtime: DevelopmentRuntime, *, descriptor: Mapping[str, object], patient_count: int, seed: int) -> NativeCohort`; `generate_development_cohort(runtime: DevelopmentRuntime, *, descriptor_path: Path, output: Path, patient_count: int, seed: int, reference_time: str, software_revision: str) -> Path`; and the `development-cohort` CLI branch.
 
-- [ ] **Step 1: Write failing cohort-package tests**
+- [x] **Step 1: Write failing cohort-package tests**
 
 Add a direct runner test with 64 patients and seed `20260901`. Assert a promoted package has exactly the eight descriptor resources, unique `syn-` patient/visit identifiers, longitudinal visits at every fixed age, both healthy and GHD latent module classes in the evaluator-held cohort before export, no visible latent module/severity/truth fields, empty but descriptor-shaped ancillary resources, and manifest fields `profile == "development-cohort"`, `reference_id == "cdc-lms-reference-v1"`, `reference_sha256 == runtime.reference.source_sha256`, `derivation_fingerprint == AUGMENTER_RUNTIME_MANIFEST_SHA256`, `test_only_derivation is True`, and status `STRUCTURE_VALIDATED_TEST_ORACLE`.
 
@@ -275,7 +275,7 @@ assert tuple((item.kind, item.probability) for item in config.module_weights) ==
 
 Test the `U`-sex weight is zero, the reference mapping remains `F/M/U` one-to-one, all demographic weights sum within the existing envelope, and the configuration hash is identical across repeated runs. Test a descriptor collision before generation and a missing/non-PASS bundle as fixed redacted failures with no promoted output.
 
-- [ ] **Step 2: Run cohort-package tests to verify they fail**
+- [x] **Step 2: Run cohort-package tests to verify they fail**
 
 Run:
 
@@ -285,7 +285,7 @@ uv run pytest -q tests/synthetic/test_development_runtime.py tests/synthetic/tes
 
 Expected: the fixed profile factory and cohort CLI branch are missing. Correct only fixture setup before implementation.
 
-- [ ] **Step 3: Implement fixed cohort configuration and export bridge**
+- [x] **Step 3: Implement fixed cohort configuration and export bridge**
 
 In `development_runtime.py`, add immutable builders for `CalibrationSamplingProfile` and `CohortConfig`, named `development_calibration_profile()` and `development_cohort_config()`. Use profile/artifact identity `development-cohort-v1`, target registry `calibration-targets-v1`, sex weights `(F=0.50, M=0.50, U=0.00)`, ethnicity weights `(blank=0.02, Not Hispanic or Latino=0.65, Hispanic or Latino=0.18, Choose not to Answer=0.03, Unknown=0.04, Unable to collect=0.03, Patient does not know=0.05)`, race weights `(blank=0.01, American Indian or Alaska Native=0.01, Another Race=0.03, Asian=0.08, Black or African American=0.12, Choose not to answer=0.02, Middle Eastern or Northern African=0.02, Native Hawaiian or Other Pacific Islander=0.01, Patient does not know=0.02, Unable to collect=0.02, Unknown=0.04, White=0.62)`, race multiselect `0.06`, and legacy recorded-outcome fields `0.0`. Use the exact age tuple and observation policy from the spec, `reference_sex_mapping=(('F','F'),('M','M'),('U','U'))`, healthy/GHD weights `0.5/0.5`, and the existing default `AgeRegimeConfig`.
 
@@ -295,7 +295,7 @@ Wrap reference, cohort, projection, and export failures in the existing redacted
 
 In `generate.py`, add the `development-cohort` branch that builds the same runtime and calls `generate_development_cohort()` with parsed metadata. Keep both profile names explicit; no profile continues to raise `CLI_UNAVAILABLE_MESSAGE`.
 
-- [ ] **Step 4: Run focused tests, lint, and commit**
+- [x] **Step 4: Run focused tests, lint, and commit**
 
 ```sh
 uv run pytest -q tests/synthetic/test_development_runtime.py tests/synthetic/test_generate_cli.py
@@ -317,7 +317,7 @@ git commit -m "feat: add development cohort package profile"
 - Consumes: the two working CLI profiles, `build_development_runtime`, the source-matched candidate/oracle guides, and the existing exact-schema output contract.
 - Produces: copy-pasteable development commands and tests proving that explicit development composition is enabled without turning the default/no-profile path into a production route.
 
-- [ ] **Step 1: Write failing documentation and boundary tests**
+- [x] **Step 1: Write failing documentation and boundary tests**
 
 Require the guide to contain both exact commands:
 
@@ -330,7 +330,7 @@ Also require `development-authoritative`, `cdc-lms-reference-v1`, `test_only_der
 
 Add a boundary test that scans `development_runtime.py` for forbidden real-data/calibration/held-out/privacy/Synthea imports and arguments, allows only the declared descriptor/runtime/package-export reads, rejects network/process escapes outside the existing oracle, and confirms `generate.py` has no `--real-root`, `--calibration`, `--heldout`, `--privacy`, `--synthea`, or model option.
 
-- [ ] **Step 2: Run documentation/boundary tests to verify they fail**
+- [x] **Step 2: Run documentation/boundary tests to verify they fail**
 
 Run:
 
@@ -340,7 +340,7 @@ uv run pytest -q tests/synthetic/test_augmenter_oracle_docs.py tests/synthetic/t
 
 Expected: missing CLI documentation or an overly strict candidate-import boundary. Correct only assertions that target stale wording before editing prose or scanner allow-lists.
 
-- [ ] **Step 3: Document the explicit development route and preserve the no-profile boundary**
+- [x] **Step 3: Document the explicit development route and preserve the no-profile boundary**
 
 Add a `## Explicit development CLI profiles` section near the current-scope material. Explain that `development-smoke` preserves the three-visit smoke contract and that `development-cohort` emits the fixed healthy/GHD, full-age, visible-resource profile. Document the defaults, collision behavior, deterministic rerun rule (compare distinct output roots), manifest fields, source/runtime lock pins, the BMI 730-day boundary, zero-U mapping, empty ancillary resources, and the fact that all outputs remain test-only.
 
@@ -348,7 +348,7 @@ Rewrite stale sentences that say the command is entirely unavailable to say prec
 
 Adjust `test_augmenter_oracle_boundaries.py` so exactly `development_runtime.py` and `cdc_reference.py` are allowed to import `synthetic.augmenter_oracle`; retain the scanner's rejection of that import everywhere else. Keep `test_cohort_boundaries.py`'s in-memory cohort restrictions unchanged and add only the explicit composition module's allow-list checks.
 
-- [ ] **Step 4: Run focused tests, lint, and commit**
+- [x] **Step 4: Run focused tests, lint, and commit**
 
 ```sh
 uv run pytest -q tests/synthetic/test_augmenter_oracle_docs.py tests/synthetic/test_augmenter_oracle_boundaries.py tests/synthetic/test_cohort_boundaries.py
@@ -369,11 +369,11 @@ git commit -m "docs: document development generator profiles"
 - Consumes: both explicit profile runners, the pinned CDC reference/oracle, the existing `SYNTHETIC_RUN_SCALE=1` marker, and all repository validators.
 - Produces: opt-in 10,000-patient evidence that the development route can sustain the existing exact-schema/trajectory/derivation composition without adding multi-minute work to ordinary CI.
 
-- [ ] **Step 1: Write the opt-in scale assertions**
+- [x] **Step 1: Write the opt-in scale assertions**
 
 Add a `@pytest.mark.scale` test guarded by `os.environ.get("SYNTHETIC_RUN_SCALE") == "1"` that runs `development-cohort` with the existing 10,000-patient count, the fixed age schedule, and a temporary output root. Assert exact package row counts, unique synthetic IDs, manifest schema/reference/derivation/test-only fields, and no latent truth in any package artifact. Keep the current 10,000-patient native validation profile and its three fixed seeds; do not add a real-data comparison or prevalence assertion.
 
-- [ ] **Step 2: Run the scale test in its normal skipped mode**
+- [x] **Step 2: Run the scale test in its normal skipped mode**
 
 ```sh
 uv run pytest -q tests/synthetic/test_development_scale.py tests/synthetic/test_generate_cli.py
@@ -381,7 +381,7 @@ uv run pytest -q tests/synthetic/test_development_scale.py tests/synthetic/test_
 
 Expected: all ordinary tests pass and the scale case is skipped with its explicit opt-in reason.
 
-- [ ] **Step 3: Run the opt-in scale test**
+- [x] **Step 3: Run the opt-in scale test**
 
 ```sh
 SYNTHETIC_RUN_SCALE=1 uv run pytest -q -m scale tests/synthetic/test_development_scale.py tests/synthetic/test_generate_cli.py
@@ -389,7 +389,7 @@ SYNTHETIC_RUN_SCALE=1 uv run pytest -q -m scale tests/synthetic/test_development
 
 Expected: the 10,000-patient fictional package completes, validates, and is written only beneath pytest's temporary directory. If source-backed output fails, fix only deterministic reference/runtime/performance defects; do not relax the test-only or exact-schema checks.
 
-- [ ] **Step 4: Run full verification and inspect the staged scope**
+- [x] **Step 4: Run full verification and inspect the staged scope**
 
 ```sh
 uv run pytest -q
@@ -403,7 +403,7 @@ git status --short --branch
 
 Stage only the named scale test/documentation files before the cached-whitespace check; confirm no real-data files, generated packages, lock changes, or cache directories are staged. Read the final diff against the spec and verify the source runtime manifest and `scripts/augment.py` hashes are unchanged.
 
-- [ ] **Step 5: Commit the scale/verification changes**
+- [x] **Step 5: Commit the scale/verification changes**
 
 ```sh
 git add tests/synthetic/test_development_scale.py tests/synthetic/test_generate_cli.py docs/synthetic-generator.md
@@ -420,15 +420,15 @@ git commit -m "test: exercise development generator at scale"
 - Consumes: task commits, focused/full verification output, the design spec, and the repository's existing review/merge conventions.
 - Produces: a reviewed `main` commit published to `origin/main`, with the source closure, test-only classification, no-profile boundary, and docs all synchronized.
 
-- [ ] **Step 1: Perform a fresh read-only review**
+- [x] **Step 1: Perform a fresh read-only review**
 
 Check every spec acceptance criterion against code and tests. Inspect the staged names/stat, `git diff --cached --check`, manifest digest, `uv.lock` digest, source-script bytes, CLI error strings, package inventory, configuration hash inputs, and documentation claims. Search for `TODO`, `TBD`, `FIXME`, `test_only=False`, `require_approved_derivation_binding`, real-data argument names, and hidden-truth fields in visible serializers.
 
-- [ ] **Step 2: Resolve review findings with focused test-first fixes**
+- [x] **Step 2: Resolve review findings with focused test-first fixes**
 
 For each confirmed finding, add the smallest failing regression test, implement the narrow fix in the owning file, rerun the affected focused suite and Ruff, inspect the diff, and commit a scoped fix. Do not broaden the runtime to governed evidence or change the source-matched bytes.
 
-- [ ] **Step 3: Re-run final verification**
+- [x] **Step 3: Re-run final verification**
 
 ```sh
 uv run pytest -q
@@ -439,7 +439,7 @@ git diff --check
 git status --short --branch
 ```
 
-- [ ] **Step 4: Merge/push and verify the remote**
+- [x] **Step 4: Merge/push and verify the remote**
 
 After review and all checks pass, push `main` using the repository's approved Git workflow. Verify:
 
@@ -450,3 +450,11 @@ git status --short --branch
 ```
 
 `HEAD` and `origin/main` must match, and only pre-existing intentionally untracked cache directories may remain outside the commit.
+
+## Completion evidence
+
+- Tasks 1–6 were implemented and covered by focused reviews and fix rounds. The CDC adapter hardening covered four-table-only reads, intermediate and terminal symlink rejection, digest/manifest drift, strict LMS domains, BMI day-730 handling, P3/P97 generation-only clamping, and constructor compatibility.
+- Runtime/binding reviews covered locked source closure, exact identity/fingerprint/classification invariants, direct-oracle lock drift, binding-version enforcement, and visible-generator/deferred-import boundaries. CLI, cohort, documentation, and scale reviews approved the explicit profiles and test-only claims.
+- The final CLI advisory was resolved by `b930e56`; its subprocess test now uses a runtime root without the default descriptor and exercises custom descriptor, reference-time, and software-revision forwarding. The advisory re-review approved it with no findings.
+- Current-main focused verification: `160 passed` for CDC/reference/kernel/runtime contracts, `27 passed, 4 skipped` for smoke/CLI/scale-focused tests, and `29 passed` for augmenter/privacy boundaries; Ruff passed. The repository-wide suite is `2492 passed, 4 skipped`, schema validation and `uv lock --check` pass, and source/runtime/lock hashes remain `e7fe76af...`, `b50afc36...`, and `d17f8c26...` respectively.
+- The published profiles remain development-only and test-only: no-profile/unknown-profile invocation is fail-closed, no approved binding or clinical validity is inferred, and no real/governed patient, calibration, held-out, privacy, model, network, Synthea, or release input is accepted.
