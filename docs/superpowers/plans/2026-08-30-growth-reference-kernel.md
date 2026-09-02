@@ -34,7 +34,7 @@
 - Produces `LmsGrowthReference(reference_id: str, rows: Iterable[LmsRow], source_sha256: str | None = None)` with `from_csv(path: Path, reference_id: str, expected_sha256: str | None = None)`, `value(metric: str, age_days: int, reference_sex: str, z: float) -> float`, and read-only `reference_id`, `source_sha256`, `metrics`, `min_age_days`, and `max_age_days` properties.
 - Consumes the existing `GrowthReference` protocol without changing the test-only `LinearTestReference`.
 
-- [ ] **Step 1: Write the failing tests for LMS conversion and interpolation**
+- [x] **Step 1: Write the failing tests for LMS conversion and interpolation**
 
 Add these tests to `tests/synthetic/test_references.py`:
 
@@ -138,13 +138,13 @@ def test_lms_reference_rejects_bad_csv_columns(tmp_path) -> None:
         LmsGrowthReference.from_csv(path, reference_id="public-growth-v1")
 ```
 
-- [ ] **Step 2: Run the reference tests to verify the feature is missing**
+- [x] **Step 2: Run the reference tests to verify the feature is missing**
 
 Run: `uv run pytest -q tests/synthetic/test_references.py`
 
 Expected: collection fails because `LmsGrowthReference` and `LmsRow` are not defined.
 
-- [ ] **Step 3: Implement the minimal validated LMS reference**
+- [x] **Step 3: Implement the minimal validated LMS reference**
 
 In `src/synthetic/references.py`:
 
@@ -155,19 +155,19 @@ In `src/synthetic/references.py`:
 5. Convert z to a value with `M * (1 + L * S * z) ** (1 / L)` when `L != 0`, and `M * exp(S * z)` when `L == 0`. Reject a nonpositive LMS base before exponentiation and reject any nonfinite or nonpositive result.
 6. Implement `from_csv` with the exact column set `metric,age_days,reference_sex,l,m,s`, UTF-8 `csv.DictReader`, strict missing/extra-column rejection, typed parsing, and exact-byte SHA-256 verification when `expected_sha256` is supplied. Record the computed file hash as `source_sha256`.
 
-- [ ] **Step 4: Run the reference tests to verify they pass**
+- [x] **Step 4: Run the reference tests to verify they pass**
 
 Run: `uv run pytest -q tests/synthetic/test_references.py`
 
 Expected: all reference tests pass with no warnings.
 
-- [ ] **Step 5: Run focused lint and the existing synthetic suite**
+- [x] **Step 5: Run focused lint and the existing synthetic suite**
 
 Run: `uv run ruff check src/synthetic/references.py tests/synthetic/test_references.py && uv run pytest -q tests/synthetic`
 
 Expected: Ruff reports no findings and all synthetic tests pass.
 
-- [ ] **Step 6: Commit the validated reference implementation**
+- [x] **Step 6: Commit the validated reference implementation**
 
 ```bash
 git add src/synthetic/references.py tests/synthetic/test_references.py
@@ -187,7 +187,7 @@ git commit -m "feat: add validated LMS growth reference"
 - Produces: `HealthyKernel(reference, minimum_age_days: int = 730, maximum_age_days: int | None = None)` and the existing `generate(...) -> tuple[LatentPoint, ...]` signature.
 - Preserves: `LatentPoint` fields, named `growth` stream, existing age-two smoke behavior, and the height/BMI-to-weight identity.
 
-- [ ] **Step 1: Write failing tests for domain and physical-output guards**
+- [x] **Step 1: Write failing tests for domain and physical-output guards**
 
 Add these tests to `tests/synthetic/test_healthy_reference_guards.py`:
 
@@ -255,13 +255,13 @@ def test_kernel_rejects_invalid_age_configuration() -> None:
         HealthyKernel(GuardReference(), minimum_age_days=900, maximum_age_days=800)
 ```
 
-- [ ] **Step 2: Run the guard tests to verify they fail**
+- [x] **Step 2: Run the guard tests to verify they fail**
 
 Run: `uv run pytest -q tests/synthetic/test_healthy_reference_guards.py`
 
 Expected: collection or assertions fail because the kernel has no configurable domain or physical-output guards.
 
-- [ ] **Step 3: Implement minimal kernel guards**
+- [x] **Step 3: Implement minimal kernel guards**
 
 In `src/synthetic/native/healthy.py`:
 
@@ -271,19 +271,19 @@ In `src/synthetic/native/healthy.py`:
 4. After requesting each height and BMI value, reject any nonfinite or nonpositive value with a `ValueError` containing `finite and positive`; then derive weight exactly as before.
 5. Keep the existing reference calls, named stream, z-score AR updates, `LatentPoint` construction, and default age-two behavior unchanged.
 
-- [ ] **Step 4: Run focused tests and the full suite**
+- [x] **Step 4: Run focused tests and the full suite**
 
 Run: `uv run pytest -q tests/synthetic/test_healthy_kernel.py tests/synthetic/test_healthy_reference_guards.py && uv run pytest -q`
 
 Expected: all focused and repository tests pass.
 
-- [ ] **Step 5: Run lint and schema checks**
+- [x] **Step 5: Run lint and schema checks**
 
 Run: `uv run ruff check src tests && python3 schema/build.py --check && git diff --check`
 
 Expected: Ruff has no findings, the eight descriptor resources validate, and Git reports no whitespace errors.
 
-- [ ] **Step 6: Commit the kernel hardening**
+- [x] **Step 6: Commit the kernel hardening**
 
 ```bash
 git add src/synthetic/native/healthy.py tests/synthetic/test_healthy_reference_guards.py
@@ -302,17 +302,17 @@ git commit -m "feat: guard healthy trajectories by reference domain"
 - Consumes: `LmsGrowthReference.from_csv` and the existing injected `GrowthReference` boundary.
 - Produces: documentation that explains how to supply a pinned public LMS artifact without implying that this repository bundles a clinically validated reference.
 
-- [ ] **Step 1: Add the reference-provider section**
+- [x] **Step 1: Add the reference-provider section**
 
 Document the exact CSV columns, SHA-256 pinning, age/sex/metric domain behavior, and a short `LmsGrowthReference.from_csv(...)` example. State that the artifact must be approved and public, that no patient rows may be used, and that a table-backed reference alone is not prevalence, clinical, or privacy validation.
 
-- [ ] **Step 2: Verify documentation and repository checks**
+- [x] **Step 2: Verify documentation and repository checks**
 
 Run: `uv run pytest -q && uv run ruff check src tests && python3 schema/build.py --check && git diff --check`
 
 Expected: all tests pass, Ruff has no findings, the schema check validates eight resources, and Git reports no whitespace errors.
 
-- [ ] **Step 3: Commit the documentation**
+- [x] **Step 3: Commit the documentation**
 
 ```bash
 git add docs/synthetic-generator.md
@@ -330,3 +330,12 @@ Before calling this plan complete, verify that:
 - No clinical reference data, real patient rows, hidden truth, or privacy evidence entered the repository.
 - The full pytest, Ruff, schema, and whitespace checks pass from the feature branch.
 - The usage guide explicitly labels the reference layer as an input contract, not clinical or prevalence validation.
+
+## Completion evidence
+
+- Current closure commits on `main`: `60a917a`, `f1ccfe4`, `d27c21c`, `59f3a15`, and `bbe9ed5` (age validation, LMS file safety/parsing, guarded anthropometrics and hooks, oversized numeric normalization, and their regressions).
+- Final current-HEAD verification: `2548 passed, 4 skipped` (`PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q`). The four skips are the documented opt-in scale tests.
+- Final focused reference/kernel/CDC/age-regime checks: `115 passed`; Ruff, `python3 schema/build.py --check` (`validated 8 resources`), `uv lock --check`, and `git diff --check` all pass.
+- Fresh scoped reviews approved the age fix, LMS file-safety fix, anthropometric guard follow-up, and LMS oversized-input follow-up. The final integrated review at `bbe9ed5` reports no Critical, Important, or Minor findings.
+- Augmenter provenance closure remains intact: the 14-file source closure matches the local `growth-ai` checkout and the manifest hash is `b50afc36eca61684380154129cdacf484e62d56fa6da55914adab18c2d94d1d6`. The CDC reference identity/domain check passes with the pinned fingerprint `33b67c78867c2c00708c4ba6f0752b59f29671ba8b8fe84a78707a460cffa6a4`.
+- No clinical reference table, real patient rows, hidden truth, privacy evidence, prevalence claim, or release authorization was added. The reference layer remains an approved public-input contract and the default CLI remains fail-closed.
