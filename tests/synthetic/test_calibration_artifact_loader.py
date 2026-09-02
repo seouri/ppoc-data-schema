@@ -192,6 +192,26 @@ def test_loader_rejects_fifo_before_opening(tmp_path: Path) -> None:
         load_calibration_artifact(fifo)
 
 
+def test_loader_rejects_nonregular_path_before_opening(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    directory = tmp_path / "directory"
+    directory.mkdir()
+    opened = False
+
+    def unexpected_open(*args: object, **kwargs: object) -> int:
+        nonlocal opened
+        opened = True
+        raise AssertionError("nonregular calibration path was opened")
+
+    monkeypatch.setattr(os, "open", unexpected_open)
+
+    with pytest.raises(ValueError, match="regular file"):
+        load_calibration_artifact(directory)
+
+    assert not opened
+
+
 def test_loader_accepts_exact_byte_limit_and_rejects_one_byte_over(tmp_path: Path) -> None:
     payload = json.dumps(valid_mapping(), separators=(",", ":")).encode("utf-8")
     exact = tmp_path / "exact.json"
@@ -233,6 +253,19 @@ def test_loader_rejects_overflowing_numeric_value_as_controlled_validation_error
     path.write_text(payload, encoding="utf-8")
 
     with pytest.raises(ValueError, match="value must be a finite number") as error:
+        load_calibration_artifact(path)
+
+    assert error.value.__cause__ is None
+
+
+def test_loader_rejects_oversized_json_integer_as_controlled_validation_error(tmp_path: Path) -> None:
+    path = tmp_path / "oversized-integer.json"
+    payload = json.dumps(valid_mapping(), separators=(",", ":")).replace(
+        '"value":-0.03', '"value":' + "9" * 5001, 1
+    )
+    path.write_text(payload, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="valid JSON") as error:
         load_calibration_artifact(path)
 
     assert error.value.__cause__ is None

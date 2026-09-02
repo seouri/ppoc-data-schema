@@ -417,6 +417,40 @@ def test_target_name_rejects_attack_and_privacy_outputs(target_name: str) -> Non
         CalibrationArtifact.from_mapping(valid_mapping_with_target(target_name=target_name))
 
 
+@pytest.mark.parametrize(
+    ("channel", "unsafe"),
+    [
+        ("artifact_id", "patientid"),
+        ("artifact_id", "foo_patientid_bar"),
+        ("artifact_id", "fooidentifierbar"),
+        ("source_snapshot", "visitid"),
+        ("source_snapshot", "foo-123e4567-e89b-12d3-a456-426614174000-bar"),
+        ("artifact_id", "123e4567-e89b-12d3-a456-426614174000"),
+        ("target_name", "visitid"),
+        ("unit", "membership_inference_risk"),
+        ("unit", "foo_membershipinference_bar"),
+        ("artifact_id", "foo_membership_inferenceid"),
+        ("unit", "foo_privacy_auditx"),
+        ("target_name", "foo_differential_privacyx"),
+        ("artifact_id", "fooSYN-P-001bar"),
+        ("artifact_id", "foo-ro-w-bar"),
+        ("unit", "foo_r.ow_bar"),
+        ("target_name", "foo_r:o:w_bar"),
+    ],
+)
+def test_all_serialized_metadata_rejects_concatenated_identifiers_uuids_and_attack_outputs(
+    channel: str, unsafe: str
+) -> None:
+    value = valid_mapping()
+    if channel in {"artifact_id", "source_snapshot"}:
+        value[channel] = unsafe
+    else:
+        value["strata"][0]["targets"][0][channel] = unsafe  # type: ignore[index]
+
+    with pytest.raises(ValueError):
+        CalibrationArtifact.from_mapping(value)
+
+
 def test_model_rejects_overflowing_numeric_value_as_controlled_validation_error() -> None:
     with pytest.raises(ValueError, match="value must be a finite number") as error:
         CalibrationArtifact.from_mapping(valid_mapping_with_target(value=10**400))

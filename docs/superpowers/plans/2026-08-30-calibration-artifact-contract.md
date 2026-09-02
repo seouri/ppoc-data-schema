@@ -41,7 +41,7 @@
 - Produces `CalibrationArtifact.from_mapping(value: object) -> CalibrationArtifact` and `CalibrationArtifact.to_mapping() -> dict[str, object]`.
 - Exposes `ARTIFACT_VERSION = "calibration-artifact-v1"`, `MAX_CALIBRATION_ARTIFACT_BYTES = 4 * 1024 * 1024`, and the allowlists needed by the loader task.
 
-- [ ] **Step 1: Write failing model tests**
+- [x] **Step 1: Write failing model tests**
 
 Create a synthetic mapping helper whose only stratum is `age_regime=infancy|reference_sex=F` and whose released target is a physiology mean for `height_z`. Assert that parsing yields frozen dataclasses, tuple-backed strata/targets, canonical dimension ordering, and a newly allocated mapping:
 
@@ -112,13 +112,13 @@ def test_statistic_domains_fail_closed(statistic: str, value: object) -> None:
 
 The tests must also cover quantile-level presence/absence, minimum support, denominator positivity and support ordering, count rounding of zero, continuous precision bounds, positive policy minimum, boolean-as-number rejection, finite-number rejection, and family/name rejection for `latent`, `truth`, `patient`, `sequence`, `candidate`, `match`, `row`, and `resource` indicators.
 
-- [ ] **Step 2: Run the model tests to verify the red state**
+- [x] **Step 2: Run the model tests to verify the red state**
 
 Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_calibration_artifact_model.py`
 
 Expected: collection/test failure because `synthetic.calibration` and its model API do not yet exist. Correct any test syntax or fixture errors before implementing the module.
 
-- [ ] **Step 3: Implement the frozen model and validators**
+- [x] **Step 3: Implement the frozen model and validators**
 
 In `src/synthetic/calibration.py`:
 
@@ -130,13 +130,13 @@ In `src/synthetic/calibration.py`:
 6. Validate exact artifact version, calibration partition, lowercase 64-hex hashes, valid exact UTC timestamp, positive policy minimum, and policy precision `0..9`.
 7. Implement `to_mapping()` with fresh dict/list containers, sorted dimensions, and omission of `quantile_level` except for quantile targets. Do not import or reference any generator, schema, manifest, native trajectory, CSV, DuckDB, or real-data module.
 
-- [ ] **Step 4: Run model tests and the synthetic regression suite**
+- [x] **Step 4: Run model tests and the synthetic regression suite**
 
 Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_calibration_artifact_model.py tests/synthetic`
 
 Expected: all new model tests and all pre-existing synthetic tests pass.
 
-- [ ] **Step 5: Review and commit the model task**
+- [x] **Step 5: Review and commit the model task**
 
 Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run ruff check src/synthetic/calibration.py tests/synthetic/test_calibration_artifact_model.py` and `git diff --check`.
 
@@ -156,7 +156,7 @@ git commit -m "feat: add calibration artifact model"
 - Produces `load_calibration_artifact(path: Path) -> CalibrationArtifact`.
 - Produces `CalibrationArtifact.canonical_json() -> str` using the exact serialization arguments in the global constraints.
 
-- [ ] **Step 1: Write failing loader and serialization tests**
+- [x] **Step 1: Write failing loader and serialization tests**
 
 Use `tmp_path` and only synthetic JSON text. Assert that a valid file loads equal to the in-memory artifact and that canonical output is compact, ASCII, key-sorted, and stable regardless of input object/list ordering:
 
@@ -182,13 +182,13 @@ def test_loader_and_canonical_json_are_deterministic(tmp_path: Path) -> None:
 
 Add tests that a duplicate key at the top level and in a nested target raises `ValueError`; JSON `NaN`, `Infinity`, `-Infinity`, a UTF-8 BOM, invalid UTF-8, and a non-object root raise `ValueError` without a parser traceback. Add path tests for a missing path, symlink, directory, FIFO/special file where supported, exact `MAX_CALIBRATION_ARTIFACT_BYTES` acceptance, and `MAX_CALIBRATION_ARTIFACT_BYTES + 1` rejection. Ensure a file that grows beyond the limit during reading is rejected by asserting the read path does not return a partial artifact.
 
-- [ ] **Step 2: Run loader tests to verify the red state**
+- [x] **Step 2: Run loader tests to verify the red state**
 
 Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_calibration_artifact_loader.py`
 
 Expected: collection/test failure because `load_calibration_artifact` and `canonical_json` are not yet implemented. Correct only test fixture mistakes before adding the loader.
 
-- [ ] **Step 3: Implement guarded decoding and canonical output**
+- [x] **Step 3: Implement guarded decoding and canonical output**
 
 In `src/synthetic/calibration.py`:
 
@@ -197,7 +197,7 @@ In `src/synthetic/calibration.py`:
 3. Implement `canonical_json()` with exactly `json.dumps(self.to_mapping(), sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False)`. It returns the JSON string; all model numbers have already been normalized and no nonfinite value can serialize.
 4. Keep loader/module imports standard-library only and preserve Task 1's strict model behavior. Do not add path, partition, row, or source-data fields to the schema.
 
-- [ ] **Step 4: Run loader, model, and full repository checks**
+- [x] **Step 4: Run loader, model, and full repository checks**
 
 Run:
 
@@ -211,7 +211,7 @@ git diff --check
 
 Expected: all commands exit zero; the full suite retains the pre-task test count plus the new tests.
 
-- [ ] **Step 5: Review and commit the loader task**
+- [x] **Step 5: Review and commit the loader task**
 
 Inspect `git diff --stat`, `git diff --cached --check`, and the changed file names, then run:
 
@@ -230,7 +230,7 @@ git commit -m "feat: add guarded calibration artifact loader"
 - Consumes `load_calibration_artifact` only in the documentation example and boundary tests.
 - Produces a user-facing aggregate-artifact usage section and an AST-based structural assertion that visible generation/export/schema/manifest/native paths do not import or call the calibration loader.
 
-- [ ] **Step 1: Write failing boundary tests**
+- [x] **Step 1: Write failing boundary tests**
 
 Create a test that walks these repository-relative paths: `src/synthetic/generate.py`, `src/synthetic/csv_package.py`, `src/synthetic/manifest.py`, `src/synthetic/schema_contract.py`, and every `src/synthetic/native/*.py`. Parse each file with `ast.parse` and fail if an import targets `synthetic.calibration` or if a call/name references `load_calibration_artifact`. Also add a documentation-presence test that requires the new section title and loader example; that assertion is the intentional red test because the section is not present yet.
 
@@ -248,13 +248,13 @@ def test_docs_name_the_aggregate_only_boundary() -> None:
     assert "load_calibration_artifact" in text
 ```
 
-- [ ] **Step 2: Run the boundary tests to verify the red state**
+- [x] **Step 2: Run the boundary tests to verify the red state**
 
 Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_calibration_artifact_boundary.py`
 
 Expected: the documentation-presence test fails because the section does not exist yet; the AST assertion may already pass because the visible paths are intentionally not integrated. Resolve only test setup errors before implementation.
 
-- [ ] **Step 3: Add the documentation and structural assertions**
+- [x] **Step 3: Add the documentation and structural assertions**
 
 In `docs/synthetic-generator.md`, add a concise section titled `Aggregate calibration artifacts (development boundary)` that shows:
 
@@ -270,7 +270,7 @@ State that the file is a disclosure-controlled aggregate from the governed `cali
 
 Implement `visible_paths()` and AST helpers in the boundary test. Keep the check focused on imports and call/name references so documentation strings do not create false positives. Do not import calibration from `synthetic/__init__.py` or any visible runtime path.
 
-- [ ] **Step 4: Run the complete verification gate**
+- [x] **Step 4: Run the complete verification gate**
 
 Run:
 
@@ -283,7 +283,7 @@ git diff --check
 
 Expected: all repository checks exit zero, the structural test confirms no visible integration, and the docs identify the slice as aggregate-only and uncalibrated.
 
-- [ ] **Step 5: Review and commit the boundary task**
+- [x] **Step 5: Review and commit the boundary task**
 
 Inspect the staged names/stat and whitespace, then run:
 
@@ -293,6 +293,14 @@ git commit -m "docs: document calibration artifact boundary"
 ```
 
 ## Final review and handoff
+
+### Completion evidence
+
+- Model, guarded loader, canonical serialization, documentation, and AST boundary tests are implemented and complete.
+- Final adversarial review approved the metadata guards, UUID and embedded synthetic-ID rejection, pre-open regular-file check, controlled JSON errors, separator-obfuscated `row` rejection, and preservation of `growth_dx_flag`.
+- Focused artifact model/loader/boundary suite: `137 passed`; broader calibration suite: `326 passed`; full repository suite: `2664 passed, 4 skipped`.
+- Ruff, schema validation, lock validation, and `git diff --check` passed; the four skips are opt-in 10,000-member development scale tests.
+- The contract remains aggregate-only; later governed calibration, native cohort consumption, held-out validation, privacy auditing, and optional Synthea work are separate roadmap gates.
 
 - After Task 3, run the full test, Ruff, schema, and whitespace commands again from the feature worktree.
 - Review the complete branch against the approved spec: no real-data reader or generator integration, no hidden truth transport, exact disclosure semantics, deterministic ordering/serialization, and bounded loader behavior.

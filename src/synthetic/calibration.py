@@ -78,7 +78,11 @@ _TOKEN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
 _DIMENSION_VALUE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,63}\Z")
 _SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
 _UTC_TIMESTAMP_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z\Z")
-_IDENTIFIER_RE = re.compile(r"\b[A-Za-z][A-Za-z0-9]*-[PV]-[0-9]{3,}\b", re.IGNORECASE)
+_UUID_RE = re.compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+    re.IGNORECASE,
+)
+_IDENTIFIER_RE = re.compile(r"[A-Za-z][A-Za-z0-9]*-[PV]-[0-9]{3,}", re.IGNORECASE)
 _PATH_EXTENSION_RE = re.compile(
     r"\b[A-Za-z0-9_-]+\.(?:csv|tsv|json|parquet|txt|zip|gz)\b", re.IGNORECASE
 )
@@ -157,11 +161,52 @@ def contains_indicator_components(value: str, indicators: Collection[str]) -> bo
     return False
 
 
+def contains_indicator_text(value: str, indicators: Collection[str]) -> bool:
+    """Detect indicators both as separated components and concatenated text."""
+    components = _metadata_components(value)
+    compact_value = "".join(components).casefold()
+    component_ranges: list[tuple[int, int]] = []
+    offset = 0
+    for component in components:
+        end = offset + len(component)
+        component_ranges.append((offset, end))
+        offset = end
+    for indicator in indicators:
+        indicator_text = "".join(_metadata_components(indicator)).casefold()
+        if not indicator_text:
+            continue
+        if len(indicator_text) >= 4 and indicator_text in compact_value:
+            return True
+        if len(indicator_text) < 4:
+            search_from = 0
+            while True:
+                start = compact_value.find(indicator_text, search_from)
+                if start < 0:
+                    break
+                end = start + len(indicator_text)
+                if sum(
+                    start < component_end and end > component_start
+                    for component_start, component_end in component_ranges
+                ) > 1:
+                    return True
+                search_from = start + 1
+        for component in components:
+            component_text = component.casefold()
+            if indicator_text == component_text:
+                return True
+            if len(indicator_text) < 4 and (
+                component_text.startswith(indicator_text) or component_text.endswith(indicator_text)
+            ):
+                return True
+    return False
+
+
 def contains_serialized_metadata_unsafe_material(value: str) -> bool:
     """Detect governed identifiers and paths in serialized aggregate metadata."""
     return (
         contains_aggregate_unsafe_material(value)
         or bool(_IDENTIFIER_RE.search(value))
+        or bool(_UUID_RE.search(value))
         or "/" in value
         or "\\" in value
         or bool(_PATH_EXTENSION_RE.search(value))
@@ -175,7 +220,7 @@ def _validate_token(value: object, field: str, *, dimension_value: bool = False)
         raise ValueError(f"{field} must be an ASCII token without whitespace or path separators")
     if contains_serialized_metadata_unsafe_material(token):
         raise ValueError(f"{field} must be aggregate-safe")
-    if contains_indicator_components(token, _RECORD_INDICATORS):
+    if contains_indicator_text(token, _RECORD_INDICATORS | _ATTACK_OUTPUT_INDICATORS):
         raise ValueError(f"{field} must not contain record or hidden-state indicators")
     return token
 
@@ -191,7 +236,7 @@ def _validate_target_name(value: object) -> str:
         raise ValueError("target_name must be an ASCII token without whitespace or path separators")
     if contains_serialized_metadata_unsafe_material(target_name):
         raise ValueError("target_name must be aggregate-safe")
-    if contains_indicator_components(target_name, _TARGET_NAME_INDICATORS):
+    if contains_indicator_text(target_name, _TARGET_NAME_INDICATORS):
         raise ValueError("target_name must not contain record, hidden-state, or attack-output indicators")
     return target_name
 
@@ -541,9 +586,19 @@ def load_calibration_artifact(path: Path) -> CalibrationArtifact:
     if nofollow is None:
         raise ValueError("calibration artifact requires secure no-follow opening")
 
+    artifact_path = Path(path)
+    try:
+        path_status = artifact_path.lstat()
+    except FileNotFoundError:
+        raise ValueError("calibration artifact path was not found") from None
+    except OSError:
+        raise ValueError("calibration artifact path could not be inspected") from None
+    if not stat.S_ISREG(path_status.st_mode):
+        raise ValueError("calibration artifact path must be a regular file")
+
     flags = os.O_RDONLY | nofollow | getattr(os, "O_NONBLOCK", 0)
     try:
-        descriptor = os.open(path, flags)
+        descriptor = os.open(artifact_path, flags)
     except FileNotFoundError:
         raise ValueError("calibration artifact path was not found") from None
     except OSError as error:
@@ -583,6 +638,12 @@ def load_calibration_artifact(path: Path) -> CalibrationArtifact:
             parse_constant=_reject_nonfinite_json_constant,
         )
     except (json.JSONDecodeError, RecursionError):
+        raise ValueError("calibration artifact must be valid JSON") from None
+    except ValueError as error:
+        if str(error).startswith(
+            ("duplicate key in JSON object:", "nonfinite JSON constant is not allowed:")
+        ):
+            raise
         raise ValueError("calibration artifact must be valid JSON") from None
 
     if not isinstance(value, Mapping):
