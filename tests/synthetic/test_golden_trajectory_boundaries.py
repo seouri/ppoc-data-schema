@@ -108,7 +108,11 @@ _FORBIDDEN_CALL_LEAVES = {
     "write_synthetic_descriptor",
     "write_text",
 }
-_DYNAMIC_IMPORT_CALLS = {"__import__", "importlib.import_module"}
+_DYNAMIC_IMPORT_CALLS = {
+    "__import__",
+    "builtins.__import__",
+    "importlib.import_module",
+}
 
 
 def _module_context(path: Path) -> tuple[str, bool]:
@@ -325,6 +329,8 @@ def test_import_scan_detects_absolute_and_relative_golden_imports(
     (
         "import importlib as loader\nloader.import_module('synthetic.golden_trajectories')",
         "from importlib import import_module as load\nload(name='synthetic.golden_trajectories')",
+        "import builtins as bi\nbi.__import__('synthetic.golden_trajectories')",
+        "from builtins import __import__ as load\nload(name='synthetic.golden_trajectories')",
         "__import__(name='synthetic.golden_trajectories')",
     ),
 )
@@ -344,6 +350,8 @@ def test_import_scan_detects_literal_dynamic_golden_import_aliases(source: str) 
     (
         "import importlib as loader\nloader.import_module('subprocess')",
         "from importlib import import_module as load\nload(name='subprocess')",
+        "import builtins as bi\nbi.__import__('subprocess')",
+        "from builtins import __import__ as load\nload(name='subprocess')",
         "__import__('subprocess')",
     ),
 )
