@@ -186,6 +186,19 @@ def test_import_scanner_records_literal_forbidden_runtime_import(tmp_path: Path)
     assert "subprocess" in imports
 
 
+def test_import_scanner_records_alias_forbidden_runtime_import(tmp_path: Path) -> None:
+    """Catches a forbidden runtime import hidden behind a module alias."""
+    module = tmp_path / "visible.py"
+    module.write_text(
+        'import importlib as loader\nloader.import_module("subprocess")\n',
+        encoding="utf-8",
+    )
+
+    imports = {_absolute_module(imported) for imported in _imports(module)}
+
+    assert "subprocess" in imports
+
+
 def test_manifest_module_has_no_engine_runtime_data_or_package_writer_calls() -> None:
     """Catches the declaration growing execution, I/O, or export behavior."""
     calls = {
