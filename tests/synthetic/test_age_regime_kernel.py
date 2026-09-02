@@ -41,6 +41,30 @@ class ZeroGenerationZReference(RegimeReference):
 PATIENT = PatientState("syn-patient-a", "F", "F")
 
 
+def _unvalidated_age_regime_state(
+    module_version: str,
+    puberty_onset_age_days: int,
+    puberty_tempo_days: int,
+) -> AgeRegimeState:
+    """Build a tampered state to exercise kernel guards below the public model boundary."""
+
+    state = object.__new__(AgeRegimeState)
+    for name, value in (
+        ("module_version", module_version),
+        ("birth_length_z", 0.0),
+        ("birth_weight_z", 0.0),
+        ("head_circumference_z", 0.0),
+        ("childhood_height_z", 0.0),
+        ("childhood_bmi_z", 0.0),
+        ("puberty_onset_age_days", puberty_onset_age_days),
+        ("puberty_tempo_days", puberty_tempo_days),
+        ("puberty_height_spurt_z", 0.0),
+        ("puberty_bmi_shift_z", 0.0),
+    ):
+        object.__setattr__(state, name, value)
+    return state
+
+
 def test_sampled_state_can_be_replayed_without_resampling() -> None:
     kernel = AgeRegimeTrajectoryKernel(RegimeReference())
     streams = NamedRandomStreams(20260830, 0)
@@ -354,18 +378,7 @@ def test_kernel_normalizes_huge_pre_transition_catch_up_arithmetic() -> None:
         puberty_tempo_min_days=1,
         puberty_tempo_max_days=1,
     )
-    state = AgeRegimeState(
-        config.module_version,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        huge + 3,
-        1,
-        0.0,
-        0.0,
-    )
+    state = _unvalidated_age_regime_state(config.module_version, huge + 3, 1)
 
     with pytest.raises(ValueError, match="age_days"):
         AgeRegimeTrajectoryKernel(config=config, reference=AgeAgnosticReference()).generate(
@@ -409,18 +422,7 @@ def test_kernel_normalizes_huge_velocity_age_gap_arithmetic() -> None:
         puberty_min_age_days=3 * huge,
         puberty_max_age_days=3 * huge,
     )
-    state = AgeRegimeState(
-        config.module_version,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        3 * huge,
-        900,
-        0.0,
-        0.0,
-    )
+    state = _unvalidated_age_regime_state(config.module_version, 3 * huge, 900)
 
     with pytest.raises(ValueError, match="velocit|age"):
         AgeRegimeTrajectoryKernel(config=config, reference=AgeAgnosticReference()).generate(

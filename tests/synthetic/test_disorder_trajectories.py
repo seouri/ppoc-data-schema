@@ -299,6 +299,29 @@ def test_kernel_accepts_matching_treatment_nonresponse_terminal_event() -> None:
     ]
 
 
+def test_kernel_rejects_treatment_state_without_complete_treatment_trace() -> None:
+    module = _treatment_module(
+        (ClinicalEvent(PATIENT.patient_id, 100, "latent_onset", None, True),)
+    )
+
+    with pytest.raises(ValueError, match="treatment"):
+        DisorderTrajectoryKernel(HealthyKernel(LinearTestReference()), module).generate(
+            PATIENT, (730,), NamedRandomStreams(20260830, 0)
+        )
+
+
+def test_shared_event_validator_rejects_unsupported_event_age() -> None:
+    with pytest.raises(ValueError, match="supported age"):
+        validate_disorder_events(
+            PATIENT,
+            LatentDisorderState(DisorderKind.FAMILIAL_SHORT_STATURE, 100, 0.8),
+            (
+                ClinicalEvent(PATIENT.patient_id, 100, "latent_onset", None, True),
+                ClinicalEvent(PATIENT.patient_id, 10**1000, "observable_phenotype", None, False),
+            ),
+        )
+
+
 @pytest.mark.parametrize(
     ("events", "response", "message"),
     [

@@ -107,6 +107,23 @@ def _require_ordered_bounds(
     return lower_value, upper_value
 
 
+def _validated_builtin_config(
+    config: object | None,
+    expected_type: type[object],
+    expected_version: str,
+    *,
+    validate_type: bool = True,
+    validate_version: bool = True,
+) -> object:
+    if config is None:
+        config = expected_type()
+    if validate_type and type(config) is not expected_type:
+        raise TypeError(f"config must be a {expected_type.__name__}")
+    if validate_version and getattr(config, "module_version", None) != expected_version:
+        raise ValueError("module/config version mismatch")
+    return config
+
+
 def _require_module_state(state: LatentDisorderState, kind: DisorderKind) -> None:
     if not isinstance(state, LatentDisorderState):
         raise TypeError("state must be a LatentDisorderState")
@@ -164,7 +181,13 @@ class HealthyGrowthModule:
     module_version: ClassVar[str] = HealthyGrowthConfig.module_version
 
     def __init__(self, config: HealthyGrowthConfig | None = None) -> None:
-        self.config = config or HealthyGrowthConfig()
+        self.config = _validated_builtin_config(
+            config,
+            HealthyGrowthConfig,
+            HealthyGrowthModule.module_version,
+            validate_type=type(self) is HealthyGrowthModule,
+            validate_version=type(self) is HealthyGrowthModule,
+        )
 
     def sample_state(
         self, patient: PatientState, streams: NamedRandomStreams
@@ -222,7 +245,13 @@ class FamilialShortStatureModule:
     module_version: ClassVar[str] = FamilialShortStatureConfig.module_version
 
     def __init__(self, config: FamilialShortStatureConfig | None = None) -> None:
-        self.config = config or FamilialShortStatureConfig()
+        self.config = _validated_builtin_config(
+            config,
+            FamilialShortStatureConfig,
+            FamilialShortStatureModule.module_version,
+            validate_type=type(self) is FamilialShortStatureModule,
+            validate_version=type(self) is FamilialShortStatureModule,
+        )
 
     def sample_state(
         self, patient: PatientState, streams: NamedRandomStreams
@@ -308,7 +337,13 @@ class ConstitutionalDelayModule:
     module_version: ClassVar[str] = ConstitutionalDelayConfig.module_version
 
     def __init__(self, config: ConstitutionalDelayConfig | None = None) -> None:
-        self.config = config or ConstitutionalDelayConfig()
+        self.config = _validated_builtin_config(
+            config,
+            ConstitutionalDelayConfig,
+            ConstitutionalDelayModule.module_version,
+            validate_type=type(self) is ConstitutionalDelayModule,
+            validate_version=type(self) is ConstitutionalDelayModule,
+        )
 
     def sample_state(
         self, patient: PatientState, streams: NamedRandomStreams
@@ -468,7 +503,13 @@ class GrowthHormoneDeficiencyModule:
     module_version: ClassVar[str] = GrowthHormoneDeficiencyConfig.module_version
 
     def __init__(self, config: GrowthHormoneDeficiencyConfig | None = None) -> None:
-        self.config = config or GrowthHormoneDeficiencyConfig()
+        self.config = _validated_builtin_config(
+            config,
+            GrowthHormoneDeficiencyConfig,
+            GrowthHormoneDeficiencyModule.module_version,
+            validate_type=type(self) is GrowthHormoneDeficiencyModule,
+            validate_version=type(self) is GrowthHormoneDeficiencyModule,
+        )
 
     def sample_state(
         self, patient: PatientState, streams: NamedRandomStreams

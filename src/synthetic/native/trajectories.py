@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from synthetic.models import (
+    MAX_AGE_DAYS,
     ClinicalEvent,
     DisorderKind,
     LatentDisorderState,
@@ -13,7 +14,17 @@ from synthetic.native.anthropometry import (
     require_finite_positive,
     require_finite_real,
 )
-from synthetic.native.clinical_modules import GrowthDisorderModule
+from synthetic.native.clinical_modules import (
+    ConstitutionalDelayConfig,
+    ConstitutionalDelayModule,
+    FamilialShortStatureConfig,
+    FamilialShortStatureModule,
+    GrowthDisorderModule,
+    GrowthHormoneDeficiencyConfig,
+    GrowthHormoneDeficiencyModule,
+    HealthyGrowthConfig,
+    HealthyGrowthModule,
+)
 from synthetic.native.healthy import HealthyKernel
 from synthetic.randomness import NamedRandomStreams
 from synthetic.references import generation_z_score
@@ -28,6 +39,21 @@ _EVENT_PHASE_ORDER = {
     "treatment_response": 6,
     "treatment_nonresponse": 6,
 }
+
+_BUILTIN_MODULE_CONTRACTS = (
+    (HealthyGrowthModule, HealthyGrowthConfig, "healthy-growth-v1"),
+    (
+        FamilialShortStatureModule,
+        FamilialShortStatureConfig,
+        "familial-short-stature-v1",
+    ),
+    (ConstitutionalDelayModule, ConstitutionalDelayConfig, "constitutional-delay-v1"),
+    (
+        GrowthHormoneDeficiencyModule,
+        GrowthHormoneDeficiencyConfig,
+        "growth-hormone-deficiency-v1",
+    ),
+)
 
 
 def validate_growth_disorder_module(module: object) -> None:
@@ -46,6 +72,19 @@ def validate_growth_disorder_module(module: object) -> None:
     ):
         if not callable(getattr(module, method_name, None)):
             raise TypeError(f"module must provide {method_name}")
+    for module_type, config_type, expected_version in _BUILTIN_MODULE_CONTRACTS:
+        if type(module) is module_type:
+            config = getattr(module, "config", None)
+            if type(config) is not config_type:
+                raise TypeError(
+                    f"built-in module config must be a {config_type.__name__}"
+                )
+            if (
+                getattr(module, "module_version", None) != expected_version
+                or getattr(config, "module_version", None) != expected_version
+            ):
+                raise ValueError("built-in module/config version mismatch")
+            break
 
 
 def validate_disorder_events(
@@ -70,8 +109,13 @@ def validate_disorder_events(
             raise TypeError("module events must be ClinicalEvent instances")
         if event.patient_id != patient.patient_id:
             raise ValueError("module event patient ID must match the requested patient")
-        if isinstance(event.age_days, bool) or not isinstance(event.age_days, int) or event.age_days < 0:
-            raise ValueError("module event age must be nonnegative")
+        if (
+            isinstance(event.age_days, bool)
+            or not isinstance(event.age_days, int)
+            or event.age_days < 0
+            or event.age_days > MAX_AGE_DAYS
+        ):
+            raise ValueError("module event age must be within supported age range")
         if event.age_days < previous_age:
             raise ValueError("module event ages must be nondecreasing")
         if not isinstance(event.event_type, str):
@@ -125,6 +169,21 @@ def validate_disorder_events(
 
         previous_age = event.age_days
         previous_phase = phase
+
+    if state.treatment_start_age_days is not None:
+        if not treatment_start_seen:
+            raise ValueError(
+                "treatment-bearing state requires a matching treatment_start event"
+            )
+        expected_outcome = (
+            "treatment_response"
+            if state.treatment_response > 0
+            else "treatment_nonresponse"
+        )
+        if treatment_outcome_seen != expected_outcome:
+            raise ValueError(
+                "treatment-bearing state requires exactly one matching terminal treatment outcome"
+            )
 
 
 class DisorderTrajectoryKernel:

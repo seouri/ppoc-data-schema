@@ -60,6 +60,28 @@ def test_module_versions_are_stable_and_unique() -> None:
     assert [module.config.module_version for module in modules] == versions
 
 
+@pytest.mark.parametrize(
+    "factory",
+    [
+        HealthyGrowthModule,
+        FamilialShortStatureModule,
+        ConstitutionalDelayModule,
+        GrowthHormoneDeficiencyModule,
+    ],
+)
+def test_built_in_modules_reject_wrong_configuration_types(factory: object) -> None:
+    with pytest.raises(TypeError, match="config"):
+        factory(object())  # type: ignore[operator]
+
+
+def test_built_in_constructor_rejects_config_version_drift() -> None:
+    config = FamilialShortStatureConfig()
+    object.__setattr__(config, "module_version", "familial-short-stature-v999")
+
+    with pytest.raises(ValueError, match="version"):
+        FamilialShortStatureModule(config)
+
+
 def test_zero_familial_severity_has_no_observable_descendants() -> None:
     module = FamilialShortStatureModule(
         FamilialShortStatureConfig(severity_min=0.0, severity_max=0.0)

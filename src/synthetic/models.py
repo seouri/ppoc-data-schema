@@ -26,6 +26,20 @@ def _is_nonnegative_age(value: object) -> bool:
     )
 
 
+_DISORDER_EVENT_TYPES = frozenset(
+    {
+        "latent_onset",
+        "observable_phenotype",
+        "recognition_opportunity",
+        "workup",
+        "recorded_diagnosis",
+        "treatment_start",
+        "treatment_response",
+        "treatment_nonresponse",
+    }
+)
+
+
 @dataclass(frozen=True)
 class PatientState:
     patient_id: str
@@ -42,6 +56,10 @@ class LatentPoint:
     weight_kg: float
     height_z: float
     bmi_z: float
+
+    def __post_init__(self) -> None:
+        if not _is_nonnegative_age(self.age_days):
+            raise ValueError("age_days must be a nonnegative integer within the supported age range")
 
 
 @dataclass(frozen=True)
@@ -137,6 +155,22 @@ class LatentTrajectory:
         if not all(isinstance(event, ClinicalEvent) for event in self.events):
             raise ValueError("events must be a tuple of ClinicalEvent")
 
+        for event in self.events:
+            if not _is_nonnegative_age(event.age_days):
+                raise ValueError(
+                    "event age_days must be a nonnegative integer within the supported age range"
+                )
+            if not isinstance(event.event_type, str):
+                raise ValueError("event_type must be a string")  # noqa: TRY004
+            if event.event_type not in _DISORDER_EVENT_TYPES:
+                raise ValueError(f"unknown event_type: {event.event_type}")
+            if event.code is not None:
+                raise ValueError("latent trajectory events must have code=None")
+            if type(event.hidden) is not bool:
+                raise ValueError("event hidden must be a boolean")
+            if event.hidden is not (event.event_type == "latent_onset"):
+                raise ValueError("event hidden flag is invalid")
+
         patient_id = self.points[0].patient_id
         if any(point.patient_id != patient_id for point in self.points):
             raise ValueError("points must have one patient")
@@ -179,13 +213,9 @@ class AgeRegimeState:
             value = getattr(self, name)
             if not _is_finite_numeric(value):
                 raise ValueError(f"{name} must be finite")
-        if (isinstance(self.puberty_onset_age_days, bool)
-                or not isinstance(self.puberty_onset_age_days, int)
-                or self.puberty_onset_age_days < 0):
+        if not _is_nonnegative_age(self.puberty_onset_age_days):
             raise ValueError("puberty_onset_age_days must be a nonnegative integer")
-        if (isinstance(self.puberty_tempo_days, bool)
-                or not isinstance(self.puberty_tempo_days, int)
-                or self.puberty_tempo_days <= 0):
+        if not _is_nonnegative_age(self.puberty_tempo_days) or self.puberty_tempo_days <= 0:
             raise ValueError("puberty_tempo_days must be a positive integer")
 
 
@@ -209,7 +239,7 @@ class AgeRegimePoint:
     def __post_init__(self) -> None:
         if not isinstance(self.patient_id, str) or not self.patient_id:
             raise ValueError("patient_id must be nonempty")
-        if isinstance(self.age_days, bool) or not isinstance(self.age_days, int) or self.age_days < 0:
+        if not _is_nonnegative_age(self.age_days):
             raise ValueError("age_days must be a nonnegative integer")
         if not isinstance(self.regime, GrowthRegime):
             raise ValueError("regime must be a GrowthRegime")  # noqa: TRY004

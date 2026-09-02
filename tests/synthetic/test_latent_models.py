@@ -134,3 +134,29 @@ def test_latent_trajectory_rejects_patient_mismatch() -> None:
             disorder=LatentDisorderState(DisorderKind.HEALTHY, None, 0.0),
             events=(event,),
         )
+
+
+@pytest.mark.parametrize(
+    "event",
+    [
+        ClinicalEvent("syn-patient-a", 10**1000, "latent_onset", None, True),
+        ClinicalEvent("syn-patient-a", 0, ["latent_onset"], None, True),  # type: ignore[arg-type]
+        ClinicalEvent("syn-patient-a", 0, "wat", None, False),
+        ClinicalEvent("syn-patient-a", 0, "latent_onset", "secret", True),
+        ClinicalEvent("syn-patient-a", 0, "latent_onset", None, False),
+    ],
+)
+def test_latent_trajectory_rejects_malformed_event_metadata(event: ClinicalEvent) -> None:
+    point = LatentPoint("syn-patient-a", 730, 90.0, 16.0, 12.96, 0.0, 0.0)
+
+    with pytest.raises((TypeError, ValueError)):
+        LatentTrajectory(
+            points=(point,),
+            disorder=LatentDisorderState(DisorderKind.HEALTHY, None, 0.0),
+            events=(event,),
+        )
+
+
+def test_latent_point_rejects_unsupported_age() -> None:
+    with pytest.raises(ValueError, match="age_days"):
+        LatentPoint("syn-patient-a", 10**1000, 90.0, 16.0, 12.96, 0.0, 0.0)

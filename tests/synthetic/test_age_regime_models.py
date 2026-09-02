@@ -81,6 +81,31 @@ def test_age_regime_models_reject_integers_that_cannot_be_represented_as_float()
         AgeRegimePoint("p", 365, GrowthRegime.INFANCY, huge, None, 8.0, None)
 
 
+@pytest.mark.parametrize("field", ["puberty_onset_age_days", "puberty_tempo_days"])
+def test_age_regime_state_rejects_unsupported_age(field: str) -> None:
+    values: dict[str, object] = {
+        "module_version": "age-regimes-v1",
+        "birth_length_z": 0.0,
+        "birth_weight_z": 0.0,
+        "head_circumference_z": 0.0,
+        "childhood_height_z": 0.0,
+        "childhood_bmi_z": 0.0,
+        "puberty_onset_age_days": 4380,
+        "puberty_tempo_days": 900,
+        "puberty_height_spurt_z": 0.0,
+        "puberty_bmi_shift_z": 0.0,
+    }
+    values[field] = 10**1000
+
+    with pytest.raises(ValueError, match=field):
+        AgeRegimeState(**values)
+
+
+def test_age_regime_point_rejects_unsupported_age() -> None:
+    with pytest.raises(ValueError, match="age_days"):
+        AgeRegimePoint("p", 10**1000, GrowthRegime.INFANCY, 75.0, None, 8.0, None)
+
+
 @pytest.mark.parametrize(
     ("height_cm", "bmi"),
     [(74.0, None), (None, 14.0)],

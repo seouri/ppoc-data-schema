@@ -11,6 +11,7 @@ from synthetic.models import (
     LatentDisorderState,
     PatientState,
 )
+from synthetic.native.clinical_modules import FamilialShortStatureModule
 from synthetic.native.trajectories import (
     validate_disorder_events,
     validate_growth_disorder_module,
@@ -88,4 +89,12 @@ def test_shared_module_validator_rejects_missing_contract_member(missing: str) -
     delattr(Module, missing)
     module = Module()
     with pytest.raises((TypeError, ValueError), match=missing):
+        validate_growth_disorder_module(module)
+
+
+def test_shared_module_validator_rejects_built_in_module_config_version_drift() -> None:
+    module = FamilialShortStatureModule()
+    module.module_version = "familial-short-stature-v999"
+
+    with pytest.raises(ValueError, match="version"):
         validate_growth_disorder_module(module)
