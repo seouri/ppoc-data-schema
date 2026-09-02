@@ -29,6 +29,7 @@ from synthetic.native.clinical_modules import (
     GrowthDisorderModule,
     GrowthHormoneDeficiencyModule,
     HealthyGrowthModule,
+    PediatricHypothyroidismModule,
 )
 from synthetic.randomness import NamedRandomStreams
 from synthetic.references import GrowthReference
@@ -39,6 +40,7 @@ GOLDEN_CASE_IDS = (
     "golden-familial-short-stature-v1",
     "golden-constitutional-delay-v1",
     "golden-growth-hormone-deficiency-v1",
+    "golden-pediatric-hypothyroidism-v1",
 )
 GOLDEN_REASON_CODES = (
     "NONDETERMINISTIC",
@@ -124,6 +126,14 @@ _FIXED_DISORDER_VALUES = {
         1.0,
         0,
         3510,
+        0.6,
+    ),
+    GOLDEN_CASE_IDS[4]: (
+        DisorderKind.PEDIATRIC_HYPOTHYROIDISM,
+        1460,
+        1.0,
+        0,
+        1850,
         0.6,
     ),
 }
@@ -573,6 +583,22 @@ DEFAULT_GOLDEN_CASES = (
         (3000, 3510, 3875, 5000),
         1004,
     ),
+    _case(
+        GOLDEN_CASE_IDS[4],
+        DisorderKind.PEDIATRIC_HYPOTHYROIDISM,
+        LatentDisorderState(
+            DisorderKind.PEDIATRIC_HYPOTHYROIDISM,
+            1460,
+            1.0,
+            treatment_start_age_days=1850,
+            treatment_response=0.6,
+        ),
+        _DISEASE_EVENTS + ("treatment_start", "treatment_response"),
+        GoldenPattern.PROGRESSION_RESPONSE,
+        GoldenPattern.POSITIVE_AFTER_ONSET,
+        (1460, 1850, 2215, 3000),
+        1005,
+    ),
 )
 
 
@@ -582,6 +608,7 @@ def _default_modules() -> dict[DisorderKind, GrowthDisorderModule]:
         DisorderKind.FAMILIAL_SHORT_STATURE: FamilialShortStatureModule(),
         DisorderKind.CONSTITUTIONAL_DELAY: ConstitutionalDelayModule(),
         DisorderKind.GROWTH_HORMONE_DEFICIENCY: GrowthHormoneDeficiencyModule(),
+        DisorderKind.PEDIATRIC_HYPOTHYROIDISM: PediatricHypothyroidismModule(),
     }
 
 

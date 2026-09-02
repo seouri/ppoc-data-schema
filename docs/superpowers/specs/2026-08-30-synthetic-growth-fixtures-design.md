@@ -231,6 +231,8 @@ Release one contains separately reviewed modules for:
 
 These are generative modules, not assertions that every diagnosis has one trajectory. Approved overlaps are encoded as explicit module interactions; release one does not sample an unconstrained Cartesian product. A clinical module cannot be enabled until its golden cases, citations, terminology mappings, and longitudinal signature assertions have been reviewed.
 
+The current ordinary-development implementation exposes pediatric hypothyroidism as an uncalibrated, evaluator-only trajectory module with a checked-in golden case; it is not enabled in the visible cohort/package route and has no TSH/free-T4, levothyroxine, or other disorder-specific ancillary projection. Those visible descendants remain a separate follow-on contract.
+
 ### Incidence, prevalence, and censoring
 
 Latent disorders arise through age-, sex-reference-, birth-state-, familial-, and approved risk-dependent incidence or onset hazards. Healthcare-system entry, visit observation, and censoring are generated separately. Recognition and recorded diagnoses arise from observable evidence and opportunities rather than from a final label-allocation step.

@@ -187,6 +187,7 @@ def test_latent_observable_and_recorded_layers_are_distinct_status_only_diagnost
         "latent_module.familial_short_stature",
         "latent_module.constitutional_delay",
         "latent_module.growth_hormone_deficiency",
+        "latent_module.pediatric_hypothyroidism",
     ]
     assert sum(item.support for item in latent) == len(cohort.members)
     assert all(item.target_value is None for item in latent)

@@ -34,6 +34,7 @@ from synthetic.native.clinical_modules import (
     GrowthHormoneDeficiencyConfig,
     GrowthHormoneDeficiencyModule,
     HealthyGrowthModule,
+    PediatricHypothyroidismModule,
 )
 from synthetic.randomness import NamedRandomStreams
 from tests.synthetic.fakes import RegimeLinearTestReference
@@ -55,6 +56,7 @@ def _modules() -> dict[DisorderKind, object]:
         DisorderKind.FAMILIAL_SHORT_STATURE: FamilialShortStatureModule(),
         DisorderKind.CONSTITUTIONAL_DELAY: ConstitutionalDelayModule(),
         DisorderKind.GROWTH_HORMONE_DEFICIENCY: GrowthHormoneDeficiencyModule(),
+        DisorderKind.PEDIATRIC_HYPOTHYROIDISM: PediatricHypothyroidismModule(),
     }
 
 
@@ -65,6 +67,7 @@ def test_golden_catalog_has_fixed_metadata_states_and_patterns() -> None:
         "golden-familial-short-stature-v1",
         "golden-constitutional-delay-v1",
         "golden-growth-hormone-deficiency-v1",
+        "golden-pediatric-hypothyroidism-v1",
     )
     assert GOLDEN_REASON_CODES == (
         "NONDETERMINISTIC",
@@ -99,6 +102,7 @@ def test_golden_catalog_has_fixed_metadata_states_and_patterns() -> None:
         DISEASE_EVENTS,
         DISEASE_EVENTS,
         DISEASE_EVENTS + ("treatment_start", "treatment_response"),
+        DISEASE_EVENTS + ("treatment_start", "treatment_response"),
     ]
     assert [case.disorder_state for case in DEFAULT_GOLDEN_CASES] == [
         LatentDisorderState(DisorderKind.HEALTHY, None, 0.0),
@@ -111,11 +115,19 @@ def test_golden_catalog_has_fixed_metadata_states_and_patterns() -> None:
             treatment_start_age_days=3510,
             treatment_response=0.6,
         ),
+        LatentDisorderState(
+            DisorderKind.PEDIATRIC_HYPOTHYROIDISM,
+            1460,
+            1.0,
+            treatment_start_age_days=1850,
+            treatment_response=0.6,
+        ),
     ]
     assert [case.height_pattern for case in DEFAULT_GOLDEN_CASES] == [
         GoldenPattern.ZERO,
         GoldenPattern.CONSTANT_NEGATIVE,
         GoldenPattern.DELAYED_RECOVERY,
+        GoldenPattern.PROGRESSION_RESPONSE,
         GoldenPattern.PROGRESSION_RESPONSE,
     ]
     assert [case.bmi_pattern for case in DEFAULT_GOLDEN_CASES] == [
@@ -123,9 +135,11 @@ def test_golden_catalog_has_fixed_metadata_states_and_patterns() -> None:
         GoldenPattern.ZERO,
         GoldenPattern.ZERO,
         GoldenPattern.POSITIVE_AFTER_ONSET,
+        GoldenPattern.POSITIVE_AFTER_ONSET,
     ]
     assert DEFAULT_GOLDEN_CASES[2].pattern_probe_ages_days == (4380, 4740, 5470)
     assert DEFAULT_GOLDEN_CASES[3].pattern_probe_ages_days == (3000, 3510, 3875, 5000)
+    assert DEFAULT_GOLDEN_CASES[4].pattern_probe_ages_days == (1460, 1850, 2215, 3000)
 
 
 def test_case_is_frozen_redacted_exact_and_copies_tuple_inputs() -> None:

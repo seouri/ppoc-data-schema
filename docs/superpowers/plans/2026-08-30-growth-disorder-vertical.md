@@ -388,7 +388,7 @@ git commit -m "feat: add disorder-aware latent trajectories"
 
 - [x] **Step 1: Add the development-module section**
 
-Document a Python example that constructs a `DisorderTrajectoryKernel` from the existing injected test reference and a module, then states that `LatentTrajectory.disorder` and `.events` are evaluator-only and are not exported. List the four modules and their directional signatures without calling their defaults clinically representative. State that prevalence, demographic calibration, disorder-critical labs/medications/referrals, held-out validation, and privacy auditing remain later gates.
+Document a Python example that constructs a `DisorderTrajectoryKernel` from the existing injected test reference and a module, then states that `LatentTrajectory.disorder` and `.events` are evaluator-only and are not exported. List the original four modules and their directional signatures without calling their defaults clinically representative; list any follow-on evaluator module separately with the same boundary. State that prevalence, demographic calibration, disorder-critical labs/medications/referrals, held-out validation, and privacy auditing remain later gates.
 
 - [x] **Step 2: Verify the repository**
 
@@ -409,7 +409,7 @@ git commit -m "docs: describe latent growth disorder modules"
 
 Before merging this plan, verify that:
 
-- All four module types produce deterministic states and ordered event traces with latent truth separate from observable descendants.
+- The original four module types produce deterministic states and ordered event traces with latent truth separate from observable descendants; the pediatric-hypothyroidism follow-on adds the same contract without widening visible package export.
 - Familial short stature preserves a constant height-z offset, constitutional delay has a bounded temporary effect, and growth-hormone deficiency has progressive impairment with optional treatment response.
 - Healthy-module output is byte-for-byte/point-for-point identical to the existing healthy kernel for the same inputs.
 - Anthropometric identities, reference guards, age ordering, and named random-stream isolation pass independent tests.
@@ -422,3 +422,9 @@ Before merging this plan, verify that:
 - Fresh adversarial review approved the final implementation after validating malformed states, event metadata, nested ages, regimes, channel applicability, treatment consistency, and direct observation-entry tampering.
 - Integrated verification passed: `2634 passed, 4 skipped`; Ruff passed; `python schema/build.py --check` validated 8 resources; `uv lock --check` passed; and `git diff --check` was clean.
 - The disorder layer remains evaluator-only: hidden state and event traces are not exported to the visible eight-resource package, ordinary loaders, descriptors, or manifests. Module defaults remain explicitly uncalibrated development scenarios, with prevalence, clinical validity, privacy, and release gates deferred.
+
+### Follow-on: pediatric hypothyroidism trajectory (2026-09-02)
+
+- [x] Add a versioned, frozen `PediatricHypothyroidismConfig` and `PediatricHypothyroidismModule` with age-bounded onset, progressive height impairment, relative BMI increase, optional treatment, and heterogeneous response/nonresponse events.
+- [x] Register `DisorderKind.PEDIATRIC_HYPOTHYROIDISM`, its named counterfactual stream, built-in module contract, and golden forced-coverage case without changing the visible generator or package schema.
+- [x] Add deterministic, schedule, overflow, state-kind, treatment, and golden-catalog tests; update evaluator-only documentation and retain non-GHD ancillary pathways as deferred.

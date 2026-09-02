@@ -388,7 +388,7 @@ Add a section after the age-regime example that:
 1. Constructs `AgeRegimeDisorderKernel(AgeRegimeTrajectoryKernel(reference), FamilialShortStatureModule())` with ages spanning infancy, transition, puberty, and adolescence.
 2. States that `result.physiology`, `result.disorder`, and `result.events` are hidden evaluator objects, not CSV, descriptor, manifest, or ordinary-loader fields.
 3. Explains the pre-transition length/weight bridge, post-transition height/BMI bridge, derived identities, adjusted transition continuity, and constitutional-delay schedule rule.
-4. Labels all four modules as uncalibrated scenarios and states module selection is not prevalence estimation.
+4. Labels all native modules as uncalibrated scenarios and states module selection is not prevalence estimation.
 5. Defers diagnosis/lab/medication/referral descendants, prevalence/demographic calibration, held-out validation, privacy auditing, counterfactual worlds, clinical reference approval, and Synthea conformance.
 6. Preserves the healthy age-730+ three-visit smoke/export boundary and non-matchability limitation.
 
@@ -423,7 +423,7 @@ Before merging this plan, verify that:
 
 - Ordinary age-regime generation remains deterministic and behaviorally unchanged when no replay state is supplied.
 - `AgeRegimeDisorderTrajectory` validates hidden physiology, disorder state, event types, and patient identities without replacing `LatentTrajectory`.
-- All four reviewed modules compose across infancy, transition, childhood, puberty, and adolescence; familial effects adjust both representations, constitutional delay shifts puberty exactly once, and treatment events remain causally ordered.
+- All reviewed native modules compose across infancy, transition, childhood, puberty, and adolescence; familial effects adjust both representations, constitutional delay shifts puberty exactly once, and treatment events remain causally ordered.
 - Pre-transition outputs contain length plus weight, transition derives height/BMI explicitly, post-transition outputs contain height plus BMI and derive weight, and adjusted identities/velocities are finite.
 - Sparse transition pairs, shifted schedules, extreme references, nonfinite effects, malformed module contracts, wrong state kinds, and malformed events fail closed.
 - The composition requests regime and disorder streams but never `growth`; identical seeds and inputs reproduce physiology, disorder state, and events.

@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a reusable, deterministic golden trajectory suite covering healthy and three growth-disorder scenarios across all pediatric age regimes without turning forced-coverage cases into prevalence or release evidence.
+**Goal:** Add a reusable, deterministic golden trajectory suite covering healthy and four growth-disorder scenarios across all pediatric age regimes without turning forced-coverage cases into prevalence or release evidence.
 
-**Architecture:** A typed evaluator module owns four immutable fictional cases containing explicit hidden states and directional assertions. A runner generates each case twice through the existing age-regime/disorder kernels, checks aggregate structural/event/physiology invariants, and emits only safe case IDs, statuses, and reason codes; documentation and AST guards prevent file, governed-data, package, Synthea, or production coupling.
+**Architecture:** A typed evaluator module owns five immutable fictional cases containing explicit hidden states and directional assertions. A runner generates each case twice through the existing age-regime/disorder kernels, checks aggregate structural/event/physiology invariants, and emits only safe case IDs, statuses, and reason codes; documentation and AST guards prevent file, governed-data, package, Synthea, or production coupling.
 
 **Tech Stack:** Python 3.12+ standard-library `dataclasses`, `enum`, `json`, `math`, `re`, `collections.abc`; existing native age-regime/disorder models and kernels; pytest; Ruff; uv; Markdown.
 
@@ -13,9 +13,9 @@
 ## Global Constraints
 
 - `GOLDEN_TRAJECTORY_VERSION` is exactly `growth-golden-v1`.
-- `GOLDEN_CASE_IDS` is exactly `("golden-healthy-v1", "golden-familial-short-stature-v1", "golden-constitutional-delay-v1", "golden-growth-hormone-deficiency-v1")`.
+- `GOLDEN_CASE_IDS` is exactly `("golden-healthy-v1", "golden-familial-short-stature-v1", "golden-constitutional-delay-v1", "golden-growth-hormone-deficiency-v1", "golden-pediatric-hypothyroidism-v1")`.
 - The default age tuple is exactly `(0, 700, 730, 760, 3000, 4379, 4380, 4740, 5470, 5475, 6575, 7305)` with fixed puberty onset `4380`, tempo `1095`, and explicit finite fictional z-state values.
-- The default disorder states are healthy `(None, 0.0)`, familial `(0, 1.0)`, constitutional delay `(4380, 1.0, delay=360)`, and growth-hormone deficiency `(onset=3000, severity=1.0, treatment_start=3510, response=0.6)`.
+- The default disorder states are healthy `(None, 0.0)`, familial `(0, 1.0)`, constitutional delay `(4380, 1.0, delay=360)`, growth-hormone deficiency `(onset=3000, severity=1.0, treatment_start=3510, response=0.6)`, and pediatric hypothyroidism `(onset=1460, severity=1.0, treatment_start=1850, response=0.6)`.
 - The runner is evaluator-only and in-memory. It accepts no path, CSV, output, package, descriptor, key, calibration, held-out, privacy, model, network, Java, or Synthea input.
 - Hidden patient/state/point/event objects never enter ordinary mappings, manifests, logs, package files, or reports; reports contain only safe case IDs, statuses, and fixed reason codes.
 - Invalid inputs raise exactly `GoldenTrajectoryUnavailable("golden trajectory suite unavailable")` without exception chaining or submitted-value echo.
@@ -40,11 +40,11 @@
 
 - [x] **Step 1: Write the failing catalog and runner tests.**
 
-  Define a test helper that returns the exact fixed default cases’ aggregate metadata and uses only `RegimeLinearTestReference`. Assert the four default IDs and fixed version, the exact fixed age tuple, all five required `GrowthRegime` values, and the expected event sets for healthy, familial short stature, constitutional delay, and treated growth-hormone deficiency.
+  Define a test helper that returns the exact fixed default cases’ aggregate metadata and uses only `RegimeLinearTestReference`. Assert the five default IDs and fixed version, the exact fixed age tuple, all five required `GrowthRegime` values, and the expected event sets for healthy, familial short stature, constitutional delay, treated growth-hormone deficiency, and treated pediatric hypothyroidism.
 
   Test frozen/exact construction: mutate attempts fail, `repr` is a fixed evaluator-safe string, source mappings/tuples do not alias, patient/state subclasses are rejected, duplicate case IDs and malformed ages/pattern probes fail, and hidden states never appear in report mappings or canonical JSON bytes.
 
-  Test `run_golden_trajectory_suite(RegimeLinearTestReference())` returns `PASS` with four ordered case results, `("OK",)` reasons, canonical sorted ASCII JSON with one newline, and equal output on repeated calls. Verify every result covers infancy, transition, childhood, puberty, and adolescence; physical height/BMI/weight identities and velocities remain valid; required events are causally ordered; and each `GoldenPattern` is exercised, including delayed recovery and post-treatment improvement followed by a non-regressing post-response probe.
+  Test `run_golden_trajectory_suite(RegimeLinearTestReference())` returns `PASS` with five ordered case results, `("OK",)` reasons, canonical sorted ASCII JSON with one newline, and equal output on repeated calls. Verify every result covers infancy, transition, childhood, puberty, and adolescence; physical height/BMI/weight identities and velocities remain valid; required events are causally ordered; and each `GoldenPattern` is exercised, including delayed recovery and post-treatment improvement followed by a non-regressing post-response probe.
 
   Test failure boundaries with a custom reference that raises, a missing/wrong-kind module mapping, an invalid case, a nondeterministic module/reference, missing required regimes/events, and a deliberately broken directional pattern. Invalid inputs must raise the fixed unavailable exception with no cause/context or submitted patient/age/value echo; generated-case failures must return `FAIL` with only the fixed reason codes. Assert no `PASS` result can expose trajectory points, states, measurements, event payloads, seeds, or patient IDs.
 
@@ -60,7 +60,7 @@
 
   Define exact fixed constants, enums, fixed reason ordering, and a single redacted exception helper. Implement all three dataclasses with `frozen=True`, `repr=False`, exact built-in scalar/tuple/model checks, immutable copies, `__init_subclass__` rejection, safe case-ID validation, and no public hidden-state serialization. Require strict ages, strictly increasing in-domain pattern probes (which may be unobserved between trajectory sample ages), unique regimes/events, valid `GoldenPattern` values, and matching patient/disorder state kinds.
 
-  Build `DEFAULT_GOLDEN_CASES` with the exact case IDs, age tuple, explicit `AgeRegimeState` values, explicit `LatentDisorderState` values, required regimes/events, and probes from the spec. Use default repository modules only when `modules is None`; otherwise copy a mapping and require exactly the four `DisorderKind` keys without retaining mutable caller state.
+  Build `DEFAULT_GOLDEN_CASES` with the exact case IDs, age tuple, explicit `AgeRegimeState` values, explicit `LatentDisorderState` values, required regimes/events, and probes from the spec. Use default repository modules only when `modules is None`; otherwise copy a mapping and require exactly the five `DisorderKind` keys without retaining mutable caller state.
 
   Implement the runner with an injected reference and `AgeRegimeTrajectoryKernel`/`AgeRegimeDisorderKernel`. For each case, generate twice with the explicit hidden state and identical `NamedRandomStreams`, then compute fixed aggregate checks for patient/trajectory type, all required regimes, event inclusion/order, positive finite measurements, height/BMI/weight identities, finite velocities, and direct module pattern semantics. Use `math.isclose(..., abs_tol=1e-12)` only for zero/equality checks; directional checks use strict signs, strict improvement during an active response interval, and non-regression at the final post-response probe. Convert per-case assertion failures to fixed reason codes and suite status; convert invalid inputs or kernel/module/reference failures to the fixed unavailable exception with `from None`.
 
@@ -101,7 +101,7 @@
 
 - [x] **Step 1: Write failing documentation and boundary tests.**
 
-  Assert the guide names `growth-golden-v1`, all four case IDs, all five age regimes, the four disorder patterns, the injected-reference call, aggregate-only report fields, and the exact fixed unavailable message. Assert it says evaluator-only/in-memory/forced coverage and explicitly disclaims prevalence, demographic fidelity, clinical validity, task utility, privacy/non-matchability, held-out, scale, Synthea, and release evidence.
+  Assert the guide names `growth-golden-v1`, all five case IDs, all five age regimes, the five disorder patterns, the injected-reference call, aggregate-only report fields, and the exact fixed unavailable message. Assert it says evaluator-only/in-memory/forced coverage and explicitly disclaims prevalence, demographic fidelity, clinical validity, task utility, privacy/non-matchability, held-out, scale, Synthea, and release evidence.
 
   Assert README and `docs/synthetic-generator.md` link the guide while retaining the production CLI’s exact fail-closed message. AST-parse every `src/synthetic` module and assert `golden_trajectories` imports only standard-library modules plus the named evaluator contracts, while generation, package export, calibration, held-out, prevalence, privacy, task, counterfactual package, and Synthea modules do not import it. Assert the golden module has no `Path`, `csv`, `os`, `subprocess`, `urllib`, `requests`, Java, Synthea, package-writer, or output-lifecycle symbols/calls.
 
@@ -180,3 +180,9 @@
 - Task 2 was independently reviewed over the historical slice. A dynamic-import AST gap was fixed through TDD in `8534585` and `70ba7b5`; scoped re-review and final broad review approved direct, relative, module/function/builtins aliases, positional/`name=` literals, forbidden-runtime coverage, and computed-target exclusion with no findings.
 - Merged `main` verification: `2492 passed, 4 skipped`; focused golden suite `93 passed`; Ruff, schema validation, `uv lock --check`, whitespace checks, and fail-closed CLI tests passed.
 - The published suite remains evaluator-only and forced-coverage: no patient package, prevalence allocation, governed input, Synthea/Java runtime, network access, or release/clinical/privacy evidence was added.
+
+### Follow-on: pediatric hypothyroidism golden coverage (2026-09-02)
+
+- [x] Register the versioned pediatric-hypothyroidism native module and extend the golden catalog from four to five fictional cases, retaining aggregate-only report fields and the existing evaluator boundary.
+- [x] Add fixed onset/treatment probes `(1460, 1850, 2215, 3000)` with progression/response height and positive-after-onset BMI assertions; update the golden guide and companion plan/spec language.
+- [x] Verify the new module, golden catalog, cohort diagnostics, and existing synthetic suite; visible generation, package export, GHD ancillary rows, prevalence, privacy, clinical, and Synthea paths remain unchanged.

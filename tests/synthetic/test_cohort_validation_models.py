@@ -112,6 +112,7 @@ def test_status_and_growth_registries_are_fixed() -> None:
         "familial_short_stature",
         "constitutional_delay",
         "growth_hormone_deficiency",
+        "pediatric_hypothyroidism",
     )
 
 

@@ -13,6 +13,8 @@ from synthetic.native.clinical_modules import (
     GrowthHormoneDeficiencyModule,
     HealthyGrowthConfig,
     HealthyGrowthModule,
+    PediatricHypothyroidismConfig,
+    PediatricHypothyroidismModule,
 )
 from synthetic.randomness import NamedRandomStreams
 
@@ -46,6 +48,7 @@ def test_module_versions_are_stable_and_unique() -> None:
         FamilialShortStatureModule(),
         ConstitutionalDelayModule(),
         GrowthHormoneDeficiencyModule(),
+        PediatricHypothyroidismModule(),
     )
 
     versions = [module.module_version for module in modules]
@@ -56,6 +59,7 @@ def test_module_versions_are_stable_and_unique() -> None:
         "familial-short-stature-v1",
         "constitutional-delay-v1",
         "growth-hormone-deficiency-v1",
+        "pediatric-hypothyroidism-v1",
     ]
     assert [module.config.module_version for module in modules] == versions
 
@@ -67,6 +71,7 @@ def test_module_versions_are_stable_and_unique() -> None:
         FamilialShortStatureModule,
         ConstitutionalDelayModule,
         GrowthHormoneDeficiencyModule,
+        PediatricHypothyroidismModule,
     ],
 )
 def test_built_in_modules_reject_wrong_configuration_types(factory: object) -> None:
@@ -161,6 +166,7 @@ def test_nonzero_treatment_response_requires_treatment_start() -> None:
         lambda: FamilialShortStatureConfig(severity_max=10**1000),
         lambda: ConstitutionalDelayConfig(expected_puberty_age_days=10**1000),
         lambda: GrowthHormoneDeficiencyConfig(onset_max_age_days=10**1000),
+        lambda: PediatricHypothyroidismConfig(onset_max_age_days=10**1000),
     ],
 )
 def test_module_configurations_reject_unrepresentable_huge_integers(
@@ -185,6 +191,10 @@ def test_module_configurations_reject_unrepresentable_huge_integers(
         (
             GrowthHormoneDeficiencyModule(),
             LatentDisorderState(DisorderKind.GROWTH_HORMONE_DEFICIENCY, 730, 0.8),
+        ),
+        (
+            PediatricHypothyroidismModule(),
+            LatentDisorderState(DisorderKind.PEDIATRIC_HYPOTHYROIDISM, 730, 0.8),
         ),
     ],
 )
@@ -255,6 +265,7 @@ def test_module_sampling_is_reproducible_and_uses_named_streams() -> None:
         FamilialShortStatureModule(),
         ConstitutionalDelayModule(),
         GrowthHormoneDeficiencyModule(),
+        PediatricHypothyroidismModule(),
     )
     for module in modules:
         left = module.sample_state(PATIENT, NamedRandomStreams(123, 7))
@@ -268,6 +279,7 @@ def test_modules_request_only_their_scoped_disorder_streams() -> None:
         FamilialShortStatureModule(),
         ConstitutionalDelayModule(),
         GrowthHormoneDeficiencyModule(),
+        PediatricHypothyroidismModule(),
     )
 
     for module in modules:
@@ -286,6 +298,7 @@ def test_modules_request_only_their_scoped_disorder_streams() -> None:
         (FamilialShortStatureConfig, "severity_min", 0.0),
         (ConstitutionalDelayConfig, "height_z_magnitude", 0.0),
         (GrowthHormoneDeficiencyConfig, "treatment_probability", 0.0),
+        (PediatricHypothyroidismConfig, "treatment_probability", 0.0),
     ],
 )
 def test_module_configurations_are_frozen(
@@ -305,6 +318,7 @@ def test_module_configurations_are_frozen(
         ),
         lambda: ConstitutionalDelayConfig(height_z_magnitude=-0.1),
         lambda: GrowthHormoneDeficiencyConfig(treatment_probability=1.1),
+        lambda: PediatricHypothyroidismConfig(treatment_probability=1.1),
     ],
 )
 def test_module_configurations_reject_invalid_magnitudes_probabilities_and_schedules(
@@ -324,6 +338,7 @@ def test_disorder_events_keep_codes_empty_and_only_hide_latent_onset() -> None:
         FamilialShortStatureModule(),
         ConstitutionalDelayModule(),
         GrowthHormoneDeficiencyModule(GrowthHormoneDeficiencyConfig(treatment_probability=1.0)),
+        PediatricHypothyroidismModule(PediatricHypothyroidismConfig(treatment_probability=1.0)),
     ):
         state = module.sample_state(PATIENT, NamedRandomStreams(123, 7))
         events = module.events(PATIENT, state)
