@@ -37,6 +37,7 @@ FORBIDDEN_WRITE_METHODS = {
     "write_bytes",
     "write_text",
 }
+_DYNAMIC_IMPORT_CALLS = {"__import__", "importlib.import_module"}
 
 
 def _tree(path: Path) -> ast.Module:
@@ -44,8 +45,9 @@ def _tree(path: Path) -> ast.Module:
 
 
 def _imports(path: Path) -> set[str]:
+    tree = _tree(path)
     imports: set[str] = set()
-    for node in ast.walk(_tree(path)):
+    for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             imports.update(alias.name for alias in node.names)
         elif isinstance(node, ast.ImportFrom):
@@ -53,6 +55,21 @@ def _imports(path: Path) -> set[str]:
             imports.add(base)
             separator = "" if base.endswith(".") else "."
             imports.update(f"{base}{separator}{alias.name}" for alias in node.names)
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if _qualified_name(node.func) not in _DYNAMIC_IMPORT_CALLS:
+            continue
+        argument = (
+            node.args[0]
+            if node.args
+            else next(
+                (keyword.value for keyword in node.keywords if keyword.arg == "name"),
+                None,
+            )
+        )
+        if isinstance(argument, ast.Constant) and isinstance(argument.value, str):
+            imports.add(argument.value)
     return imports
 
 
@@ -104,6 +121,8 @@ def test_other_synthetic_modules_do_not_import_the_manifest_contract() -> None:
         "from . import synthea_conformance",
         "from . import synthea_conformance as declaration",
         "from .synthea_conformance import SyntheaEngineManifest",
+        'import importlib\nimportlib.import_module("synthetic.synthea_conformance")',
+        '__import__("synthetic.synthea_conformance")',
     ),
 )
 def test_import_scanner_records_alias_qualified_manifest_imports(
@@ -117,6 +136,16 @@ def test_import_scanner_records_alias_qualified_manifest_imports(
     imports = {_absolute_module(imported) for imported in _imports(module)}
 
     assert "synthetic.synthea_conformance" in imports
+
+
+def test_import_scanner_records_literal_forbidden_runtime_import(tmp_path: Path) -> None:
+    """Catches a forbidden runtime import hidden behind __import__()."""
+    module = tmp_path / "visible.py"
+    module.write_text('__import__("subprocess")', encoding="utf-8")
+
+    imports = {_absolute_module(imported) for imported in _imports(module)}
+
+    assert "subprocess" in imports
 
 
 def test_manifest_module_has_no_engine_runtime_data_or_package_writer_calls() -> None:
