@@ -4,6 +4,7 @@ import math
 from numbers import Real
 
 from synthetic.models import LatentPoint, PatientState
+from synthetic.native.anthropometry import derive_weight_kg
 from synthetic.randomness import NamedRandomStreams
 from synthetic.references import GrowthReference, generation_z_score
 
@@ -107,7 +108,7 @@ class HealthyKernel:
                 or bmi <= 0
             ):
                 raise ValueError("reference BMI must be finite and positive")
-            weight_kg = bmi * (height_cm / 100.0) ** 2
+            weight_kg = derive_weight_kg(bmi, height_cm)
             points.append(
                 LatentPoint(
                     patient_id=patient.patient_id,

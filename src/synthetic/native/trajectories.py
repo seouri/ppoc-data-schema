@@ -11,6 +11,7 @@ from synthetic.models import (
     LatentTrajectory,
     PatientState,
 )
+from synthetic.native.anthropometry import derive_weight_kg
 from synthetic.native.clinical_modules import GrowthDisorderModule
 from synthetic.native.healthy import HealthyKernel
 from synthetic.randomness import NamedRandomStreams
@@ -185,7 +186,7 @@ class DisorderTrajectoryKernel:
                     age_days=point.age_days,
                     height_cm=height_cm,
                     bmi=bmi,
-                    weight_kg=bmi * (height_cm / 100.0) ** 2,
+                    weight_kg=derive_weight_kg(bmi, height_cm),
                     height_z=height_z,
                     bmi_z=bmi_z,
                 )

@@ -7,6 +7,7 @@ import stat
 from bisect import bisect_left
 from collections.abc import Iterable
 from dataclasses import dataclass
+from numbers import Real
 from pathlib import Path
 from typing import Protocol
 
@@ -38,7 +39,18 @@ def generation_z_score(
         return z
     if not callable(hook):
         raise TypeError("generation_z_score hook must be callable")
-    return hook(metric, age_days, reference_sex, z)
+    result = hook(metric, age_days, reference_sex, z)
+    if isinstance(result, bool) or not isinstance(result, Real):
+        raise ValueError(  # noqa: TRY004
+            "generation_z_score hook must return a finite real score"
+        )
+    try:
+        result = float(result)
+    except (OverflowError, TypeError, ValueError) as exc:
+        raise ValueError("generation_z_score hook must return a finite real score") from exc
+    if not math.isfinite(result):
+        raise ValueError("generation_z_score hook must return a finite real score")
+    return result
 
 
 @dataclass(frozen=True)
