@@ -704,6 +704,36 @@ PACKAGE = {
     "version": "1.0.0",
     "created": "2026-08-18T00:00:00Z",
     "keywords": ["pediatrics", "electronic-health-records", "growth", "de-identified"],
+    "x-projectGovernance": {
+        "primaryProject": {
+            "title": "Artificial Intelligence Analysis of Growth Charts to Identify Abnormal Growth Patterns",
+            "institution": "Harvard Medical School",
+            "protocols": [
+                {"type": "IRB", "identifier": "IRB24-0638"},
+                {"type": "Data Safety and Security", "identifier": "DAT24-0223"},
+            ],
+            "dataUseAgreement": {
+                "title": "Data Use Agreement",
+                "identifier": "DUA24-0257",
+                "parties": [
+                    "Harvard Medical School",
+                    "Pediatric Physicians' Organization, LLC (PPOC)",
+                ],
+            },
+        },
+        "dataAccess": {
+            "requiredTraining": [
+                "IRB training",
+                "information-security training",
+            ],
+            "requiredDocumentation": "Certificates documenting completion of all required training.",
+            "authorization": "Personnel must be formally listed as study personnel on the approved IRB protocol.",
+        },
+        "funding": {
+            "project": "Using Large Language Models for Pediatric Diagnosis",
+            "sponsors": ["Charles H. Hood Foundation", "Yosemite"],
+        },
+    },
     "x-statisticsSource": {
         "description": "Row, missing-value, unique-value, range, and category statistics are computed from the CSV snapshot by schema/profile.py and stored in schema/stats.json.",
         "snapshot": STATS["snapshot"],
