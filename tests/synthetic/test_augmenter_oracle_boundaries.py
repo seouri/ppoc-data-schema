@@ -108,9 +108,12 @@ _MODEL_OR_DIAGNOSIS_OPTION_COMPONENTS = {
 def _imports(path: Path) -> set[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     imports: set[str] = set()
+    bindings: dict[str, str] = {}
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
-            imports.update(alias.name for alias in node.names)
+            for alias in node.names:
+                imports.add(alias.name)
+                bindings[alias.asname or alias.name.split(".", maxsplit=1)[0]] = alias.name
         elif isinstance(node, ast.ImportFrom):
             if node.level:
                 base = "." * node.level + (node.module or "")
@@ -120,7 +123,33 @@ def _imports(path: Path) -> set[str]:
                 continue
             imports.add(base)
             separator = "" if base.endswith(".") else "."
-            imports.update(f"{base}{separator}{alias.name}" for alias in node.names)
+            for alias in node.names:
+                imported = f"{base}{separator}{alias.name}"
+                imports.add(imported)
+                bindings[alias.asname or alias.name] = imported
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        qualified = _call_name(node.func)
+        if qualified is None:
+            continue
+        head, dot, suffix = qualified.partition(".")
+        qualified = f"{bindings.get(head, head)}{dot}{suffix}"
+        if qualified == "builtins.__import__":
+            qualified = "__import__"
+        if qualified not in _DYNAMIC_IMPORT_CALLS:
+            continue
+        argument = (
+            node.args[0]
+            if node.args
+            else next(
+                (keyword.value for keyword in node.keywords if keyword.arg == "name"),
+                None,
+            )
+        )
+        if isinstance(argument, ast.Constant) and isinstance(argument.value, str):
+            imports.add(argument.value)
     return imports
 
 
@@ -259,13 +288,22 @@ def test_cli_option_scanner_detects_model_and_diagnosis_payload_options(
         "from synthetic import augmenter_oracle as candidate",
         "from . import augmenter_oracle",
         "from . import augmenter_oracle as candidate",
+        'import importlib\nimportlib.import_module("synthetic.augmenter_oracle")',
+        '__import__("synthetic.augmenter_oracle")',
+        'import importlib as il\nil.import_module("synthetic.augmenter_oracle")',
+        'from importlib import import_module as load\nload("synthetic.augmenter_oracle")',
+        'import builtins as bi\nbi.__import__("synthetic.augmenter_oracle")',
+        'from builtins import __import__ as load\nload("synthetic.augmenter_oracle")',
+        'import importlib as il\nil.import_module(name="synthetic.augmenter_oracle")',
+        'from importlib import import_module as load\nload(name="synthetic.augmenter_oracle")',
+        'from builtins import __import__ as load\nload(name="synthetic.augmenter_oracle")',
     ),
 )
 def test_import_scanner_records_alias_qualified_candidate_imports(
     tmp_path: Path,
     source: str,
 ) -> None:
-    """Catches import-from aliases disappearing from the visible-module scan."""
+    """Catches static and literal dynamic aliases disappearing from the scan."""
     module = tmp_path / "visible.py"
     module.write_text(source, encoding="utf-8")
 
