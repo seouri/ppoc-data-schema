@@ -154,6 +154,9 @@ def test_development_smoke_cli_exports_exact_visible_package(tmp_path: Path) -> 
     assert manifest["derivation_fingerprint"] == AUGMENTER_RUNTIME_MANIFEST_SHA256
     assert manifest["status"] == "STRUCTURE_VALIDATED_TEST_ORACLE"
     assert not validate_structure(output, descriptor).errors
+    generated_descriptor = load_descriptor(output / "datapackage.json")
+    assert "x-projectGovernance" not in generated_descriptor
+    assert "x-statisticsSource" not in generated_descriptor
     for resource_name in ("patients_augmented", "visits_augmented"):
         resource_path = next(
             resource["path"] for resource in descriptor["resources"] if resource["name"] == resource_name

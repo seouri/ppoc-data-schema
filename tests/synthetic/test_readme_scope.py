@@ -14,7 +14,9 @@ def test_readme_points_to_the_dedicated_synthetic_generator_guide() -> None:
     section = readme.split(heading, maxsplit=1)[1].split("\n## ", maxsplit=1)[0]
     assert section == (
         "\nSee the [synthetic generator guide](docs/synthetic-generator.md) for "
-        "development-only synthetic fixture generation, validation, and governance boundaries.\n"
+        "ordinary development-only synthetic fixture generation and validation. "
+        "Optional governed comparison, privacy, and release workflows are documented "
+        "there separately and are not required to generate development fixtures.\n"
     )
 
     for detailed_heading in (
@@ -39,3 +41,10 @@ def test_readme_points_to_the_dedicated_synthetic_generator_guide() -> None:
         "superpowers/specs/2026-08-30-synthetic-growth-fixtures-design.md)"
         in guide
     )
+    for ordinary_boundary in (
+        "## Ordinary development requirements\n",
+        "No real-data root, IRB/DUA authorization",
+        "do not require a governance approval bundle",
+        "none is a prerequisite for generating or using ordinary synthetic development fixtures",
+    ):
+        assert ordinary_boundary in guide

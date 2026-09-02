@@ -18,6 +18,8 @@ Access to project data is restricted to authorized study personnel who have comp
 
 Funding sponsors are the **Charles H. Hood Foundation** and **Yosemite** for the project *Using Large Language Models for Pediatric Diagnosis*.
 
+These project-governance statements apply to the restricted PPOC source snapshot described above. Ordinary synthetic development uses no PPOC rows or patient records and does not require those source-data approvals; see the [synthetic generator guide](docs/synthetic-generator.md) for its separate content and reproducibility requirements.
+
 ## Contents
 
 - [`datapackage.json`](datapackage.json): field types, nullability, constraints, keys, encodings, and resource metadata.
@@ -27,7 +29,7 @@ Funding sponsors are the **Charles H. Hood Foundation** and **Yosemite** for the
 - [`schema/build.py`](schema/build.py): regenerate and validate `datapackage.json`.
 - [`schema/profile.py`](schema/profile.py): recompute the snapshot statistics from the CSVs.
 - [`schema/stats.json`](schema/stats.json): the statistics `build.py` reads, so the descriptor rebuilds without the data.
-- [`docs/synthetic-generator.md`](docs/synthetic-generator.md): synthetic generator and governed aggregate-calibration boundaries.
+- [`docs/synthetic-generator.md`](docs/synthetic-generator.md): ordinary synthetic generation and optional governed aggregate-calibration boundaries.
 
 ## Resources
 
@@ -75,4 +77,4 @@ The Python usage example includes schema-driven pandas loading, declared CSV enc
 
 ## Synthetic generator
 
-See the [synthetic generator guide](docs/synthetic-generator.md) for development-only synthetic fixture generation, validation, and governance boundaries.
+See the [synthetic generator guide](docs/synthetic-generator.md) for ordinary development-only synthetic fixture generation and validation. Optional governed comparison, privacy, and release workflows are documented there separately and are not required to generate development fixtures.

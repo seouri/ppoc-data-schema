@@ -1,26 +1,26 @@
 # Synthetic Pediatric Growth Fixture System Design
 
 **Date:** 2026-08-30
-**Status:** Approved by the user after Synthea and synthetic-patient-generation review
+**Status:** Approved by the user after Synthea and synthetic-patient-generation review; ordinary development route separated from optional governed evaluation
 
 ## Purpose
 
 Build deterministic, completely generated pediatric EHR fixture packages that have the same eight-resource schema as the PPOC data package. The fixtures must support ordinary development and controlled counterfactual experiments. Their highest-fidelity feature is longitudinal growth: healthy trajectories and clinically distinct growth-disorder trajectories must remain coherent across latent biology, observed measurements, derived growth metrics, healthcare utilization, diagnoses, treatment, and patient-level summaries.
 
-The generator may be calibrated from real data only through a governed process. Patient-level records never become generator inputs or repository artifacts. Calibration, generation, held-out validation, and privacy auditing are distinct stages. A governed privacy audit measures linkage, membership, and attribute-inference risk under an explicit threat model; it cannot prove that no generated profile could ever be matched to any real person.
+Ordinary development uses completely generated state, pinned public/reference inputs, and versioned fictional configuration; it does not require a real-data root, calibration artifact, governance approval, or release evidence. If real data is used to tune a separate comparison route, it may be used only through a governed aggregate process. Patient-level records never become generator inputs or repository artifacts. Calibration, generation, held-out validation, and privacy auditing are distinct optional stages. A governed privacy audit measures linkage, membership, and attribute-inference risk under an explicit threat model; it cannot prove that no generated profile could ever be matched to any real person.
 
 ## Goals
 
 1. Write all eight CSV resources declared by `datapackage.json`, using the same resource paths, field names, field order, types, null conventions, dialects, encodings, and key semantics.
 2. Generate clinically coherent length or height, weight, BMI or weight-for-length, head-circumference, and velocity trajectories from pinned pediatric references and explicit biological models.
 3. Represent infancy, prepubertal childhood, puberty, and late-adolescent growth as distinct but continuous biological regimes.
-4. Approximate disclosure-approved real-data distributions for demographics, observation-window entry and exit, recorded growth diagnoses, growth flags, visit timing, measurement missingness and error, utilization, and ancillary-resource density.
+4. When a governed aggregate calibration artifact is supplied, approximate its disclosed real-data distributions for demographics, observation-window entry and exit, recorded growth diagnoses, growth flags, visit timing, measurement missingness and error, utilization, and ancillary-resource density; ordinary development profiles use explicit fictional distributions.
 5. Maintain latent disorder truth separately from observable phenotype and the visible EHR, allowing incomplete observation, delayed recognition, absent or nonspecific diagnoses, imperfect treatment, and loss to follow-up.
 6. Produce paired physiology, recognition or treatment, utilization, and measurement counterfactuals with an explicit causal change contract and machine-checkable invariants.
-7. Make every result reproducible from a versioned configuration, calibration artifact, public reference set, terminology set, module set, software revision, pseudorandom-number-generator specification, reference time, and seed.
-8. Validate structural correctness, statistical fidelity, longitudinal and clinical fidelity, task utility, and privacy separately.
+7. Make every result reproducible from a versioned configuration, optional calibration artifact, public reference set, terminology set, module set, software revision, pseudorandom-number-generator specification, reference time, and seed.
+8. Validate structural correctness in every development run, with statistical fidelity, longitudinal and clinical fidelity, task utility, and privacy evaluated separately when the corresponding evidence is available.
 9. Permit either the recommended native generator or an optional Synthea-backed implementation to satisfy one engine-independent output and validation contract.
-10. Fail closed when schema, derivation, clinical, statistical, counterfactual, provenance, task-utility, or applicable privacy gates do not pass.
+10. Fail closed when required schema, derivation, or counterfactual integrity checks do not pass; apply clinical, statistical, task-utility, privacy, provenance, and release gates only to workflows that make those claims.
 
 ## Non-goals
 
@@ -33,16 +33,16 @@ The generator may be calibrated from real data only through a governed process. 
 - Generate fixtures by copying rows, resampling patient profiles, finding nearest patients, or fitting a patient-sequence model directly to patient records.
 - Adopt Synthea's default pediatric growth, geography, utilization, or disease modules as the PPOC truth model without explicit replacement, mapping, and validation.
 
-## Governing boundaries
+## Execution boundaries and optional governed evidence
 
-The system has four execution boundaries:
+The system has one ordinary-development boundary and three optional governed/evaluation boundaries:
 
-1. **Governed calibration:** May read the calibration partition of the real eight-resource dataset. It emits disclosure-controlled aggregates and a calibration report, never patient rows, visit sequences, raw small cells, or candidate matches.
-2. **Offline generation:** Reads only the public schema, pinned public reference tables, versioned clinical configuration, and an approved calibration artifact. It has no option for a real-data path. This boundary applies equally to the native and optional Synthea-backed engines.
+1. **Ordinary development:** Reads only the public schema, pinned public reference/runtime files, and versioned fictional configuration; it generates all patient and event state and has no option for a real-data path. The native route is sufficient, and an optional Synthea-backed route is not a prerequisite.
+2. **Governed calibration:** May read the calibration partition of the real eight-resource dataset. It emits disclosure-controlled aggregates and a calibration report, never patient rows, visit sequences, raw small cells, or candidate matches.
 3. **Governed held-out validation:** Compares generated packages with a patient-disjoint real validation partition that was not used to construct calibration aggregates, clinical modules, tolerance selection, or attack models. It emits aggregate validation results only.
 4. **Governed privacy audit:** Reads calibration-partition records, held-out records, generated packages, and prior relevant releases inside the governed environment. It emits aggregate attack metrics and a decision under a versioned risk policy. Candidate links and patient-level distances remain governed.
 
-Partition assignment is stable at the patient level and recorded only in governed metadata. No visit or resource row from a held-out patient may contribute to calibration. The generated CSV package is development data, not evidence that a real-data workflow is authorized or clinically validated.
+Partition assignment is stable at the patient level and recorded only in governed metadata when the optional governed route is used. No visit or resource row from a held-out patient may contribute to calibration. The generated CSV package is ordinary development data, not evidence that a real-data workflow is authorized or clinically validated.
 
 ## Engine-independent architecture
 
@@ -67,19 +67,19 @@ The generator streams resource rows where practical so an experiment cohort does
 
 ### Recommended route: native growth-first generator
 
-The first implementation should be a small, purpose-built Python generator. This route provides direct control over pediatric reference equations, infancy and puberty regimes, two-degree anthropometric identities, PPOC observation semantics, counterfactual random-stream reuse, exact CSV derivation, and governed aggregate calibration. It also avoids making a JVM simulation framework a prerequisite for ordinary fixture generation.
+The first implementation should be a small, purpose-built Python generator. This route provides direct control over pediatric reference equations, infancy and puberty regimes, two-degree anthropometric identities, PPOC observation semantics, counterfactual random-stream reuse, exact CSV derivation, and optional governed aggregate calibration. It also avoids making a JVM simulation framework a prerequisite for ordinary fixture generation.
 
 ### Optional route: Synthea-backed engine
 
-A Synthea-backed engine is a valid alternative or later interoperability route if it implements the same engine-independent contracts. It is not a configuration-only substitution. The route requires:
+A Synthea-backed engine is a valid optional alternative or later interoperability route if it implements the same engine-independent contracts. It is not a configuration-only substitution and is not required for ordinary development. The route requires:
 
 1. A pinned Synthea source revision and documented license and attribution obligations.
 2. A custom pediatric growth extension that replaces or bypasses the default height/BMI lifecycle where it cannot express this specification's infancy, puberty, disorder, and counterfactual requirements.
 3. Versioned pediatric disease modules or custom Java physiology components whose transition logic, terminology, and source citations are reviewed independently of Synthea's bundled modules.
 4. An engine-neutral event-trace adapter so latent onset, recognition, treatment, response, observation, and censoring have the same meanings in both engines.
 5. A PPOC exporter that writes the exact eight-resource base schema; the authoritative augmentation implementation then derives augmented resources.
-6. Replacement of default population, geography, utilization, and prevalence assumptions with the approved calibration artifact and cohort model.
-7. Identical validation, counterfactual, privacy, provenance, and no-real-data-input gates.
+6. Replacement of default population, geography, utilization, and prevalence assumptions with an optional approved calibration artifact and cohort model when making population-fidelity claims.
+7. The same content, structural, counterfactual, and no-real-data-input controls as the native route; privacy, provenance, and release gates apply when the Synthea route is used for those claims.
 
 Building the entire fixture system as one Synthea Generic Module Framework JSON module is not a viable equivalent. A generic module runs inside Synthea's existing population and lifecycle machinery; it does not by itself replace pediatric growth physiology, cohort sampling, the observation model, exact PPOC export and augmentation, counterfactual orchestration, held-out validation, or privacy auditing.
 
@@ -91,7 +91,7 @@ After the native growth engine is validated, Synthea may supply unrelated backgr
 
 ### Engine decision rule
 
-The native engine is the release-one recommendation. A Synthea-backed engine becomes an accepted alternative only after an engine-conformance suite shows that it satisfies the same schema, derivation, longitudinal, disease-signature, counterfactual, task-utility, reproducibility, and privacy gates. Agreement between engines is not itself a validity criterion: each must be validated against public references and governed held-out targets. Synthea may be retained as a baseline comparator even if it is never used to produce released fixtures.
+The native engine is the ordinary-development and release-one recommendation. A Synthea-backed engine becomes an accepted alternative for a corresponding claim only after an engine-conformance suite shows that it satisfies the same schema, derivation, longitudinal, disease-signature, counterfactual, task-utility, reproducibility, and applicable privacy gates. Agreement between engines is not itself a validity criterion: each must be validated against public references and governed held-out targets when population or release claims are made. Synthea may be retained as a baseline comparator even if it is never used to produce released fixtures.
 
 ## Schema contract
 
@@ -103,23 +103,23 @@ Each generated package contains a synthetic descriptor that:
 - uses each resource path from the source descriptor, including the current augmented-visit filename;
 - replaces real row counts and observed statistics with generated-package values;
 - records that every individual and event is fictional;
-- identifies the engine, generator, configuration, calibration, reference, terminology, clinical-module, seed, PRNG, reference-time, and manifest versions; and
+- identifies the engine, generator, configuration, optional calibration, reference, terminology, clinical-module, seed, PRNG, reference-time, and manifest versions; and
 - never contains hidden evaluator truth.
 
 Base and augmented resources are not sampled independently. `patients_augmented` is derived from generated patients, visits, diagnoses, and problem lists. `visits_augmented` is derived from generated patients and visits through the authoritative derivation contract. This is required for cross-resource mathematical consistency.
 
-## Derivation parity prerequisite
+## Derivation parity and claim boundary
 
-The current documentation describes augmentation through `scripts/augment.py`, but that implementation is not present in this repository. Documentation alone is insufficient to resolve all filtering order, age-boundary, missingness, Harrall-outlier, biologically-implausible-value, EP/AP/LP velocity, and rounding behavior.
+The repository now includes the byte-pinned `scripts/augment.py` runtime and its checked-in nonpatient lookup tables. Its manifest and runtime checks resolve the documented filtering order, age-boundary, missingness, Harrall-outlier, biologically-implausible-value, EP/AP/LP velocity, and rounding behavior for ordinary development; an independent parity review remains necessary before clinical or release claims.
 
-Before an augmented fixture can be labeled valid, the project must obtain and pin one of the following:
+Before an augmented fixture can support a clinical or release claim, the project must obtain and pin one of the following:
 
 1. the authoritative augmentation implementation and its dependencies; or
 2. a custodian-approved executable reference harness plus golden inputs and outputs covering all documented boundary cases.
 
-The visible package manifest records the derivation implementation fingerprint (a cryptographic oracle identity/hash) and test-only classification. The textual `oracle_id`, source revision, dependency fingerprint, parity evidence, and review metadata remain in the private derivation binding, which maps the fingerprint to the reviewed oracle without exposing those identifiers in ordinary package files. A clean-room reimplementation may be used only after bidirectional parity tests pass across reviewed golden cases and a governed synthetic fuzz corpus. Until then, development may proceed on latent generation and base resources, but augmented outputs must be marked `UNVERIFIED_DERIVATION` and cannot satisfy acceptance criteria.
+The visible package manifest records the derivation implementation fingerprint (a cryptographic oracle identity/hash) and test-only classification. The textual `oracle_id`, source revision, dependency fingerprint, parity evidence, and review metadata remain in the private derivation binding, which maps the fingerprint to the reviewed oracle without exposing those identifiers in ordinary package files. A clean-room reimplementation may be used only after bidirectional parity tests pass across reviewed golden cases and a governed synthetic fuzz corpus. Until then, ordinary development may use the pinned test-only oracle for structural and reproducibility checks; those augmented outputs cannot support clinical or release claims.
 
-## Governed calibration
+## Optional governed calibration
 
 ### Patient-disjoint partitions
 
@@ -181,7 +181,7 @@ The generator distinguishes five layers:
 4. **Healthcare observation:** system entry, encounters, measurement opportunities, dropout, and right censoring.
 5. **Recorded EHR:** diagnoses, problems, tests, treatments, referrals, and derived summaries that appear in the eight resources.
 
-PPOC-like prevalence is evaluated in the observed healthcare cohort with explicit denominators. Population prevalence, latent disorder prevalence, observable growth-phenotype prevalence, and recorded-diagnosis prevalence are reported separately and must never be used interchangeably.
+When a population-fidelity evaluation is requested, PPOC-like prevalence is evaluated in the observed healthcare cohort with explicit denominators. Ordinary development profiles report configured fictional priors and do not claim real-population prevalence. Population prevalence, latent disorder prevalence, observable growth-phenotype prevalence, and recorded-diagnosis prevalence are reported separately and must never be used interchangeably.
 
 ### Deterministic patient state
 
@@ -302,13 +302,13 @@ Production-facing fixture APIs and ordinary development loaders must not expose 
 ## Output profiles
 
 - **Golden:** A compact, checked-in pack with forced age-regime, disease-module, measurement-error, diagnosis-delay, treatment, derivation-boundary, censoring, and counterfactual coverage. It is deterministic and explicitly not prevalence-representative.
-- **Development:** Defaults to 10,000 patients. It targets common prevalence and distributional tolerances and is generated outside Git.
+- **Development:** Defaults to 10,000 patients. It uses explicit fictional prevalence and distribution settings for development coverage; a separately governed calibration route may target real-population tolerances and is not required for ordinary fixtures.
 - **Experiment:** Accepts a configured patient count and produces one or more paired worlds. It enforces minimum expected counts for requested strata.
 - **Engine comparison:** Generates matched configuration-level cohorts from native and Synthea-backed engines without claiming patient-level correspondence. It is used only for conformance and sensitivity analysis.
 
-Every run writes an initially unvalidated manifest containing the seed, PRNG and seed-derivation versions, schema fingerprint, engine identity, calibration identity, reference and terminology hashes, clinical-module hashes, configuration hash, software revision, reference time, row counts, output hashes, and (when augmented derivation is bound) the derivation implementation fingerprint. The private binding retains the textual oracle identity and review metadata; those fields are intentionally absent from visible manifests. A validated status is added only after all applicable gates pass. External-release approval is a separate governed status that this software cannot grant.
+Every run writes an initially unvalidated manifest containing the seed, PRNG and seed-derivation versions, schema fingerprint, engine identity, optional calibration identity, reference and terminology hashes, clinical-module hashes, configuration hash, software revision, reference time, row counts, output hashes, and (when augmented derivation is bound) the derivation implementation fingerprint. The private binding retains the textual oracle identity and review metadata; those fields are intentionally absent from visible manifests. A validated status is added only after all applicable gates pass. External-release approval is a separate governed status that this software cannot grant.
 
-The generator refuses to overwrite an existing output directory. It writes to a run-specific temporary directory and promotes the result only after generation and nonprivacy structural checks complete. A failed privacy audit marks the generated run rejected and prevents release; it does not delete governed evidence automatically.
+The generator refuses to overwrite an existing output directory. It writes to a run-specific temporary directory and promotes the result only after generation and nonprivacy structural checks complete. In a governed release workflow, a failed privacy audit marks the generated run rejected and prevents release; it does not delete governed evidence automatically.
 
 ## Privacy threat model and audit
 
@@ -387,7 +387,7 @@ Validation produces machine-readable JSON plus a concise human-readable report. 
 - an unevaluable attack or subgroup blocks the corresponding release claim; and
 - human release authorization remains separate from the automated result.
 
-Golden runs apply structural, derivation, clinical, task-execution, and counterfactual assertions using forced coverage instead of population-fidelity claims. Internal development runs apply layers 1 through 5. Any release or use outside the governed development context additionally requires layer 6 and human authorization.
+Golden runs apply structural, derivation, clinical, task-execution, and counterfactual assertions using forced coverage instead of population-fidelity claims. Ordinary development runs apply the structural, derivation, longitudinal, and counterfactual checks required by their profile; statistical, clinical, task-utility, and privacy layers are optional evidence workflows. Any release or use outside the ordinary synthetic-development context additionally requires the applicable evidence and human authorization.
 
 ## Command-line interfaces
 
@@ -431,11 +431,11 @@ An accepted Synthea adapter uses `--engine synthea` and a pinned engine configur
 ## Error handling and run lifecycle
 
 - Calibration stops before profiling when a real header differs from the descriptor or patient-disjoint partitioning cannot be demonstrated.
-- Generation stops when a calibration artifact fails disclosure validation, requires a suppressed value without a declared parent fallback, or targets too few patients for requested claims.
+- When a governed calibration artifact is supplied, generation stops if it fails disclosure validation, requires a suppressed value without a declared parent fallback, or targets too few patients for requested claims.
 - A Synthea-backed run stops if its revision, module hashes, custom physiology extension, event adapter, or exporter differs from the approved engine manifest.
 - Output directories must not already exist.
 - Partial files remain in a run-specific temporary directory with a failure manifest and are never labeled validated.
-- Missing derivation parity produces `UNVERIFIED_DERIVATION`, not an augmented validation pass.
+- A route without a pinned derivation oracle remains `UNVERIFIED_DERIVATION` for augmented claims; the ordinary development route uses the checked-in test-only oracle and reports its test-only status explicitly.
 - Validation reports independent gate failures together where doing so does not create cascading, misleading results.
 - Held-out validation data cannot be used by an automated tuning loop.
 - Privacy failure marks a run `REJECTED_PRIVACY`; candidate-match details remain governed.
@@ -499,7 +499,9 @@ A scheduled development-profile test exercises bounded-memory generation, all ei
 
 ## Acceptance criteria
 
-The first native implementation is complete when:
+The ordinary development route is complete when its content and integrity criteria (exact schema, coherent trajectories, deterministic generation, hidden-truth exclusion, and counterfactual invariants) pass. The additional criteria below apply when the project seeks population, clinical, privacy, task-utility, Synthea, or release claims; they are not prerequisites for ordinary development fixtures.
+
+The full native implementation is complete for its applicable claims when:
 
 1. The authoritative augmentation implementation or approved parity harness is pinned and its boundary cases pass.
 2. A golden package and a 10,000-patient development package can be generated deterministically from approved nonpatient inputs.
@@ -507,13 +509,13 @@ The first native implementation is complete when:
 4. Anthropometric identities and age-regime transitions pass independent biological and derivation checks.
 5. Every enabled disease module has cited transition logic, reviewed terminology, at least one reviewed golden case, and population-level longitudinal signature tests.
 6. Disorder-critical laboratories, medications, problems, and referrals are causally coherent with enabled modules.
-7. Population, latent disease, observable phenotype, observed-cohort, and recorded-diagnosis prevalences are separately reported; applicable held-out demographic, growth, visit, missingness, error, and resource targets meet frozen size-aware tolerances over multiple seeds.
+7. When population-fidelity evaluation is requested, population, latent disease, observable phenotype, observed-cohort, and recorded-diagnosis prevalences are separately reported; applicable held-out demographic, growth, visit, missingness, error, and resource targets meet frozen size-aware tolerances over multiple seeds.
 8. The intended growth-screening workflow runs unchanged, its synthetic-truth metrics are reported, and any authorized real holdout task comparison uses predeclared margins.
 9. Every counterfactual class passes its change-matrix and invariant checks.
 10. Blinded clinical review passes the prespecified rubric or all material disagreements are resolved and documented.
 11. Intentionally leaky packages are rejected, independent negative controls behave as expected, and underpowered attacks are not reported as passes.
 12. A governed privacy audit can produce an aggregate report without exporting patient-level comparison data.
-13. Documentation clearly distinguishes synthetic development utility, statistical fidelity, task utility, privacy evidence, clinical validation, and release authorization.
+13. Documentation clearly distinguishes ordinary synthetic development utility and content controls from optional statistical fidelity, task utility, privacy evidence, clinical validation, and release authorization.
 
 An optional Synthea-backed implementation is accepted only after all applicable criteria above and the engine-conformance suite pass. It is not required for release one.
 

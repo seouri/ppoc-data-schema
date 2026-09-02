@@ -1,6 +1,6 @@
 # Synthetic generator
 
-This guide describes the exact-schema synthetic smoke generator, the development-only in-memory native cohort, and development-only observed-resource package export in this repository. They are development and integration harnesses for completely generated records; they are not a clinically validated simulator, a prevalence-validated representative cohort, a privacy audit, or a release-approved fixture.
+This guide describes the ordinary development route for the exact-schema synthetic smoke generator, the development-only in-memory native cohort, and development-only observed-resource package export in this repository. They are development and integration harnesses for completely generated records; they are not a clinically validated simulator, a prevalence-validated representative cohort, a privacy audit, or a release-approved fixture.
 
 The approved system design is documented in the [synthetic growth fixture specification](superpowers/specs/2026-08-30-synthetic-growth-fixtures-design.md); this guide is its implementation-facing companion.
 
@@ -10,9 +10,9 @@ The exact-schema smoke slice generates healthy patients aged two years and older
 
 The native generator reads `datapackage.json` as schema metadata only. It does not read the repository's real CSV snapshots or any patient records. The default/no-profile command-line invocation intentionally remains fail-closed with `No production growth reference or authoritative derivation oracle is configured`. The repository separately ships a source-matched growth augmenter as a development derivation candidate for wholly synthetic inputs; its setup, input contract, outputs, and manifest verification are in [the imported augmenter guide](augment-import.md), and its explicit test-only package-export use is in the [candidate augmenter-oracle guide](augmenter-oracle.md). Only explicit development profiles compose the candidate; that reproducible development composition does not establish production authority.
 
-The native generator remains the release-one route. The [optional Synthea engine-conformance guide](synthea-conformance.md) defines a future, development-only aggregate declaration plus the externally pinned engine, module, growth-extension, adapter, exporter, configuration, license-review, derivation-binding, and evidence prerequisites for any later comparison. This contract is not imported automatically by generation, export, or evaluator code and supplies no Synthea implementation, Java runtime, conformance result, patient data, network access, or release authorization. It does not change the production command, which remains fail closed with `No production growth reference or authoritative derivation oracle is configured`.
+The native generator remains the release-one route and is also the ordinary development route. The [optional Synthea engine-conformance guide](synthea-conformance.md) defines a future, development-only aggregate declaration plus the externally pinned engine, module, growth-extension, adapter, exporter, configuration, license-review, derivation-binding, and evidence prerequisites for an optional comparison. This contract is not imported automatically by generation, export, or evaluator code and supplies no Synthea implementation, Java runtime, conformance result, patient data, network access, or release authorization. It does not change the production command, which remains fail closed with `No production growth reference or authoritative derivation oracle is configured`.
 
-The evaluator-only [golden trajectory guide](golden-trajectories.md) provides a copy-pasteable fictional-reference run over four deterministic forced-coverage cases and all five native pediatric age regimes. The suite keeps hidden trajectory state out of its aggregate-only report, creates no package or output path, and does not establish prevalence, demographic fidelity, clinical validity, task utility, privacy/non-matchability, held-out, scale, Synthea, or release evidence. The native generator remains the release-one route, the optional Synthea contract remains external and downstream, and the production command remains fail closed with `No production growth reference or authoritative derivation oracle is configured`.
+The evaluator-only [golden trajectory guide](golden-trajectories.md) provides a copy-pasteable fictional-reference run over four deterministic forced-coverage cases and all five native pediatric age regimes. The suite keeps hidden trajectory state out of its aggregate-only report, creates no package or output path, and does not establish prevalence, demographic fidelity, clinical validity, task utility, privacy/non-matchability, held-out, scale, Synthea, or release evidence. The native generator remains the release-one route and is also the ordinary development route, the optional Synthea contract remains external and downstream, and the production command remains fail closed with `No production growth reference or authoritative derivation oracle is configured`.
 
 The visible smoke example remains the healthy age-730+ profile: three visits at ages 730, 1095, and 1460 days. It does not export latent age-regime state, puberty state, or any other evaluator-only trajectory state. The broader age-regime behavior below is a development-only injected-reference example, not a change to that visible smoke contract.
 
@@ -37,7 +37,15 @@ In this guide, `development-authoritative` means that the selected, byte-pinned 
 
 These profiles accept no real or governed patient inputs, real-data root, calibration artifact or path, held-out report, privacy input, network address, Synthea checkout, model, or arbitrary diagnosis payload. The default/no-profile invocation, and an unknown profile, still fail closed with `No production growth reference or authoritative derivation oracle is configured` before runtime construction or output-path checks.
 
-Successful local packages do not establish clinical validity, prevalence validation, demographic fidelity, privacy/non-matchability, patient-disjoint held-out validation, task utility, a non-test derivation binding, Synthea conformance, or release authorization. Clinical and reference review, governed prevalence/demographic calibration, held-out evidence, qualified privacy evaluation and non-matchability review, optional Synthea conformance, and release authorization remain separate deferred gates.
+Successful local packages do not establish clinical validity, prevalence validation, demographic fidelity, privacy/non-matchability, patient-disjoint held-out validation, task utility, a non-test derivation binding, Synthea conformance, or release authorization. Clinical and reference review, governed prevalence/demographic calibration, held-out evidence, qualified privacy evaluation and non-matchability review, optional Synthea conformance, and release authorization remain separate optional gates for claims outside ordinary development.
+
+## Ordinary development requirements
+
+The two explicit profiles are self-contained synthetic-development workflows. They require only a repository checkout, the pinned public/reference runtime already in the checkout, `uv sync`, a new output path, a positive patient count, and a seed. The descriptor supplies schema shape; the versioned development configuration supplies the fictional demographic weights, healthy/GHD prior, observation policy, and age schedule; and the pinned CDC reference plus source-matched augmenter supplies reproducible growth and derived fields. No real-data root, IRB/DUA authorization, partition key, disclosure or privacy policy, calibration/held-out artifact, release decision, Synthea checkout, model, or patient-level input is needed.
+
+The following controls remain ordinary-development requirements because they affect fixture content or reproducibility: exact descriptor schema and CSV semantics, finite/type/range/key validation, deterministic seeds and named configuration, pinned reference/runtime fingerprints, source-matched augmentation, hidden-truth exclusion from visible files, and atomic no-overwrite output handling. The `test_only_derivation` marker and fail-closed default command are technical authority boundaries; they do not require a governance approval bundle and do not block the explicit development profiles.
+
+Governed calibration, patient-disjoint held-out comparison, privacy/non-matchability evaluation, clinical or task-utility review, Synthea conformance, and release authorization are documented below as optional workflows. They may support a separate real-population or external-release claim, but none is a prerequisite for generating or using ordinary synthetic development fixtures.
 
 ## Scheduled development scale profile
 
@@ -53,7 +61,7 @@ This gate is composition evidence only. It does not bind the augmenter, prove pr
 
 ## Aggregate calibration artifacts (development boundary)
 
-An approved calibration artifact is a disclosure-controlled aggregate from the governed `calibration` partition. Load it only as an aggregate artifact for development review:
+This section is optional. An approved calibration artifact is a disclosure-controlled aggregate from the governed `calibration` partition; ordinary development profiles do not load one. When a separately governed comparison needs it, load it only as an aggregate artifact for development review:
 
 ```python
 from pathlib import Path
@@ -180,6 +188,10 @@ The growth summaries use the canonical metrics `height_z_score`, `bmi_z_score`, 
 `PASS` means the evaluated structural, demographic, growth, and configured sanity checks met their policy; `FAIL` means at least one check was invalid or outside tolerance; `UNEVALUABLE` means no check failed but required evidence was too small or missing. Overall status precedence is `FAIL` over `UNEVALUABLE` over `PASS`. Layer diagnostics have no real-data target: a healthy latent module is not a real `healthy_flag`, an observable phenotype is not a recorded diagnosis, and recorded flags do not allocate latent disease.
 
 The profile report is evaluator-only aggregate diagnostics, not prevalence validation, demographic representativeness, held-out validation, clinical validity, privacy evidence, non-matchability proof, package or release evidence, task utility, other ancillary clinical pathways beyond the GHD projection, authoritative derivation, or Synthea evidence. It does not prove that a generated patient profile cannot be matched to a real patient; use the separately governed privacy evaluation for qualified, policy-bound evidence, which also cannot prove non-matchability. The production smoke CLI, exact-schema package exporter, held-out validator, privacy auditor, and optional Synthea route remain unchanged and separately gated.
+
+## Optional governed evidence and release review
+
+The commands and evidence sections that follow are optional extensions for real-population comparison, privacy/non-matchability assessment, clinical or task-utility review, Synthea conformance, or external release. They are intentionally separate from the ordinary development profiles above: their governed paths, keys, policies, reports, and human approvals are never required to generate a completely synthetic fixture and are never read by the ordinary generator.
 
 ### Governed aggregate calibration command
 
@@ -1083,7 +1095,7 @@ smoke/
 └── manifest.json
 ```
 
-All CSV headers, field order, dialects, encodings, constraints, keys, and logical links come from the source descriptor. Ancillary base resources are represented with schema-correct headers and may be empty in this smoke profile. The generated descriptor removes source snapshot statistics and provenance while retaining schema semantics and generated-only statistics.
+All CSV headers, field order, dialects, encodings, constraints, keys, and logical links come from the source descriptor. Ancillary base resources are represented with schema-correct headers and may be empty in this smoke profile. The generated descriptor removes source snapshot statistics, provenance, and project-governance metadata while retaining schema semantics and generated-only statistics; those source-only fields do not become ordinary fixture requirements.
 
 `validation-report.json` records structural errors and row counts. A successful report has no errors. `manifest.json` records the schema fingerprint, seed, PRNG and seed-derivation versions, reference identity/time, configuration hash, software revision, trusted derivation fingerprint, status, row counts, and SHA-256 hashes for every generated file except the manifest itself. Hash keys are package-relative POSIX paths.
 
