@@ -9,7 +9,7 @@
 The parent synthetic-fixture design requires a compact, deterministic golden
 library that forces coverage of healthy and growth-disorder trajectories across
 all pediatric age regimes. The repository currently has focused unit tests but
-no reusable engine-neutral golden contract. This slice adds twelve fictional,
+no reusable engine-neutral golden contract. This slice adds fourteen fictional,
 evaluator-only cases and an aggregate report runner. It makes longitudinal
 growth behavior auditable without pretending that a small forced-coverage set
 is representative prevalence or clinical evidence.
@@ -37,6 +37,8 @@ GOLDEN_CASE_IDS = (
     "golden-turner-syndrome-untreated-v1",
     "golden-undernutrition-v1",
     "golden-undernutrition-untreated-v1",
+    "golden-excess-weight-v1",
+    "golden-excess-weight-treated-v1",
 )
 
 class GoldenTrajectoryUnavailable(ValueError): ...
@@ -50,6 +52,8 @@ class GoldenPattern(str, Enum):
     BIRTH_CATCH_UP = "birth_catch_up"
     PROGRESSIVE_NEGATIVE = "progressive_negative"
     DELAYED_PROGRESSIVE = "delayed_progressive"
+    PROGRESSIVE_POSITIVE = "progressive_positive"
+    POSITIVE_PROGRESSION_RESPONSE = "positive_progression_response"
 
 class GoldenStatus(str, Enum):
     PASS = "PASS"
@@ -89,17 +93,17 @@ serialization expose only those aggregate fields.
 `GoldenTrajectoryCase` contains only typed evaluator inputs: a fictional
 `PatientState`, nonnegative seed, strictly increasing ages, an explicit
 `AgeRegimeState`, an explicit `LatentDisorderState`, the required-regime tuple,
-required event types, and bounded height/BMI pattern declarations. The twelve
+required event types, and bounded height/BMI pattern declarations. The fourteen
 checked-in cases use `syn-golden-*` patient tokens, default age-regime state,
 and fixed healthy, familial-short-stature, constitutional-delay, treated
 growth-hormone-deficiency, treated pediatric-hypothyroidism, celiac-disease,
 and treated and untreated Turner-syndrome states, plus treated and untreated
-undernutrition states and catch-up and persistent small-for-gestational-age
-states. Their
+undernutrition states, catch-up and persistent small-for-gestational-age states,
+and untreated and treated excess-weight states. Their
 hidden states never enter ordinary
 mappings, manifests, reports, logs, or package files.
 
-The twelve cases use the fixed age tuple
+The fourteen cases use the fixed age tuple
 `(0, 700, 730, 760, 3000, 4379, 4380, 4740, 5470, 5475, 6575, 7305)`
 with a default state of puberty onset `4380`, tempo `1095`, and all finite
 z-score offsets set to explicit fictional constants. The constitutional-delay
@@ -116,14 +120,17 @@ Turner-syndrome progression/response, `(1460, 2372, 3285, 4000)` for
 untreated Turner-syndrome progressive-negative height, treated undernutrition
 weight/BMI-first progression/response, untreated undernutrition delayed-progressive
 height and progressive-negative BMI, and selected points from the fixed age tuple
-for the zero and constant-negative patterns. The case
+for the zero and constant-negative patterns. Untreated excess weight uses
+`(2190, 2555, 2920, 3500)` for progressive positive BMI with a sustained plateau;
+treated excess weight uses `(2190, 2490, 2672, 2990)` for positive BMI progression
+with treatment response. The case
 catalog is a forced-coverage test asset, not a cohort sampler. It does not
 allocate disease prevalence or demographics.
 
 ## Runner and report semantics
 
 `run_golden_trajectory_suite` accepts an already-loaded injected growth
-reference and optional modules. With no module mapping it constructs the nine
+reference and optional modules. With no module mapping it constructs the ten
 versioned development modules already in the repository. It creates an
 `AgeRegimeTrajectoryKernel` and an `AgeRegimeDisorderKernel` for each case,
 generates twice with the same explicit hidden states and named streams, and
@@ -146,7 +153,10 @@ Each case must satisfy all of these aggregate checks:
    at onset, strict progressive negative effects, and a bounded plateau;
    `POSITIVE_AFTER_ONSET` requires zero at onset and positive values thereafter;
    and `DELAYED_PROGRESSIVE` requires zero at the first two probes, then a
-   negative effect followed by a bounded plateau.
+   negative effect followed by a bounded plateau; `PROGRESSIVE_POSITIVE`
+   requires zero at onset, a strict positive rise, and a bounded plateau; and
+   `POSITIVE_PROGRESSION_RESPONSE` requires zero at onset, a positive effect
+   that declines during treatment response, and no later positive rebound.
    Healthy effects are zero; familial short
    stature uses constant-negative height and zero BMI; constitutional delay
    uses delayed recovery; and growth-hormone deficiency uses progression/
@@ -159,7 +169,9 @@ Each case must satisfy all of these aggregate checks:
    reference sex, has no birth deficit, and uses either progressive-negative
    untreated height or progressive/response treated height with a relative BMI
    increase; undernutrition uses weight/BMI-first decline, delayed progressive
-   height impairment, and optional partial treatment recovery/nonresponse.
+   height impairment, and optional partial treatment recovery/nonresponse; and
+   excess weight uses a sustained positive BMI effect with zero height effect
+   and optional partial treatment recovery/nonresponse.
 
 The result contains one `GoldenCaseResult` per case and a suite status of
 `PASS` only when every case passes; otherwise it is `FAIL`. Each result exposes
@@ -199,7 +211,7 @@ silently drops a case or changes the case order.
 
 Tests use only the repository's fictional `RegimeLinearTestReference` and
 default development modules. They cover catalog immutability and exact case
-validation, all twelve cases, all five regimes, physical identities, event
+validation, all fourteen cases, all five regimes, physical identities, event
 requirements, each directional pattern, repeated-run byte/equality
 determinism, custom module/reference failures, malformed hidden states, and
 report redaction. Static tests assert no filesystem, CSV, package, governed,

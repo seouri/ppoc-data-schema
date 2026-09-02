@@ -110,6 +110,7 @@ _NATIVE_STREAM_NAMES = frozenset(
         "disorder.small_for_gestational_age",
         "disorder.turner_syndrome",
         "disorder.undernutrition",
+        "disorder.excess_weight",
     }
 )
 

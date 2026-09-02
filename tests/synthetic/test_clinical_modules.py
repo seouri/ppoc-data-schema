@@ -9,6 +9,8 @@ from synthetic.native.clinical_modules import (
     CeliacDiseaseModule,
     ConstitutionalDelayConfig,
     ConstitutionalDelayModule,
+    ExcessWeightConfig,
+    ExcessWeightModule,
     FamilialShortStatureConfig,
     FamilialShortStatureModule,
     GrowthHormoneDeficiencyConfig,
@@ -61,6 +63,7 @@ def test_module_versions_are_stable_and_unique() -> None:
         SmallForGestationalAgeModule(),
         TurnerSyndromeModule(),
         UndernutritionModule(),
+        ExcessWeightModule(),
     )
 
     versions = [module.module_version for module in modules]
@@ -76,6 +79,7 @@ def test_module_versions_are_stable_and_unique() -> None:
         "small-for-gestational-age-v1",
         "turner-syndrome-v1",
         "undernutrition-v1",
+        "excess-weight-v1",
     ]
     assert [module.config.module_version for module in modules] == versions
 
@@ -92,6 +96,7 @@ def test_module_versions_are_stable_and_unique() -> None:
         SmallForGestationalAgeModule,
         TurnerSyndromeModule,
         UndernutritionModule,
+        ExcessWeightModule,
     ],
 )
 def test_built_in_modules_reject_wrong_configuration_types(factory: object) -> None:
@@ -191,6 +196,7 @@ def test_nonzero_treatment_response_requires_treatment_start() -> None:
         lambda: SmallForGestationalAgeConfig(height_catch_up_days=10**1000),
         lambda: TurnerSyndromeConfig(onset_max_age_days=10**1000),
         lambda: UndernutritionConfig(onset_max_age_days=10**1000),
+        lambda: ExcessWeightConfig(onset_max_age_days=10**1000),
     ],
 )
 def test_module_configurations_reject_unrepresentable_huge_integers(
@@ -235,6 +241,10 @@ def test_module_configurations_reject_unrepresentable_huge_integers(
         (
             UndernutritionModule(),
             LatentDisorderState(DisorderKind.UNDERNUTRITION, 730, 0.8),
+        ),
+        (
+            ExcessWeightModule(),
+            LatentDisorderState(DisorderKind.EXCESS_WEIGHT, 730, 0.8),
         ),
     ],
 )
@@ -310,6 +320,7 @@ def test_module_sampling_is_reproducible_and_uses_named_streams() -> None:
         SmallForGestationalAgeModule(),
         TurnerSyndromeModule(),
         UndernutritionModule(),
+        ExcessWeightModule(),
     )
     for module in modules:
         left = module.sample_state(PATIENT, NamedRandomStreams(123, 7))
@@ -328,6 +339,7 @@ def test_modules_request_only_their_scoped_disorder_streams() -> None:
         SmallForGestationalAgeModule(),
         TurnerSyndromeModule(),
         UndernutritionModule(),
+        ExcessWeightModule(),
     )
 
     for module in modules:
@@ -351,6 +363,7 @@ def test_modules_request_only_their_scoped_disorder_streams() -> None:
         (CeliacDiseaseConfig, "treatment_probability", 0.0),
         (SmallForGestationalAgeConfig, "catch_up_probability", 0.0),
         (UndernutritionConfig, "weight_progression_days", 0),
+        (ExcessWeightConfig, "bmi_progression_days", 0),
     ],
 )
 def test_module_configurations_are_frozen(
@@ -374,6 +387,7 @@ def test_module_configurations_are_frozen(
         lambda: CeliacDiseaseConfig(treatment_probability=1.1),
         lambda: SmallForGestationalAgeConfig(catch_up_probability=1.1),
         lambda: UndernutritionConfig(treatment_probability=1.1),
+        lambda: ExcessWeightConfig(treatment_probability=1.1),
     ],
 )
 def test_module_configurations_reject_invalid_magnitudes_probabilities_and_schedules(
@@ -397,6 +411,7 @@ def test_disorder_events_keep_codes_empty_and_only_hide_latent_onset() -> None:
         CeliacDiseaseModule(CeliacDiseaseConfig(treatment_probability=1.0)),
         SmallForGestationalAgeModule(),
         UndernutritionModule(),
+        ExcessWeightModule(),
     ):
         state = module.sample_state(PATIENT, NamedRandomStreams(123, 7))
         events = module.events(PATIENT, state)

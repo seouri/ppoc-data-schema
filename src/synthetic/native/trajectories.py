@@ -19,6 +19,8 @@ from synthetic.native.clinical_modules import (
     CeliacDiseaseModule,
     ConstitutionalDelayConfig,
     ConstitutionalDelayModule,
+    ExcessWeightConfig,
+    ExcessWeightModule,
     FamilialShortStatureConfig,
     FamilialShortStatureModule,
     GrowthDisorderModule,
@@ -65,6 +67,7 @@ _BUILTIN_MODULE_CONTRACTS = (
     ),
     (TurnerSyndromeModule, TurnerSyndromeConfig, "turner-syndrome-v1"),
     (UndernutritionModule, UndernutritionConfig, "undernutrition-v1"),
+    (ExcessWeightModule, ExcessWeightConfig, "excess-weight-v1"),
 )
 
 

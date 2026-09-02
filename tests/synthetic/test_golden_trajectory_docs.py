@@ -33,7 +33,7 @@ def test_guide_names_the_fixed_catalog_regimes_and_directional_patterns() -> Non
 
     assert GOLDEN_TRAJECTORY_VERSION == "growth-golden-v1"
     assert "`growth-golden-v1`" in guide
-    assert "exactly twelve fictional cases" in guide
+    assert "exactly fourteen fictional cases" in guide
     for case_id in GOLDEN_CASE_IDS:
         assert f"`{case_id}`" in guide
     for regime in ("infancy", "transition", "childhood", "puberty", "adolescence"):
@@ -47,6 +47,8 @@ def test_guide_names_the_fixed_catalog_regimes_and_directional_patterns() -> Non
         "positive_after_onset",
         "birth_catch_up",
         "delayed_progressive",
+        "progressive_positive",
+        "positive_progression_response",
     ):
         assert f"`{pattern}`" in guide
 
@@ -96,6 +98,16 @@ def test_guide_documents_aggregate_report_failure_and_hidden_state_boundary() ->
         assert boundary in guide
 
 
+def test_guides_keep_excess_weight_separate_from_observed_obesity_flag() -> None:
+    guide = _guide_text()
+    synthetic_guide = SYNTHETIC_GUIDE.read_text(encoding="utf-8")
+
+    for document in (guide, synthetic_guide):
+        assert "`EXCESS_WEIGHT` is evaluator-only" in document
+        assert "neither implies nor writes `obesity_flag`" in document
+        assert "separately derived from observed BMI percentile" in document
+
+
 def test_guide_documents_unobserved_probe_ages_and_disorder_sequences() -> None:
     """Breaks if sampled ages and directional probes are presented as interchangeable."""
     guide = _guide_text()
@@ -109,6 +121,8 @@ def test_guide_documents_unobserved_probe_ages_and_disorder_sequences() -> None:
     assert "delayed height decline" in guide
     assert "BMI channel is monotone toward zero" in guide
     assert "height channel either reaches zero by day 1825 or remains constant and negative" in guide
+    assert "sustained plateau" in guide
+    assert "positive BMI effect that decreases without rebound" in guide
     for semantic in (
         "zero at onset",
         "negative at treatment",

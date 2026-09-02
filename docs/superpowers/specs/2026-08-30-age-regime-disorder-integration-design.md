@@ -7,7 +7,7 @@
 Add an evaluator-only composition layer that applies the repository's reviewed
 growth-disorder scenario modules to the age-regime physiology layer. The result
 will support coherent healthy, familial-short-stature, constitutional-delay,
-growth-hormone-deficiency, and undernutrition trajectories from infancy through adolescence,
+growth-hormone-deficiency, undernutrition, and excess-weight trajectories from infancy through adolescence,
 while preserving the existing visible eight-resource fixture package and its
 exact-schema smoke contract.
 
@@ -143,7 +143,7 @@ The implementation will use TDD and add focused tests for:
    the length/weight and height/BMI identities;
 4. constitutional-delay puberty-onset shifting, bounded recovery semantics,
    and event preservation;
-5. growth-hormone-deficiency and undernutrition onset, treatment,
+5. growth-hormone-deficiency, undernutrition, and excess-weight onset, treatment,
    response/nonresponse events, and post-treatment trajectory changes;
 6. all five age regimes, sparse transition samples, derived velocities, and
    adjusted continuity;

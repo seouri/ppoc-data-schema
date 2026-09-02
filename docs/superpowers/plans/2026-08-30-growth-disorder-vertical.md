@@ -383,12 +383,12 @@ git commit -m "feat: add disorder-aware latent trajectories"
 - Modify: `docs/synthetic-generator.md`
 
 **Interfaces:**
-- Consumes: `DisorderTrajectoryKernel`, the nine native module names, and `LatentTrajectory` from Tasks 1–3.
+- Consumes: `DisorderTrajectoryKernel`, the ten native module names, and `LatentTrajectory` from Tasks 1–3.
 - Produces: a concise development-only usage section that explains hidden truth/event traces, directionally coherent but uncalibrated scenarios, and the fact that visible CSV generation remains unchanged.
 
 - [x] **Step 1: Add the development-module section**
 
-Document a Python example that constructs a `DisorderTrajectoryKernel` from the existing injected test reference and a module, then states that `LatentTrajectory.disorder` and `.events` are evaluator-only and are not exported. List the original four modules and their directional signatures without calling their defaults clinically representative; list the pediatric hypothyroidism, celiac-disease, SGA, Turner-syndrome, and undernutrition follow-on evaluator modules separately with the same boundary. State that prevalence, demographic calibration, disorder-critical labs/medications/referrals, held-out validation, and privacy auditing remain later gates.
+Document a Python example that constructs a `DisorderTrajectoryKernel` from the existing injected test reference and a module, then states that `LatentTrajectory.disorder` and `.events` are evaluator-only and are not exported. List the original four modules and their directional signatures without calling their defaults clinically representative; list the pediatric hypothyroidism, celiac-disease, SGA, Turner-syndrome, undernutrition, and excess-weight follow-on evaluator modules separately with the same boundary. State that prevalence, demographic calibration, disorder-critical labs/medications/referrals, held-out validation, and privacy auditing remain later gates.
 
 - [x] **Step 2: Verify the repository**
 
@@ -409,8 +409,8 @@ git commit -m "docs: describe latent growth disorder modules"
 
 Before merging this plan, verify that:
 
-- The original four module types produce deterministic states and ordered event traces with latent truth separate from observable descendants; the pediatric-hypothyroidism, celiac-disease, SGA, Turner-syndrome, and undernutrition follow-ons add the same contract without widening visible package export.
-- Familial short stature preserves a constant height-z offset, constitutional delay has a bounded temporary effect, growth-hormone deficiency has progressive impairment with optional treatment response, and undernutrition has weight/BMI-first decline with delayed height impairment and optional partial recovery.
+- The original four module types produce deterministic states and ordered event traces with latent truth separate from observable descendants; the pediatric-hypothyroidism, celiac-disease, SGA, Turner-syndrome, undernutrition, and excess-weight follow-ons add the same contract without widening visible package export.
+- Familial short stature preserves a constant height-z offset, constitutional delay has a bounded temporary effect, growth-hormone deficiency has progressive impairment with optional treatment response, undernutrition has weight/BMI-first decline with delayed height impairment and optional partial recovery, and excess weight has sustained positive BMI growth without a linear-growth effect.
 - Healthy-module output is byte-for-byte/point-for-point identical to the existing healthy kernel for the same inputs.
 - Anthropometric identities, reference guards, age ordering, and named random-stream isolation pass independent tests.
 - No latent truth, event trace, clinical data, prevalence claim, or privacy claim enters the visible eight-resource fixture package.
@@ -452,3 +452,9 @@ Before merging this plan, verify that:
 - [x] Add a versioned, frozen `UndernutritionConfig` and `UndernutritionModule` with weight/BMI-first decline, delayed progressive height impairment, and optional partial treatment recovery/nonresponse.
 - [x] Register `DisorderKind.UNDERNUTRITION`, its named counterfactual stream, built-in module contract, and treated/untreated golden forced-coverage cases without widening visible package export.
 - [x] Add deterministic, schedule, overflow, state-kind, treatment, age-regime composition, and golden-pattern tests; update evaluator-only documentation and retain nutrition-specific ancillary pathways as deferred.
+
+### Follow-on: excess-weight trajectory (2026-09-02)
+
+- [x] Add a versioned, frozen `ExcessWeightConfig` and `ExcessWeightModule` with sustained positive BMI growth, zero linear-growth effect, and optional partial treatment recovery/nonresponse.
+- [x] Register `DisorderKind.EXCESS_WEIGHT`, its named counterfactual stream, built-in module contract, and untreated/treated golden forced-coverage cases without widening visible package export.
+- [x] Add deterministic, schedule, overflow, state-kind, treatment, age-regime composition, and golden-pattern tests; update evaluator-only documentation and retain obesity-specific ancillary pathways as deferred.

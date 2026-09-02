@@ -91,6 +91,7 @@ class DisorderKind(str, Enum):
     SMALL_FOR_GESTATIONAL_AGE = "small_for_gestational_age"
     TURNER_SYNDROME = "turner_syndrome"
     UNDERNUTRITION = "undernutrition"
+    EXCESS_WEIGHT = "excess_weight"
 
 
 @dataclass(frozen=True)

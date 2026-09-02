@@ -117,6 +117,7 @@ def test_status_and_growth_registries_are_fixed() -> None:
         "small_for_gestational_age",
         "turner_syndrome",
         "undernutrition",
+        "excess_weight",
     )
 
 
