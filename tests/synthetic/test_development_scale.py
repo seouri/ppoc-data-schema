@@ -307,11 +307,14 @@ def test_development_scale_documentation_declares_scheduled_gate_and_boundaries(
         "native direct",
         "CLI composition",
         "development-cohort",
+        "development-realistic",
         "temporary package",
         "all eight descriptor resources",
         "derivation",
         "longitudinal",
         "task",
+        "GHD ancillary",
+        "serialization sentinel",
         "opt-in",
     ):
         assert detail in guide

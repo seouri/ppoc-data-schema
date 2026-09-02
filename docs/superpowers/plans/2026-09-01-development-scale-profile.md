@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add an opt-in 10,000-patient development-profile integration gate that composes the native cohort, longitudinal/task evaluators, exact-schema exporter, and verified source-matched augmenter across a fixed seed set.
+**Goal:** Add an opt-in 10,000-patient development-profile integration gate that composes the native cohort, longitudinal/task evaluators, exact-schema exporter, and verified source-matched augmenter across a fixed seed set, including the target-shaped realistic package.
 
-**Architecture:** Keep production modules unchanged. Add a test-only scale harness that constructs the existing fictional inputs, generates one descriptor-shaped cohort per seed, runs the existing aggregate evaluators, and exports a temporary eight-resource package with the existing test-only derivation binding. Register a `scale` pytest marker and require `SYNTHETIC_RUN_SCALE=1`, so normal CI remains fast while the scheduled gate is explicit and reproducible.
+**Architecture:** Keep production modules unchanged. The existing test-only scale harness constructs fictional inputs, generates one descriptor-shaped cohort per seed, runs the existing aggregate evaluators, and exports temporary eight-resource packages with the existing test-only derivation binding. A bounded CLI follow-on exercises both explicit public profiles at 10,000 patients and checks the realistic profile's already-reviewed GHD ancillary relationships and serialization sentinel. Register a `scale` pytest marker and require `SYNTHETIC_RUN_SCALE=1`, so normal CI remains fast while the scheduled gate is explicit and reproducible.
 
 **Tech Stack:** Python 3.12+, pytest, existing native synthetic contracts, source-matched augmenter oracle, exact-schema exporter, Ruff, Frictionless-style descriptor checks.
 
@@ -20,6 +20,8 @@
 - Use the source-matched augmenter only through `SourceMatchedAugmenterOracle` and the existing test-only binding identity.
 - Require exact descriptor resource order, schema fingerprint, package tree, and row counts.
 - Preserve the existing six-resource generic bundle contract; ancillary clinical transitions remain in their dedicated evaluator tests.
+- Keep the legacy `development-cohort` CLI ancillary resources empty; only the explicit `development-realistic` check may assert the reviewed GHD projection/merge exception.
+- For the realistic CLI scale assertion, require `labs = 2 * problem_list = 2 * referrals`, `growth_dx_flag == len(problem_list)`, `0 <= len(medications) <= len(problem_list)`, and blank serialized lab flags.
 - Do not stage or remove pre-existing generated caches outside the feature files.
 
 ---
@@ -153,3 +155,12 @@ After the merged-result full suite and all checks pass, fast-forward `main`, rer
 - At `eddf24d838cf77a0384f2385fa325c6ed0b04e4e`, `SYNTHETIC_RUN_SCALE=1 PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -m scale tests/synthetic/test_development_scale.py tests/synthetic/test_generate_cli.py` completed `4 passed, 8 deselected in 1100.74s` (18 minutes 20.74 seconds), covering all three fixed native seeds and the 10,000-patient CLI composition profile.
 - `PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_development_scale.py tests/synthetic/test_generate_cli.py` completed `8 passed, 4 skipped in 6.23s`; `PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q` completed `2681 passed, 4 skipped in 151.02s`; `uv run ruff check src tests`, `python3 schema/build.py --check`, `uv lock --check`, and `git diff --check` all passed.
 - The revalidation produced no repository artifacts beyond the pre-existing untracked cache directories; the scale gate remains synthetic-only composition evidence and does not advance any governed prevalence, clinical, privacy/non-matchability, held-out, Synthea, or release gate.
+
+## Target-shaped CLI scale follow-on (2026-09-02)
+
+The `development-realistic` CLI composition test is an opt-in 10,000-patient extension of this scale gate. It uses seed `20260901`, the pinned CDC/source-matched runtime, and the existing exact-schema exporter. The test reads only generated package rows and asserts exact schema/inventory, 10,000 patients, 110,000 visits, unique synthetic IDs, manifest row-count agreement, `labs = 2 * problem_list = 2 * referrals`, `growth_dx_flag == len(problem_list)`, bounded medications, and blank serialized GHD lab flags. It does not change the legacy empty-ancillary route or any production module.
+
+- [x] Added the opt-in realistic CLI scale test with target-shaped descendant and serialization-sentinel assertions.
+- [x] Added failing-then-passing documentation assertions for the realistic profile, GHD ancillary relationship, and serialization sentinel.
+- [x] Ran the realistic 10,000-patient CLI test: `2 passed, 8 deselected in 671.06s` (the selected realistic test plus the existing documentation assertion).
+- [x] Kept the generic scale route, test-only derivation binding, source/runtime bytes, and no-real-data boundary unchanged.

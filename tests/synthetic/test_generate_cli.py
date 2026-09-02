@@ -51,6 +51,8 @@ _SCALE_ROW_COUNTS = {
     "problem_list": 0,
     "referrals": 0,
 }
+_REALISTIC_SCALE_MIN_GROWTH_DX = 1_000
+_REALISTIC_SCALE_MAX_GROWTH_DX = 2_000
 
 
 def _command(
@@ -373,6 +375,102 @@ def test_development_cohort_cli_scale_profile_exports_visible_exact_schema(
                 b"growth_hormone_deficiency",
             ):
                 assert forbidden not in published
+
+
+@pytest.mark.scale
+@pytest.mark.skipif(
+    not _SCALE_ENABLED,
+    reason="set SYNTHETIC_RUN_SCALE=1 to run the development CLI composition scale profile",
+)
+def test_development_realistic_cli_scale_profile_preserves_target_shaped_descendants(
+    tmp_path: Path,
+) -> None:
+    """Catches target-shaped scale runs that lose typed GHD descendants or schema sentinels."""
+    output = tmp_path / "development-realistic-scale"
+
+    result = _run(
+        _command(
+            output,
+            profile="development-realistic",
+            patient_count=_SCALE_PATIENT_COUNT,
+        )
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == ""
+    assert result.stderr == ""
+    descriptor = load_descriptor(ROOT / "datapackage.json")
+    generated_descriptor = load_descriptor(output / "datapackage.json")
+    assert schema_fingerprint(generated_descriptor) == EXPECTED_SCHEMA_FINGERPRINT
+    assert {
+        path.relative_to(output).as_posix()
+        for path in output.rglob("*")
+        if path.is_file()
+    } == {
+        *(
+            resource["path"]
+            for resource in descriptor["resources"]
+            if isinstance(resource["path"], str)
+        ),
+        "datapackage.json",
+        "manifest.json",
+        "validation-report.json",
+    }
+    assert not validate_structure(output, descriptor).errors
+
+    patients = _csv_rows(output / _resource_path(descriptor, "patients"))
+    visits = _csv_rows(output / _resource_path(descriptor, "visits"))
+    augmented_patients = _csv_rows(
+        output / _resource_path(descriptor, "patients_augmented")
+    )
+    labs = _csv_rows(output / _resource_path(descriptor, "labs"))
+    medications = _csv_rows(output / _resource_path(descriptor, "medications"))
+    problems = _csv_rows(output / _resource_path(descriptor, "problem_list"))
+    referrals = _csv_rows(output / _resource_path(descriptor, "referrals"))
+
+    assert len(patients) == _SCALE_PATIENT_COUNT
+    assert len(visits) == _SCALE_VISIT_COUNT
+    assert len(augmented_patients) == _SCALE_PATIENT_COUNT
+    assert len(problems) == len(referrals)
+    assert len(labs) == 2 * len(problems)
+    assert 0 <= len(medications) <= len(problems)
+    growth_dx_count = sum(int(row["growth_dx_flag"]) for row in augmented_patients)
+    assert growth_dx_count == len(problems)
+    assert _REALISTIC_SCALE_MIN_GROWTH_DX <= growth_dx_count <= _REALISTIC_SCALE_MAX_GROWTH_DX
+    assert {row["result_flag"] for row in labs} <= {""}
+
+    patient_ids = [row["patient_id"] for row in patients]
+    visit_ids = [row["visit_id"] for row in visits]
+    assert len(patient_ids) == len(set(patient_ids)) == _SCALE_PATIENT_COUNT
+    assert len(visit_ids) == len(set(visit_ids)) == _SCALE_VISIT_COUNT
+
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["profile"] == "development-realistic"
+    assert manifest["schema_fingerprint"] == EXPECTED_SCHEMA_FINGERPRINT
+    assert manifest["reference_id"] == "cdc-lms-reference-v1"
+    assert manifest["derivation_fingerprint"] == AUGMENTER_RUNTIME_MANIFEST_SHA256
+    assert manifest["test_only_derivation"] is True
+    assert manifest["row_counts"] == {
+        "patients": len(patients),
+        "patients_augmented": len(augmented_patients),
+        "visits": len(visits),
+        "visits_augmented": _SCALE_VISIT_COUNT,
+        "labs": len(labs),
+        "medications": len(medications),
+        "problem_list": len(problems),
+        "referrals": len(referrals),
+    }
+
+    published = b"".join(
+        path.read_bytes() for path in sorted(output.rglob("*")) if path.is_file()
+    )
+    for forbidden in (
+        b"latent",
+        b"severity",
+        b"truth",
+        b"growth_hormone_deficiency",
+    ):
+        assert forbidden not in published.lower()
 
 
 def test_development_smoke_cli_is_reproducible_across_distinct_outputs(tmp_path: Path) -> None:
