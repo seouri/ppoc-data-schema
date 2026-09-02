@@ -1,13 +1,18 @@
 from __future__ import annotations
 
-from synthetic.models import LatentPoint, PatientState
+from synthetic.models import MAX_AGE_DAYS, LatentPoint, PatientState
 from synthetic.native.anthropometry import derive_weight_kg, require_finite_positive
 from synthetic.randomness import NamedRandomStreams
 from synthetic.references import GrowthReference, generation_z_score
 
 
 def _nonnegative_int(name: str, value: object) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, int)
+        or value < 0
+        or value > MAX_AGE_DAYS
+    ):
         raise ValueError(f"{name} must be a nonnegative integer")
     return value
 
@@ -38,7 +43,10 @@ class HealthyKernel:
         if not isinstance(ages_days, tuple) or not ages_days:
             raise ValueError("ages_days must be a nonempty tuple")
         if any(
-            isinstance(age, bool) or not isinstance(age, int) or age < 0
+            isinstance(age, bool)
+            or not isinstance(age, int)
+            or age < 0
+            or age > MAX_AGE_DAYS
             for age in ages_days
         ):
             raise ValueError("ages_days must contain nonnegative integers")
@@ -87,10 +95,13 @@ class HealthyKernel:
                 patient.reference_sex,
                 bmi_z,
             )
-            height_cm = self.reference.value(
-                "height_cm", age_days, patient.reference_sex, height_z
-            )
-            bmi = self.reference.value("bmi", age_days, patient.reference_sex, bmi_z)
+            try:
+                height_cm = self.reference.value(
+                    "height_cm", age_days, patient.reference_sex, height_z
+                )
+                bmi = self.reference.value("bmi", age_days, patient.reference_sex, bmi_z)
+            except (ArithmeticError, TypeError) as exc:
+                raise ValueError("reference value failed during evaluation") from exc
             height_cm = require_finite_positive(
                 height_cm, "reference height must be finite and positive"
             )

@@ -3,7 +3,10 @@ import math
 import pytest
 
 from synthetic.models import PatientState
-from synthetic.native.clinical_modules import HealthyGrowthModule
+from synthetic.native.clinical_modules import (
+    FamilialShortStatureConfig,
+    FamilialShortStatureModule,
+)
 from synthetic.native.healthy import HealthyKernel
 from synthetic.native.trajectories import DisorderTrajectoryKernel
 from synthetic.randomness import NamedRandomStreams
@@ -110,7 +113,10 @@ def test_disorder_trajectory_kernel_rejects_nonphysical_derived_weight(
     reference = TrajectoryPhysicalOutputReference(height=height, bmi=bmi)
     with pytest.raises(ValueError, match="derived weight.*finite and positive"):
         DisorderTrajectoryKernel(
-            HealthyKernel(reference), HealthyGrowthModule()
+            HealthyKernel(reference),
+            FamilialShortStatureModule(
+                FamilialShortStatureConfig(severity_min=0.0, severity_max=0.0)
+            ),
         ).generate(PATIENT, (730,), NamedRandomStreams(5, 0))
 
 
@@ -137,7 +143,10 @@ def test_disorder_trajectory_kernel_rejects_oversized_integer_reference_values(
     reference = TrajectoryPhysicalOutputReference(height=height, bmi=bmi)
     with pytest.raises(ValueError, match=message):
         DisorderTrajectoryKernel(
-            HealthyKernel(reference), HealthyGrowthModule()
+            HealthyKernel(reference),
+            FamilialShortStatureModule(
+                FamilialShortStatureConfig(severity_min=0.0, severity_max=0.0)
+            ),
         ).generate(PATIENT, (730,), NamedRandomStreams(5, 0))
 
 

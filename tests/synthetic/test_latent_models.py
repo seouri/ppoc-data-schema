@@ -29,6 +29,29 @@ def test_disorder_state_accepts_valid_treatment_schedule() -> None:
     [
         {"kind": "", "onset_age_days": 0, "severity": 0.5},
         {"kind": DisorderKind.HEALTHY, "onset_age_days": -1, "severity": 0.5},
+        {"kind": DisorderKind.HEALTHY, "onset_age_days": 0, "severity": True},
+        {
+            "kind": DisorderKind.HEALTHY,
+            "onset_age_days": 0,
+            "severity": 10**1000,
+        },
+        {
+            "kind": DisorderKind.HEALTHY,
+            "onset_age_days": 10**1000,
+            "severity": 0.5,
+        },
+        {
+            "kind": DisorderKind.HEALTHY,
+            "onset_age_days": 0,
+            "severity": 0.5,
+            "treatment_start_age_days": 10**1000,
+        },
+        {
+            "kind": DisorderKind.HEALTHY,
+            "onset_age_days": 0,
+            "severity": 0.5,
+            "puberty_delay_days": 10**1000,
+        },
         {"kind": DisorderKind.HEALTHY, "onset_age_days": 0, "severity": math.nan},
         {"kind": DisorderKind.HEALTHY, "onset_age_days": 0, "severity": -0.1},
         {
@@ -42,6 +65,20 @@ def test_disorder_state_accepts_valid_treatment_schedule() -> None:
             "onset_age_days": 0,
             "severity": 0.5,
             "treatment_response": 1.1,
+        },
+        {
+            "kind": DisorderKind.HEALTHY,
+            "onset_age_days": 0,
+            "severity": 0.5,
+            "treatment_start_age_days": 1,
+            "treatment_response": True,
+        },
+        {
+            "kind": DisorderKind.HEALTHY,
+            "onset_age_days": 0,
+            "severity": 0.5,
+            "treatment_start_age_days": 1,
+            "treatment_response": 10**1000,
         },
     ],
 )
@@ -63,3 +100,37 @@ def test_latent_trajectory_is_frozen_and_keeps_hidden_events_separate() -> None:
     assert trajectory.events[0].hidden is True
     with pytest.raises(AttributeError):
         trajectory.points = ()
+
+
+@pytest.mark.parametrize(
+    ("points", "disorder", "events"),
+    [
+        ([LatentPoint("syn-patient-a", 730, 90.0, 16.0, 12.96, 0.0, 0.0)],
+         LatentDisorderState(DisorderKind.HEALTHY, None, 0.0), ()),
+        ((), LatentDisorderState(DisorderKind.HEALTHY, None, 0.0), ()),
+        ((object(),), LatentDisorderState(DisorderKind.HEALTHY, None, 0.0), ()),
+        ((LatentPoint("syn-patient-a", 730, 90.0, 16.0, 12.96, 0.0, 0.0),),
+         object(), ()),
+        ((LatentPoint("syn-patient-a", 730, 90.0, 16.0, 12.96, 0.0, 0.0),),
+         LatentDisorderState(DisorderKind.HEALTHY, None, 0.0), [object()]),
+        ((LatentPoint("syn-patient-a", 730, 90.0, 16.0, 12.96, 0.0, 0.0),),
+         LatentDisorderState(DisorderKind.HEALTHY, None, 0.0), (object(),)),
+    ],
+)
+def test_latent_trajectory_rejects_malformed_containers_and_members(
+    points: object, disorder: object, events: object
+) -> None:
+    with pytest.raises((TypeError, ValueError)):
+        LatentTrajectory(points=points, disorder=disorder, events=events)  # type: ignore[arg-type]
+
+
+def test_latent_trajectory_rejects_patient_mismatch() -> None:
+    point = LatentPoint("syn-patient-a", 730, 90.0, 16.0, 12.96, 0.0, 0.0)
+    event = ClinicalEvent("other-patient", 0, "latent_onset", None, True)
+
+    with pytest.raises(ValueError, match="patient"):
+        LatentTrajectory(
+            points=(point,),
+            disorder=LatentDisorderState(DisorderKind.HEALTHY, None, 0.0),
+            events=(event,),
+        )

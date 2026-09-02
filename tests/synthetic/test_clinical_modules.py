@@ -132,6 +132,52 @@ def test_nonzero_treatment_response_requires_treatment_start() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "factory",
+    [
+        lambda: FamilialShortStatureConfig(severity_min=10**1000),
+        lambda: FamilialShortStatureConfig(severity_max=10**1000),
+        lambda: ConstitutionalDelayConfig(expected_puberty_age_days=10**1000),
+        lambda: GrowthHormoneDeficiencyConfig(onset_max_age_days=10**1000),
+    ],
+)
+def test_module_configurations_reject_unrepresentable_huge_integers(
+    factory: object,
+) -> None:
+    with pytest.raises(ValueError):
+        factory()
+
+
+@pytest.mark.parametrize(
+    ("module", "state"),
+    [
+        (HealthyGrowthModule(), LatentDisorderState(DisorderKind.HEALTHY, None, 0.0)),
+        (
+            FamilialShortStatureModule(),
+            LatentDisorderState(DisorderKind.FAMILIAL_SHORT_STATURE, 0, 0.8),
+        ),
+        (
+            ConstitutionalDelayModule(),
+            LatentDisorderState(DisorderKind.CONSTITUTIONAL_DELAY, 4380, 1.0, 360),
+        ),
+        (
+            GrowthHormoneDeficiencyModule(),
+            LatentDisorderState(DisorderKind.GROWTH_HORMONE_DEFICIENCY, 730, 0.8),
+        ),
+    ],
+)
+def test_modules_reject_unrepresentable_huge_age_inputs(
+    module: object, state: LatentDisorderState
+) -> None:
+    with pytest.raises(ValueError, match="age_days"):
+        module.height_z_delta(state, 10**1000)  # type: ignore[attr-defined]
+
+
+def test_modules_normalize_wrong_state_type() -> None:
+    with pytest.raises(TypeError, match="LatentDisorderState"):
+        HealthyGrowthModule().height_z_delta(object(), 0)  # type: ignore[arg-type]
+
+
 def test_familial_short_stature_preserves_velocity_with_constant_height_offset() -> None:
     module = FamilialShortStatureModule()
     state = module.sample_state(PATIENT, NamedRandomStreams(5, 0))

@@ -10,7 +10,13 @@ import math
 from dataclasses import dataclass
 from typing import ClassVar, Protocol
 
-from synthetic.models import ClinicalEvent, DisorderKind, LatentDisorderState, PatientState
+from synthetic.models import (
+    MAX_AGE_DAYS,
+    ClinicalEvent,
+    DisorderKind,
+    LatentDisorderState,
+    PatientState,
+)
 from synthetic.randomness import NamedRandomStreams
 
 _PHASE_ORDER = {
@@ -23,7 +29,6 @@ _PHASE_ORDER = {
     "treatment_response": 6,
     "treatment_nonresponse": 6,
 }
-
 
 class GrowthDisorderModule(Protocol):
     kind: DisorderKind
@@ -43,7 +48,12 @@ class GrowthDisorderModule(Protocol):
 
 
 def _require_age(name: str, value: object, *, positive: bool = False) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, int)
+        or value < 0
+        or value > MAX_AGE_DAYS
+    ):
         raise ValueError(f"{name} must be a nonnegative integer")
     if positive and value == 0:
         raise ValueError(f"{name} must be a positive integer")
@@ -51,14 +61,29 @@ def _require_age(name: str, value: object, *, positive: bool = False) -> int:
 
 
 def _require_magnitude(name: str, value: object) -> float:
-    if (
-        isinstance(value, bool)
-        or not isinstance(value, (int, float))
-        or not math.isfinite(value)
-        or value < 0
-    ):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(  # noqa: TRY004
+            f"{name} must be finite and nonnegative"
+        )
+    try:
+        magnitude = float(value)
+    except (ArithmeticError, TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be finite and nonnegative") from exc
+    if not math.isfinite(magnitude) or magnitude < 0:
         raise ValueError(f"{name} must be finite and nonnegative")
-    return float(value)
+    return magnitude
+
+
+def _require_finite_real(name: str, value: object) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{name} must be finite")  # noqa: TRY004
+    try:
+        result = float(value)
+    except (ArithmeticError, TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be finite") from exc
+    if not math.isfinite(result):
+        raise ValueError(f"{name} must be finite")
+    return result
 
 
 def _require_probability(name: str, value: object) -> float:
@@ -83,8 +108,18 @@ def _require_ordered_bounds(
 
 
 def _require_module_state(state: LatentDisorderState, kind: DisorderKind) -> None:
+    if not isinstance(state, LatentDisorderState):
+        raise TypeError("state must be a LatentDisorderState")
     if state.kind is not kind:
         raise ValueError(f"state kind must be {kind.value}")
+
+
+def _checked_age_sum(name: str, *values: int) -> int:
+    try:
+        total = sum(values)
+    except (ArithmeticError, TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a supported age") from exc
+    return _require_age(name, total)
 
 
 def _ordered_events(
@@ -93,6 +128,8 @@ def _ordered_events(
     previous_phase = -1
     previous_age = -1
     for event_type, age_days in schedule:
+        if not isinstance(event_type, str):
+            raise ValueError("clinical event type must be a string")  # noqa: TRY004
         phase = _PHASE_ORDER.get(event_type)
         if phase is None:
             raise ValueError(f"unknown clinical event type: {event_type}")
@@ -256,6 +293,14 @@ class ConstitutionalDelayConfig:
             ("diagnosis_delay_days", self.diagnosis_delay_days),
         ):
             _require_age(name, value)
+        _checked_age_sum(
+            "constitutional delay diagnosis age_days",
+            self.expected_puberty_age_days,
+            self.puberty_delay_max_days,
+            self.recognition_delay_days,
+            self.workup_delay_days,
+            self.diagnosis_delay_days,
+        )
 
 
 class ConstitutionalDelayModule:
@@ -285,15 +330,26 @@ class ConstitutionalDelayModule:
         _require_module_state(state, self.kind)
         age = _require_age("age_days", age_days)
         puberty_age = self.config.expected_puberty_age_days
-        delayed_end = puberty_age + state.puberty_delay_days
+        delayed_end = _checked_age_sum(
+            "constitutional delay end age_days",
+            puberty_age,
+            state.puberty_delay_days,
+        )
         if age < puberty_age or state.puberty_delay_days == 0:
             return 0.0
-        if age <= delayed_end:
-            return -state.severity * (age - puberty_age) / state.puberty_delay_days
-        elapsed_recovery = age - delayed_end
-        if elapsed_recovery >= self.config.recovery_days:
-            return 0.0
-        return -state.severity * (1 - elapsed_recovery / self.config.recovery_days)
+        try:
+            if age <= delayed_end:
+                delta = -state.severity * (age - puberty_age) / state.puberty_delay_days
+            else:
+                elapsed_recovery = age - delayed_end
+                if elapsed_recovery >= self.config.recovery_days:
+                    return 0.0
+                delta = -state.severity * (
+                    1 - elapsed_recovery / self.config.recovery_days
+                )
+        except (ArithmeticError, TypeError, ValueError) as exc:
+            raise ValueError("age_days is too large for disorder arithmetic") from exc
+        return _require_finite_real("constitutional delay height z-score delta", delta)
 
     def bmi_z_delta(self, state: LatentDisorderState, age_days: int) -> float:
         _require_module_state(state, self.kind)
@@ -307,11 +363,31 @@ class ConstitutionalDelayModule:
         puberty_age = self.config.expected_puberty_age_days
         if state.severity == 0 or state.puberty_delay_days == 0:
             return _ordered_events(patient, (("latent_onset", puberty_age),))
-        delayed_end = puberty_age + state.puberty_delay_days
-        phenotype_age = puberty_age + state.puberty_delay_days // 2
-        recognition_age = delayed_end + self.config.recognition_delay_days
-        workup_age = recognition_age + self.config.workup_delay_days
-        diagnosis_age = workup_age + self.config.diagnosis_delay_days
+        delayed_end = _checked_age_sum(
+            "constitutional delay end age_days",
+            puberty_age,
+            state.puberty_delay_days,
+        )
+        phenotype_age = _checked_age_sum(
+            "constitutional delay phenotype age_days",
+            puberty_age,
+            state.puberty_delay_days // 2,
+        )
+        recognition_age = _checked_age_sum(
+            "constitutional delay recognition age_days",
+            delayed_end,
+            self.config.recognition_delay_days,
+        )
+        workup_age = _checked_age_sum(
+            "constitutional delay workup age_days",
+            recognition_age,
+            self.config.workup_delay_days,
+        )
+        diagnosis_age = _checked_age_sum(
+            "constitutional delay diagnosis age_days",
+            workup_age,
+            self.config.diagnosis_delay_days,
+        )
         return _ordered_events(
             patient,
             (
@@ -375,6 +451,16 @@ class GrowthHormoneDeficiencyConfig:
         if response_max > 1:
             raise ValueError("treatment response bounds must be in [0, 1]")
         _require_magnitude("bmi_z_max_delta", self.bmi_z_max_delta)
+        _checked_age_sum(
+            "growth hormone deficiency treatment outcome age_days",
+            self.onset_max_age_days,
+            self.phenotype_delay_days,
+            self.recognition_delay_days,
+            self.workup_delay_days,
+            self.diagnosis_delay_days,
+            self.treatment_delay_days,
+            self.response_days,
+        )
 
 
 class GrowthHormoneDeficiencyModule:
@@ -388,18 +474,30 @@ class GrowthHormoneDeficiencyModule:
         self, patient: PatientState, streams: NamedRandomStreams
     ) -> LatentDisorderState:
         disorder = streams.generator(f"disorder.{self.kind.value}")
-        onset = int(
-            disorder.integers(self.config.onset_min_age_days, self.config.onset_max_age_days + 1)
-        )
-        severity = float(disorder.uniform(self.config.severity_min, self.config.severity_max))
-        if severity == 0 or float(disorder.random()) >= self.config.treatment_probability:
-            return LatentDisorderState(self.kind, onset, severity)
-        response = float(
-            disorder.uniform(
-                self.config.treatment_response_min, self.config.treatment_response_max
+        try:
+            onset = int(
+                disorder.integers(
+                    self.config.onset_min_age_days,
+                    self.config.onset_max_age_days + 1,
+                )
             )
-        )
-        treatment_start = onset + self._treatment_start_offset()
+            severity = float(
+                disorder.uniform(self.config.severity_min, self.config.severity_max)
+            )
+            if severity == 0 or float(disorder.random()) >= self.config.treatment_probability:
+                return LatentDisorderState(self.kind, onset, severity)
+            response = float(
+                disorder.uniform(
+                    self.config.treatment_response_min, self.config.treatment_response_max
+                )
+            )
+            treatment_start = _checked_age_sum(
+                "growth hormone deficiency treatment start age_days",
+                onset,
+                self._treatment_start_offset(),
+            )
+        except (ArithmeticError, TypeError, ValueError) as exc:
+            raise ValueError("growth hormone deficiency state cannot be sampled") from exc
         return LatentDisorderState(
             self.kind,
             onset,
@@ -409,7 +507,8 @@ class GrowthHormoneDeficiencyModule:
         )
 
     def _treatment_start_offset(self) -> int:
-        return (
+        return _checked_age_sum(
+            "growth hormone deficiency treatment start offset",
             self.config.phenotype_delay_days
             + self.config.recognition_delay_days
             + self.config.workup_delay_days
@@ -421,8 +520,15 @@ class GrowthHormoneDeficiencyModule:
         assert state.onset_age_days is not None
         if age_days < state.onset_age_days:
             return 0.0
-        fraction = min((age_days - state.onset_age_days) / self.config.progression_days, 1.0)
-        return -state.severity * fraction
+        try:
+            fraction = min(
+                (age_days - state.onset_age_days) / self.config.progression_days,
+                1.0,
+            )
+            delta = -state.severity * fraction
+        except (ArithmeticError, TypeError, ValueError) as exc:
+            raise ValueError("age_days is too large for disorder arithmetic") from exc
+        return _require_finite_real("growth hormone deficiency height z-score delta", delta)
 
     def height_z_delta(self, state: LatentDisorderState, age_days: int) -> float:
         _require_module_state(state, self.kind)
@@ -433,20 +539,31 @@ class GrowthHormoneDeficiencyModule:
         treatment_start = state.treatment_start_age_days
         if treatment_start is None or age <= treatment_start:
             return untreated
-        at_treatment = self._untreated_height_z_delta(state, treatment_start)
-        recovery_fraction = min((age - treatment_start) / self.config.response_days, 1.0)
-        recovered = at_treatment * (1 - state.treatment_response)
-        return at_treatment + (recovered - at_treatment) * recovery_fraction
+        try:
+            at_treatment = self._untreated_height_z_delta(state, treatment_start)
+            recovery_fraction = min(
+                (age - treatment_start) / self.config.response_days,
+                1.0,
+            )
+            recovered = at_treatment * (1 - state.treatment_response)
+            delta = at_treatment + (recovered - at_treatment) * recovery_fraction
+        except (ArithmeticError, TypeError, ValueError) as exc:
+            raise ValueError("age_days is too large for disorder arithmetic") from exc
+        return _require_finite_real("growth hormone deficiency height z-score delta", delta)
 
     def bmi_z_delta(self, state: LatentDisorderState, age_days: int) -> float:
         _require_module_state(state, self.kind)
         _require_age("age_days", age_days)
         if state.severity == 0:
             return 0.0
-        untreated_fraction = min(
-            max(-self.height_z_delta(state, age_days) / state.severity, 0.0), 1.0
-        )
-        return self.config.bmi_z_max_delta * untreated_fraction
+        try:
+            untreated_fraction = min(
+                max(-self.height_z_delta(state, age_days) / state.severity, 0.0), 1.0
+            )
+            delta = self.config.bmi_z_max_delta * untreated_fraction
+        except (ArithmeticError, TypeError, ValueError) as exc:
+            raise ValueError("age_days is too large for disorder arithmetic") from exc
+        return _require_finite_real("growth hormone deficiency BMI z-score delta", delta)
 
     def events(
         self, patient: PatientState, state: LatentDisorderState
@@ -457,10 +574,26 @@ class GrowthHormoneDeficiencyModule:
         onset = state.onset_age_days
         if state.severity == 0:
             return _ordered_events(patient, (("latent_onset", onset),))
-        phenotype_age = onset + self.config.phenotype_delay_days
-        recognition_age = phenotype_age + self.config.recognition_delay_days
-        workup_age = recognition_age + self.config.workup_delay_days
-        diagnosis_age = workup_age + self.config.diagnosis_delay_days
+        phenotype_age = _checked_age_sum(
+            "growth hormone deficiency phenotype age_days",
+            onset,
+            self.config.phenotype_delay_days,
+        )
+        recognition_age = _checked_age_sum(
+            "growth hormone deficiency recognition age_days",
+            phenotype_age,
+            self.config.recognition_delay_days,
+        )
+        workup_age = _checked_age_sum(
+            "growth hormone deficiency workup age_days",
+            recognition_age,
+            self.config.workup_delay_days,
+        )
+        diagnosis_age = _checked_age_sum(
+            "growth hormone deficiency diagnosis age_days",
+            workup_age,
+            self.config.diagnosis_delay_days,
+        )
         schedule: tuple[tuple[str, int], ...] = (
             ("latent_onset", onset),
             ("observable_phenotype", phenotype_age),
@@ -470,9 +603,18 @@ class GrowthHormoneDeficiencyModule:
         )
         if state.treatment_start_age_days is None:
             return _ordered_events(patient, schedule)
-        expected_treatment_start = diagnosis_age + self.config.treatment_delay_days
+        expected_treatment_start = _checked_age_sum(
+            "growth hormone deficiency treatment start age_days",
+            diagnosis_age,
+            self.config.treatment_delay_days,
+        )
         if state.treatment_start_age_days != expected_treatment_start:
             raise ValueError("treatment start does not match the configured causal schedule")
+        response_age = _checked_age_sum(
+            "growth hormone deficiency treatment response age_days",
+            state.treatment_start_age_days,
+            self.config.response_days,
+        )
         return _ordered_events(
             patient,
             schedule
@@ -482,7 +624,7 @@ class GrowthHormoneDeficiencyModule:
                     "treatment_response"
                     if state.treatment_response > 0
                     else "treatment_nonresponse",
-                    state.treatment_start_age_days + self.config.response_days,
+                    response_age,
                 ),
             ),
         )

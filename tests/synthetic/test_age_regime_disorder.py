@@ -36,6 +36,14 @@ class ZeroGenerationZReference(RegimeLinearTestReference):
         return 0.0
 
 
+class HalfGenerationZReference(RegimeLinearTestReference):
+    def generation_z_score(
+        self, metric: str, age_days: int, reference_sex: str, z: float
+    ) -> float:
+        del metric, age_days, reference_sex
+        return z / 2.0
+
+
 class FixedModule:
     module_version = "fixed-test-v1"
 
@@ -94,6 +102,32 @@ def test_generation_hook_records_effective_z_scores_after_disorder_composition()
         for score in (point.length_z, point.height_z, point.weight_z, point.bmi_z):
             if score is not None:
                 assert score == 0.0
+
+
+def test_healthy_age_regime_composition_applies_generation_hook_once() -> None:
+    physiology = AgeRegimeTrajectoryKernel(HalfGenerationZReference())
+    baseline = physiology.generate(PATIENT, AGES, NamedRandomStreams(7, 0))
+    result = AgeRegimeDisorderKernel(physiology, HealthyGrowthModule()).generate(
+        PATIENT, AGES, NamedRandomStreams(7, 0)
+    )
+
+    assert result.physiology == baseline
+
+
+def test_nonhealthy_age_regime_composition_applies_generation_hook_after_effect() -> None:
+    reference = HalfGenerationZReference()
+    physiology = AgeRegimeTrajectoryKernel(reference)
+    baseline = physiology.generate(PATIENT, AGES, NamedRandomStreams(7, 0))
+    module = FamilialShortStatureModule(
+        FamilialShortStatureConfig(severity_min=0.8, severity_max=0.8)
+    )
+    result = AgeRegimeDisorderKernel(physiology, module).generate(
+        PATIENT, AGES, NamedRandomStreams(7, 0)
+    )
+
+    assert result.physiology.points[-1].height_z == pytest.approx(
+        (baseline.points[-1].height_z - 0.8) / 2.0
+    )
 
 
 def test_familial_effect_preserves_identities_across_regimes() -> None:
@@ -249,12 +283,50 @@ def test_composition_rejects_nonfinite_or_nonreal_module_deltas(
     height_delta: object, bmi_delta: object, message: str
 ) -> None:
     module = FixedModule(
-        LatentDisorderState(DisorderKind.HEALTHY, None, 0.0),
+        LatentDisorderState(DisorderKind.FAMILIAL_SHORT_STATURE, 0, 0.8),
         height_delta=height_delta,
         bmi_delta=bmi_delta,
+        kind=DisorderKind.FAMILIAL_SHORT_STATURE,
     )
 
     with pytest.raises(ValueError, match=message):
+        AgeRegimeDisorderKernel(
+            AgeRegimeTrajectoryKernel(RegimeLinearTestReference()), module
+        ).generate(PATIENT, (1000,), NamedRandomStreams(13, 0))
+
+
+@pytest.mark.parametrize("metric", ["height", "bmi"])
+def test_composition_normalizes_module_delta_arithmetic_errors(metric: str) -> None:
+    class ArithmeticDeltaModule(FixedModule):
+        def height_z_delta(self, state: LatentDisorderState, age_days: int) -> object:
+            if metric == "height":
+                raise OverflowError("delta overflow")
+            return super().height_z_delta(state, age_days)
+
+        def bmi_z_delta(self, state: LatentDisorderState, age_days: int) -> object:
+            if metric == "bmi":
+                raise TypeError("delta type failure")
+            return super().bmi_z_delta(state, age_days)
+
+    module = ArithmeticDeltaModule(
+        LatentDisorderState(DisorderKind.FAMILIAL_SHORT_STATURE, 0, 0.8),
+        kind=DisorderKind.FAMILIAL_SHORT_STATURE,
+    )
+
+    with pytest.raises(ValueError, match=f"(?i)module {metric}"):
+        AgeRegimeDisorderKernel(
+            AgeRegimeTrajectoryKernel(RegimeLinearTestReference()), module
+        ).generate(PATIENT, (1000,), NamedRandomStreams(13, 0))
+
+
+@pytest.mark.parametrize("events", [[], "latent_onset"])
+def test_composition_requires_module_events_to_be_a_tuple(events: object) -> None:
+    module = FixedModule(
+        LatentDisorderState(DisorderKind.HEALTHY, None, 0.0),
+        events=events,  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(TypeError, match="tuple"):
         AgeRegimeDisorderKernel(
             AgeRegimeTrajectoryKernel(RegimeLinearTestReference()), module
         ).generate(PATIENT, (1000,), NamedRandomStreams(13, 0))

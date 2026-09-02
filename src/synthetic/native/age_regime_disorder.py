@@ -172,6 +172,12 @@ class AgeRegimeDisorderKernel:
             streams,
             state=adjusted_state,
         )
+        events = self.module.events(patient, disorder_state)
+        if not isinstance(events, tuple):
+            raise TypeError("module events must be a tuple of ClinicalEvent")
+        validate_disorder_events(patient, disorder_state, events)
+        if disorder_state.kind is DisorderKind.HEALTHY:
+            return AgeRegimeDisorderTrajectory(baseline, disorder_state, events)
         if disorder_state.kind is DisorderKind.CONSTITUTIONAL_DELAY:
             physiology = baseline
         else:
@@ -184,8 +190,6 @@ class AgeRegimeDisorderKernel:
             )
             physiology = AgeRegimeTrajectory(tuple(points), adjusted_state)
 
-        events = tuple(self.module.events(patient, disorder_state))
-        validate_disorder_events(patient, disorder_state, events)
         return AgeRegimeDisorderTrajectory(physiology, disorder_state, events)
 
     def _adjusted_state(
@@ -217,7 +221,7 @@ class AgeRegimeDisorderKernel:
                 value = self.module.height_z_delta(state, age_days)
             else:
                 value = self.module.bmi_z_delta(state, age_days)
-        except ArithmeticError as exc:
+        except (ArithmeticError, TypeError) as exc:
             raise ValueError(message) from exc
         return _finite_real(value, message)
 

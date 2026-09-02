@@ -53,8 +53,16 @@ def validate_disorder_events(
     state: LatentDisorderState,
     events: tuple[ClinicalEvent, ...],
 ) -> None:
+    if not isinstance(patient, PatientState):
+        raise TypeError("patient must be a PatientState")
+    if not isinstance(state, LatentDisorderState):
+        raise TypeError("state must be a LatentDisorderState")
+    if not isinstance(events, tuple):
+        raise TypeError("module events must be a tuple of ClinicalEvent")
+
     previous_age = -1
     previous_phase = -1
+    latent_onset_seen = False
     treatment_start_seen = False
     treatment_outcome_seen: str | None = None
     for event in events:
@@ -66,9 +74,24 @@ def validate_disorder_events(
             raise ValueError("module event age must be nonnegative")
         if event.age_days < previous_age:
             raise ValueError("module event ages must be nondecreasing")
+        if not isinstance(event.event_type, str):
+            raise ValueError("module event_type must be a string")  # noqa: TRY004
         phase = _EVENT_PHASE_ORDER.get(event.event_type)
         if phase is None:
             raise ValueError(f"unknown clinical event type: {event.event_type}")
+        if event.code is not None:
+            raise ValueError("module events must have code=None")
+        if type(event.hidden) is not bool:
+            raise ValueError("module event hidden must be a boolean")
+        expected_hidden = event.event_type == "latent_onset"
+        if event.hidden is not expected_hidden:
+            raise ValueError("module event hidden flag is invalid")
+        if event.event_type == "latent_onset":
+            if state.onset_age_days is None or event.age_days != state.onset_age_days:
+                raise ValueError("latent_onset must match state onset age")
+            latent_onset_seen = True
+        elif not latent_onset_seen:
+            raise ValueError("module event schedule must begin with latent_onset")
         if treatment_outcome_seen is not None:
             raise ValueError("treatment outcome events are terminal")
         if phase <= previous_phase:
@@ -125,22 +148,18 @@ class DisorderTrajectoryKernel:
             raise TypeError("module must return a LatentDisorderState")
         if state.kind is not self.module.kind:
             raise ValueError("module state kind must match module kind")
+        events = self.module.events(patient, state)
+        if not isinstance(events, tuple):
+            raise TypeError("module events must be a tuple of ClinicalEvent")
+        validate_disorder_events(patient, state, events)
+        if state.kind is DisorderKind.HEALTHY:
+            return LatentTrajectory(baseline, state, events)
 
         points: list[LatentPoint] = []
         for point in baseline:
             height_z = require_finite_real(
-                point.height_z + require_finite_real(
-                    self.module.height_z_delta(state, point.age_days),
-                    "module height z-score delta must be finite",
-                ),
+                point.height_z + self._module_delta(state, point.age_days, metric="height"),
                 "adjusted height z-score must be finite",
-            )
-            bmi_z = require_finite_real(
-                point.bmi_z + require_finite_real(
-                    self.module.bmi_z_delta(state, point.age_days),
-                    "module BMI z-score delta must be finite",
-                ),
-                "adjusted BMI z-score must be finite",
             )
             height_z = generation_z_score(
                 self.healthy.reference,
@@ -148,6 +167,10 @@ class DisorderTrajectoryKernel:
                 point.age_days,
                 patient.reference_sex,
                 height_z,
+            )
+            bmi_z = require_finite_real(
+                point.bmi_z + self._module_delta(state, point.age_days, metric="BMI"),
+                "adjusted BMI z-score must be finite",
             )
             bmi_z = generation_z_score(
                 self.healthy.reference,
@@ -157,15 +180,13 @@ class DisorderTrajectoryKernel:
                 bmi_z,
             )
             height_cm = require_finite_positive(
-                self.healthy.reference.value(
+                self._reference_value(
                     "height_cm", point.age_days, patient.reference_sex, height_z
                 ),
                 "reference height must be finite and positive",
             )
             bmi = require_finite_positive(
-                self.healthy.reference.value(
-                    "bmi", point.age_days, patient.reference_sex, bmi_z
-                ),
+                self._reference_value("bmi", point.age_days, patient.reference_sex, bmi_z),
                 "reference BMI must be finite and positive",
             )
             points.append(
@@ -180,6 +201,34 @@ class DisorderTrajectoryKernel:
                 )
             )
 
-        events = tuple(self.module.events(patient, state))
-        validate_disorder_events(patient, state, events)
         return LatentTrajectory(tuple(points), state, events)
+
+    def _module_delta(
+        self,
+        state: LatentDisorderState,
+        age_days: int,
+        *,
+        metric: str,
+    ) -> float:
+        message = f"module {metric} z-score delta must be finite"
+        try:
+            value = (
+                self.module.height_z_delta(state, age_days)
+                if metric == "height"
+                else self.module.bmi_z_delta(state, age_days)
+            )
+        except (ArithmeticError, TypeError) as exc:
+            raise ValueError(message) from exc
+        return require_finite_real(value, message)
+
+    def _reference_value(
+        self,
+        metric: str,
+        age_days: int,
+        reference_sex: str,
+        z: float,
+    ) -> float:
+        try:
+            return self.healthy.reference.value(metric, age_days, reference_sex, z)
+        except (ArithmeticError, TypeError) as exc:
+            raise ValueError(f"reference {metric} failed during evaluation") from exc

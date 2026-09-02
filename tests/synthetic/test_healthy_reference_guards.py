@@ -118,3 +118,26 @@ def test_kernel_accepts_nonnegative_integer_requested_age() -> None:
     )
 
     assert [point.age_days for point in points] == [730]
+
+
+def test_kernel_rejects_unrepresentable_huge_requested_age() -> None:
+    with pytest.raises(ValueError, match="ages_days"):
+        HealthyKernel(GuardReference()).generate(
+            _patient(), (10**1000,), NamedRandomStreams(5, 0)
+        )
+
+
+@pytest.mark.parametrize("failure", [OverflowError, TypeError])
+def test_kernel_normalizes_reference_arithmetic_and_type_errors(
+    failure: type[Exception],
+) -> None:
+    class RaisingReference(GuardReference):
+        def value(self, metric: str, age_days: int, reference_sex: str, z: float) -> float:
+            if metric == "height_cm":
+                raise failure("reference failure")
+            return super().value(metric, age_days, reference_sex, z)
+
+    with pytest.raises(ValueError, match="reference"):
+        HealthyKernel(RaisingReference()).generate(
+            _patient(), (730,), NamedRandomStreams(5, 0)
+        )

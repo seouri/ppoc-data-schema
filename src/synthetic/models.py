@@ -2,6 +2,10 @@ import math
 from dataclasses import dataclass
 from enum import Enum
 
+# Shared evaluator age bound. The native clinical modules feed age ranges to
+# NumPy's signed-int64 sampler, whose exclusive upper bound must also fit.
+MAX_AGE_DAYS = (1 << 63) - 2
+
 
 def _is_finite_numeric(value: object) -> bool:
     """Return whether a model numeric is finite without leaking conversion errors."""
@@ -12,6 +16,14 @@ def _is_finite_numeric(value: object) -> bool:
         return math.isfinite(value)
     except (OverflowError, TypeError, ValueError):
         return False
+
+
+def _is_nonnegative_age(value: object) -> bool:
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, int)
+        and 0 <= value <= MAX_AGE_DAYS
+    )
 
 
 @dataclass(frozen=True)
@@ -75,17 +87,14 @@ class LatentDisorderState:
             ("onset_age_days", self.onset_age_days),
             ("treatment_start_age_days", self.treatment_start_age_days),
         ):
-            if age is not None and (isinstance(age, bool) or not isinstance(age, int) or age < 0):
+            if age is not None and not _is_nonnegative_age(age):
                 raise ValueError(f"{name} must be a nonnegative integer or None")
         if (
-            isinstance(self.puberty_delay_days, bool)
-            or not isinstance(self.puberty_delay_days, int)
-            or self.puberty_delay_days < 0
+            not _is_nonnegative_age(self.puberty_delay_days)
         ):
             raise ValueError("puberty_delay_days must be a nonnegative integer")
         if (
-            not isinstance(self.severity, (int, float))
-            or not math.isfinite(self.severity)
+            not _is_finite_numeric(self.severity)
             or self.severity < 0
         ):
             raise ValueError("severity must be finite and nonnegative")
@@ -96,8 +105,7 @@ class LatentDisorderState:
         ):
             raise ValueError("treatment must not precede onset")
         if (
-            not isinstance(self.treatment_response, (int, float))
-            or not math.isfinite(self.treatment_response)
+            not _is_finite_numeric(self.treatment_response)
             or not 0 <= self.treatment_response <= 1
         ):
             raise ValueError("treatment_response must be finite and in [0, 1]")
@@ -112,6 +120,33 @@ class LatentTrajectory:
     points: tuple[LatentPoint, ...]
     disorder: LatentDisorderState
     events: tuple[ClinicalEvent, ...]
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.points, tuple)
+            or not self.points
+            or not all(isinstance(point, LatentPoint) for point in self.points)
+        ):
+            raise ValueError("points must be a nonempty tuple of LatentPoint")
+        if not isinstance(self.disorder, LatentDisorderState):
+            raise TypeError("disorder must be a LatentDisorderState")
+        if not isinstance(self.events, tuple):
+            raise ValueError(  # noqa: TRY004
+                "events must be a tuple of ClinicalEvent"
+            )
+        if not all(isinstance(event, ClinicalEvent) for event in self.events):
+            raise ValueError("events must be a tuple of ClinicalEvent")
+
+        patient_id = self.points[0].patient_id
+        if any(point.patient_id != patient_id for point in self.points):
+            raise ValueError("points must have one patient")
+        if any(event.patient_id != patient_id for event in self.events):
+            raise ValueError("events must have one patient")
+        if any(
+            previous.age_days >= current.age_days
+            for previous, current in zip(self.points, self.points[1:])
+        ):
+            raise ValueError("points must be strictly increasing by age")
 
 
 class GrowthRegime(str, Enum):

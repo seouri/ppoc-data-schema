@@ -54,6 +54,7 @@ def test_shared_event_validator_keeps_terminal_treatment_rules() -> None:
         treatment_start_age_days=300, treatment_response=0.6,
     )
     events = (
+        ClinicalEvent("syn-patient-a", 100, "latent_onset", None, True),
         ClinicalEvent("syn-patient-a", 300, "treatment_start", None, False),
         ClinicalEvent("syn-patient-a", 400, "treatment_response", None, False),
     )
