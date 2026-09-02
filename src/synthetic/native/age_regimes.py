@@ -340,18 +340,37 @@ class AgeRegimeTrajectoryKernel:
         residual = streams.generator("regime.residual")
         head = streams.generator("regime.head")
 
-        puberty_height_spurt_z = float(
-            puberty.uniform(
-                self.config.puberty_height_spurt_min,
-                self.config.puberty_height_spurt_max,
+        try:
+            puberty_height_spurt_z = float(
+                puberty.uniform(
+                    self.config.puberty_height_spurt_min,
+                    self.config.puberty_height_spurt_max,
+                )
             )
-        )
-        puberty_bmi_shift_z = float(
-            puberty.uniform(
-                self.config.puberty_bmi_shift_min,
-                self.config.puberty_bmi_shift_max,
+            puberty_bmi_shift_z = float(
+                puberty.uniform(
+                    self.config.puberty_bmi_shift_min,
+                    self.config.puberty_bmi_shift_max,
+                )
             )
-        )
+            puberty_onset_age_days = round(
+                float(
+                    puberty.uniform(
+                        self.config.puberty_min_age_days,
+                        self.config.puberty_max_age_days,
+                    )
+                )
+            )
+            puberty_tempo_days = round(
+                float(
+                    puberty.uniform(
+                        self.config.puberty_tempo_min_days,
+                        self.config.puberty_tempo_max_days,
+                    )
+                )
+            )
+        except (ArithmeticError, TypeError, ValueError) as exc:
+            raise ValueError("puberty parameters cannot be sampled") from exc
         state = AgeRegimeState(
             module_version=self.config.module_version,
             birth_length_z=float(birth.normal(0.0, 0.8)),
@@ -359,22 +378,8 @@ class AgeRegimeTrajectoryKernel:
             head_circumference_z=float(head.normal(0.0, 0.8)),
             childhood_height_z=float(childhood.normal(0.0, 0.8)),
             childhood_bmi_z=float(childhood.normal(0.0, 0.8)),
-            puberty_onset_age_days=round(
-                float(
-                    puberty.uniform(
-                        self.config.puberty_min_age_days,
-                        self.config.puberty_max_age_days,
-                    )
-                )
-            ),
-            puberty_tempo_days=round(
-                float(
-                    puberty.uniform(
-                        self.config.puberty_tempo_min_days,
-                        self.config.puberty_tempo_max_days,
-                    )
-                )
-            ),
+            puberty_onset_age_days=puberty_onset_age_days,
+            puberty_tempo_days=puberty_tempo_days,
             puberty_height_spurt_z=puberty_height_spurt_z,
             puberty_bmi_shift_z=puberty_bmi_shift_z,
         )
@@ -402,7 +407,10 @@ class AgeRegimeTrajectoryKernel:
         mass_residual: float,
         head,
     ) -> dict[str, float | None]:
-        catch_up_fraction = max(0.0, 1.0 - age_days / self.config.catch_up_days)
+        try:
+            catch_up_fraction = max(0.0, 1.0 - age_days / self.config.catch_up_days)
+        except (ArithmeticError, TypeError) as exc:
+            raise ValueError("age_days is too large for age-regime arithmetic") from exc
         length_z = (
             state.childhood_height_z
             + catch_up_fraction * (state.birth_length_z - state.childhood_height_z)

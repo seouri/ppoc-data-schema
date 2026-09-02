@@ -15,6 +15,12 @@ The changes cover oversized numeric inputs, optional head-circumference availabi
 - `src/synthetic/golden_trajectories.py` keeps its evaluator-only identity contract aligned with the optional post-decay head channel; post-transition head data remains prohibited.
 - The observation-generation hostile-input regression now bypasses the model invariant explicitly so it continues to exercise the downstream boundary with malformed latent data.
 
+## Follow-up: oversized-age hardening
+
+Two additional important gaps were fixed on top of the original change. The pre-transition catch-up fraction now converts oversized integer-division failures to the age-regime arithmetic `ValueError` contract. Puberty state sampling now wraps arithmetic, type, and range failures from the random uniform draws, so huge but structurally valid integer puberty bounds cannot leak a NumPy `OverflowError`.
+
+Focused red regressions first reproduced the raw `OverflowError` from both the catch-up division and `Generator.uniform`. The corresponding green regressions cover a valid huge-age pre-transition configuration with an explicit state and huge puberty bounds with ordinary generation; both now fail closed with `ValueError` while default configurations remain unchanged.
+
 ## TDD evidence
 
 New regressions were added before the corresponding production changes. The initial red run reproduced ten missing guards across model/config/kernel tests. The infancy regression initially failed to raise; it passed after adding the model invariant. The golden trajectory suite initially reported six identity failures because its evaluator still required head circumference in a post-decay transition point; the evaluator-only check was updated and those cases pass.
@@ -33,6 +39,15 @@ validated 8 resources in datapackage.json
 
 git diff --check
 clean
+```
+
+The follow-up verification reran the same focused/downstream matrix with the two additional regressions:
+
+```text
+210 passed in 2.50s
+All checks passed!
+validated 8 resources in datapackage.json
+git diff --check: clean
 ```
 
 No visible export/resource path, schema contract, roadmap, or documentation claim was changed.

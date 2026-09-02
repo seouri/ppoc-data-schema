@@ -3,7 +3,7 @@ import math
 
 import pytest
 
-from synthetic.models import GrowthRegime, PatientState
+from synthetic.models import AgeRegimeState, GrowthRegime, PatientState
 from synthetic.native.age_regimes import AgeRegimeConfig, AgeRegimeTrajectoryKernel
 from synthetic.randomness import NamedRandomStreams
 
@@ -325,6 +325,65 @@ def test_kernel_rejects_age_integers_that_cannot_be_represented_as_float() -> No
     with pytest.raises(ValueError, match="age_days"):
         AgeRegimeTrajectoryKernel(config=config, reference=AgeAgnosticReference()).generate(
             PATIENT, (huge,), NamedRandomStreams(5, 0)
+        )
+
+
+def test_kernel_normalizes_huge_pre_transition_catch_up_arithmetic() -> None:
+    class AgeAgnosticReference:
+        reference_id = "age-agnostic-reference-v1"
+
+        def value(
+            self, metric: str, age_days: int, reference_sex: str, z: float
+        ) -> float:
+            del age_days, reference_sex, z
+            return {
+                "length_cm": 90.7,
+                "weight_kg": 12.0,
+                "head_circumference_cm": 47.0,
+                "height_cm": 90.0,
+                "bmi": 12.0 / 0.9**2,
+            }[metric]
+
+    huge = 10**1000
+    config = AgeRegimeConfig(
+        transition_age_days=huge + 1,
+        transition_window_days=1,
+        maximum_age_days=huge + 5,
+        puberty_min_age_days=huge + 3,
+        puberty_max_age_days=huge + 3,
+        puberty_tempo_min_days=1,
+        puberty_tempo_max_days=1,
+    )
+    state = AgeRegimeState(
+        config.module_version,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        huge + 3,
+        1,
+        0.0,
+        0.0,
+    )
+
+    with pytest.raises(ValueError, match="age_days"):
+        AgeRegimeTrajectoryKernel(config=config, reference=AgeAgnosticReference()).generate(
+            PATIENT, (huge - 1,), NamedRandomStreams(5, 0), state=state
+        )
+
+
+def test_kernel_normalizes_huge_puberty_sampling_bounds() -> None:
+    huge = 10**1000
+    config = AgeRegimeConfig(
+        maximum_age_days=huge + 1_460,
+        puberty_min_age_days=huge,
+        puberty_max_age_days=huge,
+    )
+
+    with pytest.raises(ValueError, match="puberty"):
+        AgeRegimeTrajectoryKernel(RegimeReference(), config).generate(
+            PATIENT, (0,), NamedRandomStreams(5, 0)
         )
 
 
