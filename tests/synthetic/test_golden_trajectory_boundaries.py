@@ -108,6 +108,7 @@ _FORBIDDEN_CALL_LEAVES = {
     "write_synthetic_descriptor",
     "write_text",
 }
+_DYNAMIC_IMPORT_CALLS = {"__import__", "importlib.import_module"}
 
 
 def _module_context(path: Path) -> tuple[str, bool]:
@@ -131,6 +132,46 @@ def _import_from_base(node: ast.ImportFrom, module_name: str, *, is_package: boo
     return ".".join(parts)
 
 
+def _bindings(tree: ast.AST, module_name: str, *, is_package: bool) -> dict[str, str]:
+    bindings: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                bindings[alias.asname or alias.name.split(".", maxsplit=1)[0]] = alias.name
+        elif isinstance(node, ast.ImportFrom):
+            base = _import_from_base(node, module_name, is_package=is_package)
+            if base:
+                for alias in node.names:
+                    bindings[alias.asname or alias.name] = f"{base}.{alias.name}"
+    return bindings
+
+
+def _dynamic_imports(tree: ast.AST, module_name: str, *, is_package: bool) -> set[str]:
+    bindings = _bindings(tree, module_name, is_package=is_package)
+    imported: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        call_name = _qualified_name(node.func)
+        if call_name is None:
+            continue
+        root, dot, suffix = call_name.partition(".")
+        resolved_name = f"{bindings.get(root, root)}{dot}{suffix}"
+        if resolved_name not in _DYNAMIC_IMPORT_CALLS:
+            continue
+        argument = (
+            node.args[0]
+            if node.args
+            else next(
+                (keyword.value for keyword in node.keywords if keyword.arg == "name"),
+                None,
+            )
+        )
+        if isinstance(argument, ast.Constant) and isinstance(argument.value, str):
+            imported.add(argument.value)
+    return imported
+
+
 def _imports(tree: ast.AST, module_name: str, *, is_package: bool) -> set[str]:
     imported: set[str] = set()
     for node in ast.walk(tree):
@@ -141,7 +182,7 @@ def _imports(tree: ast.AST, module_name: str, *, is_package: bool) -> set[str]:
             if base:
                 imported.add(base)
                 imported.update(f"{base}.{alias.name}" for alias in node.names)
-    return imported
+    return imported | _dynamic_imports(tree, module_name, is_package=is_package)
 
 
 def _import_bases(tree: ast.AST, module_name: str, *, is_package: bool) -> set[str]:
@@ -153,7 +194,7 @@ def _import_bases(tree: ast.AST, module_name: str, *, is_package: bool) -> set[s
             base = _import_from_base(node, module_name, is_package=is_package)
             if base:
                 imported.add(base)
-    return imported
+    return imported | _dynamic_imports(tree, module_name, is_package=is_package)
 
 
 def _qualified_name(node: ast.expr) -> str | None:
@@ -277,6 +318,44 @@ def test_import_scan_detects_absolute_and_relative_golden_imports(
         or imported.startswith("synthetic.golden_trajectories.")
         for imported in imports
     )
+
+
+@pytest.mark.parametrize(
+    "source",
+    (
+        "import importlib as loader\nloader.import_module('synthetic.golden_trajectories')",
+        "from importlib import import_module as load\nload(name='synthetic.golden_trajectories')",
+        "__import__(name='synthetic.golden_trajectories')",
+    ),
+)
+def test_import_scan_detects_literal_dynamic_golden_import_aliases(source: str) -> None:
+    """Catches dynamic literal consumers hidden behind module or function aliases."""
+    imports = _imports(
+        ast.parse(source),
+        "synthetic.generate",
+        is_package=False,
+    )
+
+    assert "synthetic.golden_trajectories" in imports
+
+
+@pytest.mark.parametrize(
+    "source",
+    (
+        "import importlib as loader\nloader.import_module('subprocess')",
+        "from importlib import import_module as load\nload(name='subprocess')",
+        "__import__('subprocess')",
+    ),
+)
+def test_import_scan_detects_literal_forbidden_runtime_aliases(source: str) -> None:
+    """Catches forbidden runtime imports hidden behind dynamic literal aliases."""
+    imports = _import_bases(
+        ast.parse(source),
+        "synthetic.golden_trajectories",
+        is_package=False,
+    )
+
+    assert "subprocess" in imports
 
 
 def test_golden_module_has_no_file_package_engine_or_output_lifecycle_calls() -> None:
