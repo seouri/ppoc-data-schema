@@ -152,3 +152,20 @@ def test_generation_z_score_rejects_nonfinite_nonreal_hook_results(
         HealthyKernel(HookReference(hook_result)).generate(
             PATIENT, (730,), NamedRandomStreams(5, 0)
         )
+
+
+@pytest.mark.parametrize("failure", [OverflowError, TypeError])
+def test_generation_z_score_normalizes_hook_exceptions(
+    failure: type[Exception],
+) -> None:
+    class RaisingHookReference(PhysicalOutputReference):
+        def generation_z_score(
+            self, metric: str, age_days: int, reference_sex: str, z: float
+        ) -> object:
+            del metric, age_days, reference_sex, z
+            raise failure("hook failure")
+
+    with pytest.raises(ValueError, match="generation_z_score"):
+        HealthyKernel(RaisingHookReference()).generate(
+            PATIENT, (730,), NamedRandomStreams(5, 0)
+        )

@@ -21,6 +21,12 @@ Two additional important gaps were fixed on top of the original change. The pre-
 
 Focused red regressions first reproduced the raw `OverflowError` from both the catch-up division and `Generator.uniform`. The corresponding green regressions cover a valid huge-age pre-transition configuration with an explicit state and huge puberty bounds with ordinary generation; both now fail closed with `ValueError` while default configurations remain unchanged.
 
+## Final velocity-gap hardening
+
+The velocity annualization now guards the age-gap scale calculation. A focused `(H, 2H)` regression with `H = 10**1000` first reproduced the raw integer-to-float `OverflowError`; it now fails closed with the documented finite-velocity `ValueError` while ordinary velocity arithmetic remains unchanged.
+
+The shared `generation_z_score` helper now likewise normalizes custom-hook `ArithmeticError` and `TypeError` failures to a fixed `ValueError`. A pair of downstream regressions first reproduced the leaked exceptions and now pass without changing the existing `KeyError` or domain-`ValueError` paths.
+
 ## TDD evidence
 
 New regressions were added before the corresponding production changes. The initial red run reproduced ten missing guards across model/config/kernel tests. The infancy regression initially failed to raise; it passed after adding the model invariant. The golden trajectory suite initially reported six identity failures because its evaluator still required head circumference in a post-decay transition point; the evaluator-only check was updated and those cases pass.
@@ -49,5 +55,9 @@ All checks passed!
 validated 8 resources in datapackage.json
 git diff --check: clean
 ```
+
+The final focused/downstream verification, including the velocity-gap regression, reported `211 passed in 2.44s`; Ruff, schema validation, and `git diff --check` remained clean.
+
+The final verification including the hook regressions reported `254 passed in 2.50s`; Ruff, schema validation, and `git diff --check` remained clean.
 
 No visible export/resource path, schema contract, roadmap, or documentation claim was changed.

@@ -39,7 +39,10 @@ def generation_z_score(
         return z
     if not callable(hook):
         raise TypeError("generation_z_score hook must be callable")
-    result = hook(metric, age_days, reference_sex, z)
+    try:
+        result = hook(metric, age_days, reference_sex, z)
+    except (ArithmeticError, TypeError) as exc:
+        raise ValueError("generation_z_score hook failed during evaluation") from exc
     if isinstance(result, bool) or not isinstance(result, Real):
         raise ValueError(  # noqa: TRY004
             "generation_z_score hook must return a finite real score"

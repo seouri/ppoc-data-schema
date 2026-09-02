@@ -387,6 +387,47 @@ def test_kernel_normalizes_huge_puberty_sampling_bounds() -> None:
         )
 
 
+def test_kernel_normalizes_huge_velocity_age_gap_arithmetic() -> None:
+    class AgeAgnosticReference:
+        reference_id = "age-agnostic-reference-v1"
+
+        def value(
+            self, metric: str, age_days: int, reference_sex: str, z: float
+        ) -> float:
+            del age_days, reference_sex, z
+            return {
+                "length_cm": 90.7,
+                "weight_kg": 12.0,
+                "head_circumference_cm": 47.0,
+                "height_cm": 90.0,
+                "bmi": 12.0 / 0.9**2,
+            }[metric]
+
+    huge = 10**1000
+    config = AgeRegimeConfig(
+        maximum_age_days=3 * huge + 1_460,
+        puberty_min_age_days=3 * huge,
+        puberty_max_age_days=3 * huge,
+    )
+    state = AgeRegimeState(
+        config.module_version,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        3 * huge,
+        900,
+        0.0,
+        0.0,
+    )
+
+    with pytest.raises(ValueError, match="velocit|age"):
+        AgeRegimeTrajectoryKernel(config=config, reference=AgeAgnosticReference()).generate(
+            PATIENT, (huge, 2 * huge), NamedRandomStreams(5, 0), state=state
+        )
+
+
 def test_kernel_omits_head_circumference_after_configured_decay() -> None:
     class DecayingHeadReference(RegimeReference):
         def value(self, metric: str, age_days: int, reference_sex: str, z: float) -> float:

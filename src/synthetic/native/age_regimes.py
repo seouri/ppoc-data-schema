@@ -258,9 +258,12 @@ class AgeRegimeTrajectoryKernel:
             height_velocity: float | None = None
             weight_velocity: float | None = None
             if previous_age is not None:
-                scale = 365.25 / (age_days - previous_age)
-                height_velocity = (comparable_size - previous_size) * scale
-                weight_velocity = (weight_kg - previous_weight) * scale
+                try:
+                    scale = 365.25 / (age_days - previous_age)
+                    height_velocity = (comparable_size - previous_size) * scale
+                    weight_velocity = (weight_kg - previous_weight) * scale
+                except (ArithmeticError, TypeError) as exc:
+                    raise ValueError("derived velocities must be finite") from exc
                 if not math.isfinite(height_velocity) or not math.isfinite(weight_velocity):
                     raise ValueError("derived velocities must be finite")
 
