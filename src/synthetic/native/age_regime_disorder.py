@@ -255,7 +255,7 @@ class AgeRegimeDisorderKernel:
         message = f"adjusted {metric} z-score must be finite"
         try:
             value = baseline + delta
-        except ArithmeticError as exc:
+        except (ArithmeticError, TypeError) as exc:
             raise ValueError(message) from exc
         return _finite_real(value, message)
 
@@ -276,7 +276,7 @@ class AgeRegimeDisorderKernel:
                 patient.reference_sex,
                 z,
             )
-        except ArithmeticError as exc:
+        except (ArithmeticError, TypeError) as exc:
             raise ValueError(message) from exc
         return _positive_real(value, message)
 

@@ -443,6 +443,23 @@ def test_composition_rejects_nonphysical_adjusted_reference_values(
         )
 
 
+def test_composition_normalizes_adjusted_reference_type_errors() -> None:
+    class TypeErrorAdjustedReference(RegimeLinearTestReference):
+        def value(self, metric: str, age_days: int, reference_sex: str, z: float) -> float:
+            if metric == "height_cm" and z < -5.0:
+                raise TypeError("adjusted reference type failure")
+            return super().value(metric, age_days, reference_sex, z)
+
+    module = FamilialShortStatureModule(
+        FamilialShortStatureConfig(severity_min=10.0, severity_max=10.0)
+    )
+
+    with pytest.raises(ValueError, match="reference height.*finite and positive"):
+        AgeRegimeDisorderKernel(
+            AgeRegimeTrajectoryKernel(TypeErrorAdjustedReference()), module
+        ).generate(PATIENT, (1000,), NamedRandomStreams(17, 0))
+
+
 def test_composition_converts_adjusted_weight_overflow_to_value_error() -> None:
     class ExtremeAdjustedReference(RegimeLinearTestReference):
         def value(self, metric: str, age_days: int, reference_sex: str, z: float) -> float:
