@@ -2,6 +2,8 @@ import csv
 import hashlib
 import io
 import math
+import os
+import stat
 from bisect import bisect_left
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -56,8 +58,11 @@ class LmsRow:
         if not isinstance(self.age_days, int) or isinstance(self.age_days, bool) or self.age_days < 0:
             raise ValueError("age_days must be a nonnegative integer")
         for name in ("l", "m", "s"):
+            raw = getattr(self, name)
+            if isinstance(raw, bool):
+                raise ValueError(f"{name} must be a finite float")  # noqa: TRY004
             try:
-                number = float(getattr(self, name))
+                number = float(raw)
             except (TypeError, ValueError) as exc:
                 raise ValueError(f"{name} must be a finite float") from exc
             if not math.isfinite(number):
@@ -145,7 +150,7 @@ class LmsGrowthReference:
                 raise ValueError("LMS result is not finite and positive") from exc
         else:
             base = 1 + lms.l * lms.s * score
-            if base <= 0:
+            if not math.isfinite(base) or base <= 0:
                 raise ValueError("LMS base must be positive")
             try:
                 result = lms.m * math.pow(base, 1 / lms.l)
@@ -159,7 +164,7 @@ class LmsGrowthReference:
     def from_csv(
         cls, path: Path, reference_id: str, expected_sha256: str | None = None
     ) -> "LmsGrowthReference":
-        source = path.read_bytes()
+        source = _read_regular_source(path)
         digest = hashlib.sha256(source).hexdigest()
         if expected_sha256 is not None:
             _validate_sha256(expected_sha256, "expected_sha256")
@@ -167,7 +172,11 @@ class LmsGrowthReference:
                 raise ValueError("SHA-256 hash does not match expected value")
         columns = ("metric", "age_days", "reference_sex", "l", "m", "s")
         rows: list[LmsRow] = []
-        with io.StringIO(source.decode("utf-8"), newline="") as handle:
+        try:
+            text = source.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise ValueError("LMS source file must be valid UTF-8") from exc
+        with io.StringIO(text, newline="") as handle:
             reader = csv.DictReader(handle)
             if reader.fieldnames is None or set(reader.fieldnames) != set(columns) or len(reader.fieldnames) != len(columns):
                 raise ValueError("CSV columns must be exactly metric, age_days, reference_sex, l, m, s")
@@ -179,3 +188,46 @@ class LmsGrowthReference:
                 except (KeyError, TypeError, ValueError) as exc:
                     raise ValueError("invalid typed LMS row") from exc
         return cls(reference_id, rows, source_sha256=digest)
+
+
+def _read_regular_source(path: Path) -> bytes:
+    """Read one regular, non-symlink source file without exposing filesystem errors."""
+
+    if not isinstance(path, Path):
+        raise ValueError("LMS source file must be a Path")  # noqa: TRY004
+    try:
+        metadata = path.lstat()
+    except OSError:
+        raise ValueError("LMS source file is unavailable") from None
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+        raise ValueError("LMS source file must be a regular non-symlink file")
+
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_NONBLOCK", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_CLOEXEC", 0)
+    )
+    try:
+        descriptor = os.open(path, flags)
+    except OSError:
+        raise ValueError("LMS source file is unavailable") from None
+    try:
+        try:
+            opened = os.fstat(descriptor)
+        except OSError:
+            raise ValueError("LMS source file is unavailable") from None
+        if not stat.S_ISREG(opened.st_mode):
+            raise ValueError("LMS source file must be a regular non-symlink file")
+        chunks: list[bytes] = []
+        while True:
+            try:
+                chunk = os.read(descriptor, 1024 * 1024)
+            except OSError:
+                raise ValueError("LMS source file is unavailable") from None
+            if not chunk:
+                break
+            chunks.append(chunk)
+        return b"".join(chunks)
+    finally:
+        os.close(descriptor)

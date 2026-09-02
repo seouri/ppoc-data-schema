@@ -1,6 +1,8 @@
 import hashlib
-import io
 import math
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -106,27 +108,26 @@ def test_lms_reference_hashes_and_parses_the_same_single_read(
         "metric,age_days,reference_sex,l,m,s\n"
         "height_cm,730,F,1,999,0.1\n"
     )
+    approved_path = tmp_path / "approved.csv"
+    path.write_text(replacement, encoding="utf-8", newline="")
+    approved_path.write_bytes(approved)
     reads: list[str] = []
+    real_open = os.open
 
-    def read_bytes_once(self: Path) -> bytes:
-        assert self == path
-        reads.append("bytes")
-        return approved
+    def open_approved(source, flags, *args, **kwargs):
+        if Path(source) == path:
+            reads.append("path-open")
+            return real_open(approved_path, flags, *args, **kwargs)
+        return real_open(source, flags, *args, **kwargs)
 
-    def reopen_replacement(self: Path, *args, **kwargs):
-        assert self == path
-        reads.append("text")
-        return io.StringIO(replacement)
-
-    monkeypatch.setattr(Path, "read_bytes", read_bytes_once)
-    monkeypatch.setattr(Path, "open", reopen_replacement)
+    monkeypatch.setattr(os, "open", open_approved)
 
     digest = hashlib.sha256(approved).hexdigest()
     reference = LmsGrowthReference.from_csv(
         path, reference_id="public-growth-v1", expected_sha256=digest
     )
 
-    assert reads == ["bytes"]
+    assert reads == ["path-open"]
     assert reference.source_sha256 == digest
     assert reference.value("height_cm", 730, "F", 0.0) == pytest.approx(100.0)
 
@@ -146,3 +147,104 @@ def test_lms_reference_rejects_malformed_or_uppercase_source_hash() -> None:
         LmsGrowthReference("public-growth-v1", rows=(row,), source_sha256="abc")
     with pytest.raises(ValueError, match="SHA-256"):
         LmsGrowthReference("public-growth-v1", rows=(row,), source_sha256="A" * 64)
+
+
+def _write_reference_csv(path: Path) -> None:
+    path.write_bytes(
+        b"metric,age_days,reference_sex,l,m,s\n"
+        b"height_cm,730,F,1,100,0.1\n"
+    )
+
+
+def test_lms_reference_rejects_symlink_source_without_following_it(tmp_path: Path) -> None:
+    target = tmp_path / "growth.csv"
+    link = tmp_path / "growth-link.csv"
+    _write_reference_csv(target)
+    link.symlink_to(target)
+
+    with pytest.raises(ValueError, match="regular") as error:
+        LmsGrowthReference.from_csv(link, reference_id="public-growth-v1")
+
+    assert str(link) not in str(error.value)
+
+
+def test_lms_reference_rejects_directory_source_without_path_in_error(tmp_path: Path) -> None:
+    directory = tmp_path / "growth-directory"
+    directory.mkdir()
+
+    with pytest.raises(ValueError, match="regular") as error:
+        LmsGrowthReference.from_csv(directory, reference_id="public-growth-v1")
+
+    assert str(directory) not in str(error.value)
+
+
+def test_lms_reference_rejects_missing_source_without_path_in_error(tmp_path: Path) -> None:
+    missing = tmp_path / "missing.csv"
+
+    with pytest.raises(ValueError, match="unavailable") as error:
+        LmsGrowthReference.from_csv(missing, reference_id="public-growth-v1")
+
+    assert str(missing) not in str(error.value)
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFO creation is unavailable")
+def test_lms_reference_rejects_fifo_without_blocking(tmp_path: Path) -> None:
+    fifo = tmp_path / "growth.fifo"
+    os.mkfifo(fifo)
+    root = Path(__file__).resolve().parents[2]
+    script = """
+from pathlib import Path
+import sys
+
+from synthetic.references import LmsGrowthReference
+
+try:
+    LmsGrowthReference.from_csv(Path(sys.argv[1]), reference_id="public-growth-v1")
+except ValueError as error:
+    if "regular" not in str(error) or sys.argv[1] in str(error):
+        raise
+    raise SystemExit(0)
+raise SystemExit("FIFO was unexpectedly accepted")
+"""
+
+    result = subprocess.run(
+        [sys.executable, "-c", script, str(fifo)],
+        cwd=root,
+        env=os.environ | {"PYTHONPATH": str(root / "src")},
+        capture_output=True,
+        text=True,
+        timeout=2,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_lms_reference_normalizes_invalid_utf8(tmp_path: Path) -> None:
+    path = tmp_path / "growth.csv"
+    path.write_bytes(
+        b"metric,age_days,reference_sex,l,m,s\n"
+        b"height_cm,730,F,1,100,\xff\n"
+    )
+
+    with pytest.raises(ValueError, match="UTF-8"):
+        LmsGrowthReference.from_csv(path, reference_id="public-growth-v1")
+
+
+@pytest.mark.parametrize("field", ["l", "m", "s"])
+def test_lms_row_rejects_boolean_parameters(field: str) -> None:
+    parameters = {"l": 1.0, "m": 100.0, "s": 0.1}
+    parameters[field] = True
+
+    with pytest.raises(ValueError, match=field):
+        LmsRow("height_cm", 730, "F", **parameters)
+
+
+def test_lms_reference_rejects_nonfinite_base_before_exponentiation() -> None:
+    reference = LmsGrowthReference(
+        "public-growth-v1",
+        rows=(LmsRow("height_cm", 730, "F", 1e308, 100.0, 1e308),),
+    )
+
+    with pytest.raises(ValueError, match="base"):
+        reference.value("height_cm", 730, "F", 1.0)
