@@ -79,7 +79,7 @@ def test_guide_preserves_truth_boundary_and_explicit_deferrals() -> None:
         "model",
         "synthea",
         "pair-aware exact-schema export",
-        "next gate",
+        "documented below",
         "optional later adapter",
         "prevalence",
         "demographic",

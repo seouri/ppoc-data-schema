@@ -168,7 +168,7 @@ The full repository suite, Ruff, schema validation, lock check, and whitespace c
 
 ## Documentation and roadmap
 
-`docs/synthetic-generator.md` gains an “In-memory paired counterfactual EHR worlds” section with a short usage example, base-compatible descriptor caveat, validation report semantics, visible change matrix, hidden-truth boundary, and failure behavior. `README.md` gains one roadmap paragraph after the ancillary-bundle section. Both documents state that this is a synthetic-only evaluator seam, not prevalence/demographic evidence, privacy/non-matchability evidence, clinical validity, task utility, package/release evidence, or Synthea conformance. They identify pair-aware exact-schema export as the next package gate and Synthea as an optional later adapter.
+`docs/synthetic-generator.md` gains an “In-memory paired counterfactual EHR worlds” section with a short usage example, base-compatible descriptor caveat, validation report semantics, visible change matrix, hidden-truth boundary, and failure behavior. `README.md` gains one roadmap paragraph after the ancillary-bundle section. Both documents state that this is a synthetic-only evaluator seam, not prevalence/demographic evidence, privacy/non-matchability evidence, clinical validity, task utility, package/release evidence, or Synthea conformance. They identify the separately documented pair-aware exact-schema export bridge and Synthea as an optional later adapter.
 
 ## Acceptance criteria
 

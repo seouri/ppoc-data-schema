@@ -59,7 +59,7 @@
 
 - [x] Write failing documentation assertions for the exact public API, loaded-descriptor/base-compatible caveat, deterministic shared streams, seven report checks, resource-level matrix, redaction, fixed failure boundary, and no-export/no-real/Synthea deferrals.
 - [x] Add a concise usage section showing assembly from an existing `CounterfactualPair`, shared `SyntheticDemographics`/`ObservationPolicy`, loaded descriptor, GHD policy, and aggregate validation. Do not publish private truth or a package-writing recipe.
-- [x] State that pair-aware exact-schema export is a later gate and Synthea is an optional adapter only after conformance; retain existing prevalence, calibration, held-out, privacy, clinical, utility, release, and non-matchability boundaries.
+- [x] State that pair-aware exact-schema export is a separate development-only bridge and Synthea is an optional adapter only after conformance; retain existing prevalence, calibration, held-out, privacy, clinical, utility, release, and non-matchability boundaries.
 - [x] Run documentation tests, full Ruff, schema check, lock check, and whitespace checks; commit `docs: document paired counterfactual EHR worlds`.
 
 ### Task 4: Review, verify, merge, and push
@@ -84,4 +84,4 @@
 
 ## Deferred roadmap gates
 
-This slice does not satisfy pair-aware package export, authoritative augmented derivation, prevalence or demographic calibration, held-out fidelity, temporal drift, task utility, clinical validity, privacy/non-matchability, release authorization, or Synthea conformance. The next implementation item is a separately designed pair-aware exact-schema package export gate; an optional Synthea adapter remains downstream of the native conformance suite.
+This slice does not satisfy authoritative augmented derivation, prevalence or demographic calibration, held-out fidelity, temporal drift, task utility, clinical validity, privacy/non-matchability, release authorization, or Synthea conformance. Pair-aware exact-schema package export is implemented as a separate development-only bridge; an optional Synthea adapter remains downstream of the native conformance suite.

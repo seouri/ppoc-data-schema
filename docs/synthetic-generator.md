@@ -498,7 +498,7 @@ The fixed named streams are `observation.window`, `observation.censoring`, `obse
 
 `validate_observation_frame` uses seven fixed aggregate checks: patient identity, effective window, visit references, measurements and derived BMI identity, hidden events, causal event order, and minimum evidence. Reports contain only check names, `PASS`/`FAIL`/`UNEVALUABLE` statuses, fixed reason codes, and status counts. Malformed or missing private evidence is `UNEVALUABLE`, while a typed visible invariant violation is `FAIL`. The report never includes patient IDs, ages tied to a patient, measurement values, source-event payloads, latent values, error deltas, hashes, seeds, paths, or stream identities.
 
-The first observation slice supports routine visit selection, explicit administrative/lost-to-follow-up windows, independent anthropometric availability, additive/rounding error, derived BMI, and recognition/recorded-event projection. Utilization-intensity and measurement-error-removal counterfactuals remain explicitly deferred until observation/resource descendants and their reviewed causal matrices exist. Other disorder-specific ancillary pathways and bundle/package integration, prevalence/demographic calibration, held-out validation, privacy auditing, and an optional Synthea adapter remain separate roadmap gates; the evaluator-only GHD projection is documented below.
+The first observation slice supports routine visit selection, explicit administrative/lost-to-follow-up windows, independent anthropometric availability, additive/rounding error, derived BMI, and recognition/recorded-event projection. Utilization-intensity and measurement-error-removal counterfactuals remain explicitly deferred until observation/resource descendants and their reviewed causal matrices exist. Other disorder-specific ancillary pathways, prevalence/demographic calibration, held-out validation, privacy auditing, and an optional Synthea adapter remain separate roadmap gates; the evaluator-only GHD projection and bundle/package bridges are documented below.
 
 ## Evaluator-only observed resource bundles
 
@@ -582,12 +582,14 @@ over `PASS`. Reports expose only check names, statuses, reason codes, and
 counts; row identifiers, ages, values, hidden events, and source payloads are
 never returned.
 
-This is an evaluator-only exact-row contract. `ObservedResourceBundle`, exact
-complete package export, augmented derivation, other disorders, prevalence
-calibration, held-out validation, privacy and non-matchability evidence,
-clinical review, task utility, release approval, and Synthea conformance are
-unchanged and deferred. The production CLI remains fail-closed, and existing
-empty-ancillary base-resource contracts remain in force.
+This is an evaluator-only exact-row contract. `ObservedResourceBundle` and the
+complete package export bridges (which remain development-only) are documented
+separately; augmented
+derivation, other disorders, prevalence calibration, held-out validation,
+privacy and non-matchability evidence, clinical review, task utility, release
+approval, and Synthea conformance remain separate deferred gates. The default
+production CLI remains fail-closed, and existing empty-ancillary base-resource
+contracts remain in force.
 
 ### In-memory GHD ancillary bundle integration
 
@@ -660,7 +662,7 @@ The aggregate validator has exactly seven checks, in fixed order: `pair_binding`
 
 The visible resource-level intervention matrix is deliberately narrow. `PHYSIOLOGY_SEVERITY` may change only recorded growth measurement values; visit structure, availability, visible event trace, clinical descendants, and ancillary rows stay invariant. `EARLIER_RECOGNITION` preserves growth measurement values, availability, patient rows, and visits, while the visible event trace plus event-derived clinical descendants and ancillary rows may differ through the reviewed recognition pathway. `TREATMENT_ADHERENCE` preserves event trace, clinical descendants, ancillary rows, and measurement availability; growth values may differ only at or after the private `treatment_start`, and remain invariant when no treatment start exists. `UTILIZATION_INTENSITY` and `MEASUREMENT_ERROR_REMOVAL` remain rejected until their own reviewed resource descendants and matrices exist.
 
-This has no file input or output: it is not a file writer, package exporter, manifest workflow, CLI, real-data or governed-data interface, calibration or held-out evaluator, privacy or non-matchability proof, clinical model, prevalence or demographic calibration, task utility experiment, or release approval. Pair-aware exact-schema export is the next gate. A Synthea implementation is an optional later adapter only after conformance to this native contract; it does not replace the resource-level validator or hidden-truth boundary.
+This has no file input or output: it is not a file writer, package exporter, manifest workflow, CLI, real-data or governed-data interface, calibration or held-out evaluator, privacy or non-matchability proof, clinical model, prevalence or demographic calibration, task utility experiment, or release approval. Pair-aware exact-schema export is documented below as a separate development-only bridge. A Synthea implementation is an optional later adapter only after conformance to this native contract; it does not replace the resource-level validator or hidden-truth boundary.
 
 ## Evaluator-only augmented-derivation parity gate
 
@@ -784,7 +786,7 @@ exported = export_observed_resource_package(
 
 `IdentityPreservingTestDerivationOracle` is explicitly test-only: it copies fictional visible identity fields and is not an authoritative clinical derivation implementation. A test-only binding can support fictional testing only; it cannot become an approved non-test binding by changing the caller or oracle result. An approved non-test binding has `test_only=False`, complete matching golden, parity, fuzz, schema, oracle, reference-standard, and approved-review evidence, and a `PASS` report. Status precedence is `FAIL > UNEVALUABLE > PASS`; missing evidence is never converted to zero or `PASS`.
 
-The binding evaluator is aggregate-only and serializes no rows, paths, or secrets. It does not execute an external harness, calibration, held-out, privacy, native-trajectory, temporal, prevalence, or Synthea route. A data custodian retains golden inputs/outputs, fuzz rows, and parity report bytes; only safe IDs/digests are recorded in the repository. The production command-line interface still fails closed with `No production growth reference or authoritative derivation oracle is configured` because this repository does not ship an approved oracle.
+The binding evaluator is aggregate-only and serializes no rows, paths, or secrets. It does not execute an external harness, calibration, held-out, privacy, native-trajectory, temporal, prevalence, or Synthea route. A data custodian retains golden inputs/outputs, fuzz rows, and parity report bytes; only safe IDs/digests are recorded in the repository. The default/no-profile production command-line interface still fails closed with `No production growth reference or authoritative derivation oracle is configured`; the explicit development profiles use a separate test-only binding and do not claim production authority.
 
 Software validation of a binding is not clinical validity, privacy validation, prevalence validation, Synthea conformance, or release authorization. An approved binding is necessary but not sufficient for clinical or release claims; those need their own approved evidence and governance. Synthea remains an optional later engine-conformance route.
 
@@ -1133,10 +1135,10 @@ The default/no-profile invocation intentionally exits with the fixed unavailable
 uv run python -m synthetic.generate --output /tmp/ppoc-smoke --patients 10 --seed 20260830
 ```
 
-That behavior is intentional. Do not treat a command-line failure as a missing flag or bypass the injected-reference/oracle boundary. The two explicit development profiles are documented above; they use the pinned source-matched runtime for test-only reproducibility and do not enable a production route. Wire a reviewed production reference and authoritative oracle through an explicit API/CLI design before enabling it.
+That behavior is intentional. Do not treat a command-line failure as a missing flag or bypass the injected-reference/oracle boundary. The two explicit development profiles are documented above; they use the pinned source-matched runtime for test-only reproducibility and do not enable a production route. Wire a reviewed production reference and authoritative oracle through an explicit API/CLI design before enabling a production route.
 
 ## Claims and non-claims
 
-The smoke profile is suitable for exercising schema loaders, joins, deterministic pipelines, counterfactual plumbing, and failure handling. It does not establish that generated trajectories match real growth distributions, that growth-disorder prevalence or demographics are representative, or that downstream clinical decisions are valid.
+The smoke and explicit development profiles are suitable for exercising schema loaders, joins, deterministic pipelines, counterfactual plumbing, and failure handling. They do not establish that generated trajectories match real growth distributions, that growth-disorder prevalence or demographics are representative, or that downstream clinical decisions are valid.
 
-It also does not demonstrate that a generated patient profile cannot be matched to a real patient. Structural safeguards and synthetic-only inputs reduce accidental leakage, while a separate privacy evaluation provides only qualified, policy-bound evidence under its approved data-governance process (for example, linkage, attribute-disclosure, and membership-inference testing); it does not prove non-matchability. Do not publish the smoke package as a golden, validated, development, clinical, representative, privacy-safe, or release-approved fixture.
+It also does not demonstrate that a generated patient profile cannot be matched to a real patient. Structural safeguards and synthetic-only inputs reduce accidental leakage, while a separate privacy evaluation provides only qualified, policy-bound evidence under its approved data-governance process (for example, linkage, attribute-disclosure, and membership-inference testing); it does not prove non-matchability. Do not publish any generated package as a golden, validated, clinical, representative, privacy-safe, or release-approved fixture.

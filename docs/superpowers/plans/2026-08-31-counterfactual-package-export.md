@@ -338,6 +338,5 @@
 This slice does not satisfy authoritative augmented derivation, prevalence or
 demographic calibration, held-out fidelity, temporal drift, task utility,
 clinical validity, privacy/non-matchability, release authorization, or Synthea
-conformance. The next item remains the separately designed prevalence and
-demographic calibration/held-out evidence sequence; a Synthea adapter remains
+conformance. Those are separate evidence gates; a Synthea adapter remains
 optional and downstream of native conformance.
