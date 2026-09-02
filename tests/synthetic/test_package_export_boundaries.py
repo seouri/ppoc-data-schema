@@ -95,8 +95,9 @@ PACKAGE_PATH_READERS = {
     "read_text",
     "read_table",
 }
-LEGACY_READER_CALLS = {
+ALLOWED_READER_CALLS = {
     ROOT / "src" / "synthetic" / "generate.py": ("load_descriptor",),
+    ROOT / "src" / "synthetic" / "derivation.py": ("open",),
     PACKAGE_EXPORT: ("read_bytes",),
 }
 RANDOMNESS_IMPORTERS = {
@@ -298,7 +299,7 @@ def test_visible_package_paths_reject_governed_synthea_and_package_reader_bounda
         allowed_calls = COHORT_ALLOWED_CALLS if path == COHORT else frozenset()
         assert _matches_forbidden(calls, allowed_names=allowed_calls) == set(), path
         assert not identifiers & FORBIDDEN_REAL_DATA_IDENTIFIERS, path
-        assert readers == LEGACY_READER_CALLS.get(path, ()), path
+        assert readers == ALLOWED_READER_CALLS.get(path, ()), path
 
 
 def test_scanner_qualifies_alias_calls_and_detects_new_package_readers() -> None:

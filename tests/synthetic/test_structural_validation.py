@@ -49,6 +49,84 @@ def test_invalid_required_and_enum_values_fail(tmp_path: Path) -> None:
     assert "patients row 2 sex: value is not in enum" in report.errors
 
 
+def test_oversized_integer_is_reported_without_crashing(tmp_path: Path) -> None:
+    descriptor = load_descriptor(ROOT / "datapackage.json")
+    _empty_package(tmp_path, descriptor)
+    patients = next(item for item in descriptor["resources"] if item["name"] == "patients")
+    patient_fields = [field["name"] for field in patients["schema"]["fields"]]
+    patient_row = {field: "" for field in patient_fields}
+    patient_row.update({"patient_id": "syn-a", "sex": "U"})
+    with (tmp_path / patients["path"]).open("a", encoding=patients["encoding"], newline="") as handle:
+        csv.DictWriter(handle, fieldnames=patient_fields).writerow(patient_row)
+
+    visits = next(item for item in descriptor["resources"] if item["name"] == "visits")
+    visit_fields = [field["name"] for field in visits["schema"]["fields"]]
+    visit_row = {field: "" for field in visit_fields}
+    visit_row.update({
+        "patient_id": "syn-a",
+        "visit_id": "syn-visit-a",
+        "age_in_days": "9" * 5000,
+        "encounter_type": "Well Visit (Conv.)",
+    })
+    with (tmp_path / visits["path"]).open("a", encoding=visits["encoding"], newline="") as handle:
+        csv.DictWriter(handle, fieldnames=visit_fields).writerow(visit_row)
+
+    report = validate_structure(tmp_path, descriptor)
+
+    assert "visits row 2 age_in_days: invalid integer" in report.errors
+
+
+def test_large_integer_range_is_checked_without_float_overflow(tmp_path: Path) -> None:
+    descriptor = load_descriptor(ROOT / "datapackage.json")
+    _empty_package(tmp_path, descriptor)
+    visits = next(item for item in descriptor["resources"] if item["name"] == "visits")
+    age_field = next(field for field in visits["schema"]["fields"] if field["name"] == "age_in_days")
+    age_field["constraints"]["maximum"] = 100
+    fields = [field["name"] for field in visits["schema"]["fields"]]
+    row = {field: "" for field in fields}
+    row.update({
+        "patient_id": "syn-a",
+        "visit_id": "syn-visit-a",
+        "age_in_days": "9" * 4000,
+        "encounter_type": "Well Visit (Conv.)",
+    })
+    with (tmp_path / visits["path"]).open("a", encoding=visits["encoding"], newline="") as handle:
+        csv.DictWriter(handle, fieldnames=fields).writerow(row)
+
+    report = validate_structure(tmp_path, descriptor)
+
+    assert "visits row 2 age_in_days: value is above maximum" in report.errors
+    assert not any("9" * 100 in error for error in report.errors)
+
+
+def test_logical_link_policy_can_require_complete_links(tmp_path: Path) -> None:
+    descriptor = load_descriptor(ROOT / "datapackage.json")
+    _empty_package(tmp_path, descriptor)
+    patients = next(item for item in descriptor["resources"] if item["name"] == "patients")
+    patient_fields = [field["name"] for field in patients["schema"]["fields"]]
+    patient_row = {field: "" for field in patient_fields}
+    patient_row.update({"patient_id": "syn-a", "sex": "U"})
+    with (tmp_path / patients["path"]).open("a", encoding=patients["encoding"], newline="") as handle:
+        csv.DictWriter(handle, fieldnames=patient_fields).writerow(patient_row)
+
+    labs = next(item for item in descriptor["resources"] if item["name"] == "labs")
+    lab_fields = [field["name"] for field in labs["schema"]["fields"]]
+    lab_row = {field: "" for field in lab_fields}
+    lab_row.update({"patient_id": "syn-a", "visit_id": "orphan-visit"})
+    with (tmp_path / labs["path"]).open("a", encoding=labs["encoding"], newline="") as handle:
+        csv.DictWriter(handle, fieldnames=lab_fields).writerow(lab_row)
+
+    permissive = validate_structure(tmp_path, descriptor)
+    complete = validate_structure(
+        tmp_path,
+        descriptor,
+        logical_link_policy={("labs", "visit_id"): "complete"},
+    )
+
+    assert not any("logical foreign key" in error for error in permissive.errors)
+    assert "labs: unresolved logical foreign key visit_id" in complete.errors
+
+
 def test_synthetic_descriptor_removes_real_statistics(tmp_path: Path) -> None:
     descriptor = load_descriptor(ROOT / "datapackage.json")
     _empty_package(tmp_path, descriptor)

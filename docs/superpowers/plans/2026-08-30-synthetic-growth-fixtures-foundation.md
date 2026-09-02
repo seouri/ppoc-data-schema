@@ -6,6 +6,8 @@
 
 **Architecture:** A small Python package loads `datapackage.json` as the schema authority, generates engine-neutral latent and observed records through named random streams, writes the six base resources transactionally, delegates the two augmented resources to a required derivation-oracle interface, and then emits a synthetic descriptor and validation report. This first vertical slice supports healthy patients aged two years and older through an injected reference provider; it deliberately does not claim clinical, prevalence, held-out, or privacy validation.
 
+> **Implementation note:** The code blocks below are the initial task-by-task TDD sketches and are retained as historical context. The completed source and tests are authoritative where later hardening extends these sketches. In particular, visible manifests carry the derivation implementation fingerprint and test-only classification, while the textual oracle ID and review metadata remain in the private derivation binding; the smoke/export paths require that binding explicitly.
+
 **Tech Stack:** Python 3.12+, uv, NumPy PCG64DXSM, standard-library CSV/JSON/dataclasses/hashlib, pytest, Ruff
 
 **Spec:** `docs/superpowers/specs/2026-08-30-synthetic-growth-fixtures-design.md`
@@ -13,10 +15,12 @@
 ## Global Constraints
 
 - `datapackage.json` is the sole schema authority; generated paths, headers, field order, types, null conventions, dialects, encodings, primary keys, foreign keys, and logical links must come from it.
+- Declared foreign keys are complete structural relationships. Foundation validation treats `x-logicalForeignKeys` as observational links, recomputes their null/orphan counts in the generated descriptor, and permits incompleteness by default; a later versioned observation/calibration policy may require a selected logical link to be complete without changing the schema fingerprint. The structural validation report retains errors and row counts only.
 - Offline generation reads only the public schema, pinned public references, versioned clinical configuration, and an approved calibration artifact; this foundation has no real-data input option.
 - Visible identifiers are newly generated and cannot contain hashes, substrings, ordering, or transformations of real identifiers.
 - Generate only two independent anthropometric dimensions and derive the third; this foundation generates standing height and BMI and derives weight.
 - Hidden truth and event traces never appear in the visible package or ordinary loader APIs.
+- Visible manifests record a derivation implementation fingerprint and test-only classification; the textual oracle ID, binding ID, review metadata, and source/dependency details remain in the private derivation binding and are not exported.
 - Output directories are never overwritten; partial output stays visibly unvalidated.
 - Missing derivation parity produces `UNVERIFIED_DERIVATION`, never a validation pass.
 - The authoritative augmentation implementation or approved parity harness remains a release-one prerequisite.
@@ -69,7 +73,7 @@ The foundation's generated output is a `smoke` profile. It must not be renamed `
 - Consumes: repository Python 3.12 or newer and uv.
 - Produces: importable `synthetic` package and `uv run pytest` / `uv run ruff check` commands.
 
-- [ ] **Step 1: Add project configuration and the failing import test**
+- [x] **Step 1: Add project configuration and the failing import test**
 
 ```toml
 # pyproject.toml
@@ -111,13 +115,13 @@ def test_package_has_version() -> None:
     assert synthetic.__version__ == "0.1.0"
 ```
 
-- [ ] **Step 2: Resolve dependencies and verify the test fails**
+- [x] **Step 2: Resolve dependencies and verify the test fails**
 
 Run: `uv lock && uv run pytest tests/synthetic/test_package_import.py -v`
 
 Expected: FAIL with `ModuleNotFoundError: No module named 'synthetic'`.
 
-- [ ] **Step 3: Add the minimal package**
+- [x] **Step 3: Add the minimal package**
 
 ```python
 # src/synthetic/__init__.py
@@ -128,13 +132,13 @@ __version__ = "0.1.0"
 
 Create empty `tests/__init__.py` and `tests/synthetic/__init__.py` files so integration tests can import shared fakes without relying on an unrelated installed `tests` package.
 
-- [ ] **Step 4: Run package tests and lint**
+- [x] **Step 4: Run package tests and lint**
 
 Run: `uv run pytest tests/synthetic/test_package_import.py -v && uv run ruff check src tests`
 
 Expected: one passing test and no Ruff findings.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add pyproject.toml uv.lock src/synthetic/__init__.py tests/__init__.py tests/synthetic/__init__.py tests/synthetic/test_package_import.py
@@ -153,7 +157,7 @@ git commit -m "build: initialize synthetic fixture package"
 - Consumes: `load_descriptor(path: Path) -> dict[str, Any]`.
 - Produces: `resource_spec(descriptor, name) -> dict[str, Any]`, `field_names(descriptor, name) -> tuple[str, ...]`, and `schema_fingerprint(descriptor) -> str`.
 
-- [ ] **Step 1: Write failing contract tests**
+- [x] **Step 1: Write failing contract tests**
 
 ```python
 # tests/synthetic/test_schema_contract.py
@@ -202,13 +206,13 @@ def test_unknown_resource_fails_closed() -> None:
         resource_spec(descriptor, "unknown")
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `uv run pytest tests/synthetic/test_schema_contract.py -v`
 
 Expected: FAIL because `synthetic.schema_contract` does not exist.
 
-- [ ] **Step 3: Implement canonical schema projection**
+- [x] **Step 3: Implement canonical schema projection**
 
 ```python
 # src/synthetic/schema_contract.py
@@ -283,13 +287,13 @@ def schema_fingerprint(descriptor: dict[str, Any]) -> str:
     return hashlib.sha256(payload).hexdigest()
 ```
 
-- [ ] **Step 4: Run tests and descriptor check**
+- [x] **Step 4: Run tests and descriptor check**
 
 Run: `uv run pytest tests/synthetic/test_schema_contract.py -v && python3 schema/build.py --check`
 
 Expected: three passing tests and `validated 8 resources in datapackage.json`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/synthetic/schema_contract.py tests/synthetic/test_schema_contract.py
@@ -309,7 +313,7 @@ git commit -m "feat: lock synthetic package schema contract"
 - Consumes: `NamedRandomStreams(run_seed: int, patient_index: int)`.
 - Produces: `generator(name: str) -> numpy.random.Generator`, `synthetic_id(run_seed: int, kind: str, index: int) -> str`, `RunManifest.to_json_bytes() -> bytes`.
 
-- [ ] **Step 1: Write failing reproducibility tests**
+- [x] **Step 1: Write failing reproducibility tests**
 
 ```python
 # tests/synthetic/test_reproducibility.py
@@ -353,13 +357,13 @@ def test_manifest_serialization_is_canonical() -> None:
     assert manifest.to_json_bytes().endswith(b"\n")
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `uv run pytest tests/synthetic/test_reproducibility.py -v`
 
 Expected: FAIL because the modules do not exist.
 
-- [ ] **Step 3: Implement named streams and opaque IDs**
+- [x] **Step 3: Implement named streams and opaque IDs**
 
 ```python
 # src/synthetic/randomness.py
@@ -399,12 +403,13 @@ def synthetic_id(run_seed: int, kind: str, index: int) -> str:
     return f"syn-{kind}-{digest[:24]}"
 ```
 
-- [ ] **Step 4: Implement canonical manifest serialization**
+- [x] **Step 4: Implement canonical manifest serialization**
 
 ```python
 # src/synthetic/manifest.py
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import asdict, dataclass, field
 
@@ -428,7 +433,8 @@ class RunManifest:
     status: str
     row_counts: dict[str, int] = field(default_factory=dict)
     file_sha256: dict[str, str] = field(default_factory=dict)
-    derivation_oracle: str | None = None
+    # Visible cryptographic implementation identity; textual oracle_id stays in the private binding.
+    derivation_fingerprint: str = ""
 
     @classmethod
     def smoke(
@@ -463,13 +469,13 @@ class RunManifest:
         ).encode("utf-8")
 ```
 
-- [ ] **Step 5: Run tests and lint**
+- [x] **Step 5: Run tests and lint**
 
 Run: `uv run pytest tests/synthetic/test_reproducibility.py -v && uv run ruff check src tests`
 
 Expected: three passing tests and no Ruff findings.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/synthetic/randomness.py src/synthetic/manifest.py tests/synthetic/test_reproducibility.py
@@ -488,7 +494,7 @@ git commit -m "feat: add reproducible synthetic run identity"
 - Consumes: `RunDirectory.start(target: Path, run_id: str) -> RunDirectory`.
 - Produces: writable `partial_path`, `promote() -> Path`, and `fail(reason: str) -> Path`.
 
-- [ ] **Step 1: Write failing lifecycle tests**
+- [x] **Step 1: Write failing lifecycle tests**
 
 ```python
 # tests/synthetic/test_run_directory.py
@@ -520,13 +526,13 @@ def test_failure_keeps_evidence_outside_target(tmp_path: Path) -> None:
     assert "derivation unavailable" in (failed / "failure.json").read_text()
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `uv run pytest tests/synthetic/test_run_directory.py -v`
 
 Expected: FAIL because `synthetic.run_directory` does not exist.
 
-- [ ] **Step 3: Implement the lifecycle**
+- [x] **Step 3: Implement the lifecycle**
 
 ```python
 # src/synthetic/run_directory.py
@@ -571,13 +577,13 @@ class RunDirectory:
         return self.failed_path
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `uv run pytest tests/synthetic/test_run_directory.py -v`
 
 Expected: three passing tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/synthetic/run_directory.py tests/synthetic/test_run_directory.py
@@ -599,7 +605,7 @@ git commit -m "feat: add fail-closed fixture output lifecycle"
 - Consumes: `GrowthReference.value(metric, age_days, reference_sex, z) -> float` and named patient streams.
 - Produces: `HealthyKernel.generate(patient, ages_days) -> tuple[LatentPoint, ...]`; each point contains height, BMI, and deterministically derived weight.
 
-- [ ] **Step 1: Write failing anthropometric tests with an injected test reference**
+- [x] **Step 1: Write failing anthropometric tests with an injected test reference**
 
 ```python
 # tests/synthetic/test_healthy_kernel.py
@@ -657,13 +663,13 @@ def test_foundation_rejects_infant_ages() -> None:
         )
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `uv run pytest tests/synthetic/test_healthy_kernel.py -v`
 
 Expected: FAIL because the model and kernel modules do not exist.
 
-- [ ] **Step 3: Add engine-neutral records and reference protocol**
+- [x] **Step 3: Add engine-neutral records and reference protocol**
 
 ```python
 # src/synthetic/models.py
@@ -726,7 +732,7 @@ class GrowthReference(Protocol):
 """Native synthetic-patient engine."""
 ```
 
-- [ ] **Step 4: Implement the minimum age-two-and-older kernel**
+- [x] **Step 4: Implement the minimum age-two-and-older kernel**
 
 ```python
 # src/synthetic/native/healthy.py
@@ -779,13 +785,13 @@ class HealthyKernel:
         return tuple(points)
 ```
 
-- [ ] **Step 5: Run tests and lint**
+- [x] **Step 5: Run tests and lint**
 
 Run: `uv run pytest tests/synthetic/test_healthy_kernel.py -v && uv run ruff check src tests`
 
 Expected: three passing tests and no Ruff findings.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/synthetic/models.py src/synthetic/references.py src/synthetic/native tests/synthetic/test_healthy_kernel.py
@@ -805,7 +811,7 @@ git commit -m "feat: add healthy growth kernel contract"
 - Consumes: `PatientState`, `LatentPoint`, descriptor field order.
 - Produces: `build_base_rows(...) -> dict[str, list[dict[str, object]]]` and `write_resource(path, resource, rows) -> int`.
 
-- [ ] **Step 1: Write failing base-resource and encoding tests**
+- [x] **Step 1: Write failing base-resource and encoding tests**
 
 ```python
 # tests/synthetic/test_base_resources.py
@@ -843,13 +849,13 @@ def test_writer_uses_descriptor_header_and_encoding(tmp_path: Path) -> None:
         assert next(csv.reader(handle)) == list(field_names(descriptor, "labs"))
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `uv run pytest tests/synthetic/test_base_resources.py -v`
 
 Expected: FAIL because base-resource modules do not exist.
 
-- [ ] **Step 3: Implement descriptor-shaped base rows**
+- [x] **Step 3: Implement descriptor-shaped base rows**
 
 ```python
 # src/synthetic/base_resources.py
@@ -910,7 +916,7 @@ def build_base_rows(
     return rows
 ```
 
-- [ ] **Step 4: Implement exact CSV writing**
+- [x] **Step 4: Implement exact CSV writing**
 
 ```python
 # src/synthetic/csv_package.py
@@ -950,13 +956,13 @@ def write_resource(
     return count
 ```
 
-- [ ] **Step 5: Run tests and lint**
+- [x] **Step 5: Run tests and lint**
 
 Run: `uv run pytest tests/synthetic/test_base_resources.py -v && uv run ruff check src tests`
 
 Expected: two passing tests and no Ruff findings.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/synthetic/base_resources.py src/synthetic/csv_package.py tests/synthetic/test_base_resources.py
@@ -975,10 +981,11 @@ git commit -m "feat: write descriptor-shaped base resources"
 - Consumes: `DerivationOracle.derive(package_root, descriptor) -> DerivationResult`.
 - Produces: verified presence of `patients_augmented.csv` and `visits_augmented-20251209150512.csv`, plus a pinned oracle identity.
 
-- [ ] **Step 1: Write failing derivation-boundary tests**
+- [x] **Step 1: Write failing derivation-boundary tests**
 
 ```python
 # tests/synthetic/test_derivation.py
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -1012,16 +1019,16 @@ def test_returns_pinned_identity_when_both_outputs_exist(tmp_path: Path) -> None
         (tmp_path / resource["path"]).write_text("header\n", encoding=resource["encoding"])
     assert require_augmented_outputs(
         tmp_path, descriptor, oracle_id="fake-v1"
-    ) == DerivationResult("fake-v1")
+    ) == DerivationResult("fake-v1", hashlib.sha256(b"fake-v1").hexdigest())
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `uv run pytest tests/synthetic/test_derivation.py -v`
 
 Expected: FAIL because `synthetic.derivation` does not exist.
 
-- [ ] **Step 3: Implement the protocol and explicit unavailable state**
+- [x] **Step 3: Implement the protocol and explicit unavailable state**
 
 ```python
 # src/synthetic/derivation.py
@@ -1041,6 +1048,7 @@ class DerivationUnavailable(RuntimeError):
 @dataclass(frozen=True)
 class DerivationResult:
     oracle_id: str
+    implementation_fingerprint: str
 
 
 class DerivationOracle(Protocol):
@@ -1061,16 +1069,19 @@ def require_augmented_outputs(
         path = package_root / resource_spec(descriptor, name)["path"]
         if not path.is_file():
             raise DerivationUnavailable(f"missing {name} output from {oracle_id}")
-    return DerivationResult(oracle_id=oracle_id)
+    return DerivationResult(
+        oracle_id=oracle_id,
+        implementation_fingerprint=hashlib.sha256(oracle_id.encode()).hexdigest(),
+    )
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `uv run pytest tests/synthetic/test_derivation.py -v`
 
 Expected: three passing tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/synthetic/derivation.py tests/synthetic/test_derivation.py
@@ -1090,7 +1101,7 @@ git commit -m "feat: define authoritative derivation boundary"
 - Consumes: eight generated CSVs and the source descriptor.
 - Produces: `write_synthetic_descriptor(...) -> Path` and `validate_structure(...) -> ValidationReport`.
 
-- [ ] **Step 1: Write failing exact-header, type, key, and metadata tests**
+- [x] **Step 1: Write failing exact-header, type, key, and metadata tests**
 
 ```python
 # tests/synthetic/test_structural_validation.py
@@ -1169,13 +1180,13 @@ def test_synthetic_descriptor_removes_real_statistics(tmp_path: Path) -> None:
     assert all(link["nullRows"] == 0 and link["orphanRows"] == 0 for link in logical_links)
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `uv run pytest tests/synthetic/test_structural_validation.py -v`
 
 Expected: FAIL because the validator and descriptor writer do not exist.
 
-- [ ] **Step 3: Add generated-descriptor sanitization**
+- [x] **Step 3: Add generated-descriptor sanitization**
 
 ```python
 # add these imports with the existing imports in src/synthetic/csv_package.py,
@@ -1295,7 +1306,7 @@ def write_synthetic_descriptor(
     return output
 ```
 
-- [ ] **Step 4: Implement structural validation**
+- [x] **Step 4: Implement structural validation**
 
 ```python
 # src/synthetic/validate.py
@@ -1397,13 +1408,13 @@ def validate_structure(
     return ValidationReport(tuple(errors), row_counts)
 ```
 
-- [ ] **Step 5: Run tests and lint**
+- [x] **Step 5: Run tests and lint**
 
 Run: `uv run pytest tests/synthetic/test_structural_validation.py -v && uv run ruff check src tests`
 
 Expected: four passing tests and no Ruff findings.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/synthetic/csv_package.py src/synthetic/validate.py tests/synthetic/test_structural_validation.py
@@ -1424,7 +1435,7 @@ git commit -m "feat: validate synthetic package structure"
 - Consumes: source descriptor, injected `GrowthReference`, injected `DerivationOracle`, patient count, seed, reference time, and nonexisting output path.
 - Produces: exact eight-resource package, synthetic descriptor, `manifest.json`, and `validation-report.json`.
 
-- [ ] **Step 1: Write a failing end-to-end test with explicit fake boundaries**
+- [x] **Step 1: Write a failing end-to-end test with explicit fake boundaries**
 
 ```python
 # tests/synthetic/fakes.py
@@ -1594,13 +1605,13 @@ def test_no_derivation_oracle_cannot_promote_output(tmp_path: Path) -> None:
     assert not (tmp_path / "run").exists()
 ```
 
-- [ ] **Step 2: Run the integration test to verify it fails**
+- [x] **Step 2: Run the integration test to verify it fails**
 
 Run: `uv run pytest tests/synthetic/test_generate_smoke.py -v`
 
 Expected: FAIL because `synthetic.generate` does not exist.
 
-- [ ] **Step 3: Implement smoke orchestration**
+- [x] **Step 3: Implement smoke orchestration**
 
 ```python
 # src/synthetic/generate.py
@@ -1717,7 +1728,7 @@ def generate_smoke(
             else "STRUCTURE_VALIDATED",
             row_counts=row_counts,
             file_sha256=file_sha256,
-            derivation_oracle=derivation.oracle_id,
+            derivation_fingerprint=derivation.implementation_fingerprint,
         )
         (run.partial_path / "manifest.json").write_bytes(manifest.to_json_bytes())
         return run.promote()
@@ -1741,13 +1752,13 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 4: Run the end-to-end and full test suites**
+- [x] **Step 4: Run the end-to-end and full test suites**
 
 Run: `uv run pytest tests/synthetic/test_generate_smoke.py -v && uv run pytest -q`
 
 Expected: two integration tests pass and the complete suite has zero failures.
 
-- [ ] **Step 5: Document the nonclinical smoke boundary**
+- [x] **Step 5: Document the nonclinical smoke boundary**
 
 Add this section to `README.md`:
 
@@ -1759,13 +1770,15 @@ The approved design is in [the synthetic growth fixture specification](docs/supe
 Until the authoritative augmentation implementation or an approved parity harness is supplied, the command-line entry point fails closed and no output may be labeled a validated golden or development fixture.
 ```
 
-- [ ] **Step 6: Run final foundation verification**
+The repository keeps this detailed boundary in `docs/synthetic-generator.md` and links to it from `README.md`, which remains a concise project index.
+
+- [x] **Step 6: Run final foundation verification**
 
 Run: `uv run pytest -q && uv run ruff check src tests && python3 schema/build.py --check && git diff --check`
 
 Expected: all tests pass, Ruff has no findings, all eight descriptor resources validate, and Git reports no whitespace errors.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/synthetic/generate.py tests/synthetic/fakes.py tests/synthetic/test_generate_smoke.py README.md
@@ -1781,6 +1794,14 @@ Before starting the growth-and-clinical-modules plan, verify all of the followin
 - `python3 schema/build.py --check` still validates exactly eight resources.
 - A smoke run with the test oracle writes the exact eight descriptor-named CSVs.
 - A run without a derivation oracle fails without promoting the requested output directory.
-- The smoke manifest pins schema fingerprint, seed, PRNG family, seed derivation, reference time, reference identity, configuration hash, software revision, oracle identity, row counts, and visible output hashes.
+- The smoke manifest pins schema fingerprint, seed, PRNG family, seed derivation, reference time, reference identity, configuration hash, software revision, the derivation implementation fingerprint, row counts, and visible output hashes. The private derivation binding retains the textual oracle identity and maps it to that fingerprint; visible manifests intentionally omit `oracle_id`, binding IDs, review metadata, paths, and truth state. Logical-link null/orphan counts are machine-readable in the generated descriptor; `validation-report.json` intentionally contains only structural errors and row counts.
 - Visible package files contain no hidden truth or event trace.
 - Documentation makes no clinical, prevalence, privacy, or release claim for the smoke profile.
+
+## Completion evidence (2026-09-02)
+
+- Independent foundation review approved the implementation after hardening oversized integer parsing, exact augmented-output header and regular-file checks, the explicit logical-link completeness policy, the visible derivation-fingerprint/private oracle-ID boundary, and the static reader allowlist.
+- Focused foundation and boundary suite: `82 passed`.
+- Full repository suite: `2676 passed, 4 skipped` (the four skips are the opt-in development-scale tests).
+- Ruff: `All checks passed!`; schema contract: `validated 8 resources in datapackage.json`; dependency lock: `Resolved 17 packages`; `git diff --check`: clean.
+- The test-only smoke path writes all eight descriptor-named CSV resources, records reproducible visible hashes and derivation fingerprint metadata, rejects missing derivation binding without promotion, and keeps logical-link null/orphan counts in the generated descriptor rather than the structural report.

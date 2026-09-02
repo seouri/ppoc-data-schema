@@ -3,9 +3,12 @@ from __future__ import annotations
 import csv
 import math
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
+
+LogicalLinkPolicy = Literal["allow_incomplete", "complete"]
 
 
 @dataclass(frozen=True)
@@ -19,15 +22,18 @@ def _validate_value(resource_name: str, row_number: int, field: dict[str, Any], 
     constraints = field.get("constraints", {})
     if value == "":
         return [f"{prefix} required value is missing"] if constraints.get("required") else []
-    numeric: float | None = None
+    numeric: int | float | None = None
     if field["type"] == "integer":
         if re.fullmatch(r"[+-]?\d+", value) is None:
             return [f"{prefix} invalid integer"]
-        numeric = float(int(value))
+        try:
+            numeric = int(value)
+        except (OverflowError, ValueError):
+            return [f"{prefix} invalid integer"]
     elif field["type"] == "number":
         try:
             numeric = float(value)
-        except ValueError:
+        except (OverflowError, ValueError):
             return [f"{prefix} invalid number"]
         if not math.isfinite(numeric):
             return [f"{prefix} number must be finite"]
@@ -40,7 +46,36 @@ def _validate_value(resource_name: str, row_number: int, field: dict[str, Any], 
     return []
 
 
-def validate_structure(package_root: Path, descriptor: dict[str, Any]) -> ValidationReport:
+def validate_structure(
+    package_root: Path,
+    descriptor: dict[str, Any],
+    *,
+    logical_link_policy: Mapping[tuple[str, str], LogicalLinkPolicy] | None = None,
+) -> ValidationReport:
+    """Validate descriptor-shaped resources and configured relationship semantics.
+
+    Logical links are observational by default because the source contract permits
+    nullable and orphan visit links.  Callers that require a particular logical link
+    to be complete can pass ``{("resource", "field"): "complete"}``; all other
+    logical links remain explicitly ``allow_incomplete``.
+    """
+    if logical_link_policy is not None:
+        known_links = {
+            (resource["name"], link["fields"])
+            for resource in descriptor["resources"]
+            for link in resource.get("x-logicalForeignKeys", [])
+        }
+        unknown = set(logical_link_policy) - known_links
+        if unknown:
+            raise ValueError(f"logical link policy names unknown links: {sorted(unknown)!r}")
+        invalid = {
+            key: value
+            for key, value in logical_link_policy.items()
+            if value not in {"allow_incomplete", "complete"}
+        }
+        if invalid:
+            raise ValueError(f"logical link policy has invalid values: {invalid!r}")
+
     errors: list[str] = []
     row_counts: dict[str, int] = {}
     rows_by_resource: dict[str, list[dict[str, str]]] = {}
@@ -96,4 +131,18 @@ def validate_structure(package_root: Path, descriptor: dict[str, Any]) -> Valida
             if any(row.get(field, "") and row[field] not in primary_values.get(target, set())
                    for row in rows_by_resource.get(resource["name"], [])):
                 errors.append(f"{resource['name']}: unresolved foreign key {field}")
+        for logical_link in resource.get("x-logicalForeignKeys", []):
+            field = logical_link["fields"]
+            target = logical_link["reference"]["resource"]
+            values = [row.get(field, "") for row in rows_by_resource.get(resource["name"], [])]
+            target_values = primary_values.get(target, set())
+            null_rows = sum(value == "" for value in values)
+            orphan_rows = sum(value != "" and value not in target_values for value in values)
+            policy = (
+                logical_link_policy.get((resource["name"], field), "allow_incomplete")
+                if logical_link_policy is not None
+                else "allow_incomplete"
+            )
+            if policy == "complete" and (null_rows or orphan_rows):
+                errors.append(f"{resource['name']}: unresolved logical foreign key {field}")
     return ValidationReport(tuple(errors), row_counts)

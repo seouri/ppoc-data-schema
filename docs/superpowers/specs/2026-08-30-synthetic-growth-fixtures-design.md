@@ -117,7 +117,7 @@ Before an augmented fixture can be labeled valid, the project must obtain and pi
 1. the authoritative augmentation implementation and its dependencies; or
 2. a custodian-approved executable reference harness plus golden inputs and outputs covering all documented boundary cases.
 
-The implementation records the derivation-oracle identity and hash. A clean-room reimplementation may be used only after bidirectional parity tests pass across reviewed golden cases and a governed synthetic fuzz corpus. Until then, development may proceed on latent generation and base resources, but augmented outputs must be marked `UNVERIFIED_DERIVATION` and cannot satisfy acceptance criteria.
+The visible package manifest records the derivation implementation fingerprint (a cryptographic oracle identity/hash) and test-only classification. The textual `oracle_id`, source revision, dependency fingerprint, parity evidence, and review metadata remain in the private derivation binding, which maps the fingerprint to the reviewed oracle without exposing those identifiers in ordinary package files. A clean-room reimplementation may be used only after bidirectional parity tests pass across reviewed golden cases and a governed synthetic fuzz corpus. Until then, development may proceed on latent generation and base resources, but augmented outputs must be marked `UNVERIFIED_DERIVATION` and cannot satisfy acceptance criteria.
 
 ## Governed calibration
 
@@ -306,7 +306,7 @@ Production-facing fixture APIs and ordinary development loaders must not expose 
 - **Experiment:** Accepts a configured patient count and produces one or more paired worlds. It enforces minimum expected counts for requested strata.
 - **Engine comparison:** Generates matched configuration-level cohorts from native and Synthea-backed engines without claiming patient-level correspondence. It is used only for conformance and sensitivity analysis.
 
-Every run writes an initially unvalidated manifest containing the seed, PRNG and seed-derivation versions, schema fingerprint, engine identity, calibration identity, reference and terminology hashes, clinical-module hashes, configuration hash, software revision, reference time, row counts, and output hashes. A validated status is added only after all applicable gates pass. External-release approval is a separate governed status that this software cannot grant.
+Every run writes an initially unvalidated manifest containing the seed, PRNG and seed-derivation versions, schema fingerprint, engine identity, calibration identity, reference and terminology hashes, clinical-module hashes, configuration hash, software revision, reference time, row counts, output hashes, and (when augmented derivation is bound) the derivation implementation fingerprint. The private binding retains the textual oracle identity and review metadata; those fields are intentionally absent from visible manifests. A validated status is added only after all applicable gates pass. External-release approval is a separate governed status that this software cannot grant.
 
 The generator refuses to overwrite an existing output directory. It writes to a run-specific temporary directory and promotes the result only after generation and nonprivacy structural checks complete. A failed privacy audit marks the generated run rejected and prevents release; it does not delete governed evidence automatically.
 
@@ -349,7 +349,7 @@ Validation produces machine-readable JSON plus a concise human-readable report. 
 
 - provenance identities are present and mutually compatible;
 - all eight resources have exact paths, headers, field order, types, null behavior, dialects, encodings, constraints, and schema fingerprint;
-- declared keys and complete foreign keys resolve, while logical-link incompleteness follows the configured contract; and
+- declared keys and complete foreign keys resolve; foundation structural validation recomputes `x-logicalForeignKeys` null/orphan counts in the generated descriptor without rejecting them, while a later versioned observation/calibration policy may require selected logical links to be complete; the structural validation report itself contains only errors and row counts; and
 - augmented values match the authoritative derivation oracle within declared numeric tolerances.
 
 ### Layer 2: statistical fidelity
