@@ -635,7 +635,9 @@ def test_corrupted_truth_child_returns_static_fallback(target: str) -> None:
             physiology=copied_physiology,
         )
         hostile_value = -304
-        object.__setattr__(point, "age_days", hostile_value)
+        object.__setattr__(
+            copied_trajectory.physiology.points[0], "age_days", hostile_value
+        )
         object.__setattr__(truth, "latent_trajectory", copied_trajectory)
 
     report = evaluate_task_utility(cohort, scored_task_predictions(), task_policy())

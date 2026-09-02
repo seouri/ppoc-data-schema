@@ -282,7 +282,8 @@ def test_projection_rejects_trajectory_not_bound_to_frame_truth() -> None:
         else event
         for event in member.trajectory.events
     )
-    tampered_trajectory = dataclasses.replace(member.trajectory, events=tampered_events)
+    tampered_trajectory = dataclasses.replace(member.trajectory)
+    object.__setattr__(tampered_trajectory, "events", tampered_events)
     tampered_member = dataclasses.replace(member, trajectory=tampered_trajectory)
 
     with pytest.raises(

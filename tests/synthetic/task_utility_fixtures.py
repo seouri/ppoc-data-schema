@@ -10,6 +10,7 @@ from synthetic.models import (
     AgeRegimePoint,
     AgeRegimeState,
     AgeRegimeTrajectory,
+    ClinicalEvent,
     DisorderKind,
     GrowthRegime,
     LatentDisorderState,
@@ -94,7 +95,11 @@ def task_member(
     trajectory = AgeRegimeDisorderTrajectory(
         AgeRegimeTrajectory((point,), state),
         disorder,
-        (),
+        (
+            ()
+            if kind is DisorderKind.HEALTHY
+            else (ClinicalEvent(patient_id, 50, "latent_onset", None, True),)
+        ),
     )
     window = ObservationWindow(0, 200, 200, CensoringMode.NONE)
     visit = ObservedVisit(

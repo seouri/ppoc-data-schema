@@ -572,12 +572,12 @@ def test_missing_regime_event_and_broken_pattern_are_fixed_case_failures() -> No
 
     modules = _modules()
     modules[DisorderKind.FAMILIAL_SHORT_STATURE] = EmptyFamilialEvents()
-    missing_event = run_golden_trajectory_suite(
-        RegimeLinearTestReference(),
-        modules=modules,
-        cases=(DEFAULT_GOLDEN_CASES[1],),
-    )
-    assert missing_event.case_results[0].reason_codes == ("MISSING_EVENT",)
+    with pytest.raises(GoldenTrajectoryUnavailable, match="unavailable"):
+        run_golden_trajectory_suite(
+            RegimeLinearTestReference(),
+            modules=modules,
+            cases=(DEFAULT_GOLDEN_CASES[1],),
+        )
 
     class BrokenFamilialPattern(FamilialShortStatureModule):
         module_version = "familial-broken-pattern-test-v1"

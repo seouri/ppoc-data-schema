@@ -5,6 +5,7 @@ import dataclasses
 import pytest
 
 from synthetic.models import (
+    AgeRegimeDisorderTrajectory,
     ClinicalEvent,
     DisorderKind,
     GrowthRegime,
@@ -30,6 +31,16 @@ from tests.synthetic.fakes import RegimeLinearTestReference
 PATIENT = PatientState("syn-counterfactual-validation", "F", "F")
 SEED = 20260831
 INDEX = 3
+
+
+def _tampered_trajectory(
+    trajectory: AgeRegimeDisorderTrajectory,
+    **changes: object,
+) -> AgeRegimeDisorderTrajectory:
+    copied = dataclasses.replace(trajectory)
+    for name, value in changes.items():
+        object.__setattr__(copied, name, value)
+    return copied
 
 
 def _kernel(module: object) -> AgeRegimeDisorderKernel:
@@ -203,7 +214,7 @@ def test_validation_fails_on_a_forbidden_recognition_change() -> None:
     events[index] = dataclasses.replace(events[index], age_days=events[index].age_days + 1)
     tampered = dataclasses.replace(
         pair,
-        intervention=dataclasses.replace(pair.intervention, events=tuple(events)),
+        intervention=_tampered_trajectory(pair.intervention, events=tuple(events)),
     )
 
     report = validate_counterfactual_pair(tampered)
@@ -256,7 +267,7 @@ def test_event_order_is_checked_as_causal_phase_order() -> None:
         INDEX,
         InterventionKind.EARLIER_RECOGNITION,
     )
-    malformed = dataclasses.replace(
+    malformed = _tampered_trajectory(
         pair.intervention,
         events=(
             ClinicalEvent(PATIENT.patient_id, 1000, "recorded_diagnosis", None, False),
@@ -311,7 +322,7 @@ def test_treatment_adherence_rejects_treatment_event_payload_tampering(
     events[index] = dataclasses.replace(events[index], **{field: value})
     tampered = dataclasses.replace(
         pair,
-        intervention=dataclasses.replace(pair.intervention, events=tuple(events)),
+        intervention=_tampered_trajectory(pair.intervention, events=tuple(events)),
     )
 
     report = validate_counterfactual_pair(tampered)
@@ -330,12 +341,14 @@ def test_treatment_adherence_rejects_coordinated_treatment_outcome_deletion() ->
         InterventionKind.TREATMENT_ADHERENCE,
     )
 
-    def without_outcome(trajectory: object):
-        return dataclasses.replace(
-            trajectory,  # type: ignore[arg-type]
+    def without_outcome(
+        trajectory: AgeRegimeDisorderTrajectory,
+    ) -> AgeRegimeDisorderTrajectory:
+        return _tampered_trajectory(
+            trajectory,
             events=tuple(
                 event
-                for event in trajectory.events  # type: ignore[attr-defined]
+                for event in trajectory.events
                 if event.event_type not in {"treatment_response", "treatment_nonresponse"}
             ),
         )
@@ -370,7 +383,7 @@ def test_treatment_adherence_rejects_duplicate_treatment_outcome() -> None:
     )
     malformed = dataclasses.replace(
         pair,
-        intervention=dataclasses.replace(
+        intervention=_tampered_trajectory(
             pair.intervention,
             events=pair.intervention.events + (outcome,),
         ),
@@ -506,10 +519,12 @@ def test_validation_marks_non_integer_or_negative_event_ages_unevaluable(
         InterventionKind.TREATMENT_ADHERENCE,
     )
 
-    def with_invalid_first_event_age(trajectory: object):
-        events = list(trajectory.events)  # type: ignore[attr-defined]
+    def with_invalid_first_event_age(
+        trajectory: AgeRegimeDisorderTrajectory,
+    ) -> AgeRegimeDisorderTrajectory:
+        events = list(trajectory.events)
         events[0] = dataclasses.replace(events[0], age_days=invalid_age)
-        return dataclasses.replace(trajectory, events=tuple(events))
+        return _tampered_trajectory(trajectory, events=tuple(events))
 
     malformed = dataclasses.replace(
         pair,
@@ -547,7 +562,7 @@ def test_earlier_recognition_rejects_recognition_payload_tampering(
     events[index] = dataclasses.replace(events[index], **{field: value})
     tampered = dataclasses.replace(
         pair,
-        intervention=dataclasses.replace(pair.intervention, events=tuple(events)),
+        intervention=_tampered_trajectory(pair.intervention, events=tuple(events)),
     )
 
     report = validate_counterfactual_pair(tampered)
@@ -578,7 +593,7 @@ def test_earlier_recognition_rejects_downstream_event_tampering(
     events[index] = dataclasses.replace(events[index], **{field: value})
     tampered = dataclasses.replace(
         pair,
-        intervention=dataclasses.replace(pair.intervention, events=tuple(events)),
+        intervention=_tampered_trajectory(pair.intervention, events=tuple(events)),
     )
 
     report = validate_counterfactual_pair(tampered)
@@ -603,7 +618,7 @@ def test_validation_marks_treatment_outcome_state_mismatch_unevaluable() -> None
     events[index] = dataclasses.replace(events[index], event_type="treatment_response")
     malformed = dataclasses.replace(
         pair,
-        intervention=dataclasses.replace(pair.intervention, events=tuple(events)),
+        intervention=_tampered_trajectory(pair.intervention, events=tuple(events)),
     )
 
     report = validate_counterfactual_pair(malformed)

@@ -322,9 +322,11 @@ def test_pair_requires_shared_age_regime_and_latent_disorder_states() -> None:
             matrix=matrix,
         )
 
-    different_disorder = dataclasses.replace(
-        baseline,
-        disorder=LatentDisorderState(DisorderKind.FAMILIAL_SHORT_STATURE, 100, 0.5),
+    different_disorder = dataclasses.replace(baseline)
+    object.__setattr__(
+        different_disorder,
+        "disorder",
+        LatentDisorderState(DisorderKind.FAMILIAL_SHORT_STATURE, 100, 0.5),
     )
     with pytest.raises(ValueError, match="latent disorder state"):
         CounterfactualPair(

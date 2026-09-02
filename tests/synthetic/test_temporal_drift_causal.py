@@ -49,7 +49,8 @@ def _events(patient_id: str, phases: tuple[str, ...] = _PHASES) -> tuple[Clinica
 def _with_events(
     member: CohortMember, events: tuple[ClinicalEvent, ...]
 ) -> CohortMember:
-    trajectory = dataclasses.replace(member.trajectory, events=events)
+    trajectory = dataclasses.replace(member.trajectory)
+    object.__setattr__(trajectory, "events", events)
     truth = dataclasses.replace(
         member.frame.truth,
         source_events=events,

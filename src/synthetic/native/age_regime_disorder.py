@@ -509,6 +509,8 @@ class AgeRegimeDisorderKernel:
         for previous, current in pairwise(points):
             if previous.age_days <= transition_end < current.age_days:
                 for comparison_age in (transition_end + 1, current.age_days):
+                    # Hold reference age constant while checking the effect on
+                    # the adjacent days that bridge each comparison age.
                     length_z = self._adjusted_z(
                         state.childhood_height_z,
                         disorder_state,
