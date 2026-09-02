@@ -108,6 +108,7 @@ _NATIVE_STREAM_NAMES = frozenset(
         "disorder.pediatric_hypothyroidism",
         "disorder.celiac_disease",
         "disorder.small_for_gestational_age",
+        "disorder.turner_syndrome",
     }
 )
 

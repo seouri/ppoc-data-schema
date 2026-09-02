@@ -356,8 +356,8 @@ Expected: collection fails because `native/trajectories.py` is not present.
 
 In `src/synthetic/native/trajectories.py`:
 
-1. Validate that the wrapped `HealthyKernel` and module are present. Preserve the baseline kernel’s age ordering, configured bounds, and optional reference-domain checks by delegating baseline generation first.
-2. Sample module state after baseline generation using the module’s scoped stream. For every baseline point, compute adjusted height/BMI z-scores from module deltas, require finite deltas, call the wrapped reference again for `height_cm` and `bmi`, require finite positive values, and derive weight exactly from those two dimensions.
+1. Validate that the wrapped `HealthyKernel` and module are present. If the module exposes `validate_patient(patient)`, run that eligibility preflight before any reference-backed baseline generation; then preserve the baseline kernel’s age ordering, configured bounds, and optional reference-domain checks.
+2. Sample module state after the eligibility preflight and baseline generation using the module’s scoped stream. For every baseline point, compute adjusted height/BMI z-scores from module deltas, require finite deltas, call the wrapped reference again for `height_cm` and `bmi`, require finite positive values, and derive weight exactly from those two dimensions.
 3. Preserve patient ID and age, and return a new `LatentTrajectory` with adjusted points, module state, and module events. Do not copy hidden state into any CSV/resource mapper.
 4. Verify module event patient IDs match the requested patient and event ages are nonnegative and nondecreasing; reject an event after an impossible treatment/response schedule with `ValueError`.
 5. Keep the baseline `growth` stream untouched by requiring modules to use their own named streams; identical healthy module output must equal `HealthyKernel.generate` exactly.
@@ -383,12 +383,12 @@ git commit -m "feat: add disorder-aware latent trajectories"
 - Modify: `docs/synthetic-generator.md`
 
 **Interfaces:**
-- Consumes: `DisorderTrajectoryKernel`, the seven native module names, and `LatentTrajectory` from Tasks 1–3.
+- Consumes: `DisorderTrajectoryKernel`, the eight native module names, and `LatentTrajectory` from Tasks 1–3.
 - Produces: a concise development-only usage section that explains hidden truth/event traces, directionally coherent but uncalibrated scenarios, and the fact that visible CSV generation remains unchanged.
 
 - [x] **Step 1: Add the development-module section**
 
-Document a Python example that constructs a `DisorderTrajectoryKernel` from the existing injected test reference and a module, then states that `LatentTrajectory.disorder` and `.events` are evaluator-only and are not exported. List the original four modules and their directional signatures without calling their defaults clinically representative; list the pediatric hypothyroidism, celiac-disease, and SGA follow-on evaluator modules separately with the same boundary. State that prevalence, demographic calibration, disorder-critical labs/medications/referrals, held-out validation, and privacy auditing remain later gates.
+Document a Python example that constructs a `DisorderTrajectoryKernel` from the existing injected test reference and a module, then states that `LatentTrajectory.disorder` and `.events` are evaluator-only and are not exported. List the original four modules and their directional signatures without calling their defaults clinically representative; list the pediatric hypothyroidism, celiac-disease, SGA, and Turner-syndrome follow-on evaluator modules separately with the same boundary. State that prevalence, demographic calibration, disorder-critical labs/medications/referrals, held-out validation, and privacy auditing remain later gates.
 
 - [x] **Step 2: Verify the repository**
 
@@ -409,7 +409,7 @@ git commit -m "docs: describe latent growth disorder modules"
 
 Before merging this plan, verify that:
 
-- The original four module types produce deterministic states and ordered event traces with latent truth separate from observable descendants; the pediatric-hypothyroidism, celiac-disease, and SGA follow-ons add the same contract without widening visible package export.
+- The original four module types produce deterministic states and ordered event traces with latent truth separate from observable descendants; the pediatric-hypothyroidism, celiac-disease, SGA, and Turner-syndrome follow-ons add the same contract without widening visible package export.
 - Familial short stature preserves a constant height-z offset, constitutional delay has a bounded temporary effect, and growth-hormone deficiency has progressive impairment with optional treatment response.
 - Healthy-module output is byte-for-byte/point-for-point identical to the existing healthy kernel for the same inputs.
 - Anthropometric identities, reference guards, age ordering, and named random-stream isolation pass independent tests.
@@ -440,3 +440,9 @@ Before merging this plan, verify that:
 - [x] Add a versioned, frozen `SmallForGestationalAgeConfig` and `SmallForGestationalAgeModule` with birth-state length/weight deficits, faster BMI catch-up, and catch-up versus persistent-height branches.
 - [x] Register `DisorderKind.SMALL_FOR_GESTATIONAL_AGE`, its named counterfactual stream, built-in module contract, and two golden forced-coverage cases without changing the visible generator or package schema.
 - [x] Add deterministic, schedule, overflow, state-kind, birth-onset, stream, age-regime composition, and golden-catalog tests; update evaluator-only documentation and retain gestational-age/prematurity ancillary pathways as deferred.
+
+### Follow-on: Turner syndrome trajectory (2026-09-02)
+
+- [x] Add a versioned, frozen `TurnerSyndromeConfig` and `TurnerSyndromeModule` with a female-reference compatibility rule, no SGA-like birth deficit, progressive height impairment, relative BMI increase, and optional treatment response.
+- [x] Register `DisorderKind.TURNER_SYNDROME`, its named counterfactual stream, built-in module contract, and two golden forced-coverage cases (treated and untreated) without changing the visible generator or package schema.
+- [x] Add deterministic, schedule, overflow, state-kind, sex-reference, stream, age-regime composition, and golden-pattern tests; cover treated response and untreated progressive-negative height; update evaluator-only documentation and retain karyotype/estrogen and other Turner ancillary pathways as deferred.

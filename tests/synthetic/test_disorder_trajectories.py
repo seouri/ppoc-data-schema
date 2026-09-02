@@ -11,6 +11,7 @@ from synthetic.native.clinical_modules import (
     FamilialShortStatureConfig,
     FamilialShortStatureModule,
     HealthyGrowthModule,
+    TurnerSyndromeModule,
 )
 from synthetic.native.healthy import HealthyKernel
 from synthetic.native.trajectories import (
@@ -127,6 +128,26 @@ def test_healthy_disorder_kernel_applies_generation_hook_once() -> None:
     ).generate(PATIENT, AGES, NamedRandomStreams(20260830, 0))
 
     assert result.points == baseline
+
+
+def test_turner_rejects_ineligible_reference_before_legacy_baseline_generation() -> None:
+    class CountingReference(LinearTestReference):
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def value(self, metric: str, age_days: int, reference_sex: str, z: float) -> float:
+            self.calls += 1
+            return super().value(metric, age_days, reference_sex, z)
+
+    reference = CountingReference()
+    male = PatientState("syn-patient-turner-legacy", "M", "M")
+
+    with pytest.raises(ValueError, match="reference_sex"):
+        DisorderTrajectoryKernel(
+            HealthyKernel(reference), TurnerSyndromeModule()
+        ).generate(male, (730,), NamedRandomStreams(20260902, 0))
+
+    assert reference.calls == 0
 
 
 def test_familial_short_stature_is_constant_height_shift_and_keeps_weight_identity() -> None:

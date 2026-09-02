@@ -30,6 +30,8 @@ from synthetic.native.clinical_modules import (
     PediatricHypothyroidismModule,
     SmallForGestationalAgeConfig,
     SmallForGestationalAgeModule,
+    TurnerSyndromeConfig,
+    TurnerSyndromeModule,
 )
 from synthetic.native.healthy import HealthyKernel
 from synthetic.randomness import NamedRandomStreams
@@ -59,6 +61,7 @@ _BUILTIN_MODULE_CONTRACTS = (
         SmallForGestationalAgeConfig,
         "small-for-gestational-age-v1",
     ),
+    (TurnerSyndromeModule, TurnerSyndromeConfig, "turner-syndrome-v1"),
 )
 
 
@@ -125,6 +128,7 @@ class DisorderTrajectoryKernel:
         streams: NamedRandomStreams,
     ) -> LatentTrajectory:
         validate_growth_disorder_module(self.module)
+        self._validate_patient_eligibility(patient)
         baseline = self.healthy.generate(patient, ages_days, streams)
         state = self.module.sample_state(patient, streams)
         if not isinstance(state, LatentDisorderState):
@@ -185,6 +189,14 @@ class DisorderTrajectoryKernel:
             )
 
         return LatentTrajectory(tuple(points), state, events)
+
+    def _validate_patient_eligibility(self, patient: PatientState) -> None:
+        validator = getattr(self.module, "validate_patient", None)
+        if validator is None:
+            return
+        if not callable(validator):
+            raise TypeError("module patient eligibility validator is unavailable")
+        validator(patient)
 
     def _module_delta(
         self,

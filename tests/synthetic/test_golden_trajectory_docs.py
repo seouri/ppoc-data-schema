@@ -42,6 +42,7 @@ def test_guide_names_the_fixed_catalog_regimes_and_directional_patterns() -> Non
         "constant_negative",
         "delayed_recovery",
         "progression_response",
+        "progressive_negative",
         "positive_after_onset",
         "birth_catch_up",
     ):

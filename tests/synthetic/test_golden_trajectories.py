@@ -37,6 +37,7 @@ from synthetic.native.clinical_modules import (
     HealthyGrowthModule,
     PediatricHypothyroidismModule,
     SmallForGestationalAgeModule,
+    TurnerSyndromeModule,
 )
 from synthetic.randomness import NamedRandomStreams
 from tests.synthetic.fakes import RegimeLinearTestReference
@@ -61,6 +62,7 @@ def _modules() -> dict[DisorderKind, object]:
         DisorderKind.PEDIATRIC_HYPOTHYROIDISM: PediatricHypothyroidismModule(),
         DisorderKind.CELIAC_DISEASE: CeliacDiseaseModule(),
         DisorderKind.SMALL_FOR_GESTATIONAL_AGE: SmallForGestationalAgeModule(),
+        DisorderKind.TURNER_SYNDROME: TurnerSyndromeModule(),
     }
 
 
@@ -75,6 +77,8 @@ def test_golden_catalog_has_fixed_metadata_states_and_patterns() -> None:
         "golden-celiac-disease-v1",
         "golden-small-for-gestational-age-catch-up-v1",
         "golden-small-for-gestational-age-persistent-v1",
+        "golden-turner-syndrome-v1",
+        "golden-turner-syndrome-untreated-v1",
     )
     assert GOLDEN_REASON_CODES == (
         "NONDETERMINISTIC",
@@ -113,6 +117,8 @@ def test_golden_catalog_has_fixed_metadata_states_and_patterns() -> None:
         DISEASE_EVENTS + ("treatment_start", "treatment_response"),
         DISEASE_EVENTS,
         DISEASE_EVENTS,
+        DISEASE_EVENTS + ("treatment_start", "treatment_response"),
+        DISEASE_EVENTS,
     ]
     assert [case.disorder_state for case in DEFAULT_GOLDEN_CASES] == [
         LatentDisorderState(DisorderKind.HEALTHY, None, 0.0),
@@ -141,6 +147,14 @@ def test_golden_catalog_has_fixed_metadata_states_and_patterns() -> None:
         ),
         LatentDisorderState(DisorderKind.SMALL_FOR_GESTATIONAL_AGE, 0, 0.7),
         LatentDisorderState(DisorderKind.SMALL_FOR_GESTATIONAL_AGE, 0, 1.2),
+        LatentDisorderState(
+            DisorderKind.TURNER_SYNDROME,
+            1460,
+            1.0,
+            treatment_start_age_days=1850,
+            treatment_response=0.6,
+        ),
+        LatentDisorderState(DisorderKind.TURNER_SYNDROME, 1460, 1.0),
     ]
     assert [case.height_pattern for case in DEFAULT_GOLDEN_CASES] == [
         GoldenPattern.ZERO,
@@ -151,6 +165,8 @@ def test_golden_catalog_has_fixed_metadata_states_and_patterns() -> None:
         GoldenPattern.PROGRESSION_RESPONSE,
         GoldenPattern.BIRTH_CATCH_UP,
         GoldenPattern.CONSTANT_NEGATIVE,
+        GoldenPattern.PROGRESSION_RESPONSE,
+        GoldenPattern.PROGRESSIVE_NEGATIVE,
     ]
     assert [case.bmi_pattern for case in DEFAULT_GOLDEN_CASES] == [
         GoldenPattern.ZERO,
@@ -161,6 +177,8 @@ def test_golden_catalog_has_fixed_metadata_states_and_patterns() -> None:
         GoldenPattern.PROGRESSION_RESPONSE,
         GoldenPattern.BIRTH_CATCH_UP,
         GoldenPattern.BIRTH_CATCH_UP,
+        GoldenPattern.POSITIVE_AFTER_ONSET,
+        GoldenPattern.POSITIVE_AFTER_ONSET,
     ]
     assert DEFAULT_GOLDEN_CASES[2].pattern_probe_ages_days == (4380, 4740, 5470)
     assert DEFAULT_GOLDEN_CASES[3].pattern_probe_ages_days == (3000, 3510, 3875, 5000)
@@ -168,6 +186,8 @@ def test_golden_catalog_has_fixed_metadata_states_and_patterns() -> None:
     assert DEFAULT_GOLDEN_CASES[5].pattern_probe_ages_days == (2190, 2640, 3005, 3500)
     assert DEFAULT_GOLDEN_CASES[6].pattern_probe_ages_days == (0, 365, 730, 1825)
     assert DEFAULT_GOLDEN_CASES[7].pattern_probe_ages_days == (0, 365, 730, 1825)
+    assert DEFAULT_GOLDEN_CASES[8].pattern_probe_ages_days == (1460, 1850, 2215, 3000)
+    assert DEFAULT_GOLDEN_CASES[9].pattern_probe_ages_days == (1460, 2372, 3285, 4000)
 
 
 def test_case_is_frozen_redacted_exact_and_copies_tuple_inputs() -> None:
@@ -476,6 +496,10 @@ def test_each_declared_directional_pattern_matches_direct_module_effects() -> No
             assert height[0] < 0
             assert height[0] < height[1] <= height[2] <= height[3]
             assert height[3] == 0
+        elif case.height_pattern is GoldenPattern.PROGRESSIVE_NEGATIVE:
+            assert height[0] == 0
+            assert height[0] > height[1] > height[2]
+            assert height[2] == height[3]
         else:
             assert height[0] == 0 and height[1] < 0
             assert height[2] > height[1] and height[3] >= height[2]

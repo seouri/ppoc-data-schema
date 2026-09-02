@@ -19,6 +19,8 @@ from synthetic.native.clinical_modules import (
     PediatricHypothyroidismModule,
     SmallForGestationalAgeConfig,
     SmallForGestationalAgeModule,
+    TurnerSyndromeConfig,
+    TurnerSyndromeModule,
 )
 from synthetic.randomness import NamedRandomStreams
 
@@ -55,6 +57,7 @@ def test_module_versions_are_stable_and_unique() -> None:
         PediatricHypothyroidismModule(),
         CeliacDiseaseModule(),
         SmallForGestationalAgeModule(),
+        TurnerSyndromeModule(),
     )
 
     versions = [module.module_version for module in modules]
@@ -68,6 +71,7 @@ def test_module_versions_are_stable_and_unique() -> None:
         "pediatric-hypothyroidism-v1",
         "celiac-disease-v1",
         "small-for-gestational-age-v1",
+        "turner-syndrome-v1",
     ]
     assert [module.config.module_version for module in modules] == versions
 
@@ -82,6 +86,7 @@ def test_module_versions_are_stable_and_unique() -> None:
         PediatricHypothyroidismModule,
         CeliacDiseaseModule,
         SmallForGestationalAgeModule,
+        TurnerSyndromeModule,
     ],
 )
 def test_built_in_modules_reject_wrong_configuration_types(factory: object) -> None:
@@ -179,6 +184,7 @@ def test_nonzero_treatment_response_requires_treatment_start() -> None:
         lambda: PediatricHypothyroidismConfig(onset_max_age_days=10**1000),
         lambda: CeliacDiseaseConfig(onset_max_age_days=10**1000),
         lambda: SmallForGestationalAgeConfig(height_catch_up_days=10**1000),
+        lambda: TurnerSyndromeConfig(onset_max_age_days=10**1000),
     ],
 )
 def test_module_configurations_reject_unrepresentable_huge_integers(
@@ -215,6 +221,10 @@ def test_module_configurations_reject_unrepresentable_huge_integers(
         (
             SmallForGestationalAgeModule(),
             LatentDisorderState(DisorderKind.SMALL_FOR_GESTATIONAL_AGE, 0, 0.8),
+        ),
+        (
+            TurnerSyndromeModule(),
+            LatentDisorderState(DisorderKind.TURNER_SYNDROME, 730, 0.8),
         ),
     ],
 )
@@ -288,6 +298,7 @@ def test_module_sampling_is_reproducible_and_uses_named_streams() -> None:
         PediatricHypothyroidismModule(),
         CeliacDiseaseModule(),
         SmallForGestationalAgeModule(),
+        TurnerSyndromeModule(),
     )
     for module in modules:
         left = module.sample_state(PATIENT, NamedRandomStreams(123, 7))
@@ -304,12 +315,14 @@ def test_modules_request_only_their_scoped_disorder_streams() -> None:
         PediatricHypothyroidismModule(),
         CeliacDiseaseModule(),
         SmallForGestationalAgeModule(),
+        TurnerSyndromeModule(),
     )
 
     for module in modules:
         module.sample_state(PATIENT, streams)
 
     assert streams.requested_names == [f"disorder.{module.kind.value}" for module in modules]
+    assert "growth" not in streams.requested_names
     healthy_streams = RecordingStreams(123, 7)
     HealthyGrowthModule().sample_state(PATIENT, healthy_streams)
     assert healthy_streams.requested_names == []

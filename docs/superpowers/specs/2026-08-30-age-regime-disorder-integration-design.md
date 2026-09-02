@@ -50,6 +50,10 @@ The constructor validates the same module contract as
 `DisorderTrajectoryKernel`: a `DisorderKind`, nonempty `module_version`, and
 callable state, effect, and event methods. The composition kernel never calls
 `HealthyKernel`, `DisorderTrajectoryKernel`, a CSV writer, or a resource mapper.
+When a module exposes the optional `validate_patient(patient)` eligibility hook,
+the composition kernel invokes it before any reference-backed baseline
+generation; this keeps reference-incompatible scenarios fail-closed without
+changing modules that do not need patient eligibility.
 
 ### Evaluator container
 

@@ -20,7 +20,7 @@
 - Identical reference identity, configuration, patient, module version/configuration, named streams, and seed reproduce identical state, points, disorder state, and events. The composition never requests `growth`.
 - The age-regime replay seam preserves ordinary `AgeRegimeTrajectoryKernel.generate(...)` behavior and existing call sites.
 - Constitutional delay shifts age-regime puberty onset by `puberty_delay_days` and does not apply its overlapping negative height delta a second time; an out-of-domain shifted schedule is an error.
-- Defaults remain uncalibrated development scenarios. The evaluator-only follow-on modules include pediatric hypothyroidism, celiac disease, and small-for-gestational-age; they do not widen this kernel into visible ancillary resources. No real rows, diagnosis counts, clinical tables, prevalence estimates, demographic calibration, privacy evidence, or Synthea implementation enters this plan.
+- Defaults remain uncalibrated development scenarios. The evaluator-only follow-on modules include pediatric hypothyroidism, celiac disease, small-for-gestational-age, and Turner syndrome; they do not widen this kernel into visible ancillary resources. No real rows, diagnosis counts, clinical tables, prevalence estimates, demographic calibration, privacy evidence, or Synthea implementation enters this plan.
 
 ---
 
@@ -423,7 +423,7 @@ Before merging this plan, verify that:
 
 - Ordinary age-regime generation remains deterministic and behaviorally unchanged when no replay state is supplied.
 - `AgeRegimeDisorderTrajectory` validates hidden physiology, disorder state, event types, and patient identities without replacing `LatentTrajectory`.
-- All reviewed native modules compose across infancy, transition, childhood, puberty, and adolescence; familial effects adjust both representations, SGA birth effects preserve explicit anthropometric identities, constitutional delay shifts puberty exactly once, and treatment/events remain causally ordered.
+- All reviewed native modules compose across infancy, transition, childhood, puberty, and adolescence; familial effects adjust both representations, SGA birth effects preserve explicit anthropometric identities, Turner remains female-reference-compatible without a birth deficit and preflights that eligibility before baseline reference calls, constitutional delay shifts puberty exactly once, and treatment/events remain causally ordered.
 - Pre-transition outputs contain length plus weight, transition derives height/BMI explicitly, post-transition outputs contain height plus BMI and derive weight, and adjusted identities/velocities are finite.
 - Sparse transition pairs, shifted schedules, extreme references, nonfinite effects, malformed module contracts, wrong state kinds, and malformed events fail closed.
 - The composition requests regime and disorder streams but never `growth`; identical seeds and inputs reproduce physiology, disorder state, and events.

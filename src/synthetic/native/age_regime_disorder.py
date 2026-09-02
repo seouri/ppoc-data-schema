@@ -91,6 +91,7 @@ class AgeRegimeDisorderKernel:
         disorder_state: LatentDisorderState | None = None,
     ) -> AgeRegimeDisorderTrajectory:
         validate_growth_disorder_module(self.module)
+        self._validate_patient_eligibility(patient)
         physiology_state, disorder_state = self._resolve_states(
             patient,
             streams,
@@ -109,6 +110,7 @@ class AgeRegimeDisorderKernel:
     ) -> tuple[AgeRegimeState, LatentDisorderState]:
         """Sample the two hidden states once for deterministic world replay."""
 
+        self._validate_patient_eligibility(patient)
         physiology_state = self.physiology.sample_state(streams)
         disorder_state = self.module.sample_state(patient, streams)
         return self._validated_states(physiology_state, disorder_state)
@@ -121,6 +123,14 @@ class AgeRegimeDisorderKernel:
         """Plural alias for callers that make the paired-state contract explicit."""
 
         return self.sample_state(patient, streams)
+
+    def _validate_patient_eligibility(self, patient: PatientState) -> None:
+        validator = getattr(self.module, "validate_patient", None)
+        if validator is None:
+            return
+        if not callable(validator):
+            raise TypeError("module patient eligibility validator is unavailable")
+        validator(patient)
 
     def _resolve_states(
         self,
