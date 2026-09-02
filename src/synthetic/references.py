@@ -75,7 +75,7 @@ class LmsRow:
                 raise ValueError(f"{name} must be a finite float")  # noqa: TRY004
             try:
                 number = float(raw)
-            except (TypeError, ValueError) as exc:
+            except (OverflowError, TypeError, ValueError) as exc:
                 raise ValueError(f"{name} must be a finite float") from exc
             if not math.isfinite(number):
                 raise ValueError(f"{name} must be a finite float")
@@ -130,7 +130,7 @@ class LmsGrowthReference:
     def value(self, metric: str, age_days: int, reference_sex: str, z: float) -> float:
         try:
             score = float(z)
-        except (TypeError, ValueError) as exc:
+        except (OverflowError, TypeError, ValueError) as exc:
             raise ValueError("z must be finite") from exc
         if not math.isfinite(score):
             raise ValueError("z must be finite")

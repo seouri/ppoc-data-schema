@@ -248,3 +248,22 @@ def test_lms_reference_rejects_nonfinite_base_before_exponentiation() -> None:
 
     with pytest.raises(ValueError, match="base"):
         reference.value("height_cm", 730, "F", 1.0)
+
+
+def test_lms_reference_normalizes_oversized_z_score() -> None:
+    reference = LmsGrowthReference(
+        "public-growth-v1",
+        rows=(LmsRow("height_cm", 730, "F", 1.0, 100.0, 0.1),),
+    )
+
+    with pytest.raises(ValueError, match="z must be finite"):
+        reference.value("height_cm", 730, "F", 10**1000)
+
+
+@pytest.mark.parametrize("field", ["l", "m", "s"])
+def test_lms_row_normalizes_oversized_parameters(field: str) -> None:
+    parameters = {"l": 1.0, "m": 100.0, "s": 0.1}
+    parameters[field] = 10**1000
+
+    with pytest.raises(ValueError, match=f"{field} must be a finite float"):
+        LmsRow("height_cm", 730, "F", **parameters)
