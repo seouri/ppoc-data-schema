@@ -22,7 +22,18 @@ from numbers import Real
 from types import MappingProxyType
 from typing import Any, ClassVar
 
-from synthetic.models import AgeRegimeDisorderTrajectory, ClinicalEvent, GrowthRegime
+from synthetic.models import (
+    MAX_AGE_DAYS,
+    AgeRegimeDisorderTrajectory,
+    AgeRegimePoint,
+    AgeRegimeTrajectory,
+    ClinicalEvent,
+    DisorderKind,
+    GrowthRegime,
+    LatentDisorderState,
+    PatientState,
+)
+from synthetic.native.trajectories import validate_disorder_events
 from synthetic.randomness import NamedRandomStreams
 
 _VERSION_TOKEN = re.compile(r"^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$")
@@ -155,6 +166,13 @@ def _require_nonnegative_int(value: object, name: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise ValueError(f"{name} must be a nonnegative integer")
     return value
+
+
+def _require_supported_age(value: object, name: str) -> int:
+    result = _require_nonnegative_int(value, name)
+    if result > MAX_AGE_DAYS:
+        raise ValueError(f"{name} must be within supported age range")
+    return result
 
 
 def _require_positive_int(value: object, name: str) -> int:
@@ -598,15 +616,17 @@ class ObservationTruth:
             _require_synthetic_patient_id(event.patient_id, "source event patient_id")
             if event.patient_id != self.patient_id:
                 raise ValueError("source events must identify the same synthetic patient")
-            _require_nonnegative_int(event.age_days, "source event age_days")
-            if event.event_type not in _SOURCE_EVENT_TYPES:
+            _require_supported_age(event.age_days, "source event age_days")
+            if not isinstance(event.event_type, str) or event.event_type not in _SOURCE_EVENT_TYPES:
                 raise ValueError("source event type must be a native trajectory event")
             if event.code is not None:
                 raise ValueError("source event code must be None until terminology is reviewed")
-            if not isinstance(event.hidden, bool):
+            if type(event.hidden) is not bool:
                 raise TypeError("source event hidden must be a boolean")
-            if event.event_type == "latent_onset" and not event.hidden:
-                raise ValueError("latent_onset source events must remain hidden")
+            if event.hidden is not (event.event_type == "latent_onset"):
+                if event.event_type == "latent_onset":
+                    raise ValueError("latent_onset source events must remain hidden")
+                raise ValueError("source event hidden flag is invalid")
 
         decision_indices = tuple(item.source_event_index for item in event_decisions)
         if decision_indices != tuple(range(len(source_events))):
@@ -794,7 +814,41 @@ def _validate_observation_trajectory(
 ) -> AgeRegimeDisorderTrajectory:
     if not isinstance(trajectory, AgeRegimeDisorderTrajectory):
         raise TypeError("trajectory must be an AgeRegimeDisorderTrajectory")
+    if not isinstance(trajectory.physiology, AgeRegimeTrajectory):
+        raise TypeError("trajectory physiology must be an AgeRegimeTrajectory")
     points = trajectory.physiology.points
+    if not isinstance(points, tuple) or not points or not all(
+        isinstance(point, AgeRegimePoint) for point in points
+    ):
+        raise TypeError("trajectory physiology points must be a nonempty tuple")
+    previous_point_age = -1
+    for point in points:
+        point_age = _require_supported_age(point.age_days, "physiology point age_days")
+        if point_age <= previous_point_age:
+            raise ValueError("trajectory physiology points must be strictly increasing by age")
+        previous_point_age = point_age
+        # ``AgeRegimeTrajectory`` validates this contract only at container
+        # construction; re-run the point model checks because a nested frozen
+        # point can still be altered with ``object.__setattr__``.
+        if point.regime is GrowthRegime.INFANCY:
+            # Observation projection intentionally treats standing height and
+            # BMI as inapplicable in infancy, even if a legacy point carries
+            # those extra fields.
+            replace(point, height_cm=None, bmi=None)
+        else:
+            replace(point)
+    if not isinstance(trajectory.events, tuple):
+        raise TypeError("trajectory events must be a tuple of ClinicalEvent")
+    if not isinstance(trajectory.disorder, LatentDisorderState):
+        raise TypeError("trajectory disorder must be a LatentDisorderState")
+    disorder = replace(trajectory.disorder)
+    if not isinstance(disorder.kind, DisorderKind):
+        raise TypeError("trajectory disorder kind must be a DisorderKind")
+    if disorder.kind is DisorderKind.HEALTHY:
+        if disorder.onset_age_days is not None:
+            raise ValueError("healthy trajectories must not declare a disorder onset")
+    elif disorder.onset_age_days is None:
+        raise ValueError("nonhealthy trajectories must declare a disorder onset")
     patient_id = points[0].patient_id
     _require_synthetic_patient_id(patient_id)
     if any(point.patient_id != patient_id for point in points):
@@ -802,28 +856,43 @@ def _validate_observation_trajectory(
 
     previous_age = -1
     previous_phase = -1
+    latent_onset_seen = False
     for event in trajectory.events:
         if not isinstance(event, ClinicalEvent):
             raise TypeError("trajectory events must be ClinicalEvent instances")
         _require_synthetic_patient_id(event.patient_id, "source event patient_id")
         if event.patient_id != patient_id:
             raise ValueError("source events must identify the trajectory patient")
-        _require_nonnegative_int(event.age_days, "source event age_days")
-        if event.event_type not in _SOURCE_EVENT_TYPES:
+        _require_supported_age(event.age_days, "source event age_days")
+        if not isinstance(event.event_type, str) or event.event_type not in _SOURCE_EVENT_TYPES:
             raise ValueError("source event type must be a native trajectory event")
         if event.code is not None:
             raise ValueError("source event code must be None until terminology is reviewed")
-        if not isinstance(event.hidden, bool):
+        if type(event.hidden) is not bool:
             raise TypeError("source event hidden must be a boolean")
         phase = _SOURCE_EVENT_PHASES[event.event_type]
         if event.age_days < previous_age or phase <= previous_phase:
             raise ValueError("source event schedule must follow causal phase order")
-        if event.event_type == "latent_onset" and not event.hidden:
-            raise ValueError("latent_onset source events must remain hidden")
+        expected_hidden = event.event_type == "latent_onset"
+        if event.hidden is not expected_hidden:
+            if event.event_type == "latent_onset":
+                raise ValueError("latent_onset source events must remain hidden")
+            raise ValueError("source event hidden flag is invalid")
+        if event.event_type == "latent_onset":
+            latent_onset_seen = True
         previous_age = event.age_days
         previous_phase = phase
 
-    if trajectory.disorder.kind.value == "healthy" and any(
+    if disorder.onset_age_days is not None and not latent_onset_seen:
+        raise ValueError("trajectory with an onset must contain a latent_onset event")
+
+    validate_disorder_events(
+        PatientState(patient_id, "U", "U"),
+        disorder,
+        trajectory.events,
+    )
+
+    if disorder.kind.value == "healthy" and any(
         event.event_type == "recorded_diagnosis" for event in trajectory.events
     ):
         raise ValueError("healthy trajectories cannot contain a recorded diagnosis")
@@ -1468,13 +1537,17 @@ def _source_event_data(
         if not decision.recorded and decision.opportunity_index is not None:
             raise ValueError("unrecorded event decisions must not have an opportunity link")
         _require_synthetic_patient_id(event.patient_id, "source event patient_id")
-        _require_nonnegative_int(event.age_days, "source event age_days")
-        if event.event_type not in _SOURCE_EVENT_TYPES:
+        _require_supported_age(event.age_days, "source event age_days")
+        if not isinstance(event.event_type, str) or event.event_type not in _SOURCE_EVENT_TYPES:
             raise ValueError("source event type must be a native trajectory event")
         if event.code is not None:
             raise ValueError("source event code must be None until terminology is reviewed")
-        if not isinstance(event.hidden, bool):
+        if type(event.hidden) is not bool:
             raise TypeError("source event hidden must be a boolean")
+        if event.hidden is not (event.event_type == "latent_onset"):
+            if event.event_type == "latent_onset":
+                raise ValueError("latent_onset source events must remain hidden")
+            raise ValueError("source event hidden flag is invalid")
     return events, decisions
 
 

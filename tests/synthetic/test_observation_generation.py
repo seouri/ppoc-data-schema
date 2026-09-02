@@ -6,6 +6,7 @@ import math
 import pytest
 
 from synthetic.models import (
+    MAX_AGE_DAYS,
     AgeRegimeDisorderTrajectory,
     AgeRegimePoint,
     AgeRegimeState,
@@ -139,7 +140,13 @@ def _event_trajectory() -> AgeRegimeDisorderTrajectory:
     )
     return dataclasses.replace(
         trajectory,
-        disorder=LatentDisorderState(DisorderKind.FAMILIAL_SHORT_STATURE, 500, 0.8),
+        disorder=LatentDisorderState(
+            DisorderKind.GROWTH_HORMONE_DEFICIENCY,
+            500,
+            0.8,
+            treatment_start_age_days=1800,
+            treatment_response=0.8,
+        ),
     )
 
 
@@ -233,7 +240,7 @@ def test_generation_keeps_regime_channel_applicability_and_derives_bmi() -> None
 def test_generation_keeps_bmi_not_applicable_for_infancy_extra_standing_height() -> None:
     points = list(_trajectory().physiology.points)
     # Bypass the model invariant to keep this an observation-boundary hostile
-    # input test: malformed latent points must still be rendered safely.
+    # input test: inapplicable infancy fields remain ignored by projection.
     object.__setattr__(points[0], "height_cm", 45.0)
     trajectory = dataclasses.replace(
         _trajectory(),
@@ -462,3 +469,109 @@ def test_generation_rejects_nontrajectory_and_unknown_source_events() -> None:
     )
     with pytest.raises(ValueError, match="event type"):
         generate_observation_frame(malformed, _policy(), NamedRandomStreams(9, 0))
+
+
+def test_observation_entry_rejects_tampered_source_event_visibility() -> None:
+    trajectory = _event_trajectory()
+    events = list(trajectory.events)
+    object.__setattr__(events[1], "hidden", True)
+    tampered = dataclasses.replace(trajectory, events=tuple(events))
+
+    with pytest.raises(ValueError, match="hidden"):
+        generate_observation_frame(tampered, _policy(), NamedRandomStreams(9, 0))
+
+
+def test_observation_entry_rejects_source_event_age_above_supported_bound() -> None:
+    trajectory = _event_trajectory()
+    malformed = dataclasses.replace(
+        trajectory,
+        events=tuple(
+            dataclasses.replace(
+                event,
+                age_days=MAX_AGE_DAYS + 1,
+            )
+            if event.event_type == "recognition_opportunity"
+            else event
+            for event in trajectory.events
+        ),
+    )
+
+    with pytest.raises(ValueError, match="supported age range"):
+        generate_observation_frame(malformed, _policy(), NamedRandomStreams(9, 0))
+
+
+def test_observation_entry_requires_latent_onset_before_descendant_events() -> None:
+    trajectory = _event_trajectory()
+    malformed = dataclasses.replace(
+        trajectory,
+        events=tuple(
+            event for event in trajectory.events if event.event_type != "latent_onset"
+        ),
+    )
+
+    with pytest.raises(ValueError, match="latent_onset"):
+        generate_observation_frame(malformed, _policy(), NamedRandomStreams(9, 0))
+
+
+def test_observation_entry_requires_terminal_treatment_outcome() -> None:
+    source = _event_trajectory()
+    trajectory = dataclasses.replace(
+        source,
+        disorder=LatentDisorderState(
+            DisorderKind.GROWTH_HORMONE_DEFICIENCY,
+            500,
+            0.8,
+            treatment_start_age_days=1800,
+            treatment_response=0.8,
+        ),
+        events=tuple(
+            event
+            for event in source.events
+            if event.event_type != "treatment_response"
+        ),
+    )
+
+    with pytest.raises(ValueError, match="treatment-bearing state"):
+        generate_observation_frame(trajectory, _policy(), NamedRandomStreams(9, 0))
+
+
+@pytest.mark.parametrize(
+    ("point_index", "age_days", "message"),
+    [
+        (0, -1, "nonnegative"),
+        (1, MAX_AGE_DAYS + 1, "supported age range"),
+        (1, 50, "strictly increasing"),
+    ],
+)
+def test_observation_entry_rejects_tampered_physiology_point_ages(
+    point_index: int,
+    age_days: int,
+    message: str,
+) -> None:
+    trajectory = _trajectory()
+    points = list(trajectory.physiology.points)
+    object.__setattr__(points[point_index], "age_days", age_days)
+    tampered = dataclasses.replace(trajectory)
+
+    with pytest.raises(ValueError, match=message):
+        generate_observation_frame(tampered, _policy(), NamedRandomStreams(9, 0))
+
+
+@pytest.mark.parametrize(
+    ("regime", "message"),
+    [
+        ("bogus", "regime"),
+        (GrowthRegime.PUBERTY, "standing height and BMI"),
+    ],
+)
+def test_observation_entry_rejects_tampered_regime_channel_shape(
+    regime: object,
+    message: str,
+) -> None:
+    trajectory = _trajectory()
+    point = trajectory.physiology.points[0]
+    object.__setattr__(point, "regime", regime)
+    tampered = dataclasses.replace(trajectory)
+
+    with pytest.raises(ValueError, match=message):
+        generate_observation_frame(tampered, _policy(), NamedRandomStreams(9, 0))
