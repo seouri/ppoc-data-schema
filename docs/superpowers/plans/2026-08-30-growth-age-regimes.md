@@ -36,7 +36,7 @@
 - Produces frozen `AgeRegimeTrajectory(points: tuple[AgeRegimePoint, ...], state: AgeRegimeState)`.
 - Consumes the existing `PatientState` and leaves existing `LatentPoint` and `LatentTrajectory` construction behavior unchanged.
 
-- [ ] **Step 1: Write the failing model tests**
+- [x] **Step 1: Write the failing model tests**
 
 Create `tests/synthetic/test_age_regime_models.py`:
 
@@ -134,13 +134,13 @@ def test_existing_latent_point_positional_contract_is_unchanged() -> None:
     assert point.weight_kg == pytest.approx(12.96)
 ```
 
-- [ ] **Step 2: Run the model tests to verify they fail**
+- [x] **Step 2: Run the model tests to verify they fail**
 
 Run: `uv run pytest -q tests/synthetic/test_age_regime_models.py`
 
 Expected: collection fails because the age-regime model types are not yet defined.
 
-- [ ] **Step 3: Implement the validated age-regime model types**
+- [x] **Step 3: Implement the validated age-regime model types**
 
 In `src/synthetic/models.py`:
 
@@ -151,13 +151,13 @@ In `src/synthetic/models.py`:
 5. When both standing height and BMI are present, require `weight_kg == bmi * (height_cm / 100) ** 2` within `1e-9` relative and absolute tolerance. Do not independently validate or generate a weight-for-length score in this slice.
 6. Add frozen `AgeRegimeTrajectory`; require a tuple of `AgeRegimePoint` objects and an `AgeRegimeState`, and reject empty, mixed-patient, or non-increasing point sequences. Leave all existing dataclasses and positional construction behavior unchanged.
 
-- [ ] **Step 4: Run the model tests and existing synthetic suite**
+- [x] **Step 4: Run the model tests and existing synthetic suite**
 
 Run: `uv run pytest -q tests/synthetic/test_age_regime_models.py && uv run pytest -q tests/synthetic`
 
 Expected: the new model tests and all existing synthetic tests pass.
 
-- [ ] **Step 5: Run focused lint and commit**
+- [x] **Step 5: Run focused lint and commit**
 
 Run: `uv run ruff check src/synthetic/models.py tests/synthetic/test_age_regime_models.py`
 
@@ -179,7 +179,7 @@ git commit -m "feat: add age-regime trajectory models"
 - Produces `classify_age(age_days: int, puberty_onset_age_days: int, puberty_tempo_days: int, config: AgeRegimeConfig) -> GrowthRegime`.
 - Consumes `GrowthRegime` and `AgeRegimeState` from Task 1 and does not alter `HealthyKernel` or the disorder-module configuration.
 
-- [ ] **Step 1: Write the failing configuration and classifier tests**
+- [x] **Step 1: Write the failing configuration and classifier tests**
 
 Create `tests/synthetic/test_age_regime_config.py`:
 
@@ -237,13 +237,13 @@ def test_classifier_rejects_invalid_age_or_puberty_schedule() -> None:
         classify_age(4380, 4380, 0, config)
 ```
 
-- [ ] **Step 2: Run the configuration tests to verify they fail**
+- [x] **Step 2: Run the configuration tests to verify they fail**
 
 Run: `uv run pytest -q tests/synthetic/test_age_regime_config.py`
 
 Expected: collection fails because `AgeRegimeConfig` and `classify_age` are not defined.
 
-- [ ] **Step 3: Implement the validated configuration and classifier**
+- [x] **Step 3: Implement the validated configuration and classifier**
 
 In `src/synthetic/native/age_regimes.py`:
 
@@ -252,13 +252,13 @@ In `src/synthetic/native/age_regimes.py`:
 3. Implement `classify_age` with the exact boundary policy used in the tests: ages below `transition_age_days - transition_window_days` are `INFANCY`; ages through `transition_age_days + transition_window_days` are `TRANSITION`; ages before puberty onset are `CHILDHOOD`; ages through onset plus tempo are `PUBERTY`; later ages are `ADOLESCENCE`. Reject negative ages and nonpositive puberty tempo.
 4. Keep configuration/version metadata separate from calibrated prevalence or clinical evidence; no default is allowed to be described as representative.
 
-- [ ] **Step 4: Run the configuration tests and existing suite**
+- [x] **Step 4: Run the configuration tests and existing suite**
 
 Run: `uv run pytest -q tests/synthetic/test_age_regime_config.py && uv run pytest -q tests/synthetic`
 
 Expected: all configuration and existing synthetic tests pass.
 
-- [ ] **Step 5: Run lint and commit**
+- [x] **Step 5: Run lint and commit**
 
 Run: `uv run ruff check src/synthetic/native/age_regimes.py tests/synthetic/test_age_regime_config.py`
 
@@ -282,7 +282,7 @@ git commit -m "feat: add age-regime configuration"
 - Consumes `GrowthReference.value(...)`, `AgeRegimeConfig`, `classify_age`, `AgeRegimeState`, and `AgeRegimePoint` from Tasks 1–2.
 - Never calls the existing `HealthyKernel` or modifies the current `generate_smoke`/`DisorderTrajectoryKernel` paths; integration with visible resources and disorder effects is a later slice.
 
-- [ ] **Step 1: Write failing kernel tests**
+- [x] **Step 1: Write failing kernel tests**
 
 Add a test-only `RegimeLinearTestReference` to `tests/synthetic/fakes.py` and create `tests/synthetic/test_age_regime_kernel.py`:
 
@@ -484,13 +484,13 @@ def test_kernel_rejects_transition_discontinuity() -> None:
         )
 ```
 
-- [ ] **Step 2: Run the kernel tests to verify they fail**
+- [x] **Step 2: Run the kernel tests to verify they fail**
 
 Run: `uv run pytest -q tests/synthetic/test_age_regime_kernel.py`
 
 Expected: collection fails because `AgeRegimeTrajectoryKernel` is not implemented.
 
-- [ ] **Step 3: Implement the minimal deterministic kernel**
+- [x] **Step 3: Implement the minimal deterministic kernel**
 
 In `src/synthetic/native/age_regimes.py`:
 
@@ -502,13 +502,13 @@ In `src/synthetic/native/age_regimes.py`:
 6. Compute height velocity from comparable body size (`height_cm` after conversion, or `length_cm - offset` before conversion) and weight velocity over elapsed days using `365.25 / delta_days`. Set the first point’s velocities to `None`; reject nonfinite derived velocities.
 7. Before returning `AgeRegimeTrajectory`, enforce the transition continuity tolerance between adjacent points crossing the transition window. Preserve patient IDs and ages, keep all latent state inside the returned evaluator-only object, and never call a CSV/resource mapper. Keep `RegimeLinearTestReference` under `tests/synthetic/fakes.py`; it is test-only and must not be imported by production code.
 
-- [ ] **Step 4: Run focused kernel tests and the existing suite**
+- [x] **Step 4: Run focused kernel tests and the existing suite**
 
 Run: `uv run pytest -q tests/synthetic/test_age_regime_kernel.py && uv run pytest -q tests/synthetic`
 
 Expected: the new kernel tests and all existing synthetic tests pass.
 
-- [ ] **Step 5: Run lint and commit**
+- [x] **Step 5: Run lint and commit**
 
 Run: `uv run ruff check src/synthetic/native/age_regimes.py tests/synthetic/test_age_regime_kernel.py`
 
@@ -528,7 +528,7 @@ git commit -m "feat: add deterministic age-regime kernel"
 - Consumes `AgeRegimeTrajectoryKernel`, `AgeRegimeConfig`, `AgeRegimePoint`, and `AgeRegimeTrajectory` from Tasks 1–3.
 - Produces concise documentation of the age-regime API, transition semantics, uncalibrated defaults, and the unchanged visible smoke/export path.
 
-- [ ] **Step 1: Update the usage guide**
+- [x] **Step 1: Update the usage guide**
 
 In `docs/synthetic-generator.md`:
 
@@ -538,13 +538,13 @@ In `docs/synthetic-generator.md`:
 4. State that defaults are uncalibrated development scenarios; no WHO/CDC clinical table is bundled; prevalence, demographic calibration, disorder-critical descendants, held-out validation, privacy auditing, and Synthea conformance remain later gates.
 5. Replace ambiguous “example below” wording with “smoke example” where the guide now contains more than one Python example. Keep the guide’s non-matchability limitation intact.
 
-- [ ] **Step 2: Verify documentation and repository checks**
+- [x] **Step 2: Verify documentation and repository checks**
 
 Run: `uv run pytest -q && uv run ruff check src tests && python3 schema/build.py --check && git diff --check`
 
 Expected: all tests pass, Ruff is clean, eight schema resources validate, and Git reports no whitespace errors.
 
-- [ ] **Step 3: Commit the documentation**
+- [x] **Step 3: Commit the documentation**
 
 ```bash
 git add docs/synthetic-generator.md
@@ -564,3 +564,12 @@ Before merging this plan, verify that:
 - Named regime streams are isolated from the existing `growth` stream and identical inputs reproduce identical state and points.
 - No age-regime latent state, evaluator point, clinical claim, prevalence claim, real patient row, or privacy evidence enters the visible eight-resource fixture package.
 - Full pytest, Ruff, schema, and whitespace checks pass from the feature branch, and documentation labels the layer as uncalibrated development-only behavior.
+
+## Completion evidence
+
+- Historical implementation commits are present on `main` for the model containers, versioned classifier/configuration, deterministic physiology kernel, and evaluator-only documentation. Current-main hardening commits are `e093b6a`, `b6fe64b`, and `58af5e6` (numeric fail-closed boundaries, optional head cutoff, sparse transition continuity, malformed-domain rejection, classifier bounds, infancy two-dimension enforcement, velocity protection, and hook/reference exception normalization).
+- Final affected age-regime/downstream verification passed `246 passed, 3 skipped`; the skips are documented opt-in development-scale tests. Final full repository verification passed `2565 passed, 4 skipped`.
+- Final static checks passed: Ruff reported `All checks passed!`; `python3 schema/build.py --check` validated 8 resources; `uv lock --check` resolved 17 packages; and `git diff --check` was clean.
+- Two fresh re-reviews of the complete hardening stack approved it with no Critical, Important, or Minor findings (`final-fix-review-1.md` and `final-fix-review-2.md`). The fix implementation report records red/green TDD evidence and downstream boundary updates.
+- The age-regime layer uses isolated `regime.*` streams, preserves deterministic state replay, and remains evaluator/development-only. No age-regime state, points, velocities, clinical table, real patient row, prevalence/demographic claim, privacy evidence, Synthea result, or release authorization enters the visible eight-resource package.
+- Augmenter provenance remains intact: the 14-file source closure matches the local `growth-ai` checkout with manifest hash `b50afc36eca61684380154129cdacf484e62d56fa6da55914adab18c2d94d1d6`; the pinned CDC reference identity/domain check passes with fingerprint `33b67c78867c2c00708c4ba6f0752b59f29671ba8b8fe84a78707a460cffa6a4`; and tracked-data exclusion passes.
