@@ -38,7 +38,7 @@
 - `GoldenTrajectoryCase` fields are `case_id`, `patient`, `seed`, `ages_days`, `physiology_state`, `disorder_state`, `required_regimes`, `required_event_types`, `height_pattern`, `bmi_pattern`, and `pattern_probe_ages_days`.
 - `GoldenCaseResult` fields are `case_id`, `status`, and `reason_codes`; `GoldenTrajectoryReport` fields are `report_version`, `status`, and `case_results`.
 
-- [ ] **Step 1: Write the failing catalog and runner tests.**
+- [x] **Step 1: Write the failing catalog and runner tests.**
 
   Define a test helper that returns the exact fixed default cases’ aggregate metadata and uses only `RegimeLinearTestReference`. Assert the four default IDs and fixed version, the exact fixed age tuple, all five required `GrowthRegime` values, and the expected event sets for healthy, familial short stature, constitutional delay, and treated growth-hormone deficiency.
 
@@ -48,7 +48,7 @@
 
   Test failure boundaries with a custom reference that raises, a missing/wrong-kind module mapping, an invalid case, a nondeterministic module/reference, missing required regimes/events, and a deliberately broken directional pattern. Invalid inputs must raise the fixed unavailable exception with no cause/context or submitted patient/age/value echo; generated-case failures must return `FAIL` with only the fixed reason codes. Assert no `PASS` result can expose trajectory points, states, measurements, event payloads, seeds, or patient IDs.
 
-- [ ] **Step 2: Run focused tests to verify the red state.**
+- [x] **Step 2: Run focused tests to verify the red state.**
 
   ```sh
   PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_golden_trajectories.py
@@ -56,7 +56,7 @@
 
   Expected: collection fails because `synthetic.golden_trajectories` and its public classes do not yet exist.
 
-- [ ] **Step 3: Implement the minimal evaluator-only suite.**
+- [x] **Step 3: Implement the minimal evaluator-only suite.**
 
   Define exact fixed constants, enums, fixed reason ordering, and a single redacted exception helper. Implement all three dataclasses with `frozen=True`, `repr=False`, exact built-in scalar/tuple/model checks, immutable copies, `__init_subclass__` rejection, safe case-ID validation, and no public hidden-state serialization. Require strict ages, strictly increasing in-domain pattern probes (which may be unobserved between trajectory sample ages), unique regimes/events, valid `GoldenPattern` values, and matching patient/disorder state kinds.
 
@@ -66,7 +66,7 @@
 
   Implement `GoldenCaseResult.to_mapping()`, `GoldenTrajectoryReport.to_mapping()`, and `to_json_bytes()` using private scalar extractors rather than overridable methods, sorted compact ASCII JSON, `allow_nan=False`, and one trailing newline. Do not include `patient`, `age`, `state`, `point`, `event`, `seed`, `reference`, `module`, value, or hidden-truth fields in report output.
 
-- [ ] **Step 4: Run focused tests and lint.**
+- [x] **Step 4: Run focused tests and lint.**
 
   ```sh
   PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_golden_trajectories.py
@@ -75,7 +75,7 @@
 
   Expected: all catalog/runner tests pass and Ruff reports no errors.
 
-- [ ] **Step 5: Commit the core golden-suite task.**
+- [x] **Step 5: Commit the core golden-suite task.**
 
   ```sh
   git add src/synthetic/golden_trajectories.py tests/synthetic/test_golden_trajectories.py
@@ -99,13 +99,13 @@
 - Consumes `run_golden_trajectory_suite`, `DEFAULT_GOLDEN_CASES`, the native age-regime/disorder guide, and the optional Synthea handoff guide.
 - Produces a fictional-reference usage example, explicit forced-coverage/non-claim language, and AST regression tests showing no file/governed/production coupling.
 
-- [ ] **Step 1: Write failing documentation and boundary tests.**
+- [x] **Step 1: Write failing documentation and boundary tests.**
 
   Assert the guide names `growth-golden-v1`, all four case IDs, all five age regimes, the four disorder patterns, the injected-reference call, aggregate-only report fields, and the exact fixed unavailable message. Assert it says evaluator-only/in-memory/forced coverage and explicitly disclaims prevalence, demographic fidelity, clinical validity, task utility, privacy/non-matchability, held-out, scale, Synthea, and release evidence.
 
   Assert README and `docs/synthetic-generator.md` link the guide while retaining the production CLI’s exact fail-closed message. AST-parse every `src/synthetic` module and assert `golden_trajectories` imports only standard-library modules plus the named evaluator contracts, while generation, package export, calibration, held-out, prevalence, privacy, task, counterfactual package, and Synthea modules do not import it. Assert the golden module has no `Path`, `csv`, `os`, `subprocess`, `urllib`, `requests`, Java, Synthea, package-writer, or output-lifecycle symbols/calls.
 
-- [ ] **Step 2: Run docs/boundary tests to verify the red state.**
+- [x] **Step 2: Run docs/boundary tests to verify the red state.**
 
   ```sh
   PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_golden_trajectory_docs.py tests/synthetic/test_golden_trajectory_boundaries.py
@@ -113,13 +113,13 @@
 
   Expected: collection or assertions fail because the guide, links, and boundary tests do not yet exist.
 
-- [ ] **Step 3: Add the guide and cross-document roadmap language.**
+- [x] **Step 3: Add the guide and cross-document roadmap language.**
 
   Create `docs/golden-trajectories.md` with a copy-pasteable call using `RegimeLinearTestReference`, the default catalog, and `report.to_json_bytes()`. Explain the fixed ages, hidden explicit states, all five regimes, event/pattern checks, deterministic repeated-run behavior, and fixed aggregate report. State that the catalog is deliberately not prevalence-representative, does not generate a package, and does not replace schema/export/derivation, calibration, held-out, privacy, clinical review, task utility, Synthea, or release gates.
 
   Link the guide from README and the synthetic-generator guide. State that the native engine remains release one, the production command remains fail closed, and the optional Synthea contract remains external and downstream. Keep paragraphs on one physical Markdown line where repository convention requires it.
 
-- [ ] **Step 4: Run docs/boundary tests, lint, whitespace, and commit.**
+- [x] **Step 4: Run docs/boundary tests, lint, whitespace, and commit.**
 
   ```sh
   PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_golden_trajectory_docs.py tests/synthetic/test_golden_trajectory_boundaries.py
@@ -142,7 +142,7 @@
 - Consumes Task 1/2 commits, focused reports, native kernel tests, and repository schema/lock gates.
 - Produces a reviewed branch that advances trajectory coverage without changing visible generation, package lifecycle, source data, or remote state before verification.
 
-- [ ] **Step 1: Run the complete verification matrix.**
+- [x] **Step 1: Run the complete verification matrix.**
 
   ```sh
   PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q
@@ -154,11 +154,11 @@
 
   Also inspect the diff for only planned files, scan changed paths for patient/real/governed/output artifacts, run the golden focused suite, scan imports for forbidden coupling, and verify `python -m synthetic.generate --output /tmp/golden-contract-smoke --patients 1 --seed 1` still exits with the unchanged fail-closed message and creates no output.
 
-- [ ] **Step 2: Dispatch scoped and broad reviews.**
+- [x] **Step 2: Dispatch scoped and broad reviews.**
 
   Generate a merge-base-to-`HEAD` review package. Use a fresh Task 1 reviewer and a fresh Task 2 reviewer, then one broad reviewer on the most capable model. Review strict case/model immutability, hostile subclass behavior, deterministic kernel reuse, physical identity and directional assertions, aggregate report redaction, documentation accuracy, AST boundaries, and unchanged production fail-closed behavior. Route every Critical/Important finding through one fix/re-review loop per SDD rules; record Minor findings and rulings in the ledger.
 
-- [ ] **Step 3: Merge, rerun, push, and confirm parity.**
+- [x] **Step 3: Merge, rerun, push, and confirm parity.**
 
   Use the finishing workflow: run the full suite on the feature branch, inspect status and staged names, fast-forward `main`, rerun the full suite and all required checks on merged `main`, push `origin main`, fetch, and verify `git rev-parse main` equals `git rev-parse origin/main`. Preserve unrelated untracked caches and remove only this clean feature worktree/branch after successful parity.
 
@@ -169,7 +169,14 @@
 
 ## Self-review checklist
 
-- [ ] Every spec field, default case, age/regime/event/pattern rule, fixed reason, serialization rule, error boundary, and deferred claim maps to a task.
-- [ ] Every plan step contains concrete files, interfaces, test behavior, commands, and expected outcomes without unspecified implementation or validation work.
-- [ ] Task 1 output names match Task 2 documentation/tests and Task 3 review/verification commands.
-- [ ] The plan never authorizes real/governed data, patient packages, Java/Synthea execution, network access, prevalence allocation, or release promotion.
+- [x] Every spec field, default case, age/regime/event/pattern rule, fixed reason, serialization rule, error boundary, and deferred claim maps to a task.
+- [x] Every plan step contains concrete files, interfaces, test behavior, commands, and expected outcomes without unspecified implementation or validation work.
+- [x] Task 1 output names match Task 2 documentation/tests and Task 3 review/verification commands.
+- [x] The plan never authorizes real/governed data, patient packages, Java/Synthea execution, network access, prevalence allocation, or release promotion.
+
+## Completion evidence
+
+- Task 1 was independently reviewed over `990004b..5374021`; the fresh review approved the catalog, runner, strict validation, deterministic repeated generation, redaction, and evaluator-only boundaries with no findings.
+- Task 2 was independently reviewed over the historical slice. A dynamic-import AST gap was fixed through TDD in `8534585` and `70ba7b5`; scoped re-review and final broad review approved direct, relative, module/function/builtins aliases, positional/`name=` literals, forbidden-runtime coverage, and computed-target exclusion with no findings.
+- Merged `main` verification: `2492 passed, 4 skipped`; focused golden suite `93 passed`; Ruff, schema validation, `uv lock --check`, whitespace checks, and fail-closed CLI tests passed.
+- The published suite remains evaluator-only and forced-coverage: no patient package, prevalence allocation, governed input, Synthea/Java runtime, network access, or release/clinical/privacy evidence was added.
