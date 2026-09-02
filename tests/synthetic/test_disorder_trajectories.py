@@ -507,7 +507,7 @@ def test_kernel_normalizes_module_delta_arithmetic_errors(metric: str) -> None:
 
     module = ArithmeticDeltaModule(
         LatentDisorderState(DisorderKind.FAMILIAL_SHORT_STATURE, 0, 0.8),
-        (),
+        (ClinicalEvent(PATIENT.patient_id, 0, "latent_onset", None, True),),
         kind=DisorderKind.FAMILIAL_SHORT_STATURE,
     )
 

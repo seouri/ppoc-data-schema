@@ -178,7 +178,10 @@ class AgeRegimeDisorderKernel:
         validate_disorder_events(patient, disorder_state, events)
         if disorder_state.kind is DisorderKind.HEALTHY:
             return AgeRegimeDisorderTrajectory(baseline, disorder_state, events)
-        if disorder_state.kind is DisorderKind.CONSTITUTIONAL_DELAY:
+        if (
+            disorder_state.kind is DisorderKind.CONSTITUTIONAL_DELAY
+            or self._has_zero_effect(baseline, disorder_state)
+        ):
             physiology = baseline
         else:
             points = self._adjust_points(patient, baseline, disorder_state)
@@ -191,6 +194,17 @@ class AgeRegimeDisorderKernel:
             physiology = AgeRegimeTrajectory(tuple(points), adjusted_state)
 
         return AgeRegimeDisorderTrajectory(physiology, disorder_state, events)
+
+    def _has_zero_effect(
+        self,
+        baseline: AgeRegimeTrajectory,
+        disorder_state: LatentDisorderState,
+    ) -> bool:
+        return all(
+            self._module_delta(disorder_state, point.age_days, metric=metric) == 0.0
+            for point in baseline.points
+            for metric in ("height", "BMI")
+        )
 
     def _adjusted_state(
         self,
@@ -494,53 +508,65 @@ class AgeRegimeDisorderKernel:
         )
         for previous, current in pairwise(points):
             if previous.age_days <= transition_end < current.age_days:
-                comparison_age = transition_end + 1
-                adjusted_z = self._adjusted_z(
-                    state.childhood_height_z,
-                    disorder_state,
-                    comparison_age,
-                    metric="height",
-                )
-                length_z = generation_z_score(
-                    self.physiology.reference,
-                    "length_cm",
-                    comparison_age,
-                    patient.reference_sex,
-                    adjusted_z,
-                )
-                length_cm = self._reference_value(
-                    "length_cm",
-                    comparison_age,
-                    patient,
-                    length_z,
-                    label="length",
-                )
-                message = "converted standing height must be finite and positive"
-                try:
-                    converted_value = length_cm - self.physiology.config.length_to_height_offset_cm
-                except ArithmeticError as exc:
-                    raise ValueError(message) from exc
-                converted_height = _positive_real(converted_value, message)
-                standing_height = self._reference_value(
-                    "height_cm",
-                    comparison_age,
-                    patient,
-                    generation_z_score(
+                for comparison_age in (transition_end + 1, current.age_days):
+                    length_z = self._adjusted_z(
+                        state.childhood_height_z,
+                        disorder_state,
+                        comparison_age - 1,
+                        metric="height",
+                    )
+                    length_z = generation_z_score(
                         self.physiology.reference,
-                        "height_cm",
+                        "length_cm",
                         comparison_age,
                         patient.reference_sex,
-                        adjusted_z,
-                    ),
-                    label="height",
-                )
-                try:
-                    discontinuity = abs(standing_height - converted_height)
-                except ArithmeticError as exc:
-                    raise ValueError("transition discontinuity must be finite") from exc
-                discontinuity = _finite_real(
-                    discontinuity,
-                    "transition discontinuity must be finite",
-                )
-                if discontinuity > self.physiology.config.max_transition_discontinuity_cm:
-                    raise ValueError("transition discontinuity exceeds configured tolerance")
+                        length_z,
+                    )
+                    length_cm = self._reference_value(
+                        "length_cm",
+                        comparison_age,
+                        patient,
+                        length_z,
+                        label="length",
+                    )
+                    message = "converted standing height must be finite and positive"
+                    try:
+                        converted_value = (
+                            length_cm - self.physiology.config.length_to_height_offset_cm
+                        )
+                    except ArithmeticError as exc:
+                        raise ValueError(message) from exc
+                    converted_height = _positive_real(converted_value, message)
+                    standing_height = self._reference_value(
+                        "height_cm",
+                        comparison_age,
+                        patient,
+                        generation_z_score(
+                            self.physiology.reference,
+                            "height_cm",
+                            comparison_age,
+                            patient.reference_sex,
+                            self._adjusted_z(
+                                state.childhood_height_z,
+                                disorder_state,
+                                comparison_age,
+                                metric="height",
+                            ),
+                        ),
+                        label="height",
+                    )
+                    try:
+                        discontinuity = abs(standing_height - converted_height)
+                    except ArithmeticError as exc:
+                        raise ValueError("transition discontinuity must be finite") from exc
+                    discontinuity = _finite_real(
+                        discontinuity,
+                        "transition discontinuity must be finite",
+                    )
+                    if (
+                        discontinuity
+                        > self.physiology.config.max_transition_discontinuity_cm
+                    ):
+                        raise ValueError(
+                            "transition discontinuity exceeds configured tolerance"
+                        )

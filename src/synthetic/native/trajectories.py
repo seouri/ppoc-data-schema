@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from synthetic.models import (
-    MAX_AGE_DAYS,
     ClinicalEvent,
     DisorderKind,
     LatentDisorderState,
     LatentPoint,
     LatentTrajectory,
     PatientState,
+    validate_disorder_event_trace,
 )
 from synthetic.native.anthropometry import (
     derive_weight_kg,
@@ -28,17 +28,6 @@ from synthetic.native.clinical_modules import (
 from synthetic.native.healthy import HealthyKernel
 from synthetic.randomness import NamedRandomStreams
 from synthetic.references import generation_z_score
-
-_EVENT_PHASE_ORDER = {
-    "latent_onset": 0,
-    "observable_phenotype": 1,
-    "recognition_opportunity": 2,
-    "workup": 3,
-    "recorded_diagnosis": 4,
-    "treatment_start": 5,
-    "treatment_response": 6,
-    "treatment_nonresponse": 6,
-}
 
 _BUILTIN_MODULE_CONTRACTS = (
     (HealthyGrowthModule, HealthyGrowthConfig, "healthy-growth-v1"),
@@ -98,92 +87,10 @@ def validate_disorder_events(
         raise TypeError("state must be a LatentDisorderState")
     if not isinstance(events, tuple):
         raise TypeError("module events must be a tuple of ClinicalEvent")
-
-    previous_age = -1
-    previous_phase = -1
-    latent_onset_seen = False
-    treatment_start_seen = False
-    treatment_outcome_seen: str | None = None
     for event in events:
         if not isinstance(event, ClinicalEvent):
             raise TypeError("module events must be ClinicalEvent instances")
-        if event.patient_id != patient.patient_id:
-            raise ValueError("module event patient ID must match the requested patient")
-        if (
-            isinstance(event.age_days, bool)
-            or not isinstance(event.age_days, int)
-            or event.age_days < 0
-            or event.age_days > MAX_AGE_DAYS
-        ):
-            raise ValueError("module event age must be within supported age range")
-        if event.age_days < previous_age:
-            raise ValueError("module event ages must be nondecreasing")
-        if not isinstance(event.event_type, str):
-            raise ValueError("module event_type must be a string")  # noqa: TRY004
-        phase = _EVENT_PHASE_ORDER.get(event.event_type)
-        if phase is None:
-            raise ValueError(f"unknown clinical event type: {event.event_type}")
-        if event.code is not None:
-            raise ValueError("module events must have code=None")
-        if type(event.hidden) is not bool:
-            raise ValueError("module event hidden must be a boolean")
-        expected_hidden = event.event_type == "latent_onset"
-        if event.hidden is not expected_hidden:
-            raise ValueError("module event hidden flag is invalid")
-        if event.event_type == "latent_onset":
-            if state.onset_age_days is None or event.age_days != state.onset_age_days:
-                raise ValueError("latent_onset must match state onset age")
-            latent_onset_seen = True
-        elif not latent_onset_seen:
-            raise ValueError("module event schedule must begin with latent_onset")
-        if treatment_outcome_seen is not None:
-            raise ValueError("treatment outcome events are terminal")
-        if phase <= previous_phase:
-            raise ValueError("module event schedule must follow causal phase order")
-
-        if event.event_type == "treatment_start":
-            if (
-                state.treatment_start_age_days is None
-                or event.age_days != state.treatment_start_age_days
-                or treatment_start_seen
-            ):
-                raise ValueError("treatment start event does not match the treatment schedule")
-            treatment_start_seen = True
-        elif event.event_type in {"treatment_response", "treatment_nonresponse"}:
-            if (
-                state.treatment_start_age_days is None
-                or not treatment_start_seen
-            ):
-                raise ValueError(f"{event.event_type} requires a prior treatment_start event")
-            if event.age_days <= state.treatment_start_age_days:
-                raise ValueError(f"{event.event_type} must occur after treatment start")
-            if event.event_type == "treatment_response" and state.treatment_response <= 0:
-                raise ValueError(
-                    "treatment_response event requires state.treatment_response > 0"
-                )
-            if event.event_type == "treatment_nonresponse" and state.treatment_response != 0:
-                raise ValueError(
-                    "treatment_nonresponse event requires state.treatment_response == 0"
-                )
-            treatment_outcome_seen = event.event_type
-
-        previous_age = event.age_days
-        previous_phase = phase
-
-    if state.treatment_start_age_days is not None:
-        if not treatment_start_seen:
-            raise ValueError(
-                "treatment-bearing state requires a matching treatment_start event"
-            )
-        expected_outcome = (
-            "treatment_response"
-            if state.treatment_response > 0
-            else "treatment_nonresponse"
-        )
-        if treatment_outcome_seen != expected_outcome:
-            raise ValueError(
-                "treatment-bearing state requires exactly one matching terminal treatment outcome"
-            )
+    validate_disorder_event_trace(patient.patient_id, state, events)
 
 
 class DisorderTrajectoryKernel:

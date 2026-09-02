@@ -130,6 +130,34 @@ def test_nonhealthy_age_regime_composition_applies_generation_hook_after_effect(
     )
 
 
+@pytest.mark.parametrize(
+    "module",
+    [
+        FamilialShortStatureModule(
+            FamilialShortStatureConfig(severity_min=0.0, severity_max=0.0)
+        ),
+        GrowthHormoneDeficiencyModule(
+            GrowthHormoneDeficiencyConfig(
+                onset_min_age_days=730,
+                onset_max_age_days=730,
+                severity_min=0.0,
+                severity_max=0.0,
+            )
+        ),
+    ],
+    ids=["familial-short-stature", "growth-hormone-deficiency"],
+)
+def test_zero_effect_nonhealthy_composition_preserves_exact_baseline(module: object) -> None:
+    physiology = AgeRegimeTrajectoryKernel(HalfGenerationZReference())
+    baseline = physiology.generate(PATIENT, AGES, NamedRandomStreams(7, 0))
+
+    result = AgeRegimeDisorderKernel(physiology, module).generate(
+        PATIENT, AGES, NamedRandomStreams(7, 0)
+    )
+
+    assert result.physiology == baseline
+
+
 def test_familial_effect_preserves_identities_across_regimes() -> None:
     physiology = AgeRegimeTrajectoryKernel(RegimeLinearTestReference())
     healthy = AgeRegimeDisorderKernel(physiology, HealthyGrowthModule()).generate(
@@ -287,6 +315,7 @@ def test_composition_rejects_nonfinite_or_nonreal_module_deltas(
         height_delta=height_delta,
         bmi_delta=bmi_delta,
         kind=DisorderKind.FAMILIAL_SHORT_STATURE,
+        events=(ClinicalEvent(PATIENT.patient_id, 0, "latent_onset", None, True),),
     )
 
     with pytest.raises(ValueError, match=message):
@@ -311,6 +340,7 @@ def test_composition_normalizes_module_delta_arithmetic_errors(metric: str) -> N
     module = ArithmeticDeltaModule(
         LatentDisorderState(DisorderKind.FAMILIAL_SHORT_STATURE, 0, 0.8),
         kind=DisorderKind.FAMILIAL_SHORT_STATURE,
+        events=(ClinicalEvent(PATIENT.patient_id, 0, "latent_onset", None, True),),
     )
 
     with pytest.raises(ValueError, match=f"(?i)module {metric}"):
@@ -327,6 +357,19 @@ def test_composition_requires_module_events_to_be_a_tuple(events: object) -> Non
     )
 
     with pytest.raises(TypeError, match="tuple"):
+        AgeRegimeDisorderKernel(
+            AgeRegimeTrajectoryKernel(RegimeLinearTestReference()), module
+        ).generate(PATIENT, (1000,), NamedRandomStreams(13, 0))
+
+
+def test_composition_rejects_active_nonhealthy_empty_event_trace() -> None:
+    module = FixedModule(
+        LatentDisorderState(DisorderKind.FAMILIAL_SHORT_STATURE, 0, 0.8),
+        kind=DisorderKind.FAMILIAL_SHORT_STATURE,
+        height_delta=-0.8,
+    )
+
+    with pytest.raises(ValueError, match="empty|latent_onset"):
         AgeRegimeDisorderKernel(
             AgeRegimeTrajectoryKernel(RegimeLinearTestReference()), module
         ).generate(PATIENT, (1000,), NamedRandomStreams(13, 0))
@@ -433,6 +476,24 @@ def test_composition_rechecks_sparse_adjusted_transition_continuity() -> None:
         AgeRegimeDisorderKernel(
             AgeRegimeTrajectoryKernel(AdjustedJumpReference()), module
         ).generate(PATIENT, (699, 3000), NamedRandomStreams(19, 0))
+
+
+def test_composition_checks_adjusted_continuity_at_actual_sparse_crossing_age() -> None:
+    class LateEffectModule(FixedModule):
+        def height_z_delta(self, state: LatentDisorderState, age_days: int) -> float:
+            del state
+            return 0.0 if age_days <= 761 else -10.0
+
+    module = LateEffectModule(
+        LatentDisorderState(DisorderKind.FAMILIAL_SHORT_STATURE, 0, 0.8),
+        kind=DisorderKind.FAMILIAL_SHORT_STATURE,
+        events=(ClinicalEvent(PATIENT.patient_id, 0, "latent_onset", None, True),),
+    )
+
+    with pytest.raises(ValueError, match="transition"):
+        AgeRegimeDisorderKernel(
+            AgeRegimeTrajectoryKernel(RegimeLinearTestReference()), module
+        ).generate(PATIENT, (730, 762), NamedRandomStreams(19, 0))
 
 
 def test_constructor_rejects_wrong_physiology_type() -> None:
