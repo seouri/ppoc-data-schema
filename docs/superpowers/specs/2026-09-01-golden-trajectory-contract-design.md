@@ -9,7 +9,7 @@
 The parent synthetic-fixture design requires a compact, deterministic golden
 library that forces coverage of healthy and growth-disorder trajectories across
 all pediatric age regimes. The repository currently has focused unit tests but
-no reusable engine-neutral golden contract. This slice adds six fictional,
+no reusable engine-neutral golden contract. This slice adds eight fictional,
 evaluator-only cases and an aggregate report runner. It makes longitudinal
 growth behavior auditable without pretending that a small forced-coverage set
 is representative prevalence or clinical evidence.
@@ -31,6 +31,8 @@ GOLDEN_CASE_IDS = (
     "golden-growth-hormone-deficiency-v1",
     "golden-pediatric-hypothyroidism-v1",
     "golden-celiac-disease-v1",
+    "golden-small-for-gestational-age-catch-up-v1",
+    "golden-small-for-gestational-age-persistent-v1",
 )
 
 class GoldenTrajectoryUnavailable(ValueError): ...
@@ -41,6 +43,7 @@ class GoldenPattern(str, Enum):
     DELAYED_RECOVERY = "delayed_recovery"
     PROGRESSION_RESPONSE = "progression_response"
     POSITIVE_AFTER_ONSET = "positive_after_onset"
+    BIRTH_CATCH_UP = "birth_catch_up"
 
 class GoldenStatus(str, Enum):
     PASS = "PASS"
@@ -80,14 +83,14 @@ serialization expose only those aggregate fields.
 `GoldenTrajectoryCase` contains only typed evaluator inputs: a fictional
 `PatientState`, nonnegative seed, strictly increasing ages, an explicit
 `AgeRegimeState`, an explicit `LatentDisorderState`, the required-regime tuple,
-required event types, and bounded height/BMI pattern declarations. The six
+required event types, and bounded height/BMI pattern declarations. The eight
 checked-in cases use `syn-golden-*` patient tokens, default age-regime state,
 and fixed healthy, familial-short-stature, constitutional-delay, treated
-growth-hormone-deficiency, treated pediatric-hypothyroidism, and celiac-disease states. Their
+growth-hormone-deficiency, treated pediatric-hypothyroidism, and celiac-disease states, plus catch-up and persistent small-for-gestational-age states. Their
 hidden states never enter ordinary
 mappings, manifests, reports, logs, or package files.
 
-The six cases use the fixed age tuple
+The eight cases use the fixed age tuple
 `(0, 700, 730, 760, 3000, 4379, 4380, 4740, 5470, 5475, 6575, 7305)`
 with a default state of puberty onset `4380`, tempo `1095`, and all finite
 z-score offsets set to explicit fictional constants. The constitutional-delay
@@ -98,15 +101,16 @@ response `0.6`, and the familial case has severity `1.0`. Probe ages are
 `(4380, 4740, 5470)` for delayed recovery, `(3000, 3510, 3875, 5000)` for
 growth-hormone-deficiency progression/response, `(1460, 1850, 2215, 3000)`
 for pediatric-hypothyroidism progression/response, `(2190, 2640, 3005, 3500)`
-for celiac-disease weight-first progression/response, and selected points from
-the fixed age tuple for the zero and constant-negative patterns. The case
+for celiac-disease weight-first progression/response, `(0, 365, 730, 1825)` for
+SGA birth catch-up and persistent-height probes, and selected points from the
+fixed age tuple for the zero and constant-negative patterns. The case
 catalog is a forced-coverage test asset, not a cohort sampler. It does not
 allocate disease prevalence or demographics.
 
 ## Runner and report semantics
 
 `run_golden_trajectory_suite` accepts an already-loaded injected growth
-reference and optional modules. With no module mapping it constructs the six
+reference and optional modules. With no module mapping it constructs the seven
 versioned development modules already in the repository. It creates an
 `AgeRegimeTrajectoryKernel` and an `AgeRegimeDisorderKernel` for each case,
 generates twice with the same explicit hidden states and named streams, and
@@ -132,7 +136,9 @@ Each case must satisfy all of these aggregate checks:
    response height and positive-after-onset BMI. Pediatric hypothyroidism uses
    the same progression/response height signature and a relative BMI increase;
    celiac disease uses a delayed height effect, weight/BMI-first decline, and
-   progression/response in both channels.
+   progression/response in both channels; SGA uses a negative birth effect,
+   monotone BMI catch-up by day 365, and either height catch-up by day 1825 or
+   a constant negative height effect.
 
 The result contains one `GoldenCaseResult` per case and a suite status of
 `PASS` only when every case passes; otherwise it is `FAIL`. Each result exposes
@@ -172,7 +178,7 @@ silently drops a case or changes the case order.
 
 Tests use only the repository's fictional `RegimeLinearTestReference` and
 default development modules. They cover catalog immutability and exact case
-validation, all six cases, all five regimes, physical identities, event
+validation, all eight cases, all five regimes, physical identities, event
 requirements, each directional pattern, repeated-run byte/equality
 determinism, custom module/reference failures, malformed hidden states, and
 report redaction. Static tests assert no filesystem, CSV, package, governed,

@@ -43,6 +43,7 @@ def test_guide_names_the_fixed_catalog_regimes_and_directional_patterns() -> Non
         "delayed_recovery",
         "progression_response",
         "positive_after_onset",
+        "birth_catch_up",
     ):
         assert f"`{pattern}`" in guide
 
@@ -100,7 +101,11 @@ def test_guide_documents_unobserved_probe_ages_and_disorder_sequences() -> None:
     assert "`(4380, 4740, 5470)`" in guide
     assert "`(3000, 3510, 3875, 5000)`" in guide
     assert "`(2190, 2640, 3005, 3500)`" in guide
-    assert "weight/BMI decline before delayed height decline" in guide
+    assert "`(0, 365, 730, 1825)`" in guide
+    assert "weight/BMI-first decline" in guide
+    assert "delayed height decline" in guide
+    assert "BMI channel is monotone toward zero" in guide
+    assert "height channel either reaches zero by day 1825 or remains constant and negative" in guide
     for semantic in (
         "zero at onset",
         "negative at treatment",

@@ -1193,3 +1193,198 @@ class CeliacDiseaseModule:
                 ),
             ),
         )
+
+
+@dataclass(frozen=True)
+class SmallForGestationalAgeConfig:
+    """Uncalibrated birth-state SGA development scenario parameters."""
+
+    module_version: ClassVar[str] = "small-for-gestational-age-v1"
+
+    severity_min: float = 0.6
+    severity_max: float = 1.4
+    catch_up_severity_max: float = 0.9
+    birth_length_z_max_delta: float = 0.9
+    birth_weight_z_max_delta: float = 0.7
+    bmi_catch_up_days: int = 365
+    height_catch_up_days: int = 1825
+    phenotype_age_days: int = 0
+    recognition_delay_days: int = 365
+    workup_delay_days: int = 365
+    diagnosis_delay_days: int = 365
+    catch_up_probability: float = 0.6
+
+    def __post_init__(self) -> None:
+        severity_min, severity_max = _require_ordered_bounds(
+            "severity_min", self.severity_min, "severity_max", self.severity_max
+        )
+        catch_up_max = _require_magnitude(
+            "catch_up_severity_max", self.catch_up_severity_max
+        )
+        if not severity_min <= catch_up_max < severity_max:
+            raise ValueError(
+                "catch_up_severity_max must be within the severity range"
+            )
+        _require_magnitude(
+            "birth_length_z_max_delta", self.birth_length_z_max_delta
+        )
+        _require_magnitude(
+            "birth_weight_z_max_delta", self.birth_weight_z_max_delta
+        )
+        _require_age("bmi_catch_up_days", self.bmi_catch_up_days, positive=True)
+        _require_age("height_catch_up_days", self.height_catch_up_days, positive=True)
+        for name, value in (
+            ("phenotype_age_days", self.phenotype_age_days),
+            ("recognition_delay_days", self.recognition_delay_days),
+            ("workup_delay_days", self.workup_delay_days),
+            ("diagnosis_delay_days", self.diagnosis_delay_days),
+        ):
+            _require_age(name, value)
+        _require_probability("catch_up_probability", self.catch_up_probability)
+        _checked_age_sum(
+            "small-for-gestational-age diagnosis age_days",
+            self.phenotype_age_days,
+            self.recognition_delay_days,
+            self.workup_delay_days,
+            self.diagnosis_delay_days,
+        )
+
+
+class SmallForGestationalAgeModule:
+    """Apply an evaluator-only birth-size and catch-up-growth scenario."""
+
+    kind = DisorderKind.SMALL_FOR_GESTATIONAL_AGE
+    module_version: ClassVar[str] = SmallForGestationalAgeConfig.module_version
+
+    def __init__(self, config: SmallForGestationalAgeConfig | None = None) -> None:
+        self.config = _validated_builtin_config(
+            config,
+            SmallForGestationalAgeConfig,
+            SmallForGestationalAgeModule.module_version,
+            validate_type=type(self) is SmallForGestationalAgeModule,
+            validate_version=type(self) is SmallForGestationalAgeModule,
+        )
+
+    def sample_state(
+        self, patient: PatientState, streams: NamedRandomStreams
+    ) -> LatentDisorderState:
+        del patient
+        disorder = streams.generator(f"disorder.{self.kind.value}")
+        try:
+            catch_up = float(disorder.random()) < self.config.catch_up_probability
+            catch_up_upper = min(
+                self.config.severity_max, self.config.catch_up_severity_max
+            )
+            persistent_lower = math.nextafter(
+                self.config.catch_up_severity_max, self.config.severity_max
+            )
+            if catch_up:
+                if self.config.severity_min < catch_up_upper:
+                    severity = float(
+                        disorder.uniform(
+                            self.config.severity_min,
+                            catch_up_upper,
+                        )
+                    )
+                else:
+                    severity = float(self.config.severity_min)
+            elif persistent_lower < self.config.severity_max:
+                severity = float(
+                    disorder.uniform(
+                        persistent_lower,
+                        self.config.severity_max,
+                    )
+                )
+            else:
+                severity = float(self.config.severity_max)
+        except (ArithmeticError, TypeError, ValueError) as exc:
+            raise ValueError(
+                "small-for-gestational-age state cannot be sampled"
+            ) from exc
+        return LatentDisorderState(self.kind, 0, severity)
+
+    def _is_catch_up(self, state: LatentDisorderState) -> bool:
+        return state.severity <= self.config.catch_up_severity_max
+
+    def _birth_effect(
+        self,
+        state: LatentDisorderState,
+        age_days: int,
+        *,
+        maximum_delta: float,
+        catch_up_days: int,
+        persistent_height: bool = False,
+    ) -> float:
+        initial = -state.severity * maximum_delta
+        if persistent_height:
+            return _require_finite_real("small-for-gestational-age effect", initial)
+        try:
+            fraction = max(1.0 - age_days / catch_up_days, 0.0)
+            delta = initial * fraction
+        except (ArithmeticError, TypeError, ValueError) as exc:
+            raise ValueError("age_days is too large for disorder arithmetic") from exc
+        return _require_finite_real("small-for-gestational-age effect", delta)
+
+    def height_z_delta(self, state: LatentDisorderState, age_days: int) -> float:
+        _require_module_state(state, self.kind)
+        if state.onset_age_days != 0:
+            raise ValueError("small-for-gestational-age requires a birth onset")
+        age = _require_age("age_days", age_days)
+        return self._birth_effect(
+            state,
+            age,
+            maximum_delta=self.config.birth_length_z_max_delta,
+            catch_up_days=self.config.height_catch_up_days,
+            persistent_height=not self._is_catch_up(state),
+        )
+
+    def bmi_z_delta(self, state: LatentDisorderState, age_days: int) -> float:
+        _require_module_state(state, self.kind)
+        if state.onset_age_days != 0:
+            raise ValueError("small-for-gestational-age requires a birth onset")
+        age = _require_age("age_days", age_days)
+        return self._birth_effect(
+            state,
+            age,
+            maximum_delta=self.config.birth_weight_z_max_delta,
+            catch_up_days=self.config.bmi_catch_up_days,
+        )
+
+    def events(
+        self, patient: PatientState, state: LatentDisorderState
+    ) -> tuple[ClinicalEvent, ...]:
+        _require_module_state(state, self.kind)
+        if state.onset_age_days != 0:
+            raise ValueError("small-for-gestational-age requires a birth onset")
+        onset = state.onset_age_days
+        if state.severity == 0:
+            return _ordered_events(patient, (("latent_onset", onset),))
+        phenotype_age = _require_age(
+            "small-for-gestational-age phenotype age_days",
+            self.config.phenotype_age_days,
+        )
+        recognition_age = _checked_age_sum(
+            "small-for-gestational-age recognition age_days",
+            phenotype_age,
+            self.config.recognition_delay_days,
+        )
+        workup_age = _checked_age_sum(
+            "small-for-gestational-age workup age_days",
+            recognition_age,
+            self.config.workup_delay_days,
+        )
+        diagnosis_age = _checked_age_sum(
+            "small-for-gestational-age diagnosis age_days",
+            workup_age,
+            self.config.diagnosis_delay_days,
+        )
+        return _ordered_events(
+            patient,
+            (
+                ("latent_onset", onset),
+                ("observable_phenotype", phenotype_age),
+                ("recognition_opportunity", recognition_age),
+                ("workup", workup_age),
+                ("recorded_diagnosis", diagnosis_age),
+            ),
+        )

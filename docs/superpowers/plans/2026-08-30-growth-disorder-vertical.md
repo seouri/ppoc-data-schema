@@ -383,12 +383,12 @@ git commit -m "feat: add disorder-aware latent trajectories"
 - Modify: `docs/synthetic-generator.md`
 
 **Interfaces:**
-- Consumes: `DisorderTrajectoryKernel`, the four module names, and `LatentTrajectory` from Tasks 1–3.
+- Consumes: `DisorderTrajectoryKernel`, the seven native module names, and `LatentTrajectory` from Tasks 1–3.
 - Produces: a concise development-only usage section that explains hidden truth/event traces, directionally coherent but uncalibrated scenarios, and the fact that visible CSV generation remains unchanged.
 
 - [x] **Step 1: Add the development-module section**
 
-Document a Python example that constructs a `DisorderTrajectoryKernel` from the existing injected test reference and a module, then states that `LatentTrajectory.disorder` and `.events` are evaluator-only and are not exported. List the original four modules and their directional signatures without calling their defaults clinically representative; list any follow-on evaluator module separately with the same boundary. State that prevalence, demographic calibration, disorder-critical labs/medications/referrals, held-out validation, and privacy auditing remain later gates.
+Document a Python example that constructs a `DisorderTrajectoryKernel` from the existing injected test reference and a module, then states that `LatentTrajectory.disorder` and `.events` are evaluator-only and are not exported. List the original four modules and their directional signatures without calling their defaults clinically representative; list the pediatric hypothyroidism, celiac-disease, and SGA follow-on evaluator modules separately with the same boundary. State that prevalence, demographic calibration, disorder-critical labs/medications/referrals, held-out validation, and privacy auditing remain later gates.
 
 - [x] **Step 2: Verify the repository**
 
@@ -409,7 +409,7 @@ git commit -m "docs: describe latent growth disorder modules"
 
 Before merging this plan, verify that:
 
-- The original four module types produce deterministic states and ordered event traces with latent truth separate from observable descendants; the pediatric-hypothyroidism and celiac-disease follow-ons add the same contract without widening visible package export.
+- The original four module types produce deterministic states and ordered event traces with latent truth separate from observable descendants; the pediatric-hypothyroidism, celiac-disease, and SGA follow-ons add the same contract without widening visible package export.
 - Familial short stature preserves a constant height-z offset, constitutional delay has a bounded temporary effect, and growth-hormone deficiency has progressive impairment with optional treatment response.
 - Healthy-module output is byte-for-byte/point-for-point identical to the existing healthy kernel for the same inputs.
 - Anthropometric identities, reference guards, age ordering, and named random-stream isolation pass independent tests.
@@ -434,3 +434,9 @@ Before merging this plan, verify that:
 - [x] Add a versioned, frozen `CeliacDiseaseConfig` and `CeliacDiseaseModule` with weight/BMI-first decline, delayed height impairment, optional treatment, and heterogeneous response/nonresponse events.
 - [x] Register `DisorderKind.CELIAC_DISEASE`, its named counterfactual stream, built-in module contract, and golden forced-coverage case without changing the visible generator or package schema.
 - [x] Add deterministic, schedule, overflow, state-kind, treatment, age-regime composition, and golden-catalog tests; update evaluator-only documentation and retain celiac ancillary pathways as deferred.
+
+### Follow-on: prematurity/SGA trajectory (2026-09-02)
+
+- [x] Add a versioned, frozen `SmallForGestationalAgeConfig` and `SmallForGestationalAgeModule` with birth-state length/weight deficits, faster BMI catch-up, and catch-up versus persistent-height branches.
+- [x] Register `DisorderKind.SMALL_FOR_GESTATIONAL_AGE`, its named counterfactual stream, built-in module contract, and two golden forced-coverage cases without changing the visible generator or package schema.
+- [x] Add deterministic, schedule, overflow, state-kind, birth-onset, stream, age-regime composition, and golden-catalog tests; update evaluator-only documentation and retain gestational-age/prematurity ancillary pathways as deferred.

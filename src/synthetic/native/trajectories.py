@@ -28,6 +28,8 @@ from synthetic.native.clinical_modules import (
     HealthyGrowthModule,
     PediatricHypothyroidismConfig,
     PediatricHypothyroidismModule,
+    SmallForGestationalAgeConfig,
+    SmallForGestationalAgeModule,
 )
 from synthetic.native.healthy import HealthyKernel
 from synthetic.randomness import NamedRandomStreams
@@ -52,6 +54,11 @@ _BUILTIN_MODULE_CONTRACTS = (
         "pediatric-hypothyroidism-v1",
     ),
     (CeliacDiseaseModule, CeliacDiseaseConfig, "celiac-disease-v1"),
+    (
+        SmallForGestationalAgeModule,
+        SmallForGestationalAgeConfig,
+        "small-for-gestational-age-v1",
+    ),
 )
 
 

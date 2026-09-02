@@ -114,6 +114,7 @@ def test_status_and_growth_registries_are_fixed() -> None:
         "growth_hormone_deficiency",
         "pediatric_hypothyroidism",
         "celiac_disease",
+        "small_for_gestational_age",
     )
 
 

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Compose the existing growth-disorder modules with age-regime physiology so healthy, familial-short-stature, constitutional-delay, and growth-hormone-deficiency trajectories remain coherent from infancy through adolescence without changing the visible eight-resource exporter.
+**Goal:** Compose the existing growth-disorder modules with age-regime physiology so healthy and all reviewed evaluator-only growth-disorder trajectories remain coherent from infancy through adolescence without changing the visible eight-resource exporter.
 
 **Architecture:** Add an evaluator-only `AgeRegimeDisorderKernel` that samples age-regime and disorder state from isolated named streams, replays the age-regime kernel with any explicit constitutional-delay schedule adjustment, and applies module effects through a regime-aware two-dimension bridge. Return a frozen `AgeRegimeDisorderTrajectory` containing physiology, hidden disorder state, and hidden events; keep existing healthy/disorder kernels, smoke generation, CSV mapping, descriptors, and manifests unchanged.
 
@@ -20,7 +20,7 @@
 - Identical reference identity, configuration, patient, module version/configuration, named streams, and seed reproduce identical state, points, disorder state, and events. The composition never requests `growth`.
 - The age-regime replay seam preserves ordinary `AgeRegimeTrajectoryKernel.generate(...)` behavior and existing call sites.
 - Constitutional delay shifts age-regime puberty onset by `puberty_delay_days` and does not apply its overlapping negative height delta a second time; an out-of-domain shifted schedule is an error.
-- Defaults remain uncalibrated development scenarios. The evaluator-only follow-on modules include pediatric hypothyroidism and celiac disease; they do not widen this kernel into visible ancillary resources. No real rows, diagnosis counts, clinical tables, prevalence estimates, demographic calibration, privacy evidence, or Synthea implementation enters this plan.
+- Defaults remain uncalibrated development scenarios. The evaluator-only follow-on modules include pediatric hypothyroidism, celiac disease, and small-for-gestational-age; they do not widen this kernel into visible ancillary resources. No real rows, diagnosis counts, clinical tables, prevalence estimates, demographic calibration, privacy evidence, or Synthea implementation enters this plan.
 
 ---
 
@@ -423,7 +423,7 @@ Before merging this plan, verify that:
 
 - Ordinary age-regime generation remains deterministic and behaviorally unchanged when no replay state is supplied.
 - `AgeRegimeDisorderTrajectory` validates hidden physiology, disorder state, event types, and patient identities without replacing `LatentTrajectory`.
-- All reviewed native modules compose across infancy, transition, childhood, puberty, and adolescence; familial effects adjust both representations, constitutional delay shifts puberty exactly once, and treatment events remain causally ordered.
+- All reviewed native modules compose across infancy, transition, childhood, puberty, and adolescence; familial effects adjust both representations, SGA birth effects preserve explicit anthropometric identities, constitutional delay shifts puberty exactly once, and treatment/events remain causally ordered.
 - Pre-transition outputs contain length plus weight, transition derives height/BMI explicitly, post-transition outputs contain height plus BMI and derive weight, and adjusted identities/velocities are finite.
 - Sparse transition pairs, shifted schedules, extreme references, nonfinite effects, malformed module contracts, wrong state kinds, and malformed events fail closed.
 - The composition requests regime and disorder streams but never `growth`; identical seeds and inputs reproduce physiology, disorder state, and events.

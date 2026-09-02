@@ -17,6 +17,8 @@ from synthetic.native.clinical_modules import (
     HealthyGrowthModule,
     PediatricHypothyroidismConfig,
     PediatricHypothyroidismModule,
+    SmallForGestationalAgeConfig,
+    SmallForGestationalAgeModule,
 )
 from synthetic.randomness import NamedRandomStreams
 
@@ -52,6 +54,7 @@ def test_module_versions_are_stable_and_unique() -> None:
         GrowthHormoneDeficiencyModule(),
         PediatricHypothyroidismModule(),
         CeliacDiseaseModule(),
+        SmallForGestationalAgeModule(),
     )
 
     versions = [module.module_version for module in modules]
@@ -64,6 +67,7 @@ def test_module_versions_are_stable_and_unique() -> None:
         "growth-hormone-deficiency-v1",
         "pediatric-hypothyroidism-v1",
         "celiac-disease-v1",
+        "small-for-gestational-age-v1",
     ]
     assert [module.config.module_version for module in modules] == versions
 
@@ -77,6 +81,7 @@ def test_module_versions_are_stable_and_unique() -> None:
         GrowthHormoneDeficiencyModule,
         PediatricHypothyroidismModule,
         CeliacDiseaseModule,
+        SmallForGestationalAgeModule,
     ],
 )
 def test_built_in_modules_reject_wrong_configuration_types(factory: object) -> None:
@@ -173,6 +178,7 @@ def test_nonzero_treatment_response_requires_treatment_start() -> None:
         lambda: GrowthHormoneDeficiencyConfig(onset_max_age_days=10**1000),
         lambda: PediatricHypothyroidismConfig(onset_max_age_days=10**1000),
         lambda: CeliacDiseaseConfig(onset_max_age_days=10**1000),
+        lambda: SmallForGestationalAgeConfig(height_catch_up_days=10**1000),
     ],
 )
 def test_module_configurations_reject_unrepresentable_huge_integers(
@@ -205,6 +211,10 @@ def test_module_configurations_reject_unrepresentable_huge_integers(
         (
             CeliacDiseaseModule(),
             LatentDisorderState(DisorderKind.CELIAC_DISEASE, 730, 0.8),
+        ),
+        (
+            SmallForGestationalAgeModule(),
+            LatentDisorderState(DisorderKind.SMALL_FOR_GESTATIONAL_AGE, 0, 0.8),
         ),
     ],
 )
@@ -277,6 +287,7 @@ def test_module_sampling_is_reproducible_and_uses_named_streams() -> None:
         GrowthHormoneDeficiencyModule(),
         PediatricHypothyroidismModule(),
         CeliacDiseaseModule(),
+        SmallForGestationalAgeModule(),
     )
     for module in modules:
         left = module.sample_state(PATIENT, NamedRandomStreams(123, 7))
@@ -292,6 +303,7 @@ def test_modules_request_only_their_scoped_disorder_streams() -> None:
         GrowthHormoneDeficiencyModule(),
         PediatricHypothyroidismModule(),
         CeliacDiseaseModule(),
+        SmallForGestationalAgeModule(),
     )
 
     for module in modules:
@@ -312,6 +324,7 @@ def test_modules_request_only_their_scoped_disorder_streams() -> None:
         (GrowthHormoneDeficiencyConfig, "treatment_probability", 0.0),
         (PediatricHypothyroidismConfig, "treatment_probability", 0.0),
         (CeliacDiseaseConfig, "treatment_probability", 0.0),
+        (SmallForGestationalAgeConfig, "catch_up_probability", 0.0),
     ],
 )
 def test_module_configurations_are_frozen(
@@ -333,6 +346,7 @@ def test_module_configurations_are_frozen(
         lambda: GrowthHormoneDeficiencyConfig(treatment_probability=1.1),
         lambda: PediatricHypothyroidismConfig(treatment_probability=1.1),
         lambda: CeliacDiseaseConfig(treatment_probability=1.1),
+        lambda: SmallForGestationalAgeConfig(catch_up_probability=1.1),
     ],
 )
 def test_module_configurations_reject_invalid_magnitudes_probabilities_and_schedules(
@@ -354,6 +368,7 @@ def test_disorder_events_keep_codes_empty_and_only_hide_latent_onset() -> None:
         GrowthHormoneDeficiencyModule(GrowthHormoneDeficiencyConfig(treatment_probability=1.0)),
         PediatricHypothyroidismModule(PediatricHypothyroidismConfig(treatment_probability=1.0)),
         CeliacDiseaseModule(CeliacDiseaseConfig(treatment_probability=1.0)),
+        SmallForGestationalAgeModule(),
     ):
         state = module.sample_state(PATIENT, NamedRandomStreams(123, 7))
         events = module.events(PATIENT, state)

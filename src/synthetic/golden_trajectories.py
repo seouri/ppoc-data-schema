@@ -31,6 +31,7 @@ from synthetic.native.clinical_modules import (
     GrowthHormoneDeficiencyModule,
     HealthyGrowthModule,
     PediatricHypothyroidismModule,
+    SmallForGestationalAgeModule,
 )
 from synthetic.randomness import NamedRandomStreams
 from synthetic.references import GrowthReference
@@ -43,6 +44,8 @@ GOLDEN_CASE_IDS = (
     "golden-growth-hormone-deficiency-v1",
     "golden-pediatric-hypothyroidism-v1",
     "golden-celiac-disease-v1",
+    "golden-small-for-gestational-age-catch-up-v1",
+    "golden-small-for-gestational-age-persistent-v1",
 )
 GOLDEN_REASON_CODES = (
     "NONDETERMINISTIC",
@@ -146,6 +149,22 @@ _FIXED_DISORDER_VALUES = {
         2640,
         0.6,
     ),
+    GOLDEN_CASE_IDS[6]: (
+        DisorderKind.SMALL_FOR_GESTATIONAL_AGE,
+        0,
+        0.7,
+        0,
+        None,
+        0.0,
+    ),
+    GOLDEN_CASE_IDS[7]: (
+        DisorderKind.SMALL_FOR_GESTATIONAL_AGE,
+        0,
+        1.2,
+        0,
+        None,
+        0.0,
+    ),
 }
 
 
@@ -159,6 +178,7 @@ class GoldenPattern(str, Enum):
     DELAYED_RECOVERY = "delayed_recovery"
     PROGRESSION_RESPONSE = "progression_response"
     POSITIVE_AFTER_ONSET = "positive_after_onset"
+    BIRTH_CATCH_UP = "birth_catch_up"
 
 
 class GoldenStatus(str, Enum):
@@ -288,6 +308,14 @@ def _validate_disorder_state(state: object, *, case_id: str) -> None:
             and state.treatment_start_age_days is None
             and state.treatment_response == 0
         )
+    elif state.kind is DisorderKind.SMALL_FOR_GESTATIONAL_AGE:
+        coherent = (
+            state.onset_age_days == 0
+            and state.severity > 0
+            and state.puberty_delay_days == 0
+            and state.treatment_start_age_days is None
+            and state.treatment_response == 0
+        )
     else:
         treatment_start = state.treatment_start_age_days
         coherent = (
@@ -384,6 +412,7 @@ def _validate_pattern_size(pattern: GoldenPattern, probes: tuple[int, ...]) -> N
     exact_sizes = {
         GoldenPattern.DELAYED_RECOVERY: 3,
         GoldenPattern.PROGRESSION_RESPONSE: 4,
+        GoldenPattern.BIRTH_CATCH_UP: 4,
     }
     expected = exact_sizes.get(pattern)
     if expected is not None and len(probes) != expected:
@@ -625,6 +654,34 @@ DEFAULT_GOLDEN_CASES = (
         (2190, 2640, 3005, 3500),
         1006,
     ),
+    _case(
+        GOLDEN_CASE_IDS[6],
+        DisorderKind.SMALL_FOR_GESTATIONAL_AGE,
+        LatentDisorderState(
+            DisorderKind.SMALL_FOR_GESTATIONAL_AGE,
+            0,
+            0.7,
+        ),
+        _DISEASE_EVENTS,
+        GoldenPattern.BIRTH_CATCH_UP,
+        GoldenPattern.BIRTH_CATCH_UP,
+        (0, 365, 730, 1825),
+        1007,
+    ),
+    _case(
+        GOLDEN_CASE_IDS[7],
+        DisorderKind.SMALL_FOR_GESTATIONAL_AGE,
+        LatentDisorderState(
+            DisorderKind.SMALL_FOR_GESTATIONAL_AGE,
+            0,
+            1.2,
+        ),
+        _DISEASE_EVENTS,
+        GoldenPattern.CONSTANT_NEGATIVE,
+        GoldenPattern.BIRTH_CATCH_UP,
+        (0, 365, 730, 1825),
+        1008,
+    ),
 )
 
 
@@ -636,6 +693,7 @@ def _default_modules() -> dict[DisorderKind, GrowthDisorderModule]:
         DisorderKind.GROWTH_HORMONE_DEFICIENCY: GrowthHormoneDeficiencyModule(),
         DisorderKind.PEDIATRIC_HYPOTHYROIDISM: PediatricHypothyroidismModule(),
         DisorderKind.CELIAC_DISEASE: CeliacDiseaseModule(),
+        DisorderKind.SMALL_FOR_GESTATIONAL_AGE: SmallForGestationalAgeModule(),
     }
 
 
@@ -991,4 +1049,10 @@ def _matches_pattern(
         return _zero(values[0]) and values[1] < 0 and _zero(values[2])
     if pattern is GoldenPattern.PROGRESSION_RESPONSE:
         return _zero(values[0]) and values[1] < 0 and values[1] < values[2] <= values[3]
+    if pattern is GoldenPattern.BIRTH_CATCH_UP:
+        return (
+            values[0] < 0
+            and values[0] < values[1] <= values[2] <= values[3]
+            and _zero(values[3])
+        )
     return _zero(values[0]) and all(value > 0 for value in values[1:])
