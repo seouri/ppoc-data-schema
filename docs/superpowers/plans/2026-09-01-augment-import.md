@@ -16,7 +16,7 @@
 - Runtime reference files are exactly the ten CDC LMS/height-velocity CSVs and `icd10cm-tabular-2026.csv`; no patient or generated-output files are copied.
 - The command expects `visits.csv`, `patients.csv`, and `problem_list.csv` in an explicit caller-provided input directory and uses `data/` references.
 - The supported interface is CLI-only: run `uv run python scripts/augment.py ...` from the repository root; ordinary `import scripts.augment` is not supported by the byte-identical source.
-- The augmenter is a development derivation candidate, not an authoritative oracle; the native generator, exporters, calibration, privacy, and counterfactual paths must not import or execute it.
+- The raw CLI import is a development derivation candidate, not an authoritative oracle; it is not invoked automatically by the native generator, calibration, privacy, counterfactual, Synthea, or production paths. A separately documented, opt-in, test-only `SourceMatchedAugmenterOracle` may execute this CLI through the exact-schema exporter for staged wholly synthetic packages; this explicit adapter does not alter the default/native/production generator path or confer authority.
 - Tests use only temporary wholly synthetic input rows and must verify augmented output headers against `datapackage.json`.
 - `pandas`, `scipy`, and `pyarrow` are direct project dependencies alongside the existing NumPy dependency because the copied CLI imports or executes them.
 - Do not add real patient, visit, problem-list, laboratory, medication, referral, output, notebook, cache, virtual-environment, credential, or source-repository metadata files.

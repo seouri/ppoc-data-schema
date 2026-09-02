@@ -117,7 +117,18 @@ def test_documentation_describes_synthetic_only_import_boundary() -> None:
     assert "SHA-256" in guide
     assert "Do not point this script at governed data, real patient data" in guide
     assert "not bound as authoritative" in guide
-    assert "does not change the native generator, package exporter, calibration, privacy, counterfactual, Synthea, or release gates" in guide
+    assert "The documented and supported use is wholly synthetic exact-schema base resources" in guide
+    assert "the CLI cannot enforce input provenance" in guide
+    assert "opt-in, test-only `SourceMatchedAugmenterOracle`" in guide
+    assert "through the exact-schema exporter" in guide
+    assert "does not alter the default/native/production generator path or confer authority" in guide
+    assert "Production `synthetic.generate` remains fail-closed" in guide
+    assert "does not change the native generator, package exporter, calibration, privacy, counterfactual, Synthea, or release gates" not in guide
+
+    oracle_guide = (ROOT / "docs" / "augmenter-oracle.md").read_text()
+    assert "SourceMatchedAugmenterOracle" in oracle_guide
+    assert "test-only adapter" in oracle_guide
+    assert "exact-schema exporter" in oracle_guide
 
     assert "[synthetic generator guide](docs/synthetic-generator.md)" in readme
     for document in (synthetic_guide,):
@@ -129,6 +140,12 @@ def test_documentation_describes_synthetic_only_import_boundary() -> None:
         assert "CLI-only" in document
         assert "importable `scripts.augment`" not in document
         assert "import `scripts.augment`" not in document
+        assert "SourceMatchedAugmenterOracle" in document
+        assert "through the exact-schema exporter" in document
+        assert "not invoked automatically" in document
+        assert "does not alter the default/native/production generator path or confer authority" in document
+        assert "The script is not called by the native generator, visible package exporter" not in document
+        assert "must not import or execute it" not in document
 
     assert "git@github.com:hms-dbmi/growth-ai.git" in data_readme
     assert "cd6abdd313d8ebadcb5c66052857a3bb107419ad" in data_readme
