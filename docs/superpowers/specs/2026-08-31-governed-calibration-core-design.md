@@ -1,7 +1,7 @@
 # Governed Aggregate Calibration Core Design
 
 **Date:** 2026-08-31  
-**Status:** Proposed next roadmap slice  
+**Status:** Implementation complete; governed real-data evidence pending
 **Parent design:** [Synthetic Pediatric Growth Fixture System Design](2026-08-30-synthetic-growth-fixtures-design.md)  
 **Prerequisite:** [Calibration artifact contract](2026-08-30-calibration-artifact-contract-design.md)
 
