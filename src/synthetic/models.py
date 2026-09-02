@@ -87,6 +87,7 @@ class DisorderKind(str, Enum):
     CONSTITUTIONAL_DELAY = "constitutional_delay"
     GROWTH_HORMONE_DEFICIENCY = "growth_hormone_deficiency"
     PEDIATRIC_HYPOTHYROIDISM = "pediatric_hypothyroidism"
+    CELIAC_DISEASE = "celiac_disease"
 
 
 @dataclass(frozen=True)

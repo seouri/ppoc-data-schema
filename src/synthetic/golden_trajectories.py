@@ -24,6 +24,7 @@ from synthetic.models import (
 from synthetic.native.age_regime_disorder import AgeRegimeDisorderKernel
 from synthetic.native.age_regimes import AgeRegimeTrajectoryKernel
 from synthetic.native.clinical_modules import (
+    CeliacDiseaseModule,
     ConstitutionalDelayModule,
     FamilialShortStatureModule,
     GrowthDisorderModule,
@@ -41,6 +42,7 @@ GOLDEN_CASE_IDS = (
     "golden-constitutional-delay-v1",
     "golden-growth-hormone-deficiency-v1",
     "golden-pediatric-hypothyroidism-v1",
+    "golden-celiac-disease-v1",
 )
 GOLDEN_REASON_CODES = (
     "NONDETERMINISTIC",
@@ -134,6 +136,14 @@ _FIXED_DISORDER_VALUES = {
         1.0,
         0,
         1850,
+        0.6,
+    ),
+    GOLDEN_CASE_IDS[5]: (
+        DisorderKind.CELIAC_DISEASE,
+        2190,
+        1.0,
+        0,
+        2640,
         0.6,
     ),
 }
@@ -599,6 +609,22 @@ DEFAULT_GOLDEN_CASES = (
         (1460, 1850, 2215, 3000),
         1005,
     ),
+    _case(
+        GOLDEN_CASE_IDS[5],
+        DisorderKind.CELIAC_DISEASE,
+        LatentDisorderState(
+            DisorderKind.CELIAC_DISEASE,
+            2190,
+            1.0,
+            treatment_start_age_days=2640,
+            treatment_response=0.6,
+        ),
+        _DISEASE_EVENTS + ("treatment_start", "treatment_response"),
+        GoldenPattern.PROGRESSION_RESPONSE,
+        GoldenPattern.PROGRESSION_RESPONSE,
+        (2190, 2640, 3005, 3500),
+        1006,
+    ),
 )
 
 
@@ -609,6 +635,7 @@ def _default_modules() -> dict[DisorderKind, GrowthDisorderModule]:
         DisorderKind.CONSTITUTIONAL_DELAY: ConstitutionalDelayModule(),
         DisorderKind.GROWTH_HORMONE_DEFICIENCY: GrowthHormoneDeficiencyModule(),
         DisorderKind.PEDIATRIC_HYPOTHYROIDISM: PediatricHypothyroidismModule(),
+        DisorderKind.CELIAC_DISEASE: CeliacDiseaseModule(),
     }
 
 

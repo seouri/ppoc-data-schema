@@ -92,13 +92,15 @@ def test_guide_documents_aggregate_report_failure_and_hidden_state_boundary() ->
         assert boundary in guide
 
 
-def test_guide_documents_unobserved_probe_ages_and_exact_ghd_sequence() -> None:
+def test_guide_documents_unobserved_probe_ages_and_disorder_sequences() -> None:
     """Breaks if sampled ages and directional probes are presented as interchangeable."""
     guide = _guide_text()
 
     assert "Pattern probes may be unobserved ages between trajectory samples" in guide
     assert "`(4380, 4740, 5470)`" in guide
     assert "`(3000, 3510, 3875, 5000)`" in guide
+    assert "`(2190, 2640, 3005, 3500)`" in guide
+    assert "weight/BMI decline before delayed height decline" in guide
     for semantic in (
         "zero at onset",
         "negative at treatment",

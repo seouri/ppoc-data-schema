@@ -9,7 +9,7 @@
 The parent synthetic-fixture design requires a compact, deterministic golden
 library that forces coverage of healthy and growth-disorder trajectories across
 all pediatric age regimes. The repository currently has focused unit tests but
-no reusable engine-neutral golden contract. This slice adds five fictional,
+no reusable engine-neutral golden contract. This slice adds six fictional,
 evaluator-only cases and an aggregate report runner. It makes longitudinal
 growth behavior auditable without pretending that a small forced-coverage set
 is representative prevalence or clinical evidence.
@@ -30,6 +30,7 @@ GOLDEN_CASE_IDS = (
     "golden-constitutional-delay-v1",
     "golden-growth-hormone-deficiency-v1",
     "golden-pediatric-hypothyroidism-v1",
+    "golden-celiac-disease-v1",
 )
 
 class GoldenTrajectoryUnavailable(ValueError): ...
@@ -79,14 +80,14 @@ serialization expose only those aggregate fields.
 `GoldenTrajectoryCase` contains only typed evaluator inputs: a fictional
 `PatientState`, nonnegative seed, strictly increasing ages, an explicit
 `AgeRegimeState`, an explicit `LatentDisorderState`, the required-regime tuple,
-required event types, and bounded height/BMI pattern declarations. The five
+required event types, and bounded height/BMI pattern declarations. The six
 checked-in cases use `syn-golden-*` patient tokens, default age-regime state,
 and fixed healthy, familial-short-stature, constitutional-delay, treated
-growth-hormone-deficiency, and treated pediatric-hypothyroidism states. Their
+growth-hormone-deficiency, treated pediatric-hypothyroidism, and celiac-disease states. Their
 hidden states never enter ordinary
 mappings, manifests, reports, logs, or package files.
 
-The five cases use the fixed age tuple
+The six cases use the fixed age tuple
 `(0, 700, 730, 760, 3000, 4379, 4380, 4740, 5470, 5475, 6575, 7305)`
 with a default state of puberty onset `4380`, tempo `1095`, and all finite
 z-score offsets set to explicit fictional constants. The constitutional-delay
@@ -96,7 +97,8 @@ hypothyroidism case starts at day `1460` with treatment at day `1850` and
 response `0.6`, and the familial case has severity `1.0`. Probe ages are
 `(4380, 4740, 5470)` for delayed recovery, `(3000, 3510, 3875, 5000)` for
 growth-hormone-deficiency progression/response, `(1460, 1850, 2215, 3000)`
-for pediatric-hypothyroidism progression/response, and selected points from
+for pediatric-hypothyroidism progression/response, `(2190, 2640, 3005, 3500)`
+for celiac-disease weight-first progression/response, and selected points from
 the fixed age tuple for the zero and constant-negative patterns. The case
 catalog is a forced-coverage test asset, not a cohort sampler. It does not
 allocate disease prevalence or demographics.
@@ -104,7 +106,7 @@ allocate disease prevalence or demographics.
 ## Runner and report semantics
 
 `run_golden_trajectory_suite` accepts an already-loaded injected growth
-reference and optional modules. With no module mapping it constructs the five
+reference and optional modules. With no module mapping it constructs the six
 versioned development modules already in the repository. It creates an
 `AgeRegimeTrajectoryKernel` and an `AgeRegimeDisorderKernel` for each case,
 generates twice with the same explicit hidden states and named streams, and
@@ -128,7 +130,9 @@ Each case must satisfy all of these aggregate checks:
    stature uses constant-negative height and zero BMI; constitutional delay
    uses delayed recovery; and growth-hormone deficiency uses progression/
    response height and positive-after-onset BMI. Pediatric hypothyroidism uses
-   the same progression/response height signature and a relative BMI increase.
+   the same progression/response height signature and a relative BMI increase;
+   celiac disease uses a delayed height effect, weight/BMI-first decline, and
+   progression/response in both channels.
 
 The result contains one `GoldenCaseResult` per case and a suite status of
 `PASS` only when every case passes; otherwise it is `FAIL`. Each result exposes
@@ -168,7 +172,7 @@ silently drops a case or changes the case order.
 
 Tests use only the repository's fictional `RegimeLinearTestReference` and
 default development modules. They cover catalog immutability and exact case
-validation, all five cases, all five regimes, physical identities, event
+validation, all six cases, all five regimes, physical identities, event
 requirements, each directional pattern, repeated-run byte/equality
 determinism, custom module/reference failures, malformed hidden states, and
 report redaction. Static tests assert no filesystem, CSV, package, governed,

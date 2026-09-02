@@ -7,6 +7,7 @@ prevalence estimates or clinically validated parameterizations.
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import ClassVar, Protocol
 
@@ -900,6 +901,282 @@ class PediatricHypothyroidismModule:
             raise ValueError("treatment start does not match the configured causal schedule")
         response_age = _checked_age_sum(
             "pediatric hypothyroidism treatment response age_days",
+            state.treatment_start_age_days,
+            self.config.response_days,
+        )
+        return _ordered_events(
+            patient,
+            schedule
+            + (
+                ("treatment_start", state.treatment_start_age_days),
+                (
+                    "treatment_response"
+                    if state.treatment_response > 0
+                    else "treatment_nonresponse",
+                    response_age,
+                ),
+            ),
+        )
+
+
+@dataclass(frozen=True)
+class CeliacDiseaseConfig:
+    """Uncalibrated development scenario parameters for celiac disease."""
+
+    module_version: ClassVar[str] = "celiac-disease-v1"
+
+    onset_min_age_days: int = 730
+    onset_max_age_days: int = 4380
+    severity_min: float = 0.5
+    severity_max: float = 1.1
+    bmi_progression_days: int = 365
+    height_onset_delay_days: int = 180
+    height_progression_days: int = 730
+    phenotype_delay_days: int = 180
+    recognition_delay_days: int = 150
+    workup_delay_days: int = 30
+    diagnosis_delay_days: int = 30
+    treatment_probability: float = 0.8
+    treatment_delay_days: int = 60
+    response_days: int = 365
+    treatment_response_min: float = 0.35
+    treatment_response_max: float = 0.85
+    bmi_z_max_delta: float = 0.7
+
+    def __post_init__(self) -> None:
+        _require_ordered_bounds(
+            "onset_min_age_days",
+            self.onset_min_age_days,
+            "onset_max_age_days",
+            self.onset_max_age_days,
+            ages=True,
+        )
+        _require_ordered_bounds(
+            "severity_min", self.severity_min, "severity_max", self.severity_max
+        )
+        _require_age("bmi_progression_days", self.bmi_progression_days, positive=True)
+        _require_age("height_onset_delay_days", self.height_onset_delay_days)
+        _require_age("height_progression_days", self.height_progression_days, positive=True)
+        for name, value in (
+            ("phenotype_delay_days", self.phenotype_delay_days),
+            ("recognition_delay_days", self.recognition_delay_days),
+            ("workup_delay_days", self.workup_delay_days),
+            ("diagnosis_delay_days", self.diagnosis_delay_days),
+            ("treatment_delay_days", self.treatment_delay_days),
+        ):
+            _require_age(name, value)
+        _require_probability("treatment_probability", self.treatment_probability)
+        _require_age("response_days", self.response_days, positive=True)
+        _, response_max = _require_ordered_bounds(
+            "treatment_response_min",
+            self.treatment_response_min,
+            "treatment_response_max",
+            self.treatment_response_max,
+        )
+        if response_max > 1:
+            raise ValueError("treatment response bounds must be in [0, 1]")
+        _require_magnitude("bmi_z_max_delta", self.bmi_z_max_delta)
+        _checked_age_sum(
+            "celiac disease treatment outcome age_days",
+            self.onset_max_age_days,
+            self.phenotype_delay_days,
+            self.recognition_delay_days,
+            self.workup_delay_days,
+            self.diagnosis_delay_days,
+            self.treatment_delay_days,
+            self.response_days,
+        )
+        _checked_age_sum(
+            "celiac disease height effect end age_days",
+            self.onset_max_age_days,
+            self.height_onset_delay_days,
+            self.height_progression_days,
+        )
+
+
+class CeliacDiseaseModule:
+    """Apply an evaluator-only weight-first celiac disease scenario."""
+
+    kind = DisorderKind.CELIAC_DISEASE
+    module_version: ClassVar[str] = CeliacDiseaseConfig.module_version
+
+    def __init__(self, config: CeliacDiseaseConfig | None = None) -> None:
+        self.config = _validated_builtin_config(
+            config,
+            CeliacDiseaseConfig,
+            CeliacDiseaseModule.module_version,
+            validate_type=type(self) is CeliacDiseaseModule,
+            validate_version=type(self) is CeliacDiseaseModule,
+        )
+
+    def sample_state(
+        self, patient: PatientState, streams: NamedRandomStreams
+    ) -> LatentDisorderState:
+        del patient
+        disorder = streams.generator(f"disorder.{self.kind.value}")
+        try:
+            onset = int(
+                disorder.integers(
+                    self.config.onset_min_age_days,
+                    self.config.onset_max_age_days + 1,
+                )
+            )
+            severity = float(
+                disorder.uniform(self.config.severity_min, self.config.severity_max)
+            )
+            if severity == 0 or float(disorder.random()) >= self.config.treatment_probability:
+                return LatentDisorderState(self.kind, onset, severity)
+            response = float(
+                disorder.uniform(
+                    self.config.treatment_response_min,
+                    self.config.treatment_response_max,
+                )
+            )
+            treatment_start = _checked_age_sum(
+                "celiac disease treatment start age_days",
+                onset,
+                self._treatment_start_offset(),
+            )
+        except (ArithmeticError, TypeError, ValueError) as exc:
+            raise ValueError("celiac disease state cannot be sampled") from exc
+        return LatentDisorderState(
+            self.kind,
+            onset,
+            severity,
+            treatment_start_age_days=treatment_start,
+            treatment_response=response,
+        )
+
+    def _treatment_start_offset(self) -> int:
+        return _checked_age_sum(
+            "celiac disease treatment start offset",
+            self.config.phenotype_delay_days
+            + self.config.recognition_delay_days
+            + self.config.workup_delay_days
+            + self.config.diagnosis_delay_days
+            + self.config.treatment_delay_days,
+        )
+
+    def _untreated_bmi_z_delta(self, state: LatentDisorderState, age_days: int) -> float:
+        assert state.onset_age_days is not None
+        if age_days < state.onset_age_days:
+            return 0.0
+        try:
+            fraction = min(
+                (age_days - state.onset_age_days) / self.config.bmi_progression_days,
+                1.0,
+            )
+            delta = -state.severity * self.config.bmi_z_max_delta * fraction
+        except (ArithmeticError, TypeError, ValueError) as exc:
+            raise ValueError("age_days is too large for disorder arithmetic") from exc
+        return _require_finite_real("celiac disease BMI z-score delta", delta)
+
+    def _untreated_height_z_delta(
+        self, state: LatentDisorderState, age_days: int
+    ) -> float:
+        assert state.onset_age_days is not None
+        try:
+            effect_onset = _checked_age_sum(
+                "celiac disease height effect onset age_days",
+                state.onset_age_days,
+                self.config.height_onset_delay_days,
+            )
+        except (ArithmeticError, TypeError, ValueError) as exc:
+            raise ValueError("celiac disease height effect schedule is invalid") from exc
+        if age_days < effect_onset:
+            return 0.0
+        try:
+            fraction = min(
+                (age_days - effect_onset) / self.config.height_progression_days,
+                1.0,
+            )
+            delta = -state.severity * fraction
+        except (ArithmeticError, TypeError, ValueError) as exc:
+            raise ValueError("age_days is too large for disorder arithmetic") from exc
+        return _require_finite_real("celiac disease height z-score delta", delta)
+
+    def _treated_delta(
+        self,
+        state: LatentDisorderState,
+        age_days: int,
+        untreated: Callable[[LatentDisorderState, int], float],
+    ) -> float:
+        treatment_start = state.treatment_start_age_days
+        if treatment_start is None or age_days <= treatment_start:
+            return _require_finite_real("celiac disease treatment effect", untreated(state, age_days))
+        try:
+            at_treatment = untreated(state, treatment_start)
+            recovery_fraction = min(
+                (age_days - treatment_start) / self.config.response_days,
+                1.0,
+            )
+            recovered = at_treatment * (1 - state.treatment_response)
+            delta = at_treatment + (recovered - at_treatment) * recovery_fraction
+        except (ArithmeticError, TypeError, ValueError) as exc:
+            raise ValueError("age_days is too large for disorder arithmetic") from exc
+        return _require_finite_real("celiac disease treatment effect", delta)
+
+    def height_z_delta(self, state: LatentDisorderState, age_days: int) -> float:
+        _require_module_state(state, self.kind)
+        age = _require_age("age_days", age_days)
+        if state.onset_age_days is None:
+            raise ValueError("celiac disease requires an onset age")
+        return self._treated_delta(state, age, self._untreated_height_z_delta)
+
+    def bmi_z_delta(self, state: LatentDisorderState, age_days: int) -> float:
+        _require_module_state(state, self.kind)
+        age = _require_age("age_days", age_days)
+        if state.onset_age_days is None:
+            raise ValueError("celiac disease requires an onset age")
+        return self._treated_delta(state, age, self._untreated_bmi_z_delta)
+
+    def events(
+        self, patient: PatientState, state: LatentDisorderState
+    ) -> tuple[ClinicalEvent, ...]:
+        _require_module_state(state, self.kind)
+        if state.onset_age_days is None:
+            raise ValueError("celiac disease requires an onset age")
+        onset = state.onset_age_days
+        if state.severity == 0:
+            return _ordered_events(patient, (("latent_onset", onset),))
+        phenotype_age = _checked_age_sum(
+            "celiac disease phenotype age_days",
+            onset,
+            self.config.phenotype_delay_days,
+        )
+        recognition_age = _checked_age_sum(
+            "celiac disease recognition age_days",
+            phenotype_age,
+            self.config.recognition_delay_days,
+        )
+        workup_age = _checked_age_sum(
+            "celiac disease workup age_days",
+            recognition_age,
+            self.config.workup_delay_days,
+        )
+        diagnosis_age = _checked_age_sum(
+            "celiac disease diagnosis age_days",
+            workup_age,
+            self.config.diagnosis_delay_days,
+        )
+        schedule: tuple[tuple[str, int], ...] = (
+            ("latent_onset", onset),
+            ("observable_phenotype", phenotype_age),
+            ("recognition_opportunity", recognition_age),
+            ("workup", workup_age),
+            ("recorded_diagnosis", diagnosis_age),
+        )
+        if state.treatment_start_age_days is None:
+            return _ordered_events(patient, schedule)
+        expected_treatment_start = _checked_age_sum(
+            "celiac disease treatment start age_days",
+            diagnosis_age,
+            self.config.treatment_delay_days,
+        )
+        if state.treatment_start_age_days != expected_treatment_start:
+            raise ValueError("treatment start does not match the configured causal schedule")
+        response_age = _checked_age_sum(
+            "celiac disease treatment response age_days",
             state.treatment_start_age_days,
             self.config.response_days,
         )

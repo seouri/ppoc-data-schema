@@ -231,7 +231,7 @@ Release one contains separately reviewed modules for:
 
 These are generative modules, not assertions that every diagnosis has one trajectory. Approved overlaps are encoded as explicit module interactions; release one does not sample an unconstrained Cartesian product. A clinical module cannot be enabled until its golden cases, citations, terminology mappings, and longitudinal signature assertions have been reviewed.
 
-The current ordinary-development implementation exposes pediatric hypothyroidism as an uncalibrated, evaluator-only trajectory module with a checked-in golden case; it is not enabled in the visible cohort/package route and has no TSH/free-T4, levothyroxine, or other disorder-specific ancillary projection. Those visible descendants remain a separate follow-on contract.
+The current ordinary-development implementation exposes pediatric hypothyroidism and celiac disease as uncalibrated, evaluator-only trajectory modules with checked-in golden cases; neither is enabled in the visible cohort/package route and neither has disorder-specific ancillary projection (for example, TSH/free-T4/levothyroxine for hypothyroidism or celiac testing/referral/treatment resources). Those visible descendants remain separate follow-on contracts.
 
 ### Incidence, prevalence, and censoring
 

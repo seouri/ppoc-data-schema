@@ -20,7 +20,7 @@
 - Identical reference identity, configuration, patient, module version/configuration, named streams, and seed reproduce identical state, points, disorder state, and events. The composition never requests `growth`.
 - The age-regime replay seam preserves ordinary `AgeRegimeTrajectoryKernel.generate(...)` behavior and existing call sites.
 - Constitutional delay shifts age-regime puberty onset by `puberty_delay_days` and does not apply its overlapping negative height delta a second time; an out-of-domain shifted schedule is an error.
-- Defaults remain uncalibrated development scenarios. No real rows, diagnosis counts, clinical tables, prevalence estimates, demographic calibration, privacy evidence, or Synthea implementation enters this plan.
+- Defaults remain uncalibrated development scenarios. The evaluator-only follow-on modules include pediatric hypothyroidism and celiac disease; they do not widen this kernel into visible ancillary resources. No real rows, diagnosis counts, clinical tables, prevalence estimates, demographic calibration, privacy evidence, or Synthea implementation enters this plan.
 
 ---
 

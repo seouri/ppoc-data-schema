@@ -409,7 +409,7 @@ git commit -m "docs: describe latent growth disorder modules"
 
 Before merging this plan, verify that:
 
-- The original four module types produce deterministic states and ordered event traces with latent truth separate from observable descendants; the pediatric-hypothyroidism follow-on adds the same contract without widening visible package export.
+- The original four module types produce deterministic states and ordered event traces with latent truth separate from observable descendants; the pediatric-hypothyroidism and celiac-disease follow-ons add the same contract without widening visible package export.
 - Familial short stature preserves a constant height-z offset, constitutional delay has a bounded temporary effect, and growth-hormone deficiency has progressive impairment with optional treatment response.
 - Healthy-module output is byte-for-byte/point-for-point identical to the existing healthy kernel for the same inputs.
 - Anthropometric identities, reference guards, age ordering, and named random-stream isolation pass independent tests.
@@ -428,3 +428,9 @@ Before merging this plan, verify that:
 - [x] Add a versioned, frozen `PediatricHypothyroidismConfig` and `PediatricHypothyroidismModule` with age-bounded onset, progressive height impairment, relative BMI increase, optional treatment, and heterogeneous response/nonresponse events.
 - [x] Register `DisorderKind.PEDIATRIC_HYPOTHYROIDISM`, its named counterfactual stream, built-in module contract, and golden forced-coverage case without changing the visible generator or package schema.
 - [x] Add deterministic, schedule, overflow, state-kind, treatment, and golden-catalog tests; update evaluator-only documentation and retain non-GHD ancillary pathways as deferred.
+
+### Follow-on: celiac-disease-like trajectory (2026-09-02)
+
+- [x] Add a versioned, frozen `CeliacDiseaseConfig` and `CeliacDiseaseModule` with weight/BMI-first decline, delayed height impairment, optional treatment, and heterogeneous response/nonresponse events.
+- [x] Register `DisorderKind.CELIAC_DISEASE`, its named counterfactual stream, built-in module contract, and golden forced-coverage case without changing the visible generator or package schema.
+- [x] Add deterministic, schedule, overflow, state-kind, treatment, age-regime composition, and golden-catalog tests; update evaluator-only documentation and retain celiac ancillary pathways as deferred.

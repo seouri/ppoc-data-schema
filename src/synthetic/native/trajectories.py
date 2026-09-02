@@ -15,6 +15,8 @@ from synthetic.native.anthropometry import (
     require_finite_real,
 )
 from synthetic.native.clinical_modules import (
+    CeliacDiseaseConfig,
+    CeliacDiseaseModule,
     ConstitutionalDelayConfig,
     ConstitutionalDelayModule,
     FamilialShortStatureConfig,
@@ -49,6 +51,7 @@ _BUILTIN_MODULE_CONTRACTS = (
         PediatricHypothyroidismConfig,
         "pediatric-hypothyroidism-v1",
     ),
+    (CeliacDiseaseModule, CeliacDiseaseConfig, "celiac-disease-v1"),
 )
 
 
