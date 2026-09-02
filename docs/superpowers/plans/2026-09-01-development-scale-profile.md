@@ -144,6 +144,12 @@ After the merged-result full suite and all checks pass, fast-forward `main`, rer
 ## Completion evidence
 
 - Task 1 and Task 2 were independently reviewed with no Critical, Important, or Minor findings; the direct gate remains test-only and distinct from the later CLI composition profile.
-- Default focused collection was `1 passed, 3 skipped`; the explicit opt-in matrix completed all three fixed seeds at 10,000 patients each as `4 passed in 703.35s` (including the documentation assertion).
-- Merged `main` verification: `2492 passed, 4 skipped`; Ruff, schema validation, `uv lock --check`, whitespace checks, and focused scale checks passed.
+- Historical feature-tip evidence recorded `1 passed, 3 skipped` for the default focused collection and `4 passed in 703.35s` for the explicit opt-in matrix over all three fixed seeds at 10,000 patients each (including the documentation assertion).
+- Historical merged-`main` evidence recorded `2492 passed, 4 skipped`; Ruff, schema validation, `uv lock --check`, whitespace checks, and focused scale checks passed.
 - The gate writes only pytest-temporary packages, uses visible-only task predictions and a test-only source-matched binding, and makes no prevalence, clinical, real-label, privacy/non-matchability, held-out, Synthea, or release claim.
+
+## Current-main revalidation (2026-09-02)
+
+- At `eddf24d838cf77a0384f2385fa325c6ed0b04e4e`, `SYNTHETIC_RUN_SCALE=1 PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -m scale tests/synthetic/test_development_scale.py tests/synthetic/test_generate_cli.py` completed `4 passed, 8 deselected in 1100.74s` (18 minutes 20.74 seconds), covering all three fixed native seeds and the 10,000-patient CLI composition profile.
+- `PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_development_scale.py tests/synthetic/test_generate_cli.py` completed `8 passed, 4 skipped in 6.23s`; `PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q` completed `2681 passed, 4 skipped in 151.02s`; `uv run ruff check src tests`, `python3 schema/build.py --check`, `uv lock --check`, and `git diff --check` all passed.
+- The revalidation produced no repository artifacts beyond the pre-existing untracked cache directories; the scale gate remains synthetic-only composition evidence and does not advance any governed prevalence, clinical, privacy/non-matchability, held-out, Synthea, or release gate.
