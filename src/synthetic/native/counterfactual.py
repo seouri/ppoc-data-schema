@@ -109,6 +109,7 @@ _NATIVE_STREAM_NAMES = frozenset(
         "disorder.celiac_disease",
         "disorder.small_for_gestational_age",
         "disorder.turner_syndrome",
+        "disorder.undernutrition",
     }
 )
 

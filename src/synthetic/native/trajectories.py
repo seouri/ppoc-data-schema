@@ -32,6 +32,8 @@ from synthetic.native.clinical_modules import (
     SmallForGestationalAgeModule,
     TurnerSyndromeConfig,
     TurnerSyndromeModule,
+    UndernutritionConfig,
+    UndernutritionModule,
 )
 from synthetic.native.healthy import HealthyKernel
 from synthetic.randomness import NamedRandomStreams
@@ -62,6 +64,7 @@ _BUILTIN_MODULE_CONTRACTS = (
         "small-for-gestational-age-v1",
     ),
     (TurnerSyndromeModule, TurnerSyndromeConfig, "turner-syndrome-v1"),
+    (UndernutritionModule, UndernutritionConfig, "undernutrition-v1"),
 )
 
 

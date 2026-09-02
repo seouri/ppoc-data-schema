@@ -33,6 +33,7 @@ def test_guide_names_the_fixed_catalog_regimes_and_directional_patterns() -> Non
 
     assert GOLDEN_TRAJECTORY_VERSION == "growth-golden-v1"
     assert "`growth-golden-v1`" in guide
+    assert "exactly twelve fictional cases" in guide
     for case_id in GOLDEN_CASE_IDS:
         assert f"`{case_id}`" in guide
     for regime in ("infancy", "transition", "childhood", "puberty", "adolescence"):
@@ -45,6 +46,7 @@ def test_guide_names_the_fixed_catalog_regimes_and_directional_patterns() -> Non
         "progressive_negative",
         "positive_after_onset",
         "birth_catch_up",
+        "delayed_progressive",
     ):
         assert f"`{pattern}`" in guide
 

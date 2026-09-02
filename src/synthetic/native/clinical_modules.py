@@ -1686,3 +1686,322 @@ class TurnerSyndromeModule:
                 ),
             ),
         )
+
+
+@dataclass(frozen=True)
+class UndernutritionConfig:
+    """Uncalibrated development scenario parameters for undernutrition."""
+
+    module_version: ClassVar[str] = "undernutrition-v1"
+
+    onset_min_age_days: int = 365
+    onset_max_age_days: int = 3650
+    severity_min: float = 0.6
+    severity_max: float = 1.3
+    weight_progression_days: int = 365
+    height_onset_delay_days: int = 180
+    height_progression_days: int = 730
+    phenotype_delay_days: int = 90
+    recognition_delay_days: int = 120
+    workup_delay_days: int = 30
+    diagnosis_delay_days: int = 30
+    treatment_probability: float = 0.75
+    treatment_delay_days: int = 30
+    response_days: int = 365
+    treatment_response_min: float = 0.35
+    treatment_response_max: float = 0.8
+    weight_z_max_delta: float = 0.8
+    height_z_max_delta: float = 0.6
+
+    def __post_init__(self) -> None:
+        onset_min, onset_max = _require_ordered_bounds(
+            "onset_min_age_days",
+            self.onset_min_age_days,
+            "onset_max_age_days",
+            self.onset_max_age_days,
+            ages=True,
+        )
+        if onset_min == 0:
+            raise ValueError("undernutrition onset must be after birth")
+        _require_ordered_bounds(
+            "severity_min", self.severity_min, "severity_max", self.severity_max
+        )
+        _require_age("weight_progression_days", self.weight_progression_days, positive=True)
+        _require_age("height_onset_delay_days", self.height_onset_delay_days)
+        _require_age("height_progression_days", self.height_progression_days, positive=True)
+        for name, value in (
+            ("phenotype_delay_days", self.phenotype_delay_days),
+            ("recognition_delay_days", self.recognition_delay_days),
+            ("workup_delay_days", self.workup_delay_days),
+            ("diagnosis_delay_days", self.diagnosis_delay_days),
+            ("treatment_delay_days", self.treatment_delay_days),
+        ):
+            _require_age(name, value)
+        _require_probability("treatment_probability", self.treatment_probability)
+        _require_age("response_days", self.response_days, positive=True)
+        _, response_max = _require_ordered_bounds(
+            "treatment_response_min",
+            self.treatment_response_min,
+            "treatment_response_max",
+            self.treatment_response_max,
+        )
+        if response_max > 1:
+            raise ValueError("treatment response bounds must be in [0, 1]")
+        _require_magnitude("weight_z_max_delta", self.weight_z_max_delta)
+        _require_magnitude("height_z_max_delta", self.height_z_max_delta)
+        _checked_age_sum(
+            "undernutrition weight effect end age_days",
+            onset_max,
+            self.weight_progression_days,
+        )
+        _checked_age_sum(
+            "undernutrition height effect end age_days",
+            onset_max,
+            self.height_onset_delay_days,
+            self.height_progression_days,
+        )
+        _checked_age_sum(
+            "undernutrition treatment outcome age_days",
+            onset_max,
+            self.phenotype_delay_days,
+            self.recognition_delay_days,
+            self.workup_delay_days,
+            self.diagnosis_delay_days,
+            self.treatment_delay_days,
+            self.response_days,
+        )
+
+
+class UndernutritionModule:
+    """Apply an evaluator-only weight-first undernutrition scenario."""
+
+    kind = DisorderKind.UNDERNUTRITION
+    module_version: ClassVar[str] = UndernutritionConfig.module_version
+
+    def __init__(self, config: UndernutritionConfig | None = None) -> None:
+        self.config = _validated_builtin_config(
+            config,
+            UndernutritionConfig,
+            UndernutritionModule.module_version,
+            validate_type=type(self) is UndernutritionModule,
+            validate_version=type(self) is UndernutritionModule,
+        )
+
+    def sample_state(
+        self, patient: PatientState, streams: NamedRandomStreams
+    ) -> LatentDisorderState:
+        del patient
+        disorder = streams.generator(f"disorder.{self.kind.value}")
+        try:
+            onset = int(
+                disorder.integers(
+                    self.config.onset_min_age_days,
+                    self.config.onset_max_age_days + 1,
+                )
+            )
+            severity = float(
+                disorder.uniform(self.config.severity_min, self.config.severity_max)
+            )
+            if severity == 0 or float(disorder.random()) >= self.config.treatment_probability:
+                return LatentDisorderState(self.kind, onset, severity)
+            response = float(
+                disorder.uniform(
+                    self.config.treatment_response_min,
+                    self.config.treatment_response_max,
+                )
+            )
+            treatment_start = _checked_age_sum(
+                "undernutrition treatment start age_days",
+                onset,
+                self._treatment_start_offset(),
+            )
+        except (ArithmeticError, TypeError, ValueError) as exc:
+            raise ValueError("undernutrition state cannot be sampled") from exc
+        return LatentDisorderState(
+            self.kind,
+            onset,
+            severity,
+            treatment_start_age_days=treatment_start,
+            treatment_response=response,
+        )
+
+    def _treatment_start_offset(self) -> int:
+        return _checked_age_sum(
+            "undernutrition treatment start offset",
+            self.config.phenotype_delay_days
+            + self.config.recognition_delay_days
+            + self.config.workup_delay_days
+            + self.config.diagnosis_delay_days
+            + self.config.treatment_delay_days,
+        )
+
+    def _validate_state(self, state: LatentDisorderState) -> LatentDisorderState:
+        """Return a rehydrated state after module and causal checks."""
+
+        if type(state) is not LatentDisorderState:
+            raise TypeError("state must be a LatentDisorderState")
+        try:
+            validated = LatentDisorderState(
+                kind=state.kind,
+                onset_age_days=state.onset_age_days,
+                severity=state.severity,
+                puberty_delay_days=state.puberty_delay_days,
+                treatment_start_age_days=state.treatment_start_age_days,
+                treatment_response=state.treatment_response,
+            )
+        except (ArithmeticError, TypeError, ValueError) as exc:
+            raise ValueError("undernutrition state is invalid") from exc
+        _require_module_state(validated, self.kind)
+        if validated.onset_age_days is None or validated.onset_age_days <= 0:
+            raise ValueError("undernutrition requires a positive onset age")
+        if validated.puberty_delay_days != 0:
+            raise ValueError("undernutrition does not support a puberty delay")
+        if validated.severity == 0 and (
+            validated.treatment_start_age_days is not None
+            or validated.treatment_response != 0
+        ):
+            raise ValueError("zero-severity undernutrition state cannot include treatment")
+        if validated.treatment_start_age_days is not None:
+            expected_treatment_start = _checked_age_sum(
+                "undernutrition treatment start age_days",
+                validated.onset_age_days,
+                self._treatment_start_offset(),
+            )
+            if validated.treatment_start_age_days != expected_treatment_start:
+                raise ValueError("treatment start does not match the configured causal schedule")
+        return validated
+
+    def _untreated_bmi_z_delta(
+        self, state: LatentDisorderState, age_days: int
+    ) -> float:
+        assert state.onset_age_days is not None
+        if age_days < state.onset_age_days:
+            return 0.0
+        try:
+            fraction = min(
+                (age_days - state.onset_age_days) / self.config.weight_progression_days,
+                1.0,
+            )
+            delta = -state.severity * self.config.weight_z_max_delta * fraction
+        except (ArithmeticError, TypeError, ValueError) as exc:
+            raise ValueError("age_days is too large for disorder arithmetic") from exc
+        return _require_finite_real("undernutrition BMI z-score delta", delta)
+
+    def _untreated_height_z_delta(
+        self, state: LatentDisorderState, age_days: int
+    ) -> float:
+        assert state.onset_age_days is not None
+        try:
+            effect_onset = _checked_age_sum(
+                "undernutrition height effect onset age_days",
+                state.onset_age_days,
+                self.config.height_onset_delay_days,
+            )
+        except (ArithmeticError, TypeError, ValueError) as exc:
+            raise ValueError("undernutrition height effect schedule is invalid") from exc
+        if age_days < effect_onset:
+            return 0.0
+        try:
+            fraction = min(
+                (age_days - effect_onset) / self.config.height_progression_days,
+                1.0,
+            )
+            delta = -state.severity * self.config.height_z_max_delta * fraction
+        except (ArithmeticError, TypeError, ValueError) as exc:
+            raise ValueError("age_days is too large for disorder arithmetic") from exc
+        return _require_finite_real("undernutrition height z-score delta", delta)
+
+    def _treated_delta(
+        self,
+        state: LatentDisorderState,
+        age_days: int,
+        untreated: Callable[[LatentDisorderState, int], float],
+    ) -> float:
+        treatment_start = state.treatment_start_age_days
+        if treatment_start is None or age_days <= treatment_start:
+            return _require_finite_real("undernutrition treatment effect", untreated(state, age_days))
+        try:
+            at_treatment = untreated(state, treatment_start)
+            recovery_fraction = min(
+                (age_days - treatment_start) / self.config.response_days,
+                1.0,
+            )
+            recovered = at_treatment * (1 - state.treatment_response)
+            delta = at_treatment + (recovered - at_treatment) * recovery_fraction
+        except (ArithmeticError, TypeError, ValueError) as exc:
+            raise ValueError("age_days is too large for disorder arithmetic") from exc
+        return _require_finite_real("undernutrition treatment effect", delta)
+
+    def height_z_delta(self, state: LatentDisorderState, age_days: int) -> float:
+        state = self._validate_state(state)
+        age = _require_age("age_days", age_days)
+        return self._treated_delta(state, age, self._untreated_height_z_delta)
+
+    def bmi_z_delta(self, state: LatentDisorderState, age_days: int) -> float:
+        state = self._validate_state(state)
+        age = _require_age("age_days", age_days)
+        return self._treated_delta(state, age, self._untreated_bmi_z_delta)
+
+    def events(
+        self, patient: PatientState, state: LatentDisorderState
+    ) -> tuple[ClinicalEvent, ...]:
+        state = self._validate_state(state)
+        if state.onset_age_days is None:
+            raise ValueError("undernutrition requires an onset age")
+        onset = state.onset_age_days
+        if state.severity == 0:
+            return _ordered_events(patient, (("latent_onset", onset),))
+        phenotype_age = _checked_age_sum(
+            "undernutrition phenotype age_days",
+            onset,
+            self.config.phenotype_delay_days,
+        )
+        recognition_age = _checked_age_sum(
+            "undernutrition recognition age_days",
+            phenotype_age,
+            self.config.recognition_delay_days,
+        )
+        workup_age = _checked_age_sum(
+            "undernutrition workup age_days",
+            recognition_age,
+            self.config.workup_delay_days,
+        )
+        diagnosis_age = _checked_age_sum(
+            "undernutrition diagnosis age_days",
+            workup_age,
+            self.config.diagnosis_delay_days,
+        )
+        schedule: tuple[tuple[str, int], ...] = (
+            ("latent_onset", onset),
+            ("observable_phenotype", phenotype_age),
+            ("recognition_opportunity", recognition_age),
+            ("workup", workup_age),
+            ("recorded_diagnosis", diagnosis_age),
+        )
+        if state.treatment_start_age_days is None:
+            return _ordered_events(patient, schedule)
+        expected_treatment_start = _checked_age_sum(
+            "undernutrition treatment start age_days",
+            diagnosis_age,
+            self.config.treatment_delay_days,
+        )
+        if state.treatment_start_age_days != expected_treatment_start:
+            raise ValueError("treatment start does not match the configured causal schedule")
+        response_age = _checked_age_sum(
+            "undernutrition treatment response age_days",
+            state.treatment_start_age_days,
+            self.config.response_days,
+        )
+        return _ordered_events(
+            patient,
+            schedule
+            + (
+                ("treatment_start", state.treatment_start_age_days),
+                (
+                    "treatment_response"
+                    if state.treatment_response > 0
+                    else "treatment_nonresponse",
+                    response_age,
+                ),
+            ),
+        )

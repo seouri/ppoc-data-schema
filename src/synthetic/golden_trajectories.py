@@ -33,6 +33,7 @@ from synthetic.native.clinical_modules import (
     PediatricHypothyroidismModule,
     SmallForGestationalAgeModule,
     TurnerSyndromeModule,
+    UndernutritionModule,
 )
 from synthetic.randomness import NamedRandomStreams
 from synthetic.references import GrowthReference
@@ -49,6 +50,8 @@ GOLDEN_CASE_IDS = (
     "golden-small-for-gestational-age-persistent-v1",
     "golden-turner-syndrome-v1",
     "golden-turner-syndrome-untreated-v1",
+    "golden-undernutrition-v1",
+    "golden-undernutrition-untreated-v1",
 )
 GOLDEN_REASON_CODES = (
     "NONDETERMINISTIC",
@@ -184,6 +187,22 @@ _FIXED_DISORDER_VALUES = {
         None,
         0.0,
     ),
+    GOLDEN_CASE_IDS[10]: (
+        DisorderKind.UNDERNUTRITION,
+        2190,
+        1.0,
+        0,
+        2490,
+        0.6,
+    ),
+    GOLDEN_CASE_IDS[11]: (
+        DisorderKind.UNDERNUTRITION,
+        2190,
+        1.0,
+        0,
+        None,
+        0.0,
+    ),
 }
 
 
@@ -199,6 +218,7 @@ class GoldenPattern(str, Enum):
     POSITIVE_AFTER_ONSET = "positive_after_onset"
     BIRTH_CATCH_UP = "birth_catch_up"
     PROGRESSIVE_NEGATIVE = "progressive_negative"
+    DELAYED_PROGRESSIVE = "delayed_progressive"
 
 
 class GoldenStatus(str, Enum):
@@ -336,7 +356,7 @@ def _validate_disorder_state(state: object, *, case_id: str) -> None:
             and state.treatment_start_age_days is None
             and state.treatment_response == 0
         )
-    elif state.kind is DisorderKind.TURNER_SYNDROME:
+    elif state.kind is DisorderKind.TURNER_SYNDROME or state.kind is DisorderKind.UNDERNUTRITION:
         coherent = (
             state.onset_age_days is not None
             and state.onset_age_days > 0
@@ -449,6 +469,7 @@ def _validate_pattern_size(pattern: GoldenPattern, probes: tuple[int, ...]) -> N
         GoldenPattern.PROGRESSION_RESPONSE: 4,
         GoldenPattern.BIRTH_CATCH_UP: 4,
         GoldenPattern.PROGRESSIVE_NEGATIVE: 4,
+        GoldenPattern.DELAYED_PROGRESSIVE: 4,
     }
     expected = exact_sizes.get(pattern)
     if expected is not None and len(probes) != expected:
@@ -744,6 +765,32 @@ DEFAULT_GOLDEN_CASES = (
         (1460, 2372, 3285, 4000),
         1010,
     ),
+    _case(
+        GOLDEN_CASE_IDS[10],
+        DisorderKind.UNDERNUTRITION,
+        LatentDisorderState(
+            DisorderKind.UNDERNUTRITION,
+            2190,
+            1.0,
+            treatment_start_age_days=2490,
+            treatment_response=0.6,
+        ),
+        _DISEASE_EVENTS + ("treatment_start", "treatment_response"),
+        GoldenPattern.PROGRESSION_RESPONSE,
+        GoldenPattern.PROGRESSION_RESPONSE,
+        (2190, 2490, 2672, 3000),
+        1011,
+    ),
+    _case(
+        GOLDEN_CASE_IDS[11],
+        DisorderKind.UNDERNUTRITION,
+        LatentDisorderState(DisorderKind.UNDERNUTRITION, 2190, 1.0),
+        _DISEASE_EVENTS,
+        GoldenPattern.DELAYED_PROGRESSIVE,
+        GoldenPattern.PROGRESSIVE_NEGATIVE,
+        (2190, 2370, 3100, 3500),
+        1012,
+    ),
 )
 
 
@@ -757,6 +804,7 @@ def _default_modules() -> dict[DisorderKind, GrowthDisorderModule]:
         DisorderKind.CELIAC_DISEASE: CeliacDiseaseModule(),
         DisorderKind.SMALL_FOR_GESTATIONAL_AGE: SmallForGestationalAgeModule(),
         DisorderKind.TURNER_SYNDROME: TurnerSyndromeModule(),
+        DisorderKind.UNDERNUTRITION: UndernutritionModule(),
     }
 
 
@@ -1122,6 +1170,13 @@ def _matches_pattern(
         return (
             _zero(values[0])
             and values[0] > values[1] > values[2]
+            and _equal(values[2], values[3])
+        )
+    if pattern is GoldenPattern.DELAYED_PROGRESSIVE:
+        return (
+            _zero(values[0])
+            and _zero(values[1])
+            and values[2] < 0
             and _equal(values[2], values[3])
         )
     return _zero(values[0]) and all(value > 0 for value in values[1:])

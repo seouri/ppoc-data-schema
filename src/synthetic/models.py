@@ -90,6 +90,7 @@ class DisorderKind(str, Enum):
     CELIAC_DISEASE = "celiac_disease"
     SMALL_FOR_GESTATIONAL_AGE = "small_for_gestational_age"
     TURNER_SYNDROME = "turner_syndrome"
+    UNDERNUTRITION = "undernutrition"
 
 
 @dataclass(frozen=True)

@@ -191,6 +191,7 @@ def test_latent_observable_and_recorded_layers_are_distinct_status_only_diagnost
         "latent_module.celiac_disease",
         "latent_module.small_for_gestational_age",
         "latent_module.turner_syndrome",
+        "latent_module.undernutrition",
     ]
     assert sum(item.support for item in latent) == len(cohort.members)
     assert all(item.target_value is None for item in latent)
