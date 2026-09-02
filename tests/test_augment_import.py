@@ -134,6 +134,13 @@ def test_documentation_describes_synthetic_only_import_boundary() -> None:
     assert "SourceMatchedAugmenterOracle" in oracle_guide
     assert "test-only adapter" in oracle_guide
     assert "exact-schema exporter" in oracle_guide
+    assert (
+        "Explicit `development-smoke` and `development-cohort` profiles may compose this test-only "
+        "adapter through the exact-schema exporter. The default/no-profile and production "
+        "`synthetic.generate` paths remain fail-closed; the adapter remains wholly synthetic, "
+        "non-authoritative, and outside governed-data, calibration, privacy, counterfactual, Synthea, "
+        "or release decisions."
+    ) in oracle_guide
 
     assert "[synthetic generator guide](docs/synthetic-generator.md)" in readme
     for document in (synthetic_guide,):

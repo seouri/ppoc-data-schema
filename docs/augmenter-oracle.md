@@ -2,7 +2,7 @@
 
 `SourceMatchedAugmenterOracle` is a non-authoritative, test-only adapter for exercising the checked-in, source-matched growth augmenter against a wholly synthetic staged package. It is intended for development and counterfactual experiments only. Do not use real or governed patient data with this adapter.
 
-The adapter is separate from the imported command-line program described in [the imported augmenter guide](augment-import.md). It lets the existing exact-schema exporter invoke that program through the `DerivationOracle` protocol; it does not wire the program into visible generation or the production command-line entry point.
+The adapter is separate from the imported command-line program described in [the imported augmenter guide](augment-import.md). Explicit `development-smoke` and `development-cohort` profiles may compose this test-only adapter through the exact-schema exporter. The default/no-profile and production `synthetic.generate` paths remain fail-closed; the adapter remains wholly synthetic, non-authoritative, and outside governed-data, calibration, privacy, counterfactual, Synthea, or release decisions.
 
 ## Install and call the candidate explicitly
 
