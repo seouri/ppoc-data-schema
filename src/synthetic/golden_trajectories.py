@@ -60,6 +60,7 @@ _PUBERTY_TEMPO_BOUNDS = (730, 1460)
 _PUBERTY_HEIGHT_SPURT_BOUNDS = (0.2, 0.8)
 _PUBERTY_BMI_SHIFT_BOUNDS = (-0.2, 0.3)
 _AGE_TUPLE = (0, 700, 730, 760, 3000, 4379, 4380, 4740, 5470, 5475, 6575, 7305)
+_HEAD_CIRCUMFERENCE_DECAY_DAYS = 730
 _ALL_REGIMES = tuple(GrowthRegime)
 _DISEASE_EVENTS = (
     "latent_onset",
@@ -826,12 +827,18 @@ def _valid_identities(trajectory: AgeRegimeDisorderTrajectory) -> bool:
         for point in points:
             if not _finite_positive(point.weight_kg):
                 return False
+            head_is_valid = (
+                _finite_positive(point.head_circumference_cm)
+                if point.age_days < _HEAD_CIRCUMFERENCE_DECAY_DAYS
+                else point.head_circumference_cm is None
+                or _finite_positive(point.head_circumference_cm)
+            )
             if point.regime is GrowthRegime.INFANCY:
                 if not (
                     _finite_positive(point.length_cm)
                     and point.height_cm is None
                     and point.bmi is None
-                    and _finite_positive(point.head_circumference_cm)
+                    and head_is_valid
                     and _finite(point.length_z)
                     and point.height_z is None
                     and _finite(point.weight_z)
@@ -844,7 +851,7 @@ def _valid_identities(trajectory: AgeRegimeDisorderTrajectory) -> bool:
                     _finite_positive(point.length_cm)
                     and _finite_positive(point.height_cm)
                     and _finite_positive(point.bmi)
-                    and _finite_positive(point.head_circumference_cm)
+                    and head_is_valid
                     and _finite(point.length_z)
                     and _finite(point.height_z)
                     and _finite(point.weight_z)

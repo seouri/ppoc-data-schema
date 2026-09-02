@@ -28,7 +28,13 @@ def _positive_int(name: str, value: object) -> None:
 
 
 def _finite_number(name: str, value: object) -> None:
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{name} must be finite")  # noqa: TRY004
+    try:
+        finite = math.isfinite(value)
+    except (OverflowError, TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be finite") from exc
+    if not finite:
         raise ValueError(f"{name} must be finite")
 
 
@@ -119,6 +125,8 @@ def classify_age(
     _positive_int("puberty_tempo_days", puberty_tempo_days)
     if not isinstance(config, AgeRegimeConfig):
         raise ValueError("config must be an AgeRegimeConfig")  # noqa: TRY004
+    if age_days > config.maximum_age_days:
+        raise ValueError("age_days is outside the configured domain")
     if not config.puberty_min_age_days <= puberty_onset_age_days <= config.puberty_max_age_days:
         raise ValueError("puberty onset is outside configured puberty bounds")
     if not config.puberty_tempo_min_days <= puberty_tempo_days <= config.puberty_tempo_max_days:
@@ -169,7 +177,10 @@ def _derived_weight(bmi: float, height_cm: float) -> float:
 def _smooth_step(age_days: int, onset_age_days: int, tempo_days: int) -> float:
     if age_days < onset_age_days:
         return 0.0
-    progress = min(1.0, max(0.0, (age_days - onset_age_days) / tempo_days))
+    try:
+        progress = min(1.0, max(0.0, (age_days - onset_age_days) / tempo_days))
+    except (OverflowError, ZeroDivisionError) as exc:
+        raise ValueError("age_days is too large for age-regime arithmetic") from exc
     return 3.0 * progress * progress - 2.0 * progress * progress * progress
 
 
@@ -288,17 +299,32 @@ class AgeRegimeTrajectoryKernel:
         if any(age > self.config.maximum_age_days for age in ages_days):
             raise ValueError("ages_days are outside the configured domain")
 
-        reference_min_age = getattr(self.reference, "min_age_days", None)
-        reference_max_age = getattr(self.reference, "max_age_days", None)
+        missing = object()
+        reference_min_age = getattr(self.reference, "min_age_days", missing)
+        reference_max_age = getattr(self.reference, "max_age_days", missing)
+        if reference_min_age is not missing:
+            try:
+                _nonnegative_int("reference min_age_days", reference_min_age)
+            except ValueError as exc:
+                raise ValueError("reference domain bounds must be nonnegative integers") from exc
+        if reference_max_age is not missing:
+            try:
+                _nonnegative_int("reference max_age_days", reference_max_age)
+            except ValueError as exc:
+                raise ValueError("reference domain bounds must be nonnegative integers") from exc
         if (
-            isinstance(reference_min_age, int)
-            and not isinstance(reference_min_age, bool)
+            reference_min_age is not missing
+            and reference_max_age is not missing
+            and reference_min_age > reference_max_age
+        ):
+            raise ValueError("reference domain bounds must be ordered")
+        if (
+            reference_min_age is not missing
             and any(age < reference_min_age for age in ages_days)
         ):
             raise ValueError("requested ages are outside the reference domain")
         if (
-            isinstance(reference_max_age, int)
-            and not isinstance(reference_max_age, bool)
+            reference_max_age is not missing
             and any(age > reference_max_age for age in ages_days)
         ):
             raise ValueError("requested ages are outside the reference domain")
@@ -387,13 +413,34 @@ class AgeRegimeTrajectoryKernel:
             + catch_up_fraction * (state.birth_weight_z - state.childhood_bmi_z)
             + mass_residual
         )
-        head_fraction = max(
-            0.0,
-            1.0 - age_days / self.config.head_circumference_decay_days,
-        )
-        head_z = state.head_circumference_z * head_fraction + float(
-            head.normal(0.0, self.config.residual_sd)
-        )
+        head_circumference_cm: float | None = None
+        if age_days <= self.config.head_circumference_decay_days:
+            try:
+                head_fraction = max(
+                    0.0,
+                    1.0 - age_days / self.config.head_circumference_decay_days,
+                )
+            except (OverflowError, ZeroDivisionError) as exc:
+                raise ValueError("age_days is too large for age-regime arithmetic") from exc
+            head_z = state.head_circumference_z * head_fraction + float(
+                head.normal(0.0, self.config.residual_sd)
+            )
+
+            head_z = generation_z_score(
+                self.reference,
+                "head_circumference_cm",
+                age_days,
+                patient.reference_sex,
+                head_z,
+            )
+
+            try:
+                head_circumference_cm = self._reference_value(
+                    "head_circumference_cm", age_days, patient, head_z
+                )
+            except KeyError:
+                if age_days < self.config.head_circumference_decay_days:
+                    raise
 
         length_z = generation_z_score(
             self.reference,
@@ -409,19 +456,8 @@ class AgeRegimeTrajectoryKernel:
             patient.reference_sex,
             weight_z,
         )
-        head_z = generation_z_score(
-            self.reference,
-            "head_circumference_cm",
-            age_days,
-            patient.reference_sex,
-            head_z,
-        )
-
         length_cm = self._reference_value("length_cm", age_days, patient, length_z)
         weight_kg = self._reference_value("weight_kg", age_days, patient, weight_z)
-        head_circumference_cm = self._reference_value(
-            "head_circumference_cm", age_days, patient, head_z
-        )
 
         height_cm: float | None = None
         bmi: float | None = None
@@ -505,7 +541,10 @@ class AgeRegimeTrajectoryKernel:
         patient: PatientState,
         z: float,
     ) -> float:
-        value = self.reference.value(metric, age_days, patient.reference_sex, z)
+        try:
+            value = self.reference.value(metric, age_days, patient.reference_sex, z)
+        except (ArithmeticError, TypeError) as exc:
+            raise ValueError(f"reference {metric} failed during evaluation") from exc
         return _positive_value(f"reference {metric}", value)
 
     def _validate_transition_continuity(
@@ -517,39 +556,42 @@ class AgeRegimeTrajectoryKernel:
         transition_end = self.config.transition_age_days + self.config.transition_window_days
         for previous, current in pairwise(points):
             if previous.age_days <= transition_end < current.age_days:
-                comparison_age = transition_end + 1
-                length_z = generation_z_score(
-                    self.reference,
-                    "length_cm",
-                    comparison_age,
-                    patient.reference_sex,
-                    state.childhood_height_z,
-                )
-                length_cm = self._reference_value(
-                    "length_cm",
-                    comparison_age,
-                    patient,
-                    length_z,
-                )
-                converted_height = _positive_value(
-                    "converted standing height",
-                    length_cm - self.config.length_to_height_offset_cm,
-                )
-                height_z = generation_z_score(
-                    self.reference,
-                    "height_cm",
-                    comparison_age,
-                    patient.reference_sex,
-                    state.childhood_height_z,
-                )
-                standing_height = self._reference_value(
-                    "height_cm",
-                    comparison_age,
-                    patient,
-                    height_z,
-                )
-                if (
-                    abs(standing_height - converted_height)
-                    > self.config.max_transition_discontinuity_cm
-                ):
-                    raise ValueError("transition discontinuity exceeds configured tolerance")
+                for comparison_age in (transition_end + 1, current.age_days):
+                    length_z = generation_z_score(
+                        self.reference,
+                        "length_cm",
+                        comparison_age,
+                        patient.reference_sex,
+                        state.childhood_height_z,
+                    )
+                    length_cm = self._reference_value(
+                        "length_cm",
+                        comparison_age,
+                        patient,
+                        length_z,
+                    )
+                    converted_height = _positive_value(
+                        "converted standing height",
+                        length_cm - self.config.length_to_height_offset_cm,
+                    )
+                    height_z = generation_z_score(
+                        self.reference,
+                        "height_cm",
+                        comparison_age,
+                        patient.reference_sex,
+                        state.childhood_height_z,
+                    )
+                    standing_height = self._reference_value(
+                        "height_cm",
+                        comparison_age,
+                        patient,
+                        height_z,
+                    )
+                    try:
+                        discontinuity = abs(standing_height - converted_height)
+                    except ArithmeticError as exc:
+                        raise ValueError("transition discontinuity must be finite") from exc
+                    if not math.isfinite(discontinuity):
+                        raise ValueError("transition discontinuity must be finite")
+                    if discontinuity > self.config.max_transition_discontinuity_cm:
+                        raise ValueError("transition discontinuity exceeds configured tolerance")

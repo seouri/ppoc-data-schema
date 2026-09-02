@@ -8,6 +8,7 @@ from synthetic.models import (
     AgeRegimeTrajectory,
     GrowthRegime,
 )
+from synthetic.native.age_regimes import AgeRegimeConfig
 
 
 def test_age_regime_state_and_point_accept_valid_values() -> None:
@@ -67,6 +68,28 @@ def test_age_regime_models_reject_boolean_numeric_values() -> None:
         AgeRegimePoint("syn-patient-a", 365, GrowthRegime.INFANCY, 75.0, None, True, None)
     with pytest.raises(ValueError, match="birth_length_z"):
         AgeRegimeState("v1", True, 0.0, 0.0, 0.0, 0.0, 4380, 900, 0.0, 0.0)
+
+
+def test_age_regime_models_reject_integers_that_cannot_be_represented_as_float() -> None:
+    huge = 10**1000
+
+    with pytest.raises(ValueError, match="residual_sd"):
+        AgeRegimeConfig(residual_sd=huge)
+    with pytest.raises(ValueError, match="birth_length_z"):
+        AgeRegimeState("v1", huge, 0.0, 0.0, 0.0, 0.0, 4380, 900, 0.0, 0.0)
+    with pytest.raises(ValueError, match="length_cm"):
+        AgeRegimePoint("p", 365, GrowthRegime.INFANCY, huge, None, 8.0, None)
+
+
+@pytest.mark.parametrize(
+    ("height_cm", "bmi"),
+    [(74.0, None), (None, 14.0)],
+)
+def test_age_regime_point_rejects_standing_dimensions_in_infancy(
+    height_cm: float | None, bmi: float | None
+) -> None:
+    with pytest.raises(ValueError, match="infancy"):
+        AgeRegimePoint("p", 365, GrowthRegime.INFANCY, 75.0, height_cm, 8.0, bmi)
 
 
 def test_age_regime_point_rejects_overflowing_bmi_identity() -> None:

@@ -295,3 +295,97 @@ def test_kernel_rejects_transition_discontinuity_across_sparse_samples(
         AgeRegimeTrajectoryKernel(JumpReference()).generate(
             PATIENT, ages_days, NamedRandomStreams(5, 0)
         )
+
+
+def test_kernel_rejects_age_integers_that_cannot_be_represented_as_float() -> None:
+    class AgeAgnosticReference:
+        reference_id = "age-agnostic-reference-v1"
+
+        def value(
+            self, metric: str, age_days: int, reference_sex: str, z: float
+        ) -> float:
+            del age_days, reference_sex, z
+            return {
+                "length_cm": 90.7,
+                "weight_kg": 12.0,
+                "head_circumference_cm": 47.0,
+                "height_cm": 90.0,
+                "bmi": 12.0 / 0.9**2,
+            }[metric]
+
+    huge = 10**1000
+    config = AgeRegimeConfig(
+        maximum_age_days=huge,
+        puberty_min_age_days=1_000,
+        puberty_max_age_days=1_000,
+        puberty_tempo_min_days=1,
+        puberty_tempo_max_days=1,
+    )
+
+    with pytest.raises(ValueError, match="age_days"):
+        AgeRegimeTrajectoryKernel(config=config, reference=AgeAgnosticReference()).generate(
+            PATIENT, (huge,), NamedRandomStreams(5, 0)
+        )
+
+
+def test_kernel_omits_head_circumference_after_configured_decay() -> None:
+    class DecayingHeadReference(RegimeReference):
+        def value(self, metric: str, age_days: int, reference_sex: str, z: float) -> float:
+            if metric == "head_circumference_cm" and age_days > 365:
+                raise KeyError(metric)
+            return super().value(metric, age_days, reference_sex, z)
+
+    trajectory = AgeRegimeTrajectoryKernel(
+        DecayingHeadReference(), AgeRegimeConfig(head_circumference_decay_days=365)
+    ).generate(PATIENT, (365, 366, 700, 760, 761), NamedRandomStreams(5, 0))
+
+    assert trajectory.points[0].head_circumference_cm is not None
+    assert all(point.head_circumference_cm is None for point in trajectory.points[1:])
+
+
+def test_kernel_rejects_late_transition_discontinuity() -> None:
+    class LateJumpReference(RegimeReference):
+        def value(self, metric: str, age_days: int, reference_sex: str, z: float) -> float:
+            value = super().value(metric, age_days, reference_sex, z)
+            if metric == "height_cm" and age_days > 761:
+                return value + 10.0
+            return value
+
+    with pytest.raises(ValueError, match="transition"):
+        AgeRegimeTrajectoryKernel(LateJumpReference()).generate(
+            PATIENT, (730, 762), NamedRandomStreams(5, 0)
+        )
+
+
+@pytest.mark.parametrize(
+    ("attribute", "value"),
+    [("min_age_days", "0"), ("max_age_days", math.nan), ("min_age_days", True)],
+)
+def test_kernel_rejects_malformed_declared_reference_domains(
+    attribute: str, value: object
+) -> None:
+    class MalformedDomainReference(RegimeReference):
+        pass
+
+    setattr(MalformedDomainReference, attribute, value)
+
+    with pytest.raises(ValueError, match="reference domain"):
+        AgeRegimeTrajectoryKernel(MalformedDomainReference()).generate(
+            PATIENT, (730,), NamedRandomStreams(5, 0)
+        )
+
+
+@pytest.mark.parametrize("failure", [OverflowError, TypeError])
+def test_kernel_normalizes_reference_arithmetic_and_type_errors(
+    failure: type[Exception],
+) -> None:
+    class RaisingReference(RegimeReference):
+        def value(self, metric: str, age_days: int, reference_sex: str, z: float) -> float:
+            if metric == "length_cm":
+                raise failure("reference failure")
+            return super().value(metric, age_days, reference_sex, z)
+
+    with pytest.raises(ValueError, match="reference"):
+        AgeRegimeTrajectoryKernel(RaisingReference()).generate(
+            PATIENT, (365,), NamedRandomStreams(5, 0)
+        )

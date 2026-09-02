@@ -3,6 +3,17 @@ from dataclasses import dataclass
 from enum import Enum
 
 
+def _is_finite_numeric(value: object) -> bool:
+    """Return whether a model numeric is finite without leaking conversion errors."""
+
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    try:
+        return math.isfinite(value)
+    except (OverflowError, TypeError, ValueError):
+        return False
+
+
 @dataclass(frozen=True)
 class PatientState:
     patient_id: str
@@ -131,7 +142,7 @@ class AgeRegimeState:
                      "childhood_height_z", "childhood_bmi_z", "puberty_height_spurt_z",
                      "puberty_bmi_shift_z"):
             value = getattr(self, name)
-            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            if not _is_finite_numeric(value):
                 raise ValueError(f"{name} must be finite")
         if (isinstance(self.puberty_onset_age_days, bool)
                 or not isinstance(self.puberty_onset_age_days, int)
@@ -171,12 +182,18 @@ class AgeRegimePoint:
             value = getattr(self, name)
             if name == "weight_kg" and value is None:
                 raise ValueError("weight_kg must be finite and positive")
-            if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0):
+            if value is not None and (
+                not _is_finite_numeric(value) or value <= 0
+            ):
                 raise ValueError(f"{name} must be finite and positive")
         for name in ("length_z", "height_z", "weight_z", "bmi_z", "height_velocity_cm_per_year", "weight_velocity_kg_per_year"):
             value = getattr(self, name)
-            if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value)):
+            if value is not None and not _is_finite_numeric(value):
                 raise ValueError(f"{name} must be finite")
+        if self.regime is GrowthRegime.INFANCY and (
+            self.height_cm is not None or self.bmi is not None
+        ):
+            raise ValueError("infancy does not accept standing height or BMI")
         if self.regime is GrowthRegime.INFANCY and self.length_cm is None:
             raise ValueError("infancy requires length")
         if self.regime is GrowthRegime.TRANSITION and (self.length_cm is None or self.height_cm is None):

@@ -232,7 +232,9 @@ def test_generation_keeps_regime_channel_applicability_and_derives_bmi() -> None
 
 def test_generation_keeps_bmi_not_applicable_for_infancy_extra_standing_height() -> None:
     points = list(_trajectory().physiology.points)
-    points[0] = dataclasses.replace(points[0], height_cm=45.0)
+    # Bypass the model invariant to keep this an observation-boundary hostile
+    # input test: malformed latent points must still be rendered safely.
+    object.__setattr__(points[0], "height_cm", 45.0)
     trajectory = dataclasses.replace(
         _trajectory(),
         physiology=dataclasses.replace(_trajectory().physiology, points=tuple(points)),

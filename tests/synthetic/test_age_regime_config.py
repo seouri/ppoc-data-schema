@@ -51,3 +51,10 @@ def test_classifier_rejects_invalid_age_or_puberty_schedule() -> None:
         classify_age(-1, 4380, 900, config)
     with pytest.raises(ValueError, match="puberty"):
         classify_age(4380, 4380, 0, config)
+
+
+def test_classifier_rejects_age_beyond_configured_maximum() -> None:
+    config = AgeRegimeConfig()
+
+    with pytest.raises(ValueError, match="age_days"):
+        classify_age(config.maximum_age_days + 1, 4380, 900, config)
