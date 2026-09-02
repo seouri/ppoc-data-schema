@@ -168,8 +168,14 @@ def test_development_smoke_cli_exports_exact_visible_package(tmp_path: Path) -> 
 def test_development_smoke_cli_forwards_descriptor_and_metadata_options(tmp_path: Path) -> None:
     """Catches subprocess helper or CLI forwarding that drops optional generation metadata."""
     output = tmp_path / "forwarded-options"
-    descriptor = tmp_path / "fictional-descriptor.json"
+    runtime_root = tmp_path / "fictional-runtime"
+    shutil.copytree(ROOT / "src", runtime_root / "src")
+    shutil.copytree(ROOT / "data", runtime_root / "data")
+    shutil.copytree(ROOT / "scripts", runtime_root / "scripts")
+    shutil.copy2(ROOT / "uv.lock", runtime_root / "uv.lock")
+    descriptor = runtime_root / "fictional-descriptor.json"
     shutil.copy2(ROOT / "datapackage.json", descriptor)
+    environment = os.environ | {"PYTHONPATH": str(runtime_root / "src")}
 
     result = _run(
         _command(
@@ -178,7 +184,9 @@ def test_development_smoke_cli_forwards_descriptor_and_metadata_options(tmp_path
             descriptor=descriptor,
             reference_time="2099-12-31T23:59:59Z",
             software_revision="fictional-forwarding-v1",
-        )
+        ),
+        env=environment,
+        cwd=runtime_root,
     )
 
     assert result.returncode == 0
