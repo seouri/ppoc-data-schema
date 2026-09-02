@@ -20,6 +20,16 @@ UNKNOWN_RECORDED = PatientState("syn-patient-turner-u", "U", "F")
 MALE_REFERENCE = PatientState("syn-patient-turner-m", "M", "M")
 
 
+class HalfGenerationZReference(RegimeLinearTestReference):
+    """Test reference with a deliberately non-idempotent z-score hook."""
+
+    def generation_z_score(
+        self, metric: str, age_days: int, reference_sex: str, z: float
+    ) -> float:
+        del metric, age_days, reference_sex
+        return z / 2
+
+
 def test_turner_samples_reproducibly_from_its_scoped_stream() -> None:
     module = TurnerSyndromeModule()
     first = module.sample_state(FEMALE, NamedRandomStreams(20260902, 3))
@@ -83,6 +93,51 @@ def test_turner_rejects_nonpositive_onset_or_puberty_delay(state: LatentDisorder
 
     with pytest.raises(ValueError, match="onset|puberty"):
         module.height_z_delta(state, 730)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("severity", -1.0),
+        ("onset_age_days", "not-an-age"),
+        ("treatment_response", 2.0),
+        ("treatment_start_age_days", 1900),
+    ],
+)
+def test_turner_revalidates_tampered_state_before_effects_and_events(
+    field: str, value: object
+) -> None:
+    module = TurnerSyndromeModule()
+    state = LatentDisorderState(
+        DisorderKind.TURNER_SYNDROME,
+        1460,
+        1.0,
+        treatment_start_age_days=1850,
+        treatment_response=0.6,
+    )
+    object.__setattr__(state, field, value)
+
+    with pytest.raises(ValueError):
+        module.height_z_delta(state, 2000)
+    with pytest.raises(ValueError):
+        module.bmi_z_delta(state, 2000)
+    with pytest.raises(ValueError):
+        module.events(FEMALE, state)
+
+
+def test_turner_rejects_treatment_fields_on_zero_severity_state() -> None:
+    module = TurnerSyndromeModule()
+    state = LatentDisorderState(
+        DisorderKind.TURNER_SYNDROME,
+        1460,
+        0.0,
+        treatment_start_age_days=1850,
+    )
+
+    with pytest.raises(ValueError, match="zero-severity"):
+        module.height_z_delta(state, 2000)
+    with pytest.raises(ValueError, match="zero-severity"):
+        module.events(FEMALE, state)
 
 
 def test_turner_ignores_tampered_config_reference_attribute() -> None:
@@ -174,6 +229,32 @@ def test_turner_composes_with_age_regime_kernel_and_preserves_weight_identity() 
         point.weight_kg == pytest.approx(point.bmi * (point.height_cm / 100) ** 2)
         for point in result.physiology.points[2:]
     )
+
+
+def test_turner_preserves_zero_effect_baseline_with_nonidempotent_reference_hook() -> None:
+    reference = HalfGenerationZReference()
+    physiology = AgeRegimeTrajectoryKernel(
+        reference, AgeRegimeConfig(residual_sd=0.0)
+    )
+    physiology_state = physiology.sample_state(NamedRandomStreams(8, 0))
+    ages = (0, 730, 1460, 2190)
+    baseline = physiology.generate(
+        FEMALE,
+        ages,
+        NamedRandomStreams(8, 0),
+        state=physiology_state,
+    )
+    result = AgeRegimeDisorderKernel(physiology, TurnerSyndromeModule()).generate(
+        FEMALE,
+        ages,
+        NamedRandomStreams(8, 0),
+        physiology_state=physiology_state,
+        disorder_state=LatentDisorderState(
+            DisorderKind.TURNER_SYNDROME, 1460, 1.0
+        ),
+    )
+
+    assert result.physiology.points[:3] == baseline.points[:3]
 
 
 def test_turner_config_rejects_invalid_values() -> None:

@@ -1482,12 +1482,47 @@ class TurnerSyndromeModule:
 
         self._validate_patient(patient)
 
-    def _validate_state(self, state: LatentDisorderState) -> None:
-        _require_module_state(state, self.kind)
-        if state.onset_age_days is None or state.onset_age_days <= 0:
+    def _validate_state(self, state: LatentDisorderState) -> LatentDisorderState:
+        """Return a rehydrated state after checking Turner-specific invariants.
+
+        ``LatentDisorderState`` is frozen, but callers can still bypass the
+        dataclass constructor with ``object.__setattr__``.  Rehydrating the
+        state makes every public effect/event operation validate the generic
+        model invariants as well as this module's causal schedule.
+        """
+
+        if type(state) is not LatentDisorderState:
+            raise TypeError("state must be a LatentDisorderState")
+        try:
+            validated = LatentDisorderState(
+                kind=state.kind,
+                onset_age_days=state.onset_age_days,
+                severity=state.severity,
+                puberty_delay_days=state.puberty_delay_days,
+                treatment_start_age_days=state.treatment_start_age_days,
+                treatment_response=state.treatment_response,
+            )
+        except (ArithmeticError, TypeError, ValueError) as exc:
+            raise ValueError("Turner syndrome state is invalid") from exc
+        _require_module_state(validated, self.kind)
+        if validated.onset_age_days is None or validated.onset_age_days <= 0:
             raise ValueError("Turner syndrome requires a positive onset age")
-        if state.puberty_delay_days != 0:
+        if validated.puberty_delay_days != 0:
             raise ValueError("Turner syndrome does not support a puberty delay")
+        if validated.severity == 0 and (
+            validated.treatment_start_age_days is not None
+            or validated.treatment_response != 0
+        ):
+            raise ValueError("zero-severity Turner state cannot include treatment")
+        if validated.treatment_start_age_days is not None:
+            expected_treatment_start = _checked_age_sum(
+                "Turner syndrome treatment start age_days",
+                validated.onset_age_days,
+                self._treatment_start_offset(),
+            )
+            if validated.treatment_start_age_days != expected_treatment_start:
+                raise ValueError("treatment start does not match the configured causal schedule")
+        return validated
 
     def sample_state(
         self, patient: PatientState, streams: NamedRandomStreams
@@ -1552,7 +1587,7 @@ class TurnerSyndromeModule:
         return _require_finite_real("Turner syndrome height z-score delta", delta)
 
     def height_z_delta(self, state: LatentDisorderState, age_days: int) -> float:
-        self._validate_state(state)
+        state = self._validate_state(state)
         age = _require_age("age_days", age_days)
         if state.onset_age_days is None:
             raise ValueError("Turner syndrome requires an onset age")
@@ -1573,7 +1608,7 @@ class TurnerSyndromeModule:
         return _require_finite_real("Turner syndrome height z-score delta", delta)
 
     def bmi_z_delta(self, state: LatentDisorderState, age_days: int) -> float:
-        self._validate_state(state)
+        state = self._validate_state(state)
         _require_age("age_days", age_days)
         if state.severity == 0:
             return 0.0
@@ -1591,7 +1626,7 @@ class TurnerSyndromeModule:
         self, patient: PatientState, state: LatentDisorderState
     ) -> tuple[ClinicalEvent, ...]:
         self._validate_patient(patient)
-        self._validate_state(state)
+        state = self._validate_state(state)
         if state.onset_age_days is None:
             raise ValueError("Turner syndrome requires an onset age")
         onset = state.onset_age_days

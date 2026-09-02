@@ -315,59 +315,74 @@ class AgeRegimeDisorderKernel:
         point: AgeRegimePoint,
         disorder_state: LatentDisorderState,
     ) -> AgeRegimePoint:
+        height_delta = self._module_delta(disorder_state, point.age_days, metric="height")
         length_z = self._adjusted_z(
             point.length_z,
             disorder_state,
             point.age_days,
             metric="height",
         )
-        length_z = generation_z_score(
-            self.physiology.reference,
-            "length_cm",
-            point.age_days,
-            patient.reference_sex,
-            length_z,
-        )
+        if height_delta == 0.0:
+            length_z = point.length_z
+            length_cm = point.length_cm
+        else:
+            length_z = generation_z_score(
+                self.physiology.reference,
+                "length_cm",
+                point.age_days,
+                patient.reference_sex,
+                length_z,
+            )
+            length_cm = self._reference_value(
+                "length_cm",
+                point.age_days,
+                patient,
+                length_z,
+                label="length",
+            )
+
+        bmi_delta = self._module_delta(disorder_state, point.age_days, metric="BMI")
         weight_z = self._adjusted_z(
             point.weight_z,
             disorder_state,
             point.age_days,
             metric="BMI",
         )
-        weight_z = generation_z_score(
-            self.physiology.reference,
-            "weight_kg",
-            point.age_days,
-            patient.reference_sex,
-            weight_z,
-        )
-        length_cm = self._reference_value(
-            "length_cm",
-            point.age_days,
-            patient,
-            length_z,
-            label="length",
-        )
-        weight_kg = self._reference_value(
-            "weight_kg",
-            point.age_days,
-            patient,
-            weight_z,
-            label="weight",
-        )
+        if bmi_delta == 0.0:
+            weight_z = point.weight_z
+            weight_kg = point.weight_kg
+        else:
+            weight_z = generation_z_score(
+                self.physiology.reference,
+                "weight_kg",
+                point.age_days,
+                patient.reference_sex,
+                weight_z,
+            )
+            weight_kg = self._reference_value(
+                "weight_kg",
+                point.age_days,
+                patient,
+                weight_z,
+                label="weight",
+            )
 
         height_cm: float | None = None
         bmi: float | None = None
         height_z: float | None = None
         if point.regime is GrowthRegime.TRANSITION:
-            message = "converted standing height must be finite and positive"
-            try:
-                converted_height = length_cm - self.physiology.config.length_to_height_offset_cm
-            except ArithmeticError as exc:
-                raise ValueError(message) from exc
-            height_cm = _positive_real(converted_height, message)
+            if height_delta == 0.0:
+                height_cm = point.height_cm
+                height_z = point.height_z
+            else:
+                message = "converted standing height must be finite and positive"
+                try:
+                    converted_height = length_cm - self.physiology.config.length_to_height_offset_cm
+                except ArithmeticError as exc:
+                    raise ValueError(message) from exc
+                height_cm = _positive_real(converted_height, message)
+                height_z = length_z
             bmi = _derived_bmi(weight_kg, height_cm)
-            height_z = length_z
 
         return AgeRegimePoint(
             patient_id=point.patient_id,
@@ -390,46 +405,57 @@ class AgeRegimeDisorderKernel:
         point: AgeRegimePoint,
         disorder_state: LatentDisorderState,
     ) -> AgeRegimePoint:
+        height_delta = self._module_delta(disorder_state, point.age_days, metric="height")
         height_z = self._adjusted_z(
             point.height_z,
             disorder_state,
             point.age_days,
             metric="height",
         )
-        height_z = generation_z_score(
-            self.physiology.reference,
-            "height_cm",
-            point.age_days,
-            patient.reference_sex,
-            height_z,
-        )
+        if height_delta == 0.0:
+            height_z = point.height_z
+            height_cm = point.height_cm
+        else:
+            height_z = generation_z_score(
+                self.physiology.reference,
+                "height_cm",
+                point.age_days,
+                patient.reference_sex,
+                height_z,
+            )
+            height_cm = self._reference_value(
+                "height_cm",
+                point.age_days,
+                patient,
+                height_z,
+                label="height",
+            )
+
+        bmi_delta = self._module_delta(disorder_state, point.age_days, metric="BMI")
         bmi_z = self._adjusted_z(
             point.bmi_z,
             disorder_state,
             point.age_days,
             metric="BMI",
         )
-        bmi_z = generation_z_score(
-            self.physiology.reference,
-            "bmi",
-            point.age_days,
-            patient.reference_sex,
-            bmi_z,
-        )
-        height_cm = self._reference_value(
-            "height_cm",
-            point.age_days,
-            patient,
-            height_z,
-            label="height",
-        )
-        bmi = self._reference_value(
-            "bmi",
-            point.age_days,
-            patient,
-            bmi_z,
-            label="BMI",
-        )
+        if bmi_delta == 0.0:
+            bmi_z = point.bmi_z
+            bmi = point.bmi
+        else:
+            bmi_z = generation_z_score(
+                self.physiology.reference,
+                "bmi",
+                point.age_days,
+                patient.reference_sex,
+                bmi_z,
+            )
+            bmi = self._reference_value(
+                "bmi",
+                point.age_days,
+                patient,
+                bmi_z,
+                label="BMI",
+            )
         weight_kg = _derived_weight(bmi, height_cm)
         return AgeRegimePoint(
             patient_id=point.patient_id,
