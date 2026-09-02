@@ -1,7 +1,7 @@
 # Synthetic Growth Task-Utility Evaluation Contract
 
 **Date:** 2026-08-31
-**Status:** Approved next roadmap slice under the synthetic pediatric growth-fixture design
+**Status:** Implementation complete; evaluator-only task diagnostics; real-data clinical-utility evidence pending
 **Parent:** [Synthetic Pediatric Growth Fixture System Design](2026-08-30-synthetic-growth-fixtures-design.md)
 
 **Tech Stack:** Python 3.12+, standard-library `dataclasses`, `enum`, `json`, `math`, `collections`, existing cohort/model/resource types, pytest, Ruff, and AST boundary tests.

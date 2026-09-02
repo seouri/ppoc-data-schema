@@ -1,7 +1,7 @@
 # Observed Resource Exact-Schema Package Export
 
 **Date:** 2026-08-31
-**Status:** Approved next implementation slice under the synthetic growth-fixture design
+**Status:** Implementation complete; development/test-only export path; clinical, population, privacy, and release gates pending
 **Parent:** [Synthetic Pediatric Growth Fixture System Design](2026-08-30-synthetic-growth-fixtures-design.md)
 **Prerequisite:** [Evaluator-Only Observed Resource Contract](2026-08-31-observed-resource-contract-design.md)
 

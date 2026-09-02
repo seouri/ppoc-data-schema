@@ -1,7 +1,7 @@
 # Governed Augmented-Derivation Parity Gate
 
 **Date:** 2026-09-01
-**Status:** Approved design for the next roadmap slice
+**Status:** Implementation complete; evaluator-only parity gate; independent reference/parity/review evidence pending
 **Parent:** [Synthetic Pediatric Growth Fixture System Design](2026-08-30-synthetic-growth-fixtures-design.md)
 **Prerequisites:** the exact-schema package exporter, the native observation/resource contracts, and the governed prevalence/held-out evidence boundary
 

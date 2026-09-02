@@ -1,7 +1,7 @@
 # Development Scale-Profile Test Design
 
 **Date:** 2026-09-01
-**Status:** Approved bounded roadmap slice under the synthetic pediatric growth-fixture design
+**Status:** Implementation complete; opt-in test-only scale gate; clinical, population, privacy, and release evidence pending
 **Parent:** [Synthetic Pediatric Growth Fixture System Design](2026-08-30-synthetic-growth-fixtures-design.md)
 **Prerequisites:** Native cohort generation, observation/resource projection, exact-schema package export, the source-matched augmenter candidate, cohort validation, temporal-drift evaluation, and task-utility evaluation
 

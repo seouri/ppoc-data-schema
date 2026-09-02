@@ -1,7 +1,7 @@
 # Counterfactual Fixture Validity Contract
 
 **Date:** 2026-08-31
-**Status:** Approved roadmap slice under the parent synthetic growth-fixture design
+**Status:** Implementation complete; evaluator-only native trajectory contract; clinical, privacy, and release evidence pending
 
 ## Purpose
 

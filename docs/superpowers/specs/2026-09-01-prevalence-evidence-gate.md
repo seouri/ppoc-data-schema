@@ -1,7 +1,7 @@
 # Governed Multi-Run Prevalence Evidence Gate
 
 **Date:** 2026-09-01
-**Status:** Approved design for implementation
+**Status:** Implementation complete; aggregate-only governed evidence gate; governed real-data prevalence evidence pending
 
 ## Purpose
 

@@ -1,7 +1,7 @@
 # Evaluator-Only Observation Frame Contract
 
 **Date:** 2026-08-31
-**Status:** Approved next roadmap slice under the parent synthetic growth-fixture design
+**Status:** Implementation complete; evaluator-only; clinical, population, privacy, and release evidence pending
 **Parent:** [Synthetic Pediatric Growth Fixture System Design](2026-08-30-synthetic-growth-fixtures-design.md)
 
 ## Purpose and boundary

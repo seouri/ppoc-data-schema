@@ -1,7 +1,7 @@
 # Native Calibrated Cohort Profile
 
 **Date:** 2026-08-31
-**Status:** Approved next roadmap slice under the synthetic pediatric growth-fixture design
+**Status:** Implementation complete; evaluator/development-only; prevalence, clinical, privacy, and release gates pending
 **Parent:** [Synthetic Pediatric Growth Fixture System Design](2026-08-30-synthetic-growth-fixtures-design.md)
 **Prerequisites:** [Age-regime disorder integration](2026-08-30-age-regime-disorder-integration-design.md), [governed calibration core](2026-08-31-governed-calibration-core-design.md), [evaluator observation frame](2026-08-31-observation-frame-design.md), and [observed resource contract](2026-08-31-observed-resource-contract-design.md)
 

@@ -1,7 +1,7 @@
 # Optional Synthea Engine-Conformance Manifest Design
 
 **Date:** 2026-09-01
-**Status:** Approved optional, development-only roadmap slice
+**Status:** Manifest contract implementation complete; optional declaration-only route; Synthea engine/conformance/release evidence pending
 **Prerequisites:** the engine-neutral synthetic growth contracts, exact-schema package exporter, derivation binding, and native validation gates
 
 ## Purpose

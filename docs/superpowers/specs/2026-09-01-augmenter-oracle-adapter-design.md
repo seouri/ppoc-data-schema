@@ -1,7 +1,7 @@
 # Source-Matched Augmenter Oracle Adapter Design
 
 **Date:** 2026-09-01
-**Status:** Approved development-only roadmap slice
+**Status:** Implementation complete; development-only/test-only adapter; non-test binding, parity, clinical, and release evidence pending
 **Parent:** [Imported growth augmenter](2026-09-01-augment-import-design.md)
 **Prerequisites:** the exact-schema package exporter, the derivation-binding contract, and the byte-preserved `scripts/augment.py` runtime closure
 

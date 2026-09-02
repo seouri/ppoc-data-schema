@@ -1,7 +1,7 @@
 # Pair-Aware Exact-Schema Counterfactual Package Export
 
 **Date:** 2026-08-31
-**Status:** Approved next roadmap slice under the paired counterfactual EHR-world contract
+**Status:** Implementation complete; synthetic/test-only pair export; authoritative derivation, privacy, and release evidence pending
 **Parent:** [In-Memory Paired Counterfactual EHR-Worlds](2026-08-31-counterfactual-ehr-worlds-design.md)
 **Prerequisite:** [Observed Resource Exact-Schema Package Export](2026-08-31-observed-resource-package-export-design.md)
 

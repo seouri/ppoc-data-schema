@@ -1,7 +1,7 @@
 # Governed Privacy-Audit Evidence Design
 
 **Date:** 2026-08-31
-**Status:** Approved roadmap slice under the parent synthetic-fixture design
+**Status:** Implementation complete; aggregate-only privacy auditor; governed privacy/non-matchability evidence pending
 **Parent design:** [Synthetic Pediatric Growth Fixture System Design](2026-08-30-synthetic-growth-fixtures-design.md)
 **Prerequisite:** [Patient-disjoint held-out validation](2026-08-31-heldout-validation-design.md)
 

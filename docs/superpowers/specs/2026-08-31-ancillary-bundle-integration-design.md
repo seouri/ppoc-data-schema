@@ -1,7 +1,7 @@
 # Native GHD Ancillary-to-Bundle Integration Contract
 
 **Date:** 2026-08-31
-**Status:** Approved downstream slice under the native ancillary and counterfactual designs
+**Status:** Implementation complete; evaluator-only in-memory composition; package, clinical, privacy, and release gates pending
 **Parent:** [Synthetic Pediatric Growth Fixture System Design](2026-08-30-synthetic-growth-fixtures-design.md)
 
 ## Purpose

@@ -1,7 +1,7 @@
 # Native Cohort Fidelity/Profile Report
 
 **Date:** 2026-08-31
-**Status:** Approved roadmap slice under the synthetic pediatric growth-fixture design
+**Status:** Implementation complete; evaluator-only, uncalibrated
 **Parent:** [Synthetic Pediatric Growth Fixture System Design](2026-08-30-synthetic-growth-fixtures-design.md)
 **Prerequisites:** [Native calibrated cohort profile](2026-08-31-native-cohort-profile-design.md), age-regime/disorder kernels, and evaluator observation/resource contracts
 
