@@ -57,6 +57,9 @@ def _command(
     output: Path,
     *,
     profile: str | None = None,
+    descriptor: Path | None = None,
+    reference_time: str | None = None,
+    software_revision: str | None = None,
     patient_count: int = 3,
     seed: int = 20260901,
 ) -> list[str]:
@@ -73,6 +76,12 @@ def _command(
     ]
     if profile is not None:
         command.extend(["--profile", profile])
+    if descriptor is not None:
+        command.extend(["--descriptor", str(descriptor)])
+    if reference_time is not None:
+        command.extend(["--reference-time", reference_time])
+    if software_revision is not None:
+        command.extend(["--software-revision", software_revision])
     return command
 
 
@@ -154,6 +163,37 @@ def test_development_smoke_cli_exports_exact_visible_package(tmp_path: Path) -> 
     published = b"".join(path.read_bytes() for path in sorted(output.iterdir()) if path.is_file())
     assert b"latent" not in published.lower()
     assert b"truth" not in published.lower()
+
+
+def test_development_smoke_cli_forwards_descriptor_and_metadata_options(tmp_path: Path) -> None:
+    """Catches subprocess helper or CLI forwarding that drops optional generation metadata."""
+    output = tmp_path / "forwarded-options"
+    descriptor = tmp_path / "fictional-descriptor.json"
+    shutil.copy2(ROOT / "datapackage.json", descriptor)
+
+    result = _run(
+        _command(
+            output,
+            profile="development-smoke",
+            descriptor=descriptor,
+            reference_time="2099-12-31T23:59:59Z",
+            software_revision="fictional-forwarding-v1",
+        )
+    )
+
+    assert result.returncode == 0
+    assert result.stdout == ""
+    assert result.stderr == ""
+    expected_descriptor = load_descriptor(ROOT / "datapackage.json")
+    expected_resources = {resource["path"] for resource in expected_descriptor["resources"]}
+    assert {path.name for path in output.glob("*.csv")} == expected_resources
+    assert len(expected_resources) == 8
+    assert not validate_structure(output, expected_descriptor).errors
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["profile"] == "development-smoke"
+    assert manifest["status"] == "STRUCTURE_VALIDATED_TEST_ORACLE"
+    assert manifest["reference_time"] == "2099-12-31T23:59:59Z"
+    assert manifest["software_revision"] == "fictional-forwarding-v1"
 
 
 def test_development_cohort_cli_exports_exact_visible_package(tmp_path: Path) -> None:
