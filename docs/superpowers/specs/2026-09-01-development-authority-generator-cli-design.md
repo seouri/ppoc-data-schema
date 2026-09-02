@@ -1,7 +1,7 @@
 # Development-Only CDC-Backed Generator CLI Design
 
 **Date:** 2026-09-01
-**Status:** Proposed for implementation after user-approved design review
+**Status:** Implementation complete; development-only/test-only route; clinical, population, privacy, and release gates pending
 **Parent:** [Synthetic Pediatric Growth Fixture System Design](2026-08-30-synthetic-growth-fixtures-design.md)
 **Inputs:** the pinned `scripts/augment.py` runtime and its checked-in manifest-listed reference tables
 

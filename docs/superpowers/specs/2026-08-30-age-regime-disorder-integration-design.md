@@ -1,6 +1,6 @@
 # Age-Regime Disorder Integration Design
 
-**Status:** Draft for review
+**Status:** Implementation complete; evaluator-only, uncalibrated
 
 ## Purpose
 

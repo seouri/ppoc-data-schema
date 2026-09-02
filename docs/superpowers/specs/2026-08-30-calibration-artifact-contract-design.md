@@ -1,6 +1,6 @@
 # Aggregate Calibration Artifact Contract Design
 
-**Status:** Draft for review
+**Status:** Implementation complete; aggregate-only contract; governed real-data calibration/evidence pending
 
 ## Purpose
 
