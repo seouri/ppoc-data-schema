@@ -70,6 +70,32 @@ def test_healthy_kernel_rejects_nonphysical_derived_weight(
 
 
 @pytest.mark.parametrize(
+    ("height", "bmi", "message"),
+    [
+        pytest.param(
+            10**1000,
+            16.0,
+            "reference height.*finite and positive",
+            id="huge-height-int",
+        ),
+        pytest.param(
+            90.0,
+            10**1000,
+            "reference BMI.*finite and positive",
+            id="huge-bmi-int",
+        ),
+    ],
+)
+def test_healthy_kernel_rejects_oversized_integer_reference_values(
+    height: object, bmi: object, message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        HealthyKernel(PhysicalOutputReference(height=height, bmi=bmi)).generate(
+            PATIENT, (730,), NamedRandomStreams(5, 0)
+        )
+
+
+@pytest.mark.parametrize(
     ("height", "bmi"),
     [
         (1e-200, 16.0),
@@ -83,6 +109,33 @@ def test_disorder_trajectory_kernel_rejects_nonphysical_derived_weight(
 ) -> None:
     reference = TrajectoryPhysicalOutputReference(height=height, bmi=bmi)
     with pytest.raises(ValueError, match="derived weight.*finite and positive"):
+        DisorderTrajectoryKernel(
+            HealthyKernel(reference), HealthyGrowthModule()
+        ).generate(PATIENT, (730,), NamedRandomStreams(5, 0))
+
+
+@pytest.mark.parametrize(
+    ("height", "bmi", "message"),
+    [
+        pytest.param(
+            10**1000,
+            16.0,
+            "reference height.*finite and positive",
+            id="huge-height-int",
+        ),
+        pytest.param(
+            90.0,
+            10**1000,
+            "reference BMI.*finite and positive",
+            id="huge-bmi-int",
+        ),
+    ],
+)
+def test_disorder_trajectory_kernel_rejects_oversized_integer_reference_values(
+    height: object, bmi: object, message: str
+) -> None:
+    reference = TrajectoryPhysicalOutputReference(height=height, bmi=bmi)
+    with pytest.raises(ValueError, match=message):
         DisorderTrajectoryKernel(
             HealthyKernel(reference), HealthyGrowthModule()
         ).generate(PATIENT, (730,), NamedRandomStreams(5, 0))

@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import math
-from numbers import Real
-
 from synthetic.models import (
     ClinicalEvent,
     DisorderKind,
@@ -11,7 +8,11 @@ from synthetic.models import (
     LatentTrajectory,
     PatientState,
 )
-from synthetic.native.anthropometry import derive_weight_kg
+from synthetic.native.anthropometry import (
+    derive_weight_kg,
+    require_finite_positive,
+    require_finite_real,
+)
 from synthetic.native.clinical_modules import GrowthDisorderModule
 from synthetic.native.healthy import HealthyKernel
 from synthetic.randomness import NamedRandomStreams
@@ -27,19 +28,6 @@ _EVENT_PHASE_ORDER = {
     "treatment_response": 6,
     "treatment_nonresponse": 6,
 }
-
-
-def _finite_real(value: object, message: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, Real) or not math.isfinite(value):
-        raise ValueError(message)
-    return float(value)
-
-
-def _positive_reference_value(value: object, message: str) -> float:
-    result = _finite_real(value, message)
-    if result <= 0:
-        raise ValueError(message)
-    return result
 
 
 def validate_growth_disorder_module(module: object) -> None:
@@ -140,15 +128,15 @@ class DisorderTrajectoryKernel:
 
         points: list[LatentPoint] = []
         for point in baseline:
-            height_z = _finite_real(
-                point.height_z + _finite_real(
+            height_z = require_finite_real(
+                point.height_z + require_finite_real(
                     self.module.height_z_delta(state, point.age_days),
                     "module height z-score delta must be finite",
                 ),
                 "adjusted height z-score must be finite",
             )
-            bmi_z = _finite_real(
-                point.bmi_z + _finite_real(
+            bmi_z = require_finite_real(
+                point.bmi_z + require_finite_real(
                     self.module.bmi_z_delta(state, point.age_days),
                     "module BMI z-score delta must be finite",
                 ),
@@ -168,13 +156,13 @@ class DisorderTrajectoryKernel:
                 patient.reference_sex,
                 bmi_z,
             )
-            height_cm = _positive_reference_value(
+            height_cm = require_finite_positive(
                 self.healthy.reference.value(
                     "height_cm", point.age_days, patient.reference_sex, height_z
                 ),
                 "reference height must be finite and positive",
             )
-            bmi = _positive_reference_value(
+            bmi = require_finite_positive(
                 self.healthy.reference.value(
                     "bmi", point.age_days, patient.reference_sex, bmi_z
                 ),

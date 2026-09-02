@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-import math
-from numbers import Real
-
 from synthetic.models import LatentPoint, PatientState
-from synthetic.native.anthropometry import derive_weight_kg
+from synthetic.native.anthropometry import derive_weight_kg, require_finite_positive
 from synthetic.randomness import NamedRandomStreams
 from synthetic.references import GrowthReference, generation_z_score
 
@@ -94,20 +91,10 @@ class HealthyKernel:
                 "height_cm", age_days, patient.reference_sex, height_z
             )
             bmi = self.reference.value("bmi", age_days, patient.reference_sex, bmi_z)
-            if (
-                isinstance(height_cm, bool)
-                or not isinstance(height_cm, Real)
-                or not math.isfinite(height_cm)
-                or height_cm <= 0
-            ):
-                raise ValueError("reference height must be finite and positive")
-            if (
-                isinstance(bmi, bool)
-                or not isinstance(bmi, Real)
-                or not math.isfinite(bmi)
-                or bmi <= 0
-            ):
-                raise ValueError("reference BMI must be finite and positive")
+            height_cm = require_finite_positive(
+                height_cm, "reference height must be finite and positive"
+            )
+            bmi = require_finite_positive(bmi, "reference BMI must be finite and positive")
             weight_kg = derive_weight_kg(bmi, height_cm)
             points.append(
                 LatentPoint(
