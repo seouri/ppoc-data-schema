@@ -34,7 +34,7 @@
 - Produces `AgeRegimeTrajectoryKernel.sample_state(streams: NamedRandomStreams) -> AgeRegimeState`.
 - Extends `AgeRegimeTrajectoryKernel.generate(patient, ages_days, streams, *, state: AgeRegimeState | None = None) -> AgeRegimeTrajectory` without changing existing calls.
 
-- [ ] **Step 1: Write failing replay tests**
+- [x] **Step 1: Write failing replay tests**
 
 Add to `tests/synthetic/test_age_regime_kernel.py`:
 
@@ -72,13 +72,13 @@ def test_state_replay_rejects_wrong_version_or_puberty_domain() -> None:
 
 Keep the existing all-regime, determinism, and stream-recording tests unchanged.
 
-- [ ] **Step 2: Run replay tests to verify they fail**
+- [x] **Step 2: Run replay tests to verify they fail**
 
 Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_age_regime_kernel.py -k replay`
 
 Expected: collection or test failure because `sample_state` and the `state` keyword are not implemented.
 
-- [ ] **Step 3: Implement the replay seam**
+- [x] **Step 3: Implement the replay seam**
 
 In `src/synthetic/native/age_regimes.py`:
 
@@ -87,13 +87,13 @@ In `src/synthetic/native/age_regimes.py`:
 3. Add keyword-only `state: AgeRegimeState | None = None` to `generate`. If absent, sample state; if supplied, validate it and do not resample birth/childhood/puberty channels. In both cases obtain residual/head generators by their existing names and run the existing point construction, physical guards, velocities, and continuity validation.
 4. Preserve ordinary `generate(patient, ages_days, streams)` behavior; the replay seam is evaluator-only and no visible path may import it.
 
-- [ ] **Step 4: Run focused and regression tests**
+- [x] **Step 4: Run focused and regression tests**
 
 Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_age_regime_kernel.py && UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic`
 
 Expected: replay and all existing synthetic tests pass.
 
-- [ ] **Step 5: Run lint and commit**
+- [x] **Step 5: Run lint and commit**
 
 Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run ruff check src/synthetic/native/age_regimes.py tests/synthetic/test_age_regime_kernel.py`
 
@@ -116,7 +116,7 @@ git commit -m "feat: add age-regime state replay"
 - Produces frozen `AgeRegimeDisorderTrajectory(physiology: AgeRegimeTrajectory, disorder: LatentDisorderState, events: tuple[ClinicalEvent, ...])`.
 - Produces `validate_growth_disorder_module(module: object) -> None` and `validate_disorder_events(patient: PatientState, state: LatentDisorderState, events: tuple[ClinicalEvent, ...]) -> None` in `synthetic.native.trajectories`.
 
-- [ ] **Step 1: Write failing container and validator tests**
+- [x] **Step 1: Write failing container and validator tests**
 
 Create `tests/synthetic/test_age_regime_disorder_models.py`:
 
@@ -179,13 +179,13 @@ Also test that an object missing `module_version`, `sample_state`,
 `validate_growth_disorder_module`. Update existing disorder tests only to prove
 shared validation preserves current behavior and messages.
 
-- [ ] **Step 2: Run new tests to verify they fail**
+- [x] **Step 2: Run new tests to verify they fail**
 
 Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_age_regime_disorder_models.py`
 
 Expected: collection fails because the new model and validators are undefined.
 
-- [ ] **Step 3: Implement the container and validator reuse**
+- [x] **Step 3: Implement the container and validator reuse**
 
 In `src/synthetic/models.py`, add frozen `AgeRegimeDisorderTrajectory` after
 `AgeRegimeTrajectory`. Validate both model types, `events` as a tuple of
@@ -199,13 +199,13 @@ In `src/synthetic/native/trajectories.py`:
 2. Rename `_validate_events` to public `validate_disorder_events`, preserving terminal-treatment, ordering, patient, and state checks.
 3. Make `DisorderTrajectoryKernel.__init__` and `.generate` call the shared functions; do not alter healthy baseline or `LatentPoint` output.
 
-- [ ] **Step 4: Run focused and regression tests**
+- [x] **Step 4: Run focused and regression tests**
 
 Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_age_regime_disorder_models.py tests/synthetic/test_disorder_trajectories.py && UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic`
 
 Expected: focused tests and the complete synthetic suite pass.
 
-- [ ] **Step 5: Run lint and commit**
+- [x] **Step 5: Run lint and commit**
 
 Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run ruff check src/synthetic/models.py src/synthetic/native/trajectories.py tests/synthetic/test_age_regime_disorder_models.py tests/synthetic/test_disorder_trajectories.py`
 
@@ -226,7 +226,7 @@ git commit -m "feat: add age-regime disorder composition contract"
 - Produces `AgeRegimeDisorderKernel(physiology: AgeRegimeTrajectoryKernel, module: GrowthDisorderModule)`.
 - Produces `AgeRegimeDisorderKernel.generate(patient: PatientState, ages_days: tuple[int, ...], streams: NamedRandomStreams) -> AgeRegimeDisorderTrajectory`.
 
-- [ ] **Step 1: Write failing integration tests**
+- [x] **Step 1: Write failing integration tests**
 
 Create `tests/synthetic/test_age_regime_disorder.py` using
 `RegimeLinearTestReference` from `tests.synthetic.fakes`. Cover healthy
@@ -333,13 +333,13 @@ Add negative tests for wrong module kind/state, malformed event patient IDs,
 shifted schedules outside the configured domain, extreme reference values,
 sparse transition continuity, and missing required module methods.
 
-- [ ] **Step 2: Run integration tests to verify they fail**
+- [x] **Step 2: Run integration tests to verify they fail**
 
 Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_age_regime_disorder.py`
 
 Expected: collection fails because `AgeRegimeDisorderKernel` is undefined.
 
-- [ ] **Step 3: Implement the minimal composition kernel**
+- [x] **Step 3: Implement the minimal composition kernel**
 
 Create `src/synthetic/native/age_regime_disorder.py`:
 
@@ -355,13 +355,13 @@ Create `src/synthetic/native/age_regime_disorder.py`:
 Keep helpers focused on z-effect re-evaluation, velocity recomputation, and
 adjusted continuity. Do not add a manifest field or duplicate CSV mapping.
 
-- [ ] **Step 4: Run focused and complete synthetic tests**
+- [x] **Step 4: Run focused and complete synthetic tests**
 
 Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_age_regime_disorder.py tests/synthetic/test_age_regime_disorder_models.py && UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic`
 
 Expected: focused integration tests and the complete synthetic suite pass.
 
-- [ ] **Step 5: Run lint and commit**
+- [x] **Step 5: Run lint and commit**
 
 Run: `UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run ruff check src/synthetic/native/age_regime_disorder.py tests/synthetic/test_age_regime_disorder.py`
 
@@ -381,7 +381,7 @@ git commit -m "feat: integrate age-regime disorder trajectories"
 - Consumes `AgeRegimeDisorderKernel`, `AgeRegimeDisorderTrajectory`, and the existing injected reference/module examples.
 - Produces documentation distinguishing evaluator-only composition from visible smoke output and calibrated clinical/EHR generation.
 
-- [ ] **Step 1: Update the usage guide**
+- [x] **Step 1: Update the usage guide**
 
 Add a section after the age-regime example that:
 
@@ -395,7 +395,7 @@ Add a section after the age-regime example that:
 Do not present the pre-transition BMI-to-weight bridge as a validated infant
 clinical score or claim generated profiles cannot be matched to real data.
 
-- [ ] **Step 2: Verify documentation and repository checks**
+- [x] **Step 2: Verify documentation and repository checks**
 
 Run:
 
@@ -408,7 +408,7 @@ git diff --check
 
 Expected: all tests pass, Ruff is clean, eight schema resources validate, and Git reports no whitespace errors.
 
-- [ ] **Step 3: Commit the documentation**
+- [x] **Step 3: Commit the documentation**
 
 ```bash
 git add docs/synthetic-generator.md
@@ -429,3 +429,10 @@ Before merging this plan, verify that:
 - The composition requests regime and disorder streams but never `growth`; identical seeds and inputs reproduce physiology, disorder state, and events.
 - No age-regime/disorder state or event trace enters `datapackage.json`, visible CSVs, manifests, smoke generation, or resource mapping.
 - Full pytest, Ruff, schema, and whitespace checks pass from the feature branch, and documentation labels the layer uncalibrated/evaluator-only with calibration, privacy, counterfactual, clinical, and Synthea work deferred.
+
+## Completion evidence
+
+- The replay seam and evaluator composition were already integrated in `d0ab698`; the final review hardening is in `566f00b`, with compatibility fixture updates in `0c18029` and adjusted-reference error normalization in `617a1de`.
+- Fresh adversarial and current-main reviews found and closed direct event/physiology validation gaps, zero-effect hook-parity drift, sparse adjusted-transition continuity bypasses, active empty-event traces, and adjusted-reference `TypeError` leakage. The post-fix review approved `617a1de`.
+- Integrated verification passed: `2653 passed, 4 skipped`; Ruff passed; `python schema/build.py --check` validated 8 resources; `uv lock --check` passed; and `git diff --check` was clean.
+- The composition remains evaluator-only: hidden age-regime/disorder state, event traces, z-scores, velocities, and module selection do not enter the visible eight-resource package, descriptors, manifests, smoke generation, or ordinary loaders. Defaults remain uncalibrated, and prevalence, clinical, privacy, counterfactual-world, and Synthea gates remain deferred.
