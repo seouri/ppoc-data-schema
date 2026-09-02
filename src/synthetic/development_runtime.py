@@ -30,6 +30,13 @@ from synthetic.derivation_binding import (
     DerivationBinding,
 )
 from synthetic.models import DisorderKind
+from synthetic.native.ancillary import (
+    GHD_LAB_COMPONENT_NAMES,
+    GHD_LAB_RESULT_FLAG,
+    GhdAncillaryPolicy,
+    project_ghd_ancillary_resources,
+)
+from synthetic.native.ancillary_bundle import merge_ghd_ancillary_resources
 from synthetic.native.clinical_modules import (
     GrowthHormoneDeficiencyModule,
     HealthyGrowthModule,
@@ -62,6 +69,9 @@ _REALISTIC_PACKAGE_PROFILE = "development-realistic"
 _REALISTIC_OBSERVATION_POLICY_VERSION = "development-realistic-observation-v1"
 _REALISTIC_TARGET_SNAPSHOT = "schema-stats-2026-08-24"
 _REALISTIC_GROWTH_DIAGNOSIS_CODE = "E23.0"
+_REALISTIC_ANCILLARY_POLICY_ID = "development-realistic-ghd"
+_REALISTIC_ANCILLARY_POLICY_VERSION = "development-realistic-ghd-v1"
+_REALISTIC_ANCILLARY_RESULT_DELAY_DAYS = 7
 _REALISTIC_DENOMINATOR = 250_588
 _REALISTIC_GROWTH_DX_COUNT = 35_907
 _REALISTIC_SEX_WEIGHTS = (
@@ -345,6 +355,15 @@ def development_realistic_config(patient_count: int, seed: int) -> CohortConfig:
     )
 
 
+def development_realistic_ancillary_policy() -> GhdAncillaryPolicy:
+    """Return the fixed synthetic GHD ancillary-row policy for package export."""
+    return GhdAncillaryPolicy(
+        policy_id=_REALISTIC_ANCILLARY_POLICY_ID,
+        policy_version=_REALISTIC_ANCILLARY_POLICY_VERSION,
+        result_delay_days=_REALISTIC_ANCILLARY_RESULT_DELAY_DAYS,
+    )
+
+
 def build_development_cohort(
     runtime: DevelopmentRuntime,
     *,
@@ -450,6 +469,12 @@ def _configuration_sha256(
     if config.profile == _REALISTIC_PROFILE:
         configuration["realistic_target_snapshot"] = _REALISTIC_TARGET_SNAPSHOT
         configuration["realistic_growth_diagnosis_code"] = _REALISTIC_GROWTH_DIAGNOSIS_CODE
+        policy = development_realistic_ancillary_policy()
+        configuration["realistic_ancillary_policy"] = {
+            "policy_id": policy.policy_id,
+            "policy_version": policy.policy_version,
+            "result_delay_days": policy.result_delay_days,
+        }
     payload = json.dumps(configuration, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(payload).hexdigest()
 
@@ -457,19 +482,44 @@ def _configuration_sha256(
 def _visible_base_rows(
     cohort: NativeCohort,
     *,
-    include_realistic_growth_diagnosis: bool = False,
+    include_realistic_pathway: bool = False,
 ) -> dict[str, list[dict[str, object]]]:
     rows = {resource_name: [] for resource_name in BASE_RESOURCE_NAMES}
+    ancillary_policy = (
+        development_realistic_ancillary_policy()
+        if include_realistic_pathway
+        else None
+    )
     for member in cohort.members:
         bundle = member.bundle
         if bundle is None:
             raise ValueError("observed resource bundle did not pass validation")
+        if ancillary_policy is not None:
+            projection = project_ghd_ancillary_resources(
+                member,
+                bundle.shape,
+                ancillary_policy,
+            )
+            bundle = merge_ghd_ancillary_resources(
+                bundle, member, projection, ancillary_policy
+            )
         member_rows = {
             resource_name: [row.to_mapping() for row in bundle.rows[resource_name]]
             for resource_name in BASE_RESOURCE_NAMES
         }
+        if include_realistic_pathway:
+            # The typed in-memory pathway uses ``Synthetic`` as its explicit
+            # fictional marker.  The unchanged exact descriptor does not
+            # enumerate that marker, so serialize it as the descriptor's
+            # missing-value sentinel after the merged bundle has validated.
+            for row in member_rows["labs"]:
+                if (
+                    row.get("result_component_name") in GHD_LAB_COMPONENT_NAMES
+                    and row.get("result_flag") == GHD_LAB_RESULT_FLAG
+                ):
+                    row["result_flag"] = ""
         if (
-            include_realistic_growth_diagnosis
+            include_realistic_pathway
             and member.trajectory.disorder.kind
             is DisorderKind.GROWTH_HORMONE_DEFICIENCY
         ):
@@ -578,7 +628,7 @@ def generate_development_realistic_cohort(
         calibration = development_realistic_calibration_profile()
         return export_exact_schema_package(
             descriptor,
-            _visible_base_rows(cohort, include_realistic_growth_diagnosis=True),
+            _visible_base_rows(cohort, include_realistic_pathway=True),
             output,
             metadata=PackageExportMetadata(
                 profile=_REALISTIC_PACKAGE_PROFILE,

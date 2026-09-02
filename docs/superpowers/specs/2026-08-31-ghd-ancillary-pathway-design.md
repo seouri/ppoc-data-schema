@@ -1,7 +1,7 @@
 # Native GHD Ancillary Pathway Contract
 
 **Date:** 2026-08-31
-**Status:** Implementation complete; evaluator-only fictional pathway; clinical, prevalence, privacy, and Synthea gates pending
+**Status:** Implementation complete; evaluator-only fictional pathway consumed by the opt-in realistic development package; clinical, prevalence, privacy, and Synthea gates pending
 **Parent:** [Synthetic Pediatric Growth Fixture System Design](2026-08-30-synthetic-growth-fixtures-design.md)
 
 ## Purpose
@@ -11,7 +11,10 @@ trajectories, visible visits, and fictional recognition/workup/diagnosis
 descendants, while leaving `labs`, `medications`, `problem_list`, and
 `referrals` empty. This slice adds the first disorder-critical ancillary
 pathway for growth-hormone deficiency (GHD) as an immutable, in-memory
-projection with exact descriptor field order and causal validation.
+projection with exact descriptor field order and causal validation. The
+opt-in `development-realistic` package route now consumes the projection through
+the reviewed typed bundle merge and existing exact-schema exporter; the
+projection module itself remains file- and package-free.
 
 The pathway is a development and counterfactual-fixture contract. It is not a
 clinical terminology model, prevalence estimator, authoritative augmentation
@@ -29,10 +32,15 @@ avoids changing the established six-resource bundle/export boundary, and
 leaves a narrow seam for later merging after package and derivation contracts
 are reviewed.
 
-Directly adding nonempty ancillary rows to `ObservedResourceBundle` is deferred
-because its current validator intentionally treats ancillary rows as empty and
-the package exporter still requires an authoritative derivation oracle.
-Building the first pathway as a Synthea module is also deferred: it would not
+Directly widening the generic `ObservedResourceBundle` validator to accept
+arbitrary ancillary rows is rejected because it would make untyped rows appear
+valid. The generic observed-bundle path remains empty-ancillary. The explicit
+`development-realistic` route is a narrow integration exception: it merges a
+passing typed projection, converts the fictional lab marker to the descriptor's
+empty-string sentinel for serialization, and invokes the existing exporter with
+the pinned test-only derivation oracle. Paired-world package export,
+non-target profiles, and authoritative derivation remain deferred. Building the
+first pathway as a Synthea module is also deferred: it would not
 replace the native growth physiology, exact PPOC field mapping, observation
 contract, or derivation gate, and would introduce an engine-conformance
 dependency before the native pathway is validated.
@@ -82,7 +90,7 @@ descendant:
 | `recognition` | `referrals` | `requested_specialty="Synthetic Pediatric Endocrinology"`, `referral_number_of_visits=1` | linked to the recognition event's visible visit; referral age equals event age |
 | `workup` | `labs` | one order with two fictional components, `SYN-GHD-IGF1` and `SYN-GHD-STIM`, with `result_flag="Synthetic"` and no LOINC claim | linked to the workup event's visible visit; order age equals event age; result age equals order age plus policy delay |
 | `diagnosis` | `problem_list` | `pl_diag="SYN-GHD"` | no visit key; noted age equals diagnosis event age; unresolved row has an empty resolved age |
-| visible diagnosis plus hidden `treatment_start` | `medications` | `med_record_type="Internal"`, `med_simple_generic_name="Synthetic growth hormone"` | linked to the diagnosis visit; order age equals diagnosis age; start age equals the hidden treatment event age; end age is empty |
+| visible diagnosis plus hidden `treatment_start` | `medications` | `med_record_type="Internal"`, `med_simple_generic_name="Synthetic growth hormone"` | linked to the diagnosis visit; order age equals diagnosis age; start age equals the hidden treatment event age when that start is no earlier than the observed diagnosis; end age is empty |
 
 Rows are emitted only once per event kind. A GHD trajectory that is not
 recognized or diagnosed therefore has no corresponding visible descendant;
@@ -121,7 +129,8 @@ validator.
 2. `row_schema` — resource names, field order, field types, IDs, and fixed
    fictional values are valid;
 3. `causal_timing` — recognition/workup/diagnosis/treatment descendants are
-   ordered, result delay is applied, and treatment does not precede diagnosis;
+   ordered, result delay is applied, and an emitted medication does not start
+   before its observed diagnosis order;
 4. `cross_resource_links` — patient IDs and visible visit IDs resolve to the
    member's frame as required, while problem rows retain their nullable visit
    link semantics; and
@@ -129,11 +138,14 @@ validator.
    pass the existing observation validator.
 
 `FAIL` represents malformed typed rows, an invalid ID/code/value, a causal or
-   link violation, or an out-of-scope pathway row. `UNEVALUABLE` represents
-   absent or malformed private source evidence when no visible row itself is
-   demonstrably invalid. `FAIL` takes precedence over `UNEVALUABLE`, which
-   takes precedence over `PASS`. Reports are aggregate-only and expose fixed
-   check names, statuses, and reason codes; they never expose row payloads.
+link violation, or an out-of-scope pathway row. A hidden treatment start earlier
+than a delayed observed diagnosis is not itself a failure; its medication
+descendant is suppressed because the observed record cannot imply that earlier
+diagnosis. `UNEVALUABLE` represents absent or malformed private source evidence
+when no visible row itself is demonstrably invalid. `FAIL` takes precedence over
+`UNEVALUABLE`, which takes precedence over `PASS`. Reports are aggregate-only
+and expose fixed check names, statuses, and reason codes; they never expose row
+payloads.
 
 ## Determinism, mutation, and error boundary
 
@@ -161,19 +173,20 @@ static boundary scans. The focused tests, full suite, Ruff, schema validation,
 whitespace checks, and a fresh broad review are required before merge.
 
 `docs/synthetic-generator.md` and `README.md` will document the GHD pathway as
-an evaluator-only exact-row projection and explicitly defer terminology
-validation, other disorders, package/export integration, augmented derivation,
-prevalence calibration, held-out validation, privacy/non-matchability,
-clinical review, task utility, and Synthea conformance.
+an evaluator-only exact-row projection used by the explicit
+`development-realistic` ordinary package route. They will explicitly defer
+terminology validation, other disorders, paired package/export integration,
+authoritative augmented derivation, prevalence calibration, held-out
+validation, privacy/non-matchability, clinical review, task utility, and
+Synthea conformance.
 
 ## Deferred work
 
 This slice does not add hypothyroidism, celiac disease, Turner/SGA,
 undernutrition, obesity, unrelated background resources, new clinical codes,
-authoritative `patients_augmented`/`visits_augmented` derivation, complete
-eight-resource package export, cohort-level ancillary merging, temporal-drift
-or task-utility evaluation, clinical validation, privacy evidence, or a
-Synthea-backed engine.
+authoritative `patients_augmented`/`visits_augmented` derivation, paired or
+non-target eight-resource package export, temporal-drift or task-utility
+evaluation, clinical validation, privacy evidence, or a Synthea-backed engine.
 
 ## Acceptance criteria
 
@@ -185,8 +198,10 @@ Synthea-backed engine.
 3. Every emitted row uses the supplied descriptor's exact field order,
    required keys, nullable conventions, and fictional values.
 4. The aggregate validator catches malformed IDs/codes/values, reversed or
-   duplicate descendants, treatment-before-diagnosis, broken visit links, and
-   source-frame failures with fixed statuses and redacted output.
+   duplicate descendants, medication timing before its observed order, broken
+   visit links, and source-frame failures with fixed statuses and redacted
+   output; hidden treatment before a delayed observed diagnosis is suppressed,
+   not exposed.
 5. Projection is deterministic, nonmutating, random-free, and has no governed,
    filesystem, package, manifest, or Synthea boundary coupling.
 6. Documentation states the exact API, causal semantics, fictional terminology

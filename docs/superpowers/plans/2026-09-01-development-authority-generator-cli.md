@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add an explicit, reproducible development CLI that uses the pinned CDC tables and source-matched augmenter to emit exact-schema smoke, healthy-plus-GHD coverage, and target-shaped cohort packages while retaining test-only classification and all real-data/release gates.
+**Goal:** Add an explicit, reproducible development CLI that uses the pinned CDC tables and source-matched augmenter to emit exact-schema smoke, healthy-plus-GHD coverage, and target-shaped cohort packages, including the typed GHD ancillary pathway for the realistic profile, while retaining test-only classification and all real-data/release gates.
 
 **Architecture:** Keep `scripts/augment.py` byte-for-byte unchanged and add a strict `CdcGrowthReference` adapter plus a small development runtime factory. The CLI composes those identities with the existing smoke generator, native cohort/resource projection, and atomic exact-schema exporter; no-profile invocation remains fail-closed and every successful package is marked `test_only_derivation=true`.
 
@@ -255,7 +255,7 @@ git commit -m "feat: enable development smoke CLI profile"
 
 - [x] **Step 1: Write failing cohort-package tests**
 
-Add a direct runner test with 64 patients and seed `20260901`. Assert a promoted package has exactly the eight descriptor resources, unique `syn-` patient/visit identifiers, longitudinal visits at every fixed age, both healthy and GHD latent module classes in the evaluator-held cohort before export, no visible latent module/severity/truth fields, empty but descriptor-shaped ancillary resources, and manifest fields `profile == "development-cohort"`, `reference_id == "cdc-lms-reference-v1"`, `reference_sha256 == runtime.reference.source_sha256`, `derivation_fingerprint == AUGMENTER_RUNTIME_MANIFEST_SHA256`, `test_only_derivation is True`, and status `STRUCTURE_VALIDATED_TEST_ORACLE`.
+Add a direct runner test with 64 patients and seed `20260901`. Assert a promoted package has exactly the eight descriptor resources, unique `syn-` patient/visit identifiers, longitudinal visits at every fixed age, both healthy and GHD latent module classes in the evaluator-held cohort before export, no visible latent module/severity/truth fields, empty but descriptor-shaped ancillary resources for this legacy coverage profile, and manifest fields `profile == "development-cohort"`, `reference_id == "cdc-lms-reference-v1"`, `reference_sha256 == runtime.reference.source_sha256`, `derivation_fingerprint == AUGMENTER_RUNTIME_MANIFEST_SHA256`, `test_only_derivation is True`, and status `STRUCTURE_VALIDATED_TEST_ORACLE`.
 
 Assert the fixed configuration is exact:
 
@@ -421,10 +421,33 @@ The opt-in `development-realistic` route reuses the exact-schema native cohort a
 - [x] Added test-first configuration, deterministic module-mix, configuration-hash, package, and documentation coverage.
 - [x] Synchronized the development, augmenter-import, augmenter-oracle, and foundation companion documentation.
 
+### Task 6b: Consume the typed GHD ancillary seam in the realistic package
+
+**Status:** Implemented and verified as the next bounded follow-on to the
+target-shaped profile.
+
+The `development-realistic` route now projects each passing GHD member through
+`project_ghd_ancillary_resources`, merges the typed result with the member's
+base bundle through `merge_ghd_ancillary_resources`, and flattens the validated
+six-resource bundle for the existing exact-schema exporter. The generic
+`validate_observed_resources` contract and legacy `development-cohort` package
+remain empty-ancillary. A hidden treatment that starts before a delayed visible
+diagnosis is retained only in evaluator state; its medication row is suppressed
+instead of implying an earlier observed diagnosis. Before serialization, the
+fictional in-memory `result_flag="Synthetic"` marker is mapped to the
+unchanged descriptor's empty-string sentinel so the real-data enum remains
+schema-valid; no typed projection or descriptor is mutated.
+
+- [x] Added a test-first delayed-observation regression for medication suppression.
+- [x] Added realistic-package assertions for labs, problem-list, referrals, and normalized lab flags.
+- [x] Kept the source-matched augmenter, exact descriptor, generic validator, and test-only binding unchanged.
+- [x] Updated the GHD pathway, bundle-integration, CLI, parent-spec, and user-guide wording to describe the narrow target-profile exception and preserve paired-counterfactual/non-target/authoritative deferrals.
+- [x] Ran focused projection/validation/CLI tests and the full repository verification suite.
+
 ### Task 7: Fresh review, integration, and publication
 
 **Files:**
-- Review: all files changed by Tasks 1–6a and `docs/superpowers/specs/2026-09-01-development-authority-generator-cli-design.md`
+- Review: all files changed by Tasks 1–6b and `docs/superpowers/specs/2026-09-01-development-authority-generator-cli-design.md`
 - Modify: only the responsible task files if a review finding is confirmed
 
 **Interfaces:**

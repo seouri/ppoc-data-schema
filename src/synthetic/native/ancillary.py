@@ -669,9 +669,13 @@ def project_ghd_ancillary_resources(
                 ),
                 None,
             )
-            if treatment is not None:
-                if treatment.age_days < diagnosis_event.age_days:
-                    raise ValueError("treatment must follow diagnosis")
+            # A latent treatment may precede the first *observed* diagnosis
+            # when the observation frame skips the diagnosis-age visit.  It
+            # remains evaluator-held evidence, but exporting it as a visible
+            # medication would imply a diagnosis that the observed record does
+            # not contain yet.  Suppress that row until the observed diagnosis
+            # is no later than the latent treatment start.
+            if treatment is not None and treatment.age_days >= diagnosis_event.age_days:
                 rows["medications"] = (
                     _resource_row(
                         "medications",

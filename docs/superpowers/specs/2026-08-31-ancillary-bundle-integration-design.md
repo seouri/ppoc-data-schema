@@ -1,7 +1,7 @@
 # Native GHD Ancillary-to-Bundle Integration Contract
 
 **Date:** 2026-08-31
-**Status:** Implementation complete; evaluator-only in-memory composition; package, clinical, privacy, and release gates pending
+**Status:** Implementation complete; evaluator-only in-memory composition consumed by the opt-in realistic development package; paired-package, clinical, privacy, and release gates pending
 **Parent:** [Synthetic Pediatric Growth Fixture System Design](2026-08-30-synthetic-growth-fixtures-design.md)
 
 ## Purpose
@@ -11,7 +11,10 @@ The native observation/resource layer currently creates an immutable six-resourc
 The reviewed GHD pathway already produces exact-schema ancillary rows and an
 aggregate validator. This slice composes those rows with a previously validated
 base bundle so development and future counterfactual orchestration can operate
-on one coherent in-memory EHR-world object.
+on one coherent in-memory EHR-world object. The explicit
+`development-realistic` runtime now consumes that object, validates it, and
+passes its six-resource rows to the existing exact-schema exporter; this module
+itself remains a pure in-memory seam.
 
 This is a synthetic-only evaluator contract. It does not add a package writer,
 augmented derivation, prevalence evidence, clinical terminology, real-label
@@ -36,9 +39,13 @@ callers one fixed report for a merged bundle.
 
 Directly changing the base validator to accept arbitrary ancillary rows is
 rejected: it would make untyped rows appear valid and would couple the generic
-resource contract to one disorder pathway. Writing merged rows to CSV or a
-package is deferred until the authoritative derivation/export oracle is
-approved. A Synthea module remains an optional later adapter and is not a
+resource contract to one disorder pathway. The generic observed-bundle export
+path therefore remains empty-ancillary, while the explicit
+`development-realistic` route is a narrow exception: it calls this merge,
+serializes the fictional lab marker as the descriptor's empty-string sentinel,
+and then uses the existing exact-schema exporter and source-matched augmenter.
+Paired-world package export, non-target profiles, and authoritative derivation
+remain deferred. A Synthea module remains an optional later adapter and is not a
 replacement for this native contract.
 
 ## Public API
@@ -108,8 +115,10 @@ The base-resource check is performed against a fresh base view whose ancillary
 tuples are empty; the ancillary check is performed against a fresh projection
 view extracted from the merged rows. The generic
 `validate_observed_resources` function therefore continues to reject nonempty
-ancillary rows, and the native cohort/package-export paths remain unchanged and
-continue to accept only legacy base bundles.
+ancillary rows, and the smoke/cohort/generic observed-bundle paths remain
+unchanged and continue to accept only legacy base bundles. The target-shaped
+runtime is the explicit integration caller and uses `export_exact_schema_package`
+after this typed validation rather than widening the generic validator.
 
 `FAIL` means a typed row, shape, identity, causal, link, or boundary violation.
 `UNEVALUABLE` means required private source evidence is absent or malformed and
@@ -138,11 +147,12 @@ assert that generic `validate_observed_resources` rejects nonempty ancillary
 rows. Full pytest, Ruff, schema, whitespace, and broad review are required.
 
 `README.md` and `docs/synthetic-generator.md` will describe this as an
-evaluator-only in-memory composition seam for future counterfactual worlds.
-They will explicitly defer package-level counterfactual export, authoritative
-derivation, prevalence/demographic calibration, held-out validation, privacy
-or non-matchability evidence, clinical review, task utility claims, other
-disorder pathways, release approval, and Synthea conformance.
+evaluator-only in-memory composition seam used by the explicit
+`development-realistic` ordinary package route and available for future
+counterfactual worlds. They will explicitly defer paired package-level export,
+authoritative derivation, prevalence/demographic calibration, held-out
+validation, privacy or non-matchability evidence, clinical review, task utility
+claims, other disorder pathways, release approval, and Synthea conformance.
 
 ## Acceptance criteria
 

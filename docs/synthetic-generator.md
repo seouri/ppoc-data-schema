@@ -28,9 +28,9 @@ uv run python -m synthetic.generate --profile development-realistic --output /tm
 
 `development-smoke` preserves the visible three-visit healthy smoke contract at ages 730, 1095, and 1460 days. `development-cohort` emits a fixed, full-age, healthy-plus-growth-hormone-deficiency (GHD) development profile. Its age schedule is `(0, 365, 730, 1460, 2190, 3650, 4380, 5114, 5475, 6200, 7305)` days; its module prior is healthy/GHD `0.50/0.50`; weight is observed at every scheduled visit; length is disabled; and height and head circumference have `1.0` availability whenever their age-regime channel is structurally applicable, with zero measurement error, no rounding, recognition, or diagnosis. BMI at exactly 730 days uses the CDC 24-month boundary row; day 729 remains outside the BMI source domain.
 
-The cohort's F/M/U weights are `0.50/0.50/0.00`. The zero U sampling weight is deliberate because the CDC tables contain only M/F rows, while the F/M/U recorded-to-reference mapping remains structurally complete for the native contract. Its versioned demographic weights are fixed development configuration, not a calibration result or a real-population claim. Visible packages contain exactly eight descriptor-named CSV resources: the six base resources plus `patients_augmented` and `visits_augmented`. The ancillary base resources remain descriptor-shaped and empty for this profile. Latent disorder identity, severity, trajectory state, observation truth, source paths, and patient-level diagnostics are never exported.
+The cohort's F/M/U weights are `0.50/0.50/0.00`. The zero U sampling weight is deliberate because the CDC tables contain only M/F rows, while the F/M/U recorded-to-reference mapping remains structurally complete for the native contract. Its versioned demographic weights are fixed development configuration, not a calibration result or a real-population claim. Visible packages contain exactly eight descriptor-named CSV resources: the six base resources plus `patients_augmented` and `visits_augmented`. The `development-cohort` ancillary base resources remain descriptor-shaped and empty; the target-shaped profile's explicit GHD ancillary rows are described next. Latent disorder identity, severity, trajectory state, observation truth, source paths, and patient-level diagnostics are never exported.
 
-`development-realistic` is an opt-in target-shaped variant that preserves the same full age schedule, exact schema, and CDC-backed trajectories while using the checked-in `schema/stats.json` snapshot `2026-08-24` for its fictional inputs. Its healthy/GHD module prior is `214681/250588` (`85.6709%`) and `35907/250588` (`14.3291%`), and recognition/diagnosis recording is enabled so GHD members carry the existing fictional visible event descendants. At each sampled GHD diagnosis visit, the exporter adds the fixed synthetic `E23.0` token recognized by the pinned augmenter; this makes the visible `growth_dx_flag` follow the sampled synthetic disorder mix without accepting arbitrary diagnosis input. Its demographic weights use the checked-in snapshot counts, folding source-missing ethnicity/race cells into the visible `Unknown` category and retaining a source-shaped race-multiselect probability of `13191/250588`. The U sex cell remains zero because the pinned CDC reference has no U series. These values are a frozen development scenario prior, not a clinical prevalence estimate or diagnosis claim.
+`development-realistic` is an opt-in target-shaped variant that preserves the same full age schedule, exact schema, and CDC-backed trajectories while using the checked-in `schema/stats.json` snapshot `2026-08-24` for its fictional inputs. Its healthy/GHD module prior is `214681/250588` (`85.6709%`) and `35907/250588` (`14.3291%`), and recognition/diagnosis recording is enabled so GHD members carry the existing fictional visible event descendants. At each sampled GHD diagnosis visit, the exporter adds the fixed synthetic `E23.0` token recognized by the pinned augmenter; this makes the visible `growth_dx_flag` follow the sampled synthetic disorder mix without accepting arbitrary diagnosis input. The same explicit route projects and validates typed fictional GHD ancillary rows: each recognized member receives one referral, each workup receives two labs, each observed diagnosis receives one problem-list row, and a medication appears only when the latent treatment start is not earlier than the observed diagnosis. The in-memory lab marker `Synthetic` is serialized as the exact descriptor missing-value sentinel (`result_flag=""`) because the unchanged real-data enum has no fictional marker. Its demographic weights use the checked-in snapshot counts, folding source-missing ethnicity/race cells into the visible `Unknown` category and retaining a source-shaped race-multiselect probability of `13191/250588`. The U sex cell remains zero because the pinned CDC reference has no U series. These values are a frozen development scenario prior, not a clinical prevalence estimate or diagnosis claim.
 
 All three profiles load the repository `datapackage.json` by default and default `--reference-time` to `2026-09-01T00:00:00Z` and `--software-revision` to `development-generator-v1`; callers may override those metadata values for reproducibility experiments. They use the pinned `cdc-lms-reference-v1` CDC LMS adapter and the `development-augmenter-v1` source-matched binding. Before generation, the runtime verifies the manifest-listed 14-file augmenter closure and the pinned `uv.lock` dependency bytes. The source-matched growth augmenter is not bound as authoritative for clinical, prevalence, privacy, or release decisions. A successful manifest identifies the profile, schema/reference/derivation fingerprints, configuration hash, and `test_only_derivation=true`.
 
@@ -562,7 +562,10 @@ components (`SYN-GHD-IGF1` and `SYN-GHD-STIM`) with exact `result_flag="Syntheti
 `diagnosis` emits one unresolved `problem_list` row with `SYN-GHD`. A hidden
 `treatment_start` event is consulted only after visible diagnosis and then
 permits one medication, `Synthetic growth hormone`, with record type
-`Internal`; hidden treatment alone never creates a visible row. Event ages
+`Internal`; hidden treatment alone never creates a visible row. If an
+observation window delays the visible diagnosis beyond the hidden treatment
+start, that treatment remains evaluator-held and the medication row is
+suppressed rather than implying an earlier observed diagnosis. Event ages
 control order, noted, referral, and start timing, while each lab result is
 delayed by `policy.result_delay_days`.
 
@@ -587,12 +590,16 @@ never returned.
 
 This is an evaluator-only exact-row contract. `ObservedResourceBundle` and the
 complete package export bridges (which remain development-only) are documented
-separately; augmented
-derivation, other disorders, prevalence calibration, held-out validation,
-privacy and non-matchability evidence, clinical review, task utility, release
-approval, and Synthea conformance remain separate deferred gates. The default
-production CLI remains fail-closed, and existing empty-ancillary base-resource
-contracts remain in force.
+separately. The explicit `development-realistic` route now uses this projection
+and the typed bundle merge before calling `export_exact_schema_package`; it
+serializes the fictional lab marker as the descriptor's exact empty-string
+sentinel, while the generic empty-ancillary route remains unchanged. Complete
+package export for paired counterfactual worlds, non-target profiles, and
+authoritative derivation remains deferred, as do other disorders, prevalence
+calibration, held-out validation, privacy and non-matchability evidence,
+clinical review, task utility, release approval, and Synthea conformance. The
+default production CLI remains fail-closed, and existing empty-ancillary
+base-resource contracts remain in force.
 
 ### In-memory GHD ancillary bundle integration
 
@@ -617,7 +624,7 @@ assert validate_observed_resources(enriched_bundle).status is ResourceValidation
 
 `validate_ghd_ancillary_bundle` returns a separate aggregate-only `AncillaryBundleValidationReport` with fixed `bundle_identity`, `base_resources`, `ancillary_resources`, and `truth_boundary` checks. It re-runs the current validators against a zeroed base view and an extracted ancillary projection; `FAIL` wins over `UNEVALUABLE`, which wins over `PASS`. A typed visible row, identity, shape, link, causal-timing, or nested truth-boundary violation is `FAIL`; absent or malformed private source evidence is `UNEVALUABLE` only when no independently visible violation is demonstrable. The report contains fixed statuses, reason codes, and counts only: no rows, IDs, source frame, latent trajectory, hidden event, or truth payload is serialized or rendered.
 
-This synthetic-only, evaluator-only seam is in-memory only: there is no file input, package/file export, manifest, descriptor mutation, or CLI. It is the reviewed ancillary merge used by the paired counterfactual worlds composer below; it does not itself implement augmented derivation or package export. It is not evidence of prevalence or demographic calibration, held-out validation, clinical review, task utility, privacy or non-matchability, release approval, other disorders, or Synthea conformance. Those remain separately governed roadmap gates.
+This synthetic-only, evaluator-only seam is itself in-memory only: it has no file input, package/file export, manifest, descriptor mutation, or CLI. The explicit `development-realistic` runtime is the narrow caller that projects and merges these typed rows, converts the fictional lab marker to the exact descriptor sentinel, flattens all six resources, and sends them through the existing exact-schema exporter and source-matched augmenter. The merge remains the reviewed seam used by the paired counterfactual worlds composer below; it does not make paired counterfactual worlds, non-target profiles, or authoritative augmented derivation exportable. Those package/export paths, other disorders, prevalence or demographic calibration, held-out validation, clinical review, task utility, privacy or non-matchability, release approval, and Synthea conformance remain separately deferred.
 
 ## In-memory paired counterfactual EHR worlds
 
@@ -853,7 +860,14 @@ validation-report.json
 manifest.json
 ```
 
-The two augmented resources are oracle-owned. Empty ancillary base resources remain schema-correct rather than becoming clinical claims. The exact descriptor fields, order, dialects, encodings, constraints, keys, logical links, generated-only descriptor, structural validation report, manifest hashes, and atomic lifecycle are shared with the smoke export contract below.
+The two augmented resources are oracle-owned. This legacy observed-bundle helper
+continues to export empty ancillary base resources, preserving its generic
+validator contract. The explicit `development-realistic` route is the exception
+documented above: it serializes the validated fictional GHD ancillary rows via
+`export_exact_schema_package` and the same oracle-owned augmented resources. The
+exact descriptor fields, order, dialects, encodings, constraints, keys, logical
+links, generated-only descriptor, structural validation report, manifest hashes,
+and atomic lifecycle are shared with the smoke export contract below.
 
 The exporter refuses an existing target and redacts bundle or lifecycle failures as `observed package export failed`; a failed lifecycle is retained only as an unvalidated sibling failure archive. A successful package is a synthetic-only development artifact. Its structural success is not privacy/non-matchability or prevalence evidence, and it is not evidence of demographic calibration, other ancillary clinical pathways, held-out validation, task utility, clinical validity, release readiness, or Synthea conformance. Those remain separate deferred gates with their own approved evidence and governance.
 

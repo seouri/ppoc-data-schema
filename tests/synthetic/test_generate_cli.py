@@ -270,6 +270,11 @@ def test_development_realistic_cli_exports_target_shaped_package(tmp_path: Path)
     augmented_path = _resource_path(descriptor, "patients_augmented")
     augmented_patients = _csv_rows(output / augmented_path)
     assert sum(int(row["growth_dx_flag"]) for row in augmented_patients) == 20
+    labs = _csv_rows(output / _resource_path(descriptor, "labs"))
+    assert len(labs) == 40
+    assert {row["result_flag"] for row in labs} == {""}
+    assert len(_csv_rows(output / _resource_path(descriptor, "problem_list"))) == 20
+    assert len(_csv_rows(output / _resource_path(descriptor, "referrals"))) == 20
     published = b"".join(path.read_bytes() for path in sorted(output.iterdir()) if path.is_file())
     for forbidden in (b"latent", b"severity", b"truth", b"growth_hormone_deficiency"):
         assert forbidden not in published.lower()

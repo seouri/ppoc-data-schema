@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a deterministic evaluator-only projection and validator for fictional growth-hormone-deficiency laboratory, medication, problem-list, and referral rows in the repository's exact resource schema.
+**Goal:** Add a deterministic evaluator-only projection and validator for fictional growth-hormone-deficiency laboratory, medication, problem-list, and referral rows in the repository's exact resource schema. The projection is now consumed by the explicit `development-realistic` ordinary package profile; generic and paired-counterfactual export boundaries remain separate.
 
-**Architecture:** A new `synthetic.native.ancillary` module consumes one existing `CohortMember`, an already extracted `ResourceShape`, and a versioned `GhdAncillaryPolicy`. It returns immutable row projections for the four ancillary resources and a status-only validator; it does not change `ObservedResourceBundle`, package export, augmented derivation, or the fail-closed CLI. Visible rows arise from recorded recognition/workup/diagnosis events, while a hidden treatment-start event may supply medication timing only after visible diagnosis.
+**Architecture:** A new `synthetic.native.ancillary` module consumes one existing `CohortMember`, an already extracted `ResourceShape`, and a versioned `GhdAncillaryPolicy`. It returns immutable row projections for the four ancillary resources and a status-only validator; it does not change the generic `ObservedResourceBundle` validator or package exporter. The explicit `development-realistic` runtime merges a passing projection through `synthetic.native.ancillary_bundle`, serializes the fictional lab marker as the descriptor missing sentinel, and then uses the existing exact-schema exporter. Visible rows arise from recorded recognition/workup/diagnosis events, while a hidden treatment-start event may supply medication timing only when it is not earlier than the observed diagnosis.
 
 **Tech Stack:** Python 3.12+, standard-library dataclasses/enums/hashlib/math/re/collections.abc/types, existing synthetic cohort/observation/resource contracts, pytest, Ruff, schema checker.
 
@@ -15,7 +15,7 @@
 - Accept only `CohortMember`, `ResourceShape`, and `GhdAncillaryPolicy`; never accept a descriptor path, `Path`, CSV reader, row input, key, report, output destination, or governed data.
 - Emit only the four fixed resource names `labs`, `medications`, `problem_list`, and `referrals`; every row uses the supplied descriptor field order and empty strings for missing values.
 - Use fixed fictional pathway strings (`SYN-GHD`, `SYN-GHD-IGF1`, `SYN-GHD-STIM`, `Synthetic Pediatric Endocrinology`, `Synthetic growth hormone`) and never label them as ICD, LOINC, RxNorm, or clinical reference values.
-- Derive rows only from a valid synthetic observation frame and the existing GHD event trace: recognition creates a referral, workup creates two lab components, diagnosis creates a problem row, and visible diagnosis plus hidden `treatment_start` permits one medication.
+- Derive rows only from a valid synthetic observation frame and the existing GHD event trace: recognition creates a referral, workup creates two lab components, diagnosis creates a problem row, and visible diagnosis plus hidden `treatment_start` permits one medication only when the hidden start is not earlier than the observed diagnosis.
 - Healthy and non-GHD members return empty ancillary tuples; hidden treatment alone never creates a visible medication.
 - Projection is deterministic, nonmutating, and random-free; its visible mapping contains only generated synthetic row values required by the exact schema, while validation reports/reprs/reasons/errors omit patient/visit IDs, row IDs, ages, codes, event payloads, severity, truth hashes, paths, keys, and source values.
 - Validator statuses are fixed `PASS`, `FAIL`, and `UNEVALUABLE` with `FAIL > UNEVALUABLE > PASS`; reports expose only fixed check names, statuses, and reason codes.
@@ -73,7 +73,7 @@
 
 - [x] **Step 1: Write failing projection tests**
 
-  Use the existing fictional cohort fixtures and checked-in descriptor. Assert that a diagnosed GHD member emits one referral at recognition, two lab components at workup, one unresolved problem row at diagnosis, and a medication only when a hidden `treatment_start` follows a visible diagnosis. Assert fixed fictional values, empty LOINC/optional fields, result-age delay, diagnosis-visit medication link, nullable problem `visit_id`, exact field order, deterministic synthetic IDs, no rows for healthy/non-GHD or unrecognized GHD, no mutation, and byte-equivalent mappings on replay. Cover no-treatment and treatment cases plus valid same-age causal events.
+  Use the existing fictional cohort fixtures and checked-in descriptor. Assert that a diagnosed GHD member emits one referral at recognition, two lab components at workup, one unresolved problem row at diagnosis, and a medication only when a hidden `treatment_start` is not earlier than a visible diagnosis. Assert fixed fictional values, empty LOINC/optional fields, result-age delay, diagnosis-visit medication link, nullable problem `visit_id`, exact field order, deterministic synthetic IDs, no rows for healthy/non-GHD or unrecognized GHD, no mutation, and byte-equivalent mappings on replay. Cover no-treatment, delayed-observation suppression, and treatment cases plus valid same-age causal events.
 
 - [x] **Step 2: Run the focused projection tests to verify they fail**
 
@@ -83,7 +83,7 @@
 
 - [x] **Step 3: Implement the pure event-to-row projection**
 
-  Validate the member, shape, policy, and `validate_observation_frame(member.frame)` status; failures raise `AncillaryProjectionUnavailable("GHD ancillary projection failed")` without raw details. Require a single synthetic patient identity and a GHD disorder kind; otherwise return four empty tuples. Build a source-point-to-visible-visit lookup from realized `frame.truth.opportunities` exactly as the existing resource projection does, and select the first visible `RecordedEvent` of each fixed kind. Emit full descriptor-ordered rows using these mappings: recognition -> referral (`Synthetic Pediatric Endocrinology`, count `1`); workup -> two `labs` components sharing one deterministic synthetic order ID with components `SYN-GHD-IGF1`/`SYN-GHD-STIM`, no LOINC, `result_flag="Synthetic"`, and result age `event.age_days + policy.result_delay_days`; diagnosis -> unresolved `problem_list` row with `SYN-GHD`; diagnosis plus the first hidden `treatment_start` -> one `medications` row linked to the diagnosis visit with `Internal`, `Synthetic growth hormone`, order age at diagnosis, and start age at treatment. Use a fixed SHA-256-derived opaque synthetic ID helper keyed only by the synthetic patient ID and resource role. Never copy severity, latent kind, hidden event text, or truth objects into rows or mappings.
+  Validate the member, shape, policy, and `validate_observation_frame(member.frame)` status; failures raise `AncillaryProjectionUnavailable("GHD ancillary projection failed")` without raw details. Require a single synthetic patient identity and a GHD disorder kind; otherwise return four empty tuples. Build a source-point-to-visible-visit lookup from realized `frame.truth.opportunities` exactly as the existing resource projection does, and select the first visible `RecordedEvent` of each fixed kind. Emit full descriptor-ordered rows using these mappings: recognition -> referral (`Synthetic Pediatric Endocrinology`, count `1`); workup -> two `labs` components sharing one deterministic synthetic order ID with components `SYN-GHD-IGF1`/`SYN-GHD-STIM`, no LOINC, `result_flag="Synthetic"`, and result age `event.age_days + policy.result_delay_days`; diagnosis -> unresolved `problem_list` row with `SYN-GHD`; diagnosis plus the first hidden `treatment_start` -> one `medications` row linked to the diagnosis visit with `Internal`, `Synthetic growth hormone`, order age at diagnosis, and start age at treatment only when that start is no earlier than the observed diagnosis; otherwise retain the problem row and suppress the medication. Use a fixed SHA-256-derived opaque synthetic ID helper keyed only by the synthetic patient ID and resource role. Never copy severity, latent kind, hidden event text, or truth objects into rows or mappings.
 
 - [x] **Step 4: Run projection tests and lint**
 
@@ -145,11 +145,11 @@
 
 **Interfaces:**
 - Consumes: Task 3 public API and fixed semantics.
-- Produces: user-facing exact-row usage documentation and regression assertions that package/export, derivation, held-out, privacy, CLI, and existing empty-ancillary contracts remain unchanged.
+- Produces: user-facing exact-row usage documentation and regression assertions that generic/paired package-export, authoritative derivation, held-out, privacy, CLI, and existing empty-ancillary contracts remain unchanged; the explicit realistic profile is the documented typed-seam exception.
 
 - [x] **Step 1: Write failing documentation tests**
 
-  Assert the guide names `GhdAncillaryPolicy`, `AncillaryResourceProjection`, `AncillaryValidationReport`, `project_ghd_ancillary_resources`, and `validate_ghd_ancillary_resources`; describes all four resources, fixed fictional values, event-to-row timing, hidden-treatment/visible-diagnosis rule, exact field order, result delay, aggregate statuses, evaluator-only boundary, and every deferred claim. Assert README links the guide and does not present the pathway as package/export, prevalence, clinical, privacy/non-matchability, derivation, release, or Synthea evidence.
+  Assert the guide names `GhdAncillaryPolicy`, `AncillaryResourceProjection`, `AncillaryValidationReport`, `project_ghd_ancillary_resources`, and `validate_ghd_ancillary_resources`; describes all four resources, fixed fictional values, event-to-row timing, hidden-treatment/visible-diagnosis rule, delayed-observation suppression, exact field order, result delay, aggregate statuses, evaluator-only boundary, target-profile package seam, and every deferred claim. Assert README links the guide and does not present the pathway as package/export, prevalence, clinical, privacy/non-matchability, derivation, release, or Synthea evidence.
 
 - [x] **Step 2: Run documentation tests to verify they fail**
 
@@ -159,7 +159,7 @@
 
 - [x] **Step 3: Add the guide section and docs assertions**
 
-  Add a concise evaluator-only GHD ancillary section with an exact Python example using a previously generated in-memory `CohortMember` and `ResourceShape`, the four resource-row mappings, validation/status semantics, and explicit fictional-terminology and hidden-truth boundaries. Add one README roadmap paragraph. State that `ObservedResourceBundle`, exact-schema export, augmented derivation, other disorders, held-out validation, privacy/non-matchability, clinical review, task utility, and Synthea remain unchanged/deferred. Keep existing production CLI fail-closed and empty-ancillary tests intact.
+  Add a concise evaluator-only GHD ancillary section with an exact Python example using a previously generated in-memory `CohortMember` and `ResourceShape`, the four resource-row mappings, validation/status semantics, and explicit fictional-terminology and hidden-truth boundaries. Add one README roadmap paragraph. State that the generic `ObservedResourceBundle` and empty-ancillary export remain unchanged; the explicit realistic profile uses the typed seam and exact-schema export, while augmented derivation beyond the pinned test-only oracle, other disorders, paired package export, held-out validation, privacy/non-matchability, clinical review, task utility, and Synthea remain deferred. Keep existing production CLI fail-closed and empty-ancillary tests intact.
 
 - [x] **Step 4: Run documentation/static/schema checks**
 
@@ -195,3 +195,19 @@
 - [x] **Step 4: Finalize plan/ledger metadata and commit**
 
   Mark completed checkboxes, record all review/fix/re-review and verification evidence in the ignored ledger, run `git diff --check`, and commit only plan metadata.
+
+### Follow-on consumption: target-shaped ordinary package route (2026-09-02)
+
+- [x] Keep `synthetic.native.ancillary` pure and preserve its fixed fictional
+  `Synthetic` lab marker for typed in-memory validation.
+- [x] Consume the projection through the existing typed bundle merge from the
+  opt-in `development-realistic` runtime; suppress medication rows when hidden
+  treatment starts before the delayed observed diagnosis.
+- [x] Normalize only at serialization: map the fictional lab marker to the
+  unchanged descriptor's empty-string `result_flag` sentinel, then call the
+  existing exact-schema exporter and pinned test-only augmenter.
+- [x] Add regression coverage for delayed visible diagnosis, target package
+  ancillary row counts, and schema-valid serialized lab flags.
+- [x] Update the guide, parent/companion specs, and this plan to distinguish
+  ordinary target-profile export from generic, paired-counterfactual, and
+  authoritative routes.

@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Compose the validated fictional GHD ancillary rows with an existing observed-resource bundle in memory, preserving exact descriptor schema, hidden-truth separation, and the generic empty-ancillary validator contract.
+**Goal:** Compose the validated fictional GHD ancillary rows with an existing observed-resource bundle in memory, preserving exact descriptor schema, hidden-truth separation, and the generic empty-ancillary validator contract. The explicit `development-realistic` profile now consumes this seam for ordinary exact-schema package fixtures; paired-world export remains outside this plan.
 
-**Architecture:** Add `synthetic.native.ancillary_bundle` with an immutable, in-memory merge function and a fixed aggregate full-bundle validator. The module isolates the base six-resource rows before calling `validate_observed_resources`, extracts an `AncillaryResourceProjection` for the four ancillary rows, and delegates pathway semantics to `validate_ghd_ancillary_resources`. It does not modify the package exporter, descriptor, CLI, or generic resource validator.
+**Architecture:** Add `synthetic.native.ancillary_bundle` with an immutable, in-memory merge function and a fixed aggregate full-bundle validator. The module isolates the base six-resource rows before calling `validate_observed_resources`, extracts an `AncillaryResourceProjection` for the four ancillary rows, and delegates pathway semantics to `validate_ghd_ancillary_resources`. It does not modify the package exporter, descriptor, CLI, or generic resource validator. A separate runtime caller performs the narrow target-profile integration: it merges the typed bundle, maps the fictional lab marker to the descriptor missing sentinel, and calls the existing exact-schema exporter.
 
 **Tech Stack:** Python 3.12+, standard-library dataclasses/enums/types, existing synthetic cohort/ancillary/observation/resource contracts, pytest, Ruff, schema checker.
 
@@ -53,7 +53,7 @@
 - Create: `tests/synthetic/test_ancillary_bundle_docs.py`
 
 - [x] Add failing documentation assertions for exact API, merge preconditions, full-bundle report, hidden-truth boundary, generic validator behavior, and explicit deferrals.
-- [x] Add a concise usage section and README roadmap paragraph describing the in-memory evaluator seam; state that package export, augmented derivation, prevalence, privacy/non-matchability, clinical review, task utility, other disorders, release, and Synthea remain deferred.
+- [x] Add a concise usage section and README roadmap paragraph describing the in-memory evaluator seam; state that generic/paired package export, authoritative augmented derivation, prevalence, privacy/non-matchability, clinical review, task utility, other disorders, release, and Synthea remain deferred while the explicit realistic profile may use the existing exporter.
 - [x] Run docs/boundary tests, full Ruff, schema check, and whitespace checks; commit `docs: document ancillary bundle integration`.
 
 ### Task 4: Review, verify, and hand off
@@ -72,4 +72,12 @@
 - Scoped reviews: Task 1 PASS; Task 2 PASS after fixes `2d1cbb0` and `67f54fa`; Task 3 PASS; broad review PASS after fix `5986f3d` and scoped re-review PASS.
 - Verification at `5986f3d`: 1749 repository tests passed with bytecode disabled; `uv run ruff check src tests` passed; `uv lock --check` resolved 10 packages; schema check validated 8 resources; `git diff --check` passed.
 - Root `uv run ruff check .` remains outside the implementation gate because it reports six pre-existing schema-script findings; no unrelated schema files were changed.
-- The integrated bundle seam remains synthetic-only, evaluator-only, in-memory, and non-exportable; package-level counterfactual worlds, prevalence evidence, privacy/non-matchability, clinical review, and Synthea conformance remain deferred.
+- The integrated bundle seam remains synthetic-only, evaluator-only, and in-memory; the explicit `development-realistic` route is the only ordinary package caller and does not widen generic export. Paired-world package export, prevalence evidence, privacy/non-matchability, clinical review, and Synthea conformance remain deferred.
+
+### Follow-on consumption: target-shaped ordinary package route (2026-09-02)
+
+- [x] Keep the generic `validate_observed_resources` and legacy observed-bundle exporter empty-ancillary contracts unchanged.
+- [x] Project and merge typed GHD ancillary rows in the explicit `development-realistic` runtime, including delayed-observation suppression of a medication whose hidden treatment precedes the observed diagnosis.
+- [x] Serialize the in-memory fictional lab marker as the exact descriptor `result_flag` missing-value sentinel so the unchanged schema enum remains valid; do not mutate the typed projection or descriptor.
+- [x] Add CLI row-count and serialization assertions for labs, problem-list, referrals, and normalized lab flags; add a regression test for delayed visible diagnosis.
+- [x] Update this plan/spec and the dedicated user guide to distinguish the target ordinary route from generic, paired-counterfactual, and authoritative paths.

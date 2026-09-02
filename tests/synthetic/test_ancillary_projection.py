@@ -248,6 +248,37 @@ def test_visible_diagnosis_suppression_cannot_expose_hidden_treatment() -> None:
     assert resources["medications"] == []  # type: ignore[index]
 
 
+def test_delayed_visible_diagnosis_suppresses_treatment_started_before_observed_diagnosis() -> None:
+    """A hidden treatment predating the observed diagnosis is not exported."""
+    trajectory = _event_trajectory()
+    frame = generate_observation_frame(
+        trajectory,
+        _policy(
+            visit_probability=0.8,
+            recognition_probability=1.0,
+            diagnosis_probability=1.0,
+        ),
+        NamedRandomStreams(2, 0),
+    )
+    member = CohortMember(
+        SyntheticDemographics(PATIENT_ID), trajectory, frame, None
+    )
+    diagnosis = next(
+        event for event in frame.events if event.event_kind is RecordedEventKind.DIAGNOSIS
+    )
+    assert diagnosis.age_days == 2000
+    assert trajectory.disorder.treatment_start_age_days == 1800
+
+    resources = project_ghd_ancillary_resources(
+        member, _shape(), _policy_ancillary()
+    ).to_mapping()["resources"]
+
+    assert len(resources["referrals"]) == 1  # type: ignore[index]
+    assert len(resources["labs"]) == 2  # type: ignore[index]
+    assert len(resources["problem_list"]) == 1  # type: ignore[index]
+    assert resources["medications"] == []  # type: ignore[index]
+
+
 def test_projection_is_deterministic_nonmutating_and_uses_same_age_workup_diagnosis() -> None:
     member = _member(treatment=True)
     before = member.to_mapping()
