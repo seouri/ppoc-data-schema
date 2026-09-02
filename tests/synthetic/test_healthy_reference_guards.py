@@ -86,3 +86,35 @@ def test_kernel_rejects_invalid_age_configuration() -> None:
         HealthyKernel(GuardReference(), minimum_age_days=-1)
     with pytest.raises(ValueError, match="maximum_age_days"):
         HealthyKernel(GuardReference(), minimum_age_days=900, maximum_age_days=800)
+
+
+@pytest.mark.parametrize("minimum_age_days", [True, 730.5, "730", None])
+def test_kernel_rejects_non_integer_minimum_age_configuration(
+    minimum_age_days: object,
+) -> None:
+    with pytest.raises(ValueError, match="minimum_age_days must be a nonnegative integer"):
+        HealthyKernel(GuardReference(), minimum_age_days=minimum_age_days)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("maximum_age_days", [True, 1095.5, "1095"])
+def test_kernel_rejects_non_integer_maximum_age_configuration(
+    maximum_age_days: object,
+) -> None:
+    with pytest.raises(ValueError, match="maximum_age_days must be a nonnegative integer"):
+        HealthyKernel(GuardReference(), maximum_age_days=maximum_age_days)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("age_days", [True, 730.5, "730", None])
+def test_kernel_rejects_non_integer_requested_ages(age_days: object) -> None:
+    with pytest.raises(ValueError, match="ages_days must contain nonnegative integers"):
+        HealthyKernel(GuardReference()).generate(
+            _patient(), (age_days,), NamedRandomStreams(5, 0)  # type: ignore[assignment]
+        )
+
+
+def test_kernel_accepts_nonnegative_integer_requested_age() -> None:
+    points = HealthyKernel(GuardReference()).generate(
+        _patient(), (730,), NamedRandomStreams(5, 0)
+    )
+
+    assert [point.age_days for point in points] == [730]

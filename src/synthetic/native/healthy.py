@@ -8,6 +8,12 @@ from synthetic.randomness import NamedRandomStreams
 from synthetic.references import GrowthReference, generation_z_score
 
 
+def _nonnegative_int(name: str, value: object) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(f"{name} must be a nonnegative integer")
+    return value
+
+
 class HealthyKernel:
     def __init__(
         self,
@@ -16,8 +22,9 @@ class HealthyKernel:
         minimum_age_days: int = 730,
         maximum_age_days: int | None = None,
     ) -> None:
-        if minimum_age_days < 0:
-            raise ValueError("minimum_age_days must be non-negative")
+        minimum_age_days = _nonnegative_int("minimum_age_days", minimum_age_days)
+        if maximum_age_days is not None:
+            maximum_age_days = _nonnegative_int("maximum_age_days", maximum_age_days)
         if maximum_age_days is not None and maximum_age_days < minimum_age_days:
             raise ValueError("maximum_age_days must not be smaller than minimum_age_days")
         self.reference = reference
@@ -30,6 +37,13 @@ class HealthyKernel:
         ages_days: tuple[int, ...],
         streams: NamedRandomStreams,
     ) -> tuple[LatentPoint, ...]:
+        if not isinstance(ages_days, tuple) or not ages_days:
+            raise ValueError("ages_days must be a nonempty tuple")
+        if any(
+            isinstance(age, bool) or not isinstance(age, int) or age < 0
+            for age in ages_days
+        ):
+            raise ValueError("ages_days must contain nonnegative integers")
         if tuple(sorted(set(ages_days))) != ages_days:
             raise ValueError("ages_days must be unique and increasing")
         if any(age < self.minimum_age_days for age in ages_days):
