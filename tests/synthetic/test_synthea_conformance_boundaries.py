@@ -9,6 +9,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 SYNTHETIC_ROOT = ROOT / "src" / "synthetic"
 MANIFEST_MODULE = SYNTHETIC_ROOT / "synthea_conformance.py"
+AUGMENTER_MODULE = ROOT / "scripts" / "augment.py"
 FORBIDDEN_CALL_ROOTS = {
     "csv",
     "java",
@@ -47,18 +48,30 @@ def _tree(path: Path) -> ast.Module:
 def _imports(path: Path) -> set[str]:
     tree = _tree(path)
     imports: set[str] = set()
+    bindings: dict[str, str] = {}
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
-            imports.update(alias.name for alias in node.names)
+            for alias in node.names:
+                imports.add(alias.name)
+                bindings[alias.asname or alias.name.split(".", maxsplit=1)[0]] = alias.name
         elif isinstance(node, ast.ImportFrom):
             base = "." * node.level + (node.module or "")
             imports.add(base)
             separator = "" if base.endswith(".") else "."
-            imports.update(f"{base}{separator}{alias.name}" for alias in node.names)
+            for alias in node.names:
+                imported = f"{base}{separator}{alias.name}"
+                imports.add(imported)
+                bindings[alias.asname or alias.name] = imported
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
-        if _qualified_name(node.func) not in _DYNAMIC_IMPORT_CALLS:
+        qualified = _qualified_name(node.func)
+        if qualified is not None:
+            head, *tail = qualified.split(".")
+            qualified = ".".join([bindings.get(head, head), *tail])
+            if qualified == "builtins.__import__":
+                qualified = "__import__"
+        if qualified not in _DYNAMIC_IMPORT_CALLS:
             continue
         argument = (
             node.args[0]
@@ -78,6 +91,15 @@ def _absolute_module(imported: str) -> str:
         suffix = imported.lstrip(".")
         return f"synthetic.{suffix}" if suffix else "synthetic"
     return imported
+
+
+def _assert_not_manifest_consumer(path: Path) -> None:
+    imports = {_absolute_module(imported) for imported in _imports(path)}
+    assert not any(
+        imported == "synthetic.synthea_conformance"
+        or imported.startswith("synthetic.synthea_conformance.")
+        for imported in imports
+    ), path.relative_to(ROOT) if path.is_relative_to(ROOT) else path
 
 
 def _qualified_name(node: ast.expr) -> str | None:
@@ -100,15 +122,27 @@ def test_manifest_module_imports_only_the_standard_library() -> None:
 
 def test_other_synthetic_modules_do_not_import_the_manifest_contract() -> None:
     """Catches automatic consumption by generation, export, or evaluator code."""
-    for path in sorted(SYNTHETIC_ROOT.rglob("*.py")):
+    for path in [*sorted(SYNTHETIC_ROOT.rglob("*.py")), AUGMENTER_MODULE]:
         if path == MANIFEST_MODULE:
             continue
-        imports = {_absolute_module(imported) for imported in _imports(path)}
-        assert not any(
-            imported == "synthetic.synthea_conformance"
-            or imported.startswith("synthetic.synthea_conformance.")
-            for imported in imports
-        ), path.relative_to(ROOT)
+        _assert_not_manifest_consumer(path)
+
+
+def test_tracked_augmenter_is_in_the_non_consumer_scan() -> None:
+    """Catches the tracked augmenter being omitted from the boundary guard."""
+    assert AUGMENTER_MODULE.exists()
+    _assert_not_manifest_consumer(AUGMENTER_MODULE)
+
+
+def test_non_consumer_guard_rejects_manifest_import_in_augmenter_fixture(
+    tmp_path: Path,
+) -> None:
+    """A manifest import in the augmenter-shaped path must fail the guard."""
+    fixture = tmp_path / "scripts" / "augment.py"
+    fixture.parent.mkdir()
+    fixture.write_text("from synthetic import synthea_conformance\n", encoding="utf-8")
+    with pytest.raises(AssertionError, match="augment.py"):
+        _assert_not_manifest_consumer(fixture)
 
 
 @pytest.mark.parametrize(
@@ -123,6 +157,10 @@ def test_other_synthetic_modules_do_not_import_the_manifest_contract() -> None:
         "from .synthea_conformance import SyntheaEngineManifest",
         'import importlib\nimportlib.import_module("synthetic.synthea_conformance")',
         '__import__("synthetic.synthea_conformance")',
+        'import importlib as il\nil.import_module("synthetic.synthea_conformance")',
+        'from importlib import import_module as load\nload("synthetic.synthea_conformance")',
+        'import builtins as bi\nbi.__import__("synthetic.synthea_conformance")',
+        'from builtins import __import__ as load\nload("synthetic.synthea_conformance")',
     ),
 )
 def test_import_scanner_records_alias_qualified_manifest_imports(
