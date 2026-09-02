@@ -1,7 +1,7 @@
 # Authoritative Derivation Oracle Binding Design
 
 **Date:** 2026-09-01
-**Status:** Implementation complete; approved non-test derivation binding and independent parity/review evidence pending
+**Status:** Implementation complete; ordinary development uses a test-only binding; approved non-test derivation binding and independent parity/review evidence pending
 **Prerequisites:** the approved synthetic-growth-fixtures design, the exact-schema package exporter, and the evaluator-only derivation-parity gate
 
 ## Purpose
@@ -10,9 +10,12 @@ The repository can already compare two already-loaded augmented outputs, but it
 does not have a governed way to bind the implementation that produced those
 outputs to its executable source, dependency set, reference standard, golden
 boundary evidence, parity result, and review decision. The parent design makes
-that binding a prerequisite for calling augmented resources valid. This slice
-adds the machine-checkable handoff contract without inventing the missing
-clinical derivation logic or treating metadata as proof of clinical authority.
+that binding a prerequisite for treating augmented resources as authoritative
+for clinical or release claims. Ordinary development may use an explicit
+structurally valid test-only binding and must retain its test-only classification.
+This slice adds the machine-checkable handoff contract without inventing the
+missing clinical derivation logic or treating metadata as proof of clinical
+authority.
 
 The contract is intentionally useful before an external oracle is available:
 fictional test fixtures can carry a test-only binding, while a production
@@ -86,8 +89,9 @@ This slice does not:
 - make `PASS` metadata clinically authoritative or authorize release;
 - change the visible eight-resource schema, truth boundary, or package file
   names; or
-- enable the production CLI without an approved non-test binding and an
-  explicitly supplied oracle.
+- enable a production/authoritative route without an approved non-test binding
+  and an explicitly supplied oracle; explicit test-only development profiles
+  remain permitted.
 
 ## Binding contract
 
@@ -261,9 +265,9 @@ bound implementation fingerprint and the existing test-only status; it does
 not serialize hidden evidence or the binding's review material into a released
 package. Any mismatch raises the existing fixed redacted derivation failure.
 
-The current smoke example and fictional test oracle use an explicit test-only
-binding. No production binding is checked into the repository, and the CLI
-continues to emit its unavailable-oracle failure until a caller supplies a
+The current explicit development profiles use an explicit test-only binding.
+No production binding is checked into the repository, and the default/no-profile
+CLI continues to emit its unavailable-oracle failure until a caller supplies a
 reviewed non-test binding and oracle through a future explicit configuration
 route.
 

@@ -1,10 +1,12 @@
 # Growth Reference Kernel Implementation Plan
 
+> Historical implementation plan. The completed source, checked-in CDC runtime, and current ordinary-development route are authoritative; this plan is retained as implementation provenance.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the test-only growth-reference boundary with a validated, provenance-aware LMS table implementation and make the healthy trajectory kernel fail closed on unsupported domains or nonphysical reference output.
 
-**Architecture:** `LmsGrowthReference` owns immutable LMS rows keyed by metric, reference sex, and age in days; it validates an optional source hash, linearly interpolates parameters within each supported domain, and converts z-scores through the LMS equation. `HealthyKernel` remains engine-neutral and continues to generate two independent anthropometric dimensions before deriving weight, but it will use the reference’s declared domain and reject nonfinite or nonpositive values. No clinical reference table is bundled by this plan; callers must provide an approved public artifact.
+**Architecture:** `LmsGrowthReference` owns immutable LMS rows keyed by metric, reference sex, and age in days; it validates an optional source hash, linearly interpolates parameters within each supported domain, and converts z-scores through the LMS equation. `HealthyKernel` remains engine-neutral and continues to generate two independent anthropometric dimensions before deriving weight, but it will use the reference’s declared domain and reject nonfinite or nonpositive values. This historical plan described a caller-supplied public artifact; the current ordinary-development route uses the checked-in pinned CDC runtime, while direct callers may still provide another pinned public artifact. Neither route accepts patient data or requires a governance approval bundle.
 
 **Tech Stack:** Python 3.12+, standard-library `csv`, `hashlib`, `math`, `dataclasses`, NumPy PCG64DXSM, pytest, Ruff
 
@@ -13,11 +15,11 @@
 ## Global Constraints
 
 - `datapackage.json` remains the sole schema authority; this plan does not change CSV paths, headers, field order, types, null conventions, or key semantics.
-- Offline generation reads only public schema metadata, pinned public reference tables, versioned configuration, and approved calibration artifacts; no patient-level records or real identifiers may be accepted by the reference layer.
+- Ordinary development reads only public schema metadata, pinned public reference/runtime files, versioned configuration, and generated state; an approved calibration artifact is optional and belongs only to a separate governed comparison route. No patient-level records or real identifiers may be accepted by the reference layer.
 - Every reference artifact is identified by a nonempty versioned `reference_id`; a supplied source hash is lowercase SHA-256 and is checked against the exact file bytes.
 - A reference value must be finite and strictly positive for height/length, BMI, and other anthropometric metrics; invalid domains or parameters fail closed with `ValueError`.
 - The kernel generates only two independent anthropometric dimensions and derives weight from BMI and height; it must not independently sample weight.
-- Existing smoke behavior remains age two years and older and continues to use the injected test reference/oracle; this plan does not relabel it as clinically validated.
+- The ordinary development CLI uses the checked-in CDC reference and source-matched test oracle; direct smoke tests may still inject a test reference/oracle. Neither is relabeled as clinically validated.
 - Identical rows, reference metadata, random-stream inputs, and seed must produce identical reference values and trajectory points.
 - Hidden truth, event traces, patient-level calibration data, and privacy attack artifacts remain outside visible package APIs.
 
@@ -304,7 +306,7 @@ git commit -m "feat: guard healthy trajectories by reference domain"
 
 - [x] **Step 1: Add the reference-provider section**
 
-Document the exact CSV columns, SHA-256 pinning, age/sex/metric domain behavior, and a short `LmsGrowthReference.from_csv(...)` example. State that the artifact must be approved and public, that no patient rows may be used, and that a table-backed reference alone is not prevalence, clinical, or privacy validation.
+Document the exact CSV columns, SHA-256 pinning, age/sex/metric domain behavior, and a short `LmsGrowthReference.from_csv(...)` example. For callers who select an external reference, state that the artifact should be pinned and public, that no patient rows may be used, and that a table-backed reference alone is not prevalence, clinical, or privacy validation. Ordinary development uses the checked-in CDC runtime instead.
 
 - [x] **Step 2: Verify documentation and repository checks**
 
@@ -338,4 +340,4 @@ Before calling this plan complete, verify that:
 - Final focused reference/kernel/CDC/age-regime checks: `115 passed`; Ruff, `python3 schema/build.py --check` (`validated 8 resources`), `uv lock --check`, and `git diff --check` all pass.
 - Fresh scoped reviews approved the age fix, LMS file-safety fix, anthropometric guard follow-up, and LMS oversized-input follow-up. The final integrated review at `bbe9ed5` reports no Critical, Important, or Minor findings.
 - Augmenter provenance closure remains intact: the 14-file source closure matches the local `growth-ai` checkout and the manifest hash is `b50afc36eca61684380154129cdacf484e62d56fa6da55914adab18c2d94d1d6`. The CDC reference identity/domain check passes with the pinned fingerprint `33b67c78867c2c00708c4ba6f0752b59f29671ba8b8fe84a78707a460cffa6a4`.
-- No clinical reference table, real patient rows, hidden truth, privacy evidence, prevalence claim, or release authorization was added. The reference layer remains an approved public-input contract and the default CLI remains fail-closed.
+- No patient rows, hidden truth, privacy evidence, prevalence claim, or release authorization was added. The checked-in CDC tables are a pinned, non-clinically-validated development reference; the reference layer still accepts pinned public inputs, and the default/no-profile CLI remains fail-closed.

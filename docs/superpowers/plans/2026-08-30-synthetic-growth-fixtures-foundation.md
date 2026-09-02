@@ -8,6 +8,8 @@
 
 > **Implementation note:** The code blocks below are the initial task-by-task TDD sketches and are retained as historical context. The completed source and tests are authoritative where later hardening extends these sketches. In particular, visible manifests carry the derivation implementation fingerprint and test-only classification, while the textual oracle ID and review metadata remain in the private derivation binding; the smoke/export paths require that binding explicitly.
 
+> **Scope note:** This plan is historical. Its original calibration and parity prerequisites describe the foundation at that time; the current explicit development profiles use the checked-in test-only reference/oracle, while clinical, population, privacy, and release claims remain separate.
+
 **Tech Stack:** Python 3.12+, uv, NumPy PCG64DXSM, standard-library CSV/JSON/dataclasses/hashlib, pytest, Ruff
 
 **Spec:** `docs/superpowers/specs/2026-08-30-synthetic-growth-fixtures-design.md`
@@ -16,14 +18,14 @@
 
 - `datapackage.json` is the sole schema authority; generated paths, headers, field order, types, null conventions, dialects, encodings, primary keys, foreign keys, and logical links must come from it.
 - Declared foreign keys are complete structural relationships. Foundation validation treats `x-logicalForeignKeys` as observational links, recomputes their null/orphan counts in the generated descriptor, and permits incompleteness by default; a later versioned observation/calibration policy may require a selected logical link to be complete without changing the schema fingerprint. The structural validation report retains errors and row counts only.
-- Offline generation reads only the public schema, pinned public references, versioned clinical configuration, and an approved calibration artifact; this foundation has no real-data input option.
+- Ordinary development reads only the public schema, pinned public reference/runtime files, versioned fictional configuration, and generated state; an approved calibration artifact is optional and belongs only to a governed comparison route. This foundation has no real-data input option.
 - Visible identifiers are newly generated and cannot contain hashes, substrings, ordering, or transformations of real identifiers.
 - Generate only two independent anthropometric dimensions and derive the third; this foundation generates standing height and BMI and derives weight.
 - Hidden truth and event traces never appear in the visible package or ordinary loader APIs.
 - Visible manifests record a derivation implementation fingerprint and test-only classification; the textual oracle ID, binding ID, review metadata, and source/dependency details remain in the private derivation binding and are not exported.
 - Output directories are never overwritten; partial output stays visibly unvalidated.
-- Missing derivation parity produces `UNVERIFIED_DERIVATION`, never a validation pass.
-- The authoritative augmentation implementation or approved parity harness remains a release-one prerequisite.
+- A missing derivation oracle keeps the direct foundation API unavailable; the explicit development CLI supplies the checked-in test-only oracle and reports its test-only status.
+- An authoritative augmentation implementation or approved parity harness is required for clinical or release claims, not for ordinary development fixtures.
 - Identical inputs, versions, reference time, PRNG specification, and seed must produce identical visible file hashes.
 - Synthetic development utility, statistical fidelity, clinical validity, privacy evidence, and release authorization remain separate claims.
 
@@ -37,7 +39,7 @@ This is the first of five independently reviewable plans:
 4. **Privacy audit:** shadow-model membership inference, linkage, attribute disclosure, controls, composition, policy decisions, and optional differential privacy.
 5. **Synthea backend:** pinned Synthea extension, event adapter, PPOC exporter, and engine-conformance suite.
 
-The foundation's generated output is a `smoke` profile. It must not be renamed `golden`, `development`, or `validated` until the relevant follow-on acceptance criteria pass.
+The foundation's original generated output was a `smoke` profile. The current CLI adds explicitly named `development-smoke` and `development-cohort` profiles using the pinned test-only runtime; those packages remain development artifacts and are not clinical, prevalence, privacy, or release evidence.
 
 ## Planned file structure
 
@@ -1767,7 +1769,7 @@ Add this section to `README.md`:
 
 The approved design is in [the synthetic growth fixture specification](docs/superpowers/specs/2026-08-30-synthetic-growth-fixtures-design.md). The first implementation work package establishes an exact-schema smoke generator with injected growth-reference and augmentation interfaces. It does not ship a clinically validated reference model, estimate prevalence, read PPOC records, or establish privacy or release approval.
 
-Until the authoritative augmentation implementation or an approved parity harness is supplied, the command-line entry point fails closed and no output may be labeled a validated golden or development fixture.
+The default/no-profile command-line entry point remains fail-closed. The explicit development profiles use the checked-in test-only augmentation runtime and may produce reproducible development fixtures; an authoritative implementation or approved parity harness is still required before any clinical or release validity claim.
 ```
 
 The repository keeps this detailed boundary in `docs/synthetic-generator.md` and links to it from `README.md`, which remains a concise project index.
