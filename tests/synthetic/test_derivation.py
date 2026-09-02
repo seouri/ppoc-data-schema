@@ -71,3 +71,40 @@ def test_rejects_wrong_augmented_header(tmp_path: Path) -> None:
         (tmp_path / resource["path"]).write_text("wrong\n", encoding=resource["encoding"])
     with pytest.raises(DerivationUnavailable, match="header"):
         require_augmented_outputs(tmp_path, descriptor, oracle_id="fake-v1")
+
+
+@pytest.mark.parametrize(
+    "malformation",
+    ("fields_none", "schema_none", "dialect_none", "resource_list", "field_name_missing"),
+)
+def test_rejects_malformed_augmented_descriptor_shapes(
+    tmp_path: Path, malformation: str
+) -> None:
+    descriptor = load_descriptor(ROOT / "datapackage.json")
+    for name in ("patients_augmented", "visits_augmented"):
+        resource = next(item for item in descriptor["resources"] if item["name"] == name)
+        fields = [field["name"] for field in resource["schema"]["fields"]]
+        with (tmp_path / resource["path"]).open(
+            "w", encoding=resource["encoding"], newline=""
+        ) as handle:
+            csv.writer(handle).writerow(fields)
+
+    augmented = next(
+        index for index, item in enumerate(descriptor["resources"])
+        if item["name"] == "patients_augmented"
+    )
+    if malformation == "resource_list":
+        descriptor["resources"][augmented] = []
+    else:
+        resource = descriptor["resources"][augmented]
+        if malformation == "fields_none":
+            resource["schema"]["fields"] = None
+        elif malformation == "schema_none":
+            resource["schema"] = None
+        elif malformation == "dialect_none":
+            resource["dialect"] = None
+        else:
+            del resource["schema"]["fields"][0]["name"]
+
+    with pytest.raises(DerivationUnavailable, match="descriptor|unsafe|unreadable"):
+        require_augmented_outputs(tmp_path, descriptor, oracle_id="fake-v1")

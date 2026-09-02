@@ -1800,8 +1800,8 @@ Before starting the growth-and-clinical-modules plan, verify all of the followin
 
 ## Completion evidence (2026-09-02)
 
-- Independent foundation review approved the implementation after hardening oversized integer parsing, exact augmented-output header and regular-file checks, the explicit logical-link completeness policy, the visible derivation-fingerprint/private oracle-ID boundary, and the static reader allowlist.
-- Focused foundation and boundary suite: `82 passed`.
-- Full repository suite: `2676 passed, 4 skipped` (the four skips are the opt-in development-scale tests).
+- Independent foundation review approved the implementation after hardening oversized integer parsing, exact augmented-output header and regular-file checks, malformed descriptor-shape handling, the explicit logical-link completeness policy, the visible derivation-fingerprint/private oracle-ID boundary, and the static reader allowlist.
+- Focused derivation, validation, export, and boundary suite: `102 passed`.
+- Full repository suite: `2681 passed, 4 skipped` (the four skips are the opt-in development-scale tests).
 - Ruff: `All checks passed!`; schema contract: `validated 8 resources in datapackage.json`; dependency lock: `Resolved 17 packages`; `git diff --check`: clean.
 - The test-only smoke path writes all eight descriptor-named CSV resources, records reproducible visible hashes and derivation fingerprint metadata, rejects missing derivation binding without promotion, and keeps logical-link null/orphan counts in the generated descriptor rather than the structural report.

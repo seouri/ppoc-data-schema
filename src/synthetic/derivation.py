@@ -54,13 +54,14 @@ def require_augmented_outputs(
 
     try:
         validate_resource_paths(descriptor, package_root)
-    except (KeyError, OSError, TypeError, ValueError) as exc:
+    except (AttributeError, KeyError, OSError, TypeError, ValueError) as exc:
         raise DerivationUnavailable("unsafe augmented output path") from exc
 
     for name in ("patients_augmented", "visits_augmented"):
         try:
-            output_path = package_root / resource_spec(descriptor, name)["path"]
-        except (KeyError, TypeError, ValueError) as exc:
+            resource = resource_spec(descriptor, name)
+            output_path = package_root / resource["path"]
+        except (AttributeError, KeyError, TypeError, ValueError) as exc:
             raise DerivationUnavailable(
                 f"descriptor does not name required {name} output"
             ) from exc
@@ -70,10 +71,9 @@ def require_augmented_outputs(
             raise DerivationUnavailable(f"missing {name} output from {oracle_id}") from exc
         if not stat.S_ISREG(mode):
             raise DerivationUnavailable(f"missing {name} output from {oracle_id}")
-        resource = resource_spec(descriptor, name)
-        expected_header = [field["name"] for field in resource["schema"]["fields"]]
-        dialect = resource.get("dialect", {})
         try:
+            expected_header = [field["name"] for field in resource["schema"]["fields"]]
+            dialect = resource.get("dialect", {})
             with output_path.open(encoding=resource.get("encoding", "utf-8"), newline="") as handle:
                 reader = csv.reader(
                     handle,
@@ -86,7 +86,16 @@ def require_augmented_outputs(
                     raise DerivationUnavailable(f"{name} output header does not match descriptor")
         except DerivationUnavailable:
             raise
-        except (LookupError, OSError, TypeError, UnicodeError, ValueError, csv.Error) as exc:
+        except (
+            AttributeError,
+            KeyError,
+            LookupError,
+            OSError,
+            TypeError,
+            UnicodeError,
+            ValueError,
+            csv.Error,
+        ) as exc:
             raise DerivationUnavailable(f"unreadable {name} output from {oracle_id}") from exc
 
     return DerivationResult(
