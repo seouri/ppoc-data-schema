@@ -856,6 +856,10 @@ def validate_excess_weight_ancillary_resources(
         visible_lab_order_ages: set[int] = set()
         visible_referral_ages: set[int] = set()
         visible_problem_ages: set[int] = set()
+        visible_row_values: dict[str, list[dict[str, object]]] = {
+            resource_name: []
+            for resource_name in EXCESS_WEIGHT_ANCILLARY_RESOURCE_NAMES
+        }
         for resource_name in EXCESS_WEIGHT_ANCILLARY_RESOURCE_NAMES:
             resource_rows = rows.get(resource_name)
             if not isinstance(resource_rows, tuple):
@@ -922,6 +926,7 @@ def validate_excess_weight_ancillary_resources(
                     )
                     continue
 
+                visible_row_values[resource_name].append(values)
                 types_valid = _ancillary_row_types_are_valid(values)
                 if not types_valid:
                     mark(
@@ -1077,6 +1082,90 @@ def validate_excess_weight_ancillary_resources(
                 ExcessWeightAncillaryValidationStatus.FAIL,
                 "PATHWAY_SCOPE_INVALID",
             )
+
+        if target_kind:
+            visible_events: dict[RecordedEventKind, RecordedEvent] = {}
+            try:
+                frame_events = member.frame.events
+            except Exception:  # noqa: BLE001 - malformed visible objects are redacted
+                frame_events = ()
+            if isinstance(frame_events, tuple):
+                for event in frame_events:
+                    if (
+                        isinstance(event, RecordedEvent)
+                        and isinstance(event.event_kind, RecordedEventKind)
+                        and event.patient_id == member_id
+                        and not isinstance(event.age_days, bool)
+                        and isinstance(event.age_days, int)
+                        and 0 <= event.age_days <= MAX_AGE_DAYS
+                    ):
+                        visible_events.setdefault(event.event_kind, event)
+
+            expected_counts = {
+                "labs": 2 if RecordedEventKind.WORKUP in visible_events else 0,
+                "medications": 0,
+                "problem_list": 1
+                if RecordedEventKind.DIAGNOSIS in visible_events
+                else 0,
+                "referrals": 1
+                if RecordedEventKind.RECOGNITION in visible_events
+                else 0,
+            }
+            for resource_name, expected_count in expected_counts.items():
+                resource_rows = rows.get(resource_name)
+                actual_count = (
+                    len(resource_rows) if isinstance(resource_rows, tuple) else 0
+                )
+                if actual_count != expected_count:
+                    mark(
+                        "pathway_scope",
+                        ExcessWeightAncillaryValidationStatus.FAIL,
+                        "PATHWAY_SCOPE_INVALID",
+                    )
+
+            recognition = visible_events.get(RecordedEventKind.RECOGNITION)
+            referral_values = visible_row_values["referrals"]
+            if (
+                recognition is not None
+                and len(referral_values) == 1
+                and referral_values[0].get("referral_date_age_in_days")
+                != recognition.age_days
+            ):
+                mark(
+                    "causal_timing",
+                    ExcessWeightAncillaryValidationStatus.FAIL,
+                    "TIMING_INVALID",
+                )
+
+            workup = visible_events.get(RecordedEventKind.WORKUP)
+            lab_values = visible_row_values["labs"]
+            if workup is not None and len(lab_values) == 2:
+                expected_result_age = workup.age_days + policy.result_delay_days
+                if any(
+                    values.get("lab_order_date_age_in_days") != workup.age_days
+                    or values.get("lab_result_date_age_in_days")
+                    != expected_result_age
+                    for values in lab_values
+                ):
+                    mark(
+                        "causal_timing",
+                        ExcessWeightAncillaryValidationStatus.FAIL,
+                        "TIMING_INVALID",
+                    )
+
+            diagnosis = visible_events.get(RecordedEventKind.DIAGNOSIS)
+            problem_values = visible_row_values["problem_list"]
+            if (
+                diagnosis is not None
+                and len(problem_values) == 1
+                and problem_values[0].get("noted_date_age_in_days")
+                != diagnosis.age_days
+            ):
+                mark(
+                    "causal_timing",
+                    ExcessWeightAncillaryValidationStatus.FAIL,
+                    "TIMING_INVALID",
+                )
     except Exception:  # noqa: BLE001 - malformed visible objects are redacted
         mark(
             "row_schema",

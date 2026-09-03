@@ -75,6 +75,18 @@ def _without_truth(member: object) -> object:
     return dataclasses.replace(member, frame=frame)  # type: ignore[arg-type]
 
 
+def _with_invalid_source(member: object) -> object:
+    snapshot = dataclasses.replace(member)  # type: ignore[arg-type]
+    object.__setattr__(snapshot.frame, "patient_id", "syn-invalid-frame-patient")
+    return snapshot
+
+
+def _source_variant(member: object, source_state: str) -> object:
+    if source_state == "missing_truth":
+        return _without_truth(member)
+    return _with_invalid_source(member)
+
+
 def test_validator_passes_target_and_non_target_with_fixed_checks() -> None:
     member, projection = _target()
     report = validate_excess_weight_ancillary_resources(
@@ -356,6 +368,104 @@ def test_validator_marks_missing_private_truth_unevaluable_unless_visible_rows_f
     assert report.status is ExcessWeightAncillaryValidationStatus.FAIL
     assert _check(report, "row_schema")[0] is ExcessWeightAncillaryValidationStatus.FAIL
     assert _check(report, "source_evidence")[0] is ExcessWeightAncillaryValidationStatus.UNEVALUABLE
+
+
+@pytest.mark.parametrize("source_state", ["missing_truth", "invalid_source"])
+def test_validator_checks_visible_workup_against_expected_labs_without_private_truth(
+    source_state: str,
+) -> None:
+    member, projection = _target()
+    rows = dict(projection.rows)
+    rows["labs"] = ()
+    object.__setattr__(projection, "rows", MappingProxyType(rows))
+
+    member = _source_variant(member, source_state)
+    report = validate_excess_weight_ancillary_resources(
+        member, projection, _policy_ancillary()  # type: ignore[arg-type]
+    )
+    assert report.status is ExcessWeightAncillaryValidationStatus.FAIL
+    assert _check(report, "pathway_scope") == (
+        ExcessWeightAncillaryValidationStatus.FAIL,
+        "PATHWAY_SCOPE_INVALID",
+    )
+
+
+@pytest.mark.parametrize("source_state", ["missing_truth", "invalid_source"])
+def test_validator_rejects_injected_referral_without_visible_events(
+    source_state: str,
+) -> None:
+    member = _member(recognized=False)
+    assert member.frame.events == ()
+    projection = project_excess_weight_ancillary_resources(
+        member, _shape(), _policy_ancillary()
+    )
+    _target_member, target_projection = _target()
+    rows = dict(projection.rows)
+    rows["referrals"] = target_projection.rows["referrals"]
+    object.__setattr__(projection, "rows", MappingProxyType(rows))
+
+    member = _source_variant(member, source_state)
+    report = validate_excess_weight_ancillary_resources(
+        member, projection, _policy_ancillary()  # type: ignore[arg-type]
+    )
+    assert report.status is ExcessWeightAncillaryValidationStatus.FAIL
+    assert _check(report, "pathway_scope") == (
+        ExcessWeightAncillaryValidationStatus.FAIL,
+        "PATHWAY_SCOPE_INVALID",
+    )
+
+
+@pytest.mark.parametrize("source_state", ["missing_truth", "invalid_source"])
+def test_validator_checks_visible_event_ages_without_private_truth(
+    source_state: str,
+) -> None:
+    member, projection = _target()
+    visible_events = tuple(
+        dataclasses.replace(
+            event,
+            age_days=730
+            if event.event_kind is RecordedEventKind.RECOGNITION
+            else 1500,
+        )
+        for event in member.frame.events
+    )
+    frame = dataclasses.replace(member.frame, events=visible_events)
+    member = dataclasses.replace(member, frame=frame)
+    _replace_row(
+        projection,
+        "referrals",
+        0,
+        lambda row: _change_field(row, "referral_date_age_in_days", 700),
+    )
+    for index in range(2):
+        _replace_row(
+            projection,
+            "labs",
+            index,
+            lambda row: _change_field(row, "lab_order_date_age_in_days", 1400),
+        )
+        _replace_row(
+            projection,
+            "labs",
+            index,
+            lambda row: _change_field(row, "lab_result_date_age_in_days", 1407),
+        )
+    _replace_row(
+        projection,
+        "problem_list",
+        0,
+        lambda row: _change_field(row, "noted_date_age_in_days", 1400),
+    )
+
+    member = _source_variant(member, source_state)
+    report = validate_excess_weight_ancillary_resources(
+        member, projection, _policy_ancillary()  # type: ignore[arg-type]
+    )
+    assert report.status is ExcessWeightAncillaryValidationStatus.FAIL
+    assert _check(report, "causal_timing") == (
+        ExcessWeightAncillaryValidationStatus.FAIL,
+        "TIMING_INVALID",
+    )
 
 
 @pytest.mark.parametrize("resource_name", ["labs", "referrals"])

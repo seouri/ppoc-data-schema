@@ -60,6 +60,7 @@ def _member(
     kind: DisorderKind = DisorderKind.EXCESS_WEIGHT,
     same_age_events: bool = False,
     visit_probability: float = 1.0,
+    workup: bool = True,
 ) -> CohortMember:
     source = _event_trajectory()
     events = source.events
@@ -80,6 +81,8 @@ def _member(
             for event in events
             if event.event_type not in {"treatment_start", "treatment_response"}
         )
+    if not workup:
+        events = tuple(event for event in events if event.event_type != "workup")
     trajectory = dataclasses.replace(
         source,
         disorder=LatentDisorderState(
@@ -190,6 +193,17 @@ def test_projection_handles_visible_event_combinations_and_hidden_treatment() ->
     assert all(not unrecognized[name] for name in EXCESS_WEIGHT_ANCILLARY_RESOURCE_NAMES)
 
 
+def test_projection_handles_recognition_only_without_downstream_rows() -> None:
+    resources = project_excess_weight_ancillary_resources(
+        _member(workup=False, diagnosed=False), _shape(), _policy_ancillary()
+    ).to_mapping()["resources"]
+
+    assert len(resources["referrals"]) == 1  # type: ignore[index]
+    assert resources["labs"] == []  # type: ignore[index]
+    assert resources["problem_list"] == []  # type: ignore[index]
+    assert resources["medications"] == []  # type: ignore[index]
+
+
 def test_projection_is_empty_for_healthy_and_non_target_members() -> None:
     healthy_trajectory = _trajectory()
     healthy_frame = generate_observation_frame(
@@ -208,6 +222,18 @@ def test_projection_is_empty_for_healthy_and_non_target_members() -> None:
         )
         assert tuple(projection.rows) == EXCESS_WEIGHT_ANCILLARY_RESOURCE_NAMES
         assert all(not projection.rows[name] for name in EXCESS_WEIGHT_ANCILLARY_RESOURCE_NAMES)
+
+
+def test_projection_is_empty_for_ghd_non_target_member() -> None:
+    member = _member(kind=DisorderKind.GROWTH_HORMONE_DEFICIENCY)
+    projection = project_excess_weight_ancillary_resources(
+        member, _shape(), _policy_ancillary()
+    )
+
+    assert all(
+        not projection.rows[resource_name]
+        for resource_name in EXCESS_WEIGHT_ANCILLARY_RESOURCE_NAMES
+    )
 
 
 def test_projection_preserves_same_age_source_point_links_and_delays_results() -> None:
