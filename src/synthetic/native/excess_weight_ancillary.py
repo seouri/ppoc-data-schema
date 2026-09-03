@@ -845,6 +845,13 @@ def validate_excess_weight_ancillary_resources(
                         "SCHEMA_SHAPE_INVALID",
                     )
 
+        try:
+            visible_visit_ids = frozenset(
+                visit.visit_id for visit in member.frame.visits
+            )
+        except Exception:  # noqa: BLE001 - malformed visible objects are redacted
+            visible_visit_ids = frozenset()
+
         nonempty_resources: set[str] = set()
         visible_lab_order_ages: set[int] = set()
         visible_referral_ages: set[int] = set()
@@ -942,15 +949,17 @@ def validate_excess_weight_ancillary_resources(
                         ExcessWeightAncillaryValidationStatus.FAIL,
                         "PATIENT_MISMATCH",
                     )
-                if resource_name in {"labs", "referrals"} and not _is_synthetic_visit_id(
-                    values.get("visit_id")
-                ):
-                    mark(
-                        "cross_resource_links",
-                        ExcessWeightAncillaryValidationStatus.FAIL,
-                        "VISIT_REFERENCE_INVALID",
-                    )
-
+                if resource_name in {"labs", "referrals"}:
+                    visit_id = values.get("visit_id")
+                    if (
+                        not _is_synthetic_visit_id(visit_id)
+                        or visit_id not in visible_visit_ids
+                    ):
+                        mark(
+                            "cross_resource_links",
+                            ExcessWeightAncillaryValidationStatus.FAIL,
+                            "VISIT_REFERENCE_INVALID",
+                        )
                 if types_valid:
                     for field_name in _EXCESS_WEIGHT_AGE_FIELDS:
                         if field_name in values and values[field_name] != "" and (

@@ -358,6 +358,59 @@ def test_validator_marks_missing_private_truth_unevaluable_unless_visible_rows_f
     assert _check(report, "source_evidence")[0] is ExcessWeightAncillaryValidationStatus.UNEVALUABLE
 
 
+@pytest.mark.parametrize("resource_name", ["labs", "referrals"])
+@pytest.mark.parametrize("source_state", ["missing_truth", "invalid"])
+def test_validator_rejects_nonexistent_visible_visit_without_source_evidence(
+    resource_name: str,
+    source_state: str,
+) -> None:
+    member, projection = _target()
+    nonexistent_visit_id = "syn-not-visible-visit"
+    rows = dict(projection.rows)
+    rows[resource_name] = tuple(
+        _change_field(row, "visit_id", nonexistent_visit_id)
+        for row in rows[resource_name]
+    )
+    object.__setattr__(projection, "rows", MappingProxyType(rows))
+
+    if source_state == "missing_truth":
+        member = _without_truth(member)  # type: ignore[assignment]
+    else:
+        frame = dataclasses.replace(member.frame)
+        events = list(frame.events)
+        diagnosis = next(
+            index
+            for index, event in enumerate(events)
+            if event.event_kind is RecordedEventKind.DIAGNOSIS
+        )
+        events[diagnosis] = dataclasses.replace(events[diagnosis], age_days=1)
+        object.__setattr__(frame, "events", tuple(events))
+        member = dataclasses.replace(member, frame=frame)
+
+    report = validate_excess_weight_ancillary_resources(
+        member, projection, _policy_ancillary()  # type: ignore[arg-type]
+    )
+    assert report.status is ExcessWeightAncillaryValidationStatus.FAIL
+    assert _check(report, "cross_resource_links") == (
+        ExcessWeightAncillaryValidationStatus.FAIL,
+        "VISIT_REFERENCE_INVALID",
+    )
+    expected_source_status = (
+        ExcessWeightAncillaryValidationStatus.UNEVALUABLE
+        if source_state == "missing_truth"
+        else ExcessWeightAncillaryValidationStatus.FAIL
+    )
+    expected_source_reason = (
+        "SOURCE_EVIDENCE_UNAVAILABLE"
+        if source_state == "missing_truth"
+        else "SOURCE_EVIDENCE_INVALID"
+    )
+    assert _check(report, "source_evidence") == (
+        expected_source_status,
+        expected_source_reason,
+    )
+
+
 def test_validator_rejects_wrong_typed_inputs_at_one_fixed_error_boundary() -> None:
     _member_value, projection = _target()
     with pytest.raises(
