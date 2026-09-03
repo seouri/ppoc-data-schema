@@ -78,7 +78,7 @@ contracts, pytest, Ruff, schema checker.
   `project_undernutrition_ancillary_resources(member, shape, policy)` for Task
   2 and the documentation task.
 
-- [ ] **Step 1: Write the failing model and projection tests**
+- [x] **Step 1: Write the failing model and projection tests**
 
   Build only fictional in-memory fixtures from `tests/synthetic/fakes.py` and
   the checked-in descriptor mapping. Assert these exact public constants and
@@ -126,7 +126,7 @@ contracts, pytest, Ruff, schema checker.
   row ID equals or includes an input visit identifier. The only identifier
   copied into an emitted row is the required synthetic patient link.
 
-- [ ] **Step 2: Run focused tests to verify they fail**
+- [x] **Step 2: Run focused tests to verify they fail**
 
   ```bash
   PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_undernutrition_ancillary_models.py tests/synthetic/test_undernutrition_ancillary_projection.py
@@ -135,7 +135,7 @@ contracts, pytest, Ruff, schema checker.
   Expected: collection fails because the undernutrition ancillary module and
   its public models do not yet exist.
 
-- [ ] **Step 3: Implement strict models and projection**
+- [x] **Step 3: Implement strict models and projection**
 
   Add the following public signature and frozen models:
 
@@ -188,7 +188,7 @@ contracts, pytest, Ruff, schema checker.
   paths, or keys. Do not modify any existing module, runtime, exporter,
   descriptor, or Synthea code.
 
-- [ ] **Step 4: Run focused tests and lint**
+- [x] **Step 4: Run focused tests and lint**
 
   ```bash
   PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_undernutrition_ancillary_models.py tests/synthetic/test_undernutrition_ancillary_projection.py
@@ -196,7 +196,7 @@ contracts, pytest, Ruff, schema checker.
   git diff --check
   ```
 
-- [ ] **Step 5: Commit the projection task**
+- [x] **Step 5: Commit the projection task**
 
   ```bash
   git add src/synthetic/native/undernutrition_ancillary.py tests/synthetic/test_undernutrition_ancillary_models.py tests/synthetic/test_undernutrition_ancillary_projection.py
@@ -222,7 +222,7 @@ contracts, pytest, Ruff, schema checker.
   `validate_undernutrition_ancillary_resources(member, projection, policy)`
   for Task 3.
 
-- [ ] **Step 1: Write failing validator and boundary tests**
+- [x] **Step 1: Write failing validator and boundary tests**
 
   Assert the exact check order:
 
@@ -264,7 +264,7 @@ contracts, pytest, Ruff, schema checker.
   randomness, Synthea, or `obesity_flag`. Reject public signatures that take
   paths, rows, keys, reports, output destinations, or descriptor mappings.
 
-- [ ] **Step 2: Run focused validator tests to verify they fail**
+- [x] **Step 2: Run focused validator tests to verify they fail**
 
   ```bash
   PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_undernutrition_ancillary_validation.py tests/synthetic/test_undernutrition_ancillary_boundaries.py
@@ -273,7 +273,7 @@ contracts, pytest, Ruff, schema checker.
   Expected: collection or assertions fail because the validator and static
   boundary regression tests are not implemented.
 
-- [ ] **Step 3: Implement the fixed aggregate validator**
+- [x] **Step 3: Implement the fixed aggregate validator**
 
   Add the following public signature:
 
@@ -315,7 +315,7 @@ contracts, pytest, Ruff, schema checker.
   event links and the deterministic expected projection. Never include source
   objects or row payloads in a report.
 
-- [ ] **Step 4: Run focused validation tests and lint**
+- [x] **Step 4: Run focused validation tests and lint**
 
   ```bash
   PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_undernutrition_ancillary_validation.py tests/synthetic/test_undernutrition_ancillary_boundaries.py
@@ -323,7 +323,7 @@ contracts, pytest, Ruff, schema checker.
   git diff --check
   ```
 
-- [ ] **Step 5: Commit the validator task**
+- [x] **Step 5: Commit the validator task**
 
   ```bash
   git add src/synthetic/native/undernutrition_ancillary.py tests/synthetic/test_undernutrition_ancillary_validation.py tests/synthetic/test_undernutrition_ancillary_boundaries.py
@@ -347,7 +347,7 @@ contracts, pytest, Ruff, schema checker.
   link to the guide/spec/plan, and documentation drift tests; no runtime,
   package, descriptor, or Synthea integration.
 
-- [ ] **Step 1: Write the failing documentation tests**
+- [x] **Step 1: Write the failing documentation tests**
 
   Assert that the guide names every public type and function:
   `UndernutritionAncillaryPolicy`, `UndernutritionAncillaryProjection`,
@@ -370,7 +370,7 @@ contracts, pytest, Ruff, schema checker.
   conformance. Assert README links the guide, undernutrition plan, and spec
   without copying the full guide.
 
-- [ ] **Step 2: Implement documentation and tests**
+- [x] **Step 2: Implement documentation and tests**
 
   Add one concise `## Evaluator-only undernutrition ancillary pathway`
   section beside the existing excess-weight, hypothyroidism, celiac, SGA, and
@@ -393,7 +393,7 @@ contracts, pytest, Ruff, schema checker.
   into the new section; deferred claims are explicit boundaries of this
   ordinary-development fixture contract.
 
-- [ ] **Step 3: Run focused documentation checks**
+- [x] **Step 3: Run focused documentation checks**
 
   ```bash
   PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_undernutrition_ancillary_docs.py
@@ -401,7 +401,7 @@ contracts, pytest, Ruff, schema checker.
   git diff --check
   ```
 
-- [ ] **Step 4: Commit the documentation task**
+- [x] **Step 4: Commit the documentation task**
 
   ```bash
   git add docs/synthetic-generator.md README.md tests/synthetic/test_undernutrition_ancillary_docs.py
@@ -423,7 +423,7 @@ contracts, pytest, Ruff, schema checker.
   modifying native growth generation, real-data boundaries, runtime
   composition, package inventory, descriptor, or Synthea code.
 
-- [ ] **Step 1: Run the complete verification matrix**
+- [x] **Step 1: Run the complete verification matrix**
 
   ```bash
   PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q -p no:cacheprovider
@@ -441,7 +441,7 @@ contracts, pytest, Ruff, schema checker.
   command results in the ignored SDD ledger and task reports without staging
   those artifacts.
 
-- [ ] **Step 2: Dispatch scoped task reviews and one broad review**
+- [x] **Step 2: Dispatch scoped task reviews and one broad review**
 
   Create review packages from the exact Task 1, Task 2, and Task 3 base/head
   ranges and dispatch an independent reviewer for each. Then create a
@@ -479,12 +479,12 @@ contracts, pytest, Ruff, schema checker.
 
 ## Plan self-review
 
-- [ ] Every spec requirement has a named test or documentation/verification
+- [x] Every spec requirement has a named test or documentation/verification
   step.
-- [ ] All public names, function signatures, fixed strings, resource order,
+- [x] All public names, function signatures, fixed strings, resource order,
   field order, check order, and status precedence are consistent across the
   spec and plan.
-- [ ] The plan contains no unresolved requirement, unspecified validation, or
+- [x] The plan contains no unresolved requirement, unspecified validation, or
   implicit clinical terminology choice.
-- [ ] The plan does not authorize Synthea execution, real-data access,
+- [x] The plan does not authorize Synthea execution, real-data access,
   package/descriptor integration, or visible runtime changes.
