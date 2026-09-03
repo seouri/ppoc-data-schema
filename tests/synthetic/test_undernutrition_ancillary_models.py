@@ -122,6 +122,33 @@ def test_policy_rejects_unsafe_tokens_and_invalid_delays() -> None:
             _policy(result_delay_days=value)
 
 
+def test_policy_rejects_behavior_bearing_integer_subclass() -> None:
+    class MutableDelay(int):
+        additions = 0
+
+        def __radd__(self, other: object) -> object:
+            type(self).additions += 1
+            return int(self) + int(other) + type(self).additions
+
+    with pytest.raises(TypeError, match="result_delay_days"):
+        _policy(result_delay_days=MutableDelay(7))
+    assert MutableDelay.additions == 0
+
+
+def test_policy_rejects_behavior_bearing_string_subclasses() -> None:
+    class MutableToken(str):
+        lower_calls = 0
+
+        def lower(self) -> str:
+            type(self).lower_calls += 1
+            return "safe" if type(self).lower_calls == 1 else "patient"
+
+    for field_name in ("policy_id", "policy_version"):
+        with pytest.raises(TypeError, match=field_name):
+            _policy(**{field_name: MutableToken("stable-token")})
+    assert MutableToken.lower_calls == 0
+
+
 def test_constants_and_resource_registry_are_fixed() -> None:
     assert UNDERNUTRITION_ANCILLARY_RESOURCE_NAMES == (
         "labs",

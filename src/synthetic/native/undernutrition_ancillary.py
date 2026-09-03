@@ -131,7 +131,7 @@ class UndernutritionAncillaryProjectionUnavailable(ValueError):
 
 
 def _require_aggregate_safe_token(value: object, field_name: str) -> str:
-    if not isinstance(value, str):
+    if type(value) is not str:
         raise TypeError(f"{field_name} must be a string")
     if _AGGREGATE_TOKEN.fullmatch(value) is None:
         raise ValueError(
@@ -146,7 +146,7 @@ def _require_aggregate_safe_token(value: object, field_name: str) -> str:
 
 
 def _require_nonnegative_integer(value: object, field_name: str) -> int:
-    if isinstance(value, bool) or not isinstance(value, int):
+    if type(value) is not int:
         raise TypeError(f"{field_name} must be a nonnegative integer")
     if value < 0:
         raise ValueError(f"{field_name} must be a nonnegative integer")
