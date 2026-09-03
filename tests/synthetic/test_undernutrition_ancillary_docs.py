@@ -1,62 +1,35 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
+from synthetic.native.resources import ResourceShape
 from synthetic.native.undernutrition_ancillary import (
+    UNDERNUTRITION_ANCILLARY_CHECK_NAMES,
+    UNDERNUTRITION_ANCILLARY_REASON_CODES,
+    UNDERNUTRITION_ANCILLARY_REASON_CODES_BY_STATUS,
     UNDERNUTRITION_ANCILLARY_RESOURCE_NAMES,
     UNDERNUTRITION_DIAGNOSIS_CODE,
     UNDERNUTRITION_HEIGHT_COMPONENT,
+    UNDERNUTRITION_LAB_COMPONENT_NAMES,
     UNDERNUTRITION_LAB_RESULT_FLAG,
     UNDERNUTRITION_MEDICATION_NAME,
     UNDERNUTRITION_MEDICATION_RECORD_TYPE,
     UNDERNUTRITION_REFERRAL_SPECIALTY,
     UNDERNUTRITION_WEIGHT_COMPONENT,
+    UndernutritionAncillaryValidationStatus,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
 GUIDE = ROOT / "docs" / "synthetic-generator.md"
 README = ROOT / "README.md"
 SECTION_HEADING = "## Evaluator-only undernutrition ancillary pathway\n"
+RESOURCE_SHAPE = ResourceShape.from_descriptor(
+    json.loads((ROOT / "datapackage.json").read_text(encoding="utf-8"))
+)
 EMITTED_RESOURCE_FIELDS = {
-    "labs": (
-        "patient_id",
-        "visit_id",
-        "lab_order_id",
-        "result_line_num",
-        "lab_order_date_age_in_days",
-        "lab_procedure_name",
-        "lab_procedure_description",
-        "lab_result_date_age_in_days",
-        "result_component_name",
-        "result_loinc_code",
-        "result_value",
-        "result_flag",
-    ),
-    "medications": (
-        "patient_id",
-        "visit_id",
-        "med_record_id",
-        "med_order_date_age_in_days",
-        "med_start_date_age_in_days",
-        "med_end_date_age_in_days",
-        "med_record_type",
-        "med_simple_generic_name",
-    ),
-    "problem_list": (
-        "patient_id",
-        "problem_list_id",
-        "noted_date_age_in_days",
-        "resolved_date_age_in_days",
-        "pl_diag",
-    ),
-    "referrals": (
-        "patient_id",
-        "visit_id",
-        "referral_id",
-        "referral_date_age_in_days",
-        "requested_specialty",
-        "referral_number_of_visits",
-    ),
+    resource_name: RESOURCE_SHAPE.field_names(resource_name)
+    for resource_name in UNDERNUTRITION_ANCILLARY_RESOURCE_NAMES
 }
 
 
@@ -64,6 +37,15 @@ def _section() -> str:
     guide = GUIDE.read_text(encoding="utf-8")
     assert SECTION_HEADING in guide, "undernutrition ancillary guide section is missing"
     return guide.split(SECTION_HEADING, maxsplit=1)[1].split("\n## ", maxsplit=1)[0]
+
+
+def _render_backtick_list(values: tuple[str, ...]) -> str:
+    rendered = tuple(f"`{value}`" for value in values)
+    if len(rendered) == 1:
+        return rendered[0]
+    if len(rendered) == 2:
+        return f"{rendered[0]} and {rendered[1]}"
+    return f"{', '.join(rendered[:-1])}, and {rendered[-1]}"
 
 
 def test_guide_names_the_public_api_and_exact_fictional_contract() -> None:
@@ -111,6 +93,11 @@ def test_guide_names_the_public_api_and_exact_fictional_contract() -> None:
         assert f"`{value}`" in section
     assert f'`result_flag="{UNDERNUTRITION_LAB_RESULT_FLAG}"`' in section
     assert f'`med_record_type="{UNDERNUTRITION_MEDICATION_RECORD_TYPE}"`' in section
+    assert (
+        "The fixed lab component value order is "
+        f"{_render_backtick_list(UNDERNUTRITION_LAB_COMPONENT_NAMES)}."
+        in section
+    )
 
 
 def test_guide_states_schema_source_and_link_boundaries() -> None:
@@ -140,6 +127,7 @@ def test_guide_states_schema_source_and_link_boundaries() -> None:
     for resource_name, field_names in EMITTED_RESOURCE_FIELDS.items():
         expected = f"{resource_name}: {', '.join(field_names)}"
         assert expected in section, f"guide is missing exact {resource_name} field order"
+    assert "visit_id" not in RESOURCE_SHAPE.field_names("problem_list")
 
     for empty_field in (
         "lab_procedure_name",
@@ -165,6 +153,35 @@ def test_guide_documents_validator_and_delayed_lab_contract() -> None:
         "`pathway_scope`, `row_schema`, `causal_timing`, `cross_resource_links`, and `source_evidence`",
     ):
         assert term in section, f"guide is missing validator or delay term: {term}"
+
+    status_values = tuple(
+        status.value for status in UndernutritionAncillaryValidationStatus
+    )
+    assert _render_backtick_list(status_values) in section
+
+    precedence = (
+        UndernutritionAncillaryValidationStatus.FAIL,
+        UndernutritionAncillaryValidationStatus.UNEVALUABLE,
+        UndernutritionAncillaryValidationStatus.PASS,
+    )
+    assert " > ".join(f"`{status.value}`" for status in precedence) in section
+    assert _render_backtick_list(UNDERNUTRITION_ANCILLARY_CHECK_NAMES) in section
+
+    grouped_codes = set()
+    for status in UndernutritionAncillaryValidationStatus:
+        reason_codes = tuple(
+            sorted(UNDERNUTRITION_ANCILLARY_REASON_CODES_BY_STATUS[status])
+        )
+        grouped_codes.update(reason_codes)
+        assert (
+            f"- `{status.value}`: "
+            f"{', '.join(f'`{code}`' for code in reason_codes)}"
+            in section
+        )
+
+    assert grouped_codes == set(UNDERNUTRITION_ANCILLARY_REASON_CODES)
+    for reason_code in UNDERNUTRITION_ANCILLARY_REASON_CODES:
+        assert f"`{reason_code}`" in section
 
 
 def test_guide_documents_descendants_treatment_gating_and_empty_non_targets() -> None:
