@@ -23,6 +23,18 @@ def test_synthetic_guide_documents_all_disorder_coverage_route() -> None:
     assert "snapshot-shaped demographics" in guide
     assert "fictional coverage" in guide
     assert "prevalence estimate" in guide
+    for table_token in (
+        "Reference sex",
+        "Healthy",
+        "Each compatible nonhealthy module",
+        "Turner syndrome",
+        "1/2",
+        "1/18",
+        "1/16",
+    ):
+        assert table_token in guide
+    assert "Only matching reviewed projections create ancillary rows" in guide
+    assert "GHD alone receives" in guide
     assert "Turner" in guide
     assert "F-reference-only" in guide
     assert "E23.0" in guide
