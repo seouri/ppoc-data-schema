@@ -120,6 +120,7 @@ def test_metadata_has_exact_immutable_public_fields() -> None:
         "software_revision",
         "configuration_sha256",
         "reference_sha256",
+        "engine",
     )
     with pytest.raises(dataclasses.FrozenInstanceError):
         _metadata().profile = "changed"  # type: ignore[misc]

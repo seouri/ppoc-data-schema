@@ -121,6 +121,7 @@ class PackageExportMetadata:
     software_revision: str
     configuration_sha256: str
     reference_sha256: str | None = None
+    engine: str = "native"
 
     def __post_init__(self) -> None:
         for name in ("profile", "reference_time", "reference_id", "software_revision"):
@@ -129,6 +130,8 @@ class PackageExportMetadata:
                 raise ValueError(f"{name} must be a nonempty single-line string")
         if isinstance(self.seed, bool) or not isinstance(self.seed, int):
             raise TypeError("seed must be an integer")
+        if type(self.engine) is not str or self.engine not in {"native", "synthea"}:
+            raise ValueError("engine must be native or synthea")
         _require_digest("configuration_sha256", self.configuration_sha256, allow_placeholder=False)
         if self.reference_sha256 is not None:
             _require_digest("reference_sha256", self.reference_sha256, allow_placeholder=True)
@@ -1349,6 +1352,7 @@ def export_exact_schema_package(
             test_only_derivation=derivation_binding.test_only,
             row_counts=row_counts,
             file_sha256=file_sha256,
+            engine=metadata.engine,
         )
         (run.partial_path / "manifest.json").write_bytes(manifest.to_json_bytes())
         _scan_tree(run.partial_path, package_files, csv_dirs)

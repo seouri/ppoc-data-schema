@@ -1,8 +1,8 @@
 # Optional Synthea engine-conformance declaration
 
-**Status:** Optional, future, development-only handoff contract. The native growth-first generator remains the release-one route.
+**Status:** The declaration remains optional and development-only. An external-checkout Synthea development adapter is now implemented separately; the native growth-first generator remains the release-one route, and this declaration is still not a conformance result.
 
-This guide documents aggregate review metadata for a possible external Synthea engine handoff. It implements no engine adapter or conformance runner. The declaration is fixed at `SYNTHEA_CONFORMANCE_VERSION = "synthea-conformance-v1"`, and every `SyntheaEngineManifest` uses `engine_id="synthea"`. A valid manifest is only a declaration of reviewed identities; it is never a conformance result.
+This guide documents aggregate review metadata for a possible external Synthea engine handoff. The executable development bridge is documented in [the Synthea backend guide](synthea-backend.md); this declaration remains independent of that bridge and implements no conformance runner. The declaration is fixed at `SYNTHEA_CONFORMANCE_VERSION = "synthea-conformance-v1"`, and every `SyntheaEngineManifest` uses `engine_id="synthea"`. A valid manifest is only a declaration of reviewed identities; it is never a conformance result.
 
 ## Aggregate manifest identities
 
@@ -67,10 +67,42 @@ A future runner must be supplied and reviewed outside this repository. Before an
 
 The engine-neutral growth and derivation boundaries remain authoritative. See the [parent synthetic growth-fixture design](superpowers/specs/2026-08-30-synthetic-growth-fixtures-design.md), the [synthetic generator and derivation-binding guide](synthetic-generator.md), and the [source-matched augmenter guide](augment-import.md). The approved declaration details are in the [optional Synthea manifest design](superpowers/specs/2026-09-01-synthea-conformance-contract-design.md).
 
+## Implemented external development adapter
+
+The repository now includes an opt-in adapter at `scripts/synthea_backend.py` and a versioned local overlay at `scripts/synthea/overlay/`. It accepts only a caller-supplied checkout at revision `d9d07a6eef91ee5144293b42ab64224d84d124f8`, verifies Java 17 and the checked-in Gradle 9.2.1 wrapper, copies the checkout into a private temporary root, runs a fixed pediatric FHIR export, projects healthy and fictional GHD growth trajectories into the exact PPOC schema, and delegates augmentation to the existing test-only binding. It never vendors or modifies Synthea, accepts real inputs, or exposes names, UUIDs, raw FHIR, hidden truth, or subprocess output.
+
+Use the [Synthea backend guide](synthea-backend.md) for prerequisites and the one explicit command. A successful package manifest identifies `engine="synthea"` and `test_only_derivation=true`; the backend's in-memory report is aggregate-only. The implementation is development and engine-comparison infrastructure, not evidence that the Synthea declaration is conformant, that the fixed GHD prior matches real prevalence, or that generated profiles are non-matchable.
+
+## Local Java/Gradle compatibility preflight
+
+This repository does not vendor Synthea or execute it during ordinary generation. On 2026-09-03, a temporary checkout of the pinned Synthea revision `d9d07a6eef91ee5144293b42ab64224d84d124f8` was used for the external adapter and environment preflight. That revision declares Java source compatibility `17` and its checked-in Gradle wrapper is `9.2.1`.
+
+The conservative local runtime is Homebrew `openjdk@17` `17.0.20.1`, selected explicitly without changing the system-default OpenJDK 26. Homebrew Gradle `9.7.1` is also installed, but it does not replace the Synthea wrapper: `./gradlew` continues to use the checked-in Gradle `9.2.1` distribution.
+
+| Environment and command | Result | Meaning |
+| --- | --- | --- |
+| OpenJDK 26 + Synthea `./gradlew test` | Fails before compilation with `Unsupported class file major version 70` | The pinned Gradle wrapper is not compatible with Java 26. |
+| OpenJDK 26 + Homebrew Gradle 9.7.1 | Main and test sources compile; the full test executor exits `134` | A newer Gradle removes the wrapper failure but does not resolve the separate test-process abort. |
+| OpenJDK 17 + Synthea `./gradlew test` | Main and test sources compile; the full test executor still exits `134` | The exit `134` is independent of the Java 17 versus Java 26 choice and remains an open test-environment issue. |
+| OpenJDK 17 + `./gradlew test --tests org.mitre.synthea.engine.GeneratorTest` | Passes | A focused Synthea test runs on the stable path. |
+| OpenJDK 17 + `./run_synthea -p 1` | Passes and writes FHIR JSON | Basic patient generation works on the stable path. |
+
+For the pinned Synthea workflow, select Java 17 explicitly and use a writable Gradle cache:
+
+```sh
+export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
+export PATH="$JAVA_HOME/bin:$PATH"
+export GRADLE_USER_HOME=/tmp/synthea-gradle-home
+./gradlew test
+./run_synthea -p 1
+```
+
+The cache path is an environment workaround, not a Synthea requirement; the preflight used it because this machine's default Gradle cache had a native-library/lock-file problem. Java 17 is the recommended reproducible choice for the pinned wrapper. Java 26 should not be treated as supported until the wrapper is upgraded to a Java-26-compatible Gradle version and the full test-process abort is resolved. These checks are an engineering preflight only, not Synthea conformance evidence.
+
 ## Current non-runtime boundary
 
-This repository currently supplies none of the Synthea runtime, pinned module bundle, pediatric extension, event adapter, exact engine exporter, external license artifact, or conformance runner described above. There is no Synthea implementation, no Java runtime, no conformance result, no patient data, no network access, and no release authorization in this repository. A valid declaration cannot authorize execution and cannot imply Synthea conformance.
+This repository supplies the Python external adapter and the versioned fictional module overlay, but it does not supply the Synthea runtime, Java runtime, Gradle distribution, generated FHIR, external license artifact, or conformance runner described above. There is no Synthea implementation vendored in the repository, no Java runtime vendored in the repository, no conformance result, no patient data, no network access, and no release authorization in this repository. The adapter requires the caller to provide and verify the pinned checkout and Java 17 environment; a local workstation may have Java installed for that external run, but it does not change this repository boundary. A valid declaration cannot authorize execution and cannot imply Synthea conformance.
 
-The manifest contract is not imported automatically by generation, export, or evaluator code. It does not read a checkout, run Java, download anything, generate patients, translate engine output, write PPOC packages, allocate prevalence, replace pediatric growth physiology, bind an authoritative derivation oracle, or change the production command. The production CLI remains fail closed with `No production growth reference or authoritative derivation oracle is configured`.
+The declaration manifest contract is not imported automatically by generation, export, or evaluator code. The separate adapter reads only its caller-supplied pinned checkout, runs Java through the checked-in wrapper, translates the resulting fictional FHIR into exact-schema rows, and uses the existing test-only derivation binding; it does not download anything by default, accept real data, allocate validated prevalence, replace native growth physiology, bind an authoritative derivation oracle, or change the production command. The production CLI remains fail closed with `No production growth reference or authoritative derivation oracle is configured`.
 
 Even an externally reviewed declaration does not prove clinical validity, pediatric growth or demographic fidelity, prevalence, task utility, reproducibility, privacy or non-matchability, release readiness, or Synthea conformance. Each remains a separate governed evidence decision.

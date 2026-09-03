@@ -83,7 +83,10 @@ class RunManifest:
         row_counts: dict[str, int],
         file_sha256: dict[str, str],
         reference_sha256: str | None = None,
+        engine: str = "native",
     ) -> RunManifest:
+        if type(engine) is not str or engine not in {"native", "synthea"}:
+            raise ValueError("engine must be native or synthea")
         if reference_sha256 is not None and re.fullmatch(
             r"[0-9a-f]{64}", reference_sha256
         ) is None:
@@ -94,7 +97,7 @@ class RunManifest:
             manifest_version="1",
             generator_version="0.1.0",
             profile=profile,
-            engine="native",
+            engine=engine,
             seed=seed,
             schema_fingerprint=schema_fingerprint,
             reference_time=reference_time,

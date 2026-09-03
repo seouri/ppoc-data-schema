@@ -1,0 +1,93 @@
+{
+  "name": "PPOC Growth Hormone Deficiency",
+  "remarks": [
+    "Completely fictional development-only module for the optional PPOC Synthea bridge."
+  ],
+  "states": {
+    "Initial": {
+      "type": "Initial",
+      "direct_transition": "GHD probability"
+    },
+    "GHD probability": {
+      "type": "Simple",
+      "distributed_transition": [
+        {
+          "distribution": 0.143291,
+          "transition": "GHD delay"
+        },
+        {
+          "distribution": 0.856709,
+          "transition": "Terminal"
+        }
+      ]
+    },
+    "GHD delay": {
+      "type": "Delay",
+      "exact": {
+        "quantity": 365,
+        "unit": "days"
+      },
+      "direct_transition": "GHD condition"
+    },
+    "GHD condition": {
+      "type": "ConditionOnset",
+      "assign_to_attribute": "ppoc_ghd",
+      "target_encounter": "GHD evaluation",
+      "codes": [
+        {
+          "system": "ICD10CM",
+          "code": "E23.0",
+          "display": "Fictional growth hormone deficiency"
+        }
+      ],
+      "direct_transition": "GHD evaluation"
+    },
+    "GHD evaluation": {
+      "type": "Encounter",
+      "encounter_class": "ambulatory",
+      "reason": "ppoc_ghd",
+      "direct_transition": "IGF-1"
+    },
+    "IGF-1": {
+      "type": "Observation",
+      "category": "laboratory",
+      "unit": "ng/mL",
+      "codes": [
+        {
+          "system": "LOINC",
+          "code": "78802-8",
+          "display": "Insulin-like growth factor-I"
+        }
+      ],
+      "range": {
+        "low": 45,
+        "high": 210
+      },
+      "direct_transition": "IGFBP-3"
+    },
+    "IGFBP-3": {
+      "type": "Observation",
+      "category": "laboratory",
+      "unit": "mcg/mL",
+      "codes": [
+        {
+          "system": "LOINC",
+          "code": "35269-6",
+          "display": "Insulin-like growth factor binding protein 3"
+        }
+      ],
+      "range": {
+        "low": 1.5,
+        "high": 6.5
+      },
+      "direct_transition": "End encounter"
+    },
+    "End encounter": {
+      "type": "EncounterEnd",
+      "direct_transition": "Terminal"
+    },
+    "Terminal": {
+      "type": "Terminal"
+    }
+  }
+}
