@@ -110,6 +110,7 @@ def test_guide_defers_runtime_evidence_and_release_boundaries() -> None:
         "clinical review",
         "release authorization",
         "real or held-out data",
+        "gestational-age resource expansion",
         "synthea conformance",
     ):
         assert deferred_topic in section

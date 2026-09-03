@@ -660,7 +660,7 @@ The fixed fictional constants are `SGA_DIAGNOSIS_CODE="SYN-SGA"`, `SGA_GESTATION
 
 Birth-state at age zero and catch-up versus persistent branch state remains hidden evaluator state and never changes the fictional labels or rows. These labels are fictional/nonclinical and make no ICD, LOINC, or RxNorm claim. Healthy and all other disorder kinds return empty tuples, and this pathway does not write or derive `obesity_flag`.
 
-This SGA slice has no runtime/package integration and is not prevalence/demographic calibration, privacy/non-matchability evidence, clinical review or guidance, release authorization, real or held-out data work, or Synthea conformance. Runtime/package integration, prevalence/demographic calibration, privacy/non-matchability, clinical review, release authorization, real or held-out data, and optional Synthea conformance remain deferred and are not ordinary-development prerequisites.
+This SGA slice has no runtime/package integration and is not prevalence/demographic calibration, privacy/non-matchability evidence, clinical review or guidance, release authorization, real or held-out data work, or Synthea conformance. Runtime/package integration, prevalence/demographic calibration, privacy/non-matchability, clinical review, release authorization, real or held-out data, gestational-age resource expansion, and optional Synthea conformance remain deferred and are not ordinary-development prerequisites.
 
 ## In-memory paired counterfactual EHR worlds
 
