@@ -230,5 +230,5 @@ contracts, pytest, Ruff, schema checker.
   every Critical/Important/Minor finding and run scoped rereviews.
 - [x] Inspect staged names/stat/diff, excluding untracked `__pycache__`
   directories; commit final checklist metadata only after verification.
-- [ ] Push `main`, fetch, and verify `HEAD` equals `origin/main`.
-- [ ] Mark this plan complete only after publication parity exists.
+- [x] Push `main`, fetch, and verify `HEAD` equals `origin/main`.
+- [x] Mark this plan complete only after publication parity exists.
