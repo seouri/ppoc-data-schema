@@ -63,6 +63,12 @@ snapshot-shaped aggregate growth-diagnosis scenario.
 
 The all-disorder profile uses the existing full age schedule, exact observation
 policy, zero measurement error, and recognition/diagnosis recording at `1.0`.
+Its age-regime configuration uses the existing `AgeRegimeConfig` plus an
+optional `puberty_sampling_max_age_days` bound: the default `None` preserves
+legacy sampling, while this profile samples the base onset through day `5114`
+and validates the constitutional-delay-adjusted onset through day `5834`.
+This keeps positive constitutional-delay trajectories valid without truncating
+their delay or changing the existing replay rejection contract.
 Turner is reference-sex constrained: module selection applies the conditional
 weight row for the sampled reference sex before the deterministic module draw.
 Thus a male-reference member cannot be assigned Turner, while F/M demographic
