@@ -693,7 +693,7 @@ def test_malformed_typed_treatment_leaves_count_unknown_before_source_result() -
         member, projection, _ancillary_policy()
     )
     assert _check(report, "pathway_scope").status is (
-        UndernutritionAncillaryValidationStatus.PASS
+        UndernutritionAncillaryValidationStatus.UNEVALUABLE
     )
     assert report.status in {
         UndernutritionAncillaryValidationStatus.FAIL,
@@ -724,7 +724,7 @@ def test_private_treatment_scalar_subclasses_are_source_unavailable(
         member, projection, _ancillary_policy()
     )
     assert _check(report, "pathway_scope").status is (
-        UndernutritionAncillaryValidationStatus.PASS
+        UndernutritionAncillaryValidationStatus.UNEVALUABLE
     )
     assert _check(report, "row_schema").status is (
         UndernutritionAncillaryValidationStatus.PASS
@@ -735,6 +735,60 @@ def test_private_treatment_scalar_subclasses_are_source_unavailable(
         "SOURCE_EVIDENCE_UNAVAILABLE",
     )
     assert report.status is UndernutritionAncillaryValidationStatus.UNEVALUABLE
+
+
+@pytest.mark.parametrize("private_accessor", ["disorder", "physiology"])
+@pytest.mark.parametrize("visible_failure", [False, True])
+def test_private_runtime_errors_are_isolated_from_visible_row_validation(
+    private_accessor: str,
+    visible_failure: bool,
+) -> None:
+    class RuntimeDisorder:
+        @property
+        def kind(self) -> object:
+            raise RuntimeError("private disorder payload")
+
+    class RuntimePhysiology:
+        @property
+        def points(self) -> object:
+            raise RuntimeError("private physiology payload")
+
+    member, projection = _target()
+    trajectory = dataclasses.replace(member.trajectory)
+    if private_accessor == "disorder":
+        object.__setattr__(trajectory, "disorder", RuntimeDisorder())
+    else:
+        object.__setattr__(trajectory, "physiology", RuntimePhysiology())
+    object.__setattr__(member, "trajectory", trajectory)
+    if visible_failure:
+        _change_field(projection, "labs", 0, "result_flag", "Wrong marker")
+
+    report = validate_undernutrition_ancillary_resources(
+        member, projection, _ancillary_policy()
+    )
+    assert _check(report, "pathway_scope") == UndernutritionAncillaryCheck(
+        "pathway_scope",
+        UndernutritionAncillaryValidationStatus.UNEVALUABLE,
+        "MALFORMED_MEMBER",
+    )
+    assert _check(report, "row_schema").status is (
+        UndernutritionAncillaryValidationStatus.FAIL
+        if visible_failure
+        else UndernutritionAncillaryValidationStatus.PASS
+    )
+    assert _check(report, "source_evidence") == UndernutritionAncillaryCheck(
+        "source_evidence",
+        UndernutritionAncillaryValidationStatus.UNEVALUABLE,
+        "SOURCE_EVIDENCE_UNAVAILABLE",
+    )
+    assert report.status is (
+        UndernutritionAncillaryValidationStatus.FAIL
+        if visible_failure
+        else UndernutritionAncillaryValidationStatus.UNEVALUABLE
+    )
+    rendered = repr(report) + json.dumps(report.to_mapping(), sort_keys=True)
+    assert "private disorder payload" not in rendered
+    assert "private physiology payload" not in rendered
 
 
 @pytest.mark.parametrize(

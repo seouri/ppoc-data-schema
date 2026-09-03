@@ -840,7 +840,7 @@ def _typed_treatment_start_age(
         if len(treatment_ages) > 1:
             return False, None
         return True, treatment_ages[0] if treatment_ages else None
-    except (AttributeError, TypeError, ValueError):
+    except Exception:  # noqa: BLE001 - private trajectory state is redacted
         return False, None
 
 
@@ -941,7 +941,7 @@ def validate_undernutrition_ancillary_resources(
                 disorder_kind = trajectory.disorder.kind
                 if type(disorder_kind) is not DisorderKind:
                     raise TypeError("malformed disorder kind")
-            except (AttributeError, TypeError, ValueError):
+            except Exception:  # noqa: BLE001 - private disorder state is redacted
                 private_member_malformed = True
                 mark(
                     "pathway_scope",
@@ -956,6 +956,11 @@ def validate_undernutrition_ancillary_resources(
                     )
                     if not typed_treatment_known:
                         private_member_malformed = True
+                        mark(
+                            "pathway_scope",
+                            UndernutritionAncillaryValidationStatus.UNEVALUABLE,
+                            "MALFORMED_MEMBER",
+                        )
 
         rows = projection.rows
         if not isinstance(rows, Mapping) or tuple(rows) != (
