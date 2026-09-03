@@ -602,7 +602,7 @@ def constraint_order(pair: tuple[str, Any]) -> tuple[int, str]:
     return (order.index(key) if key in order else len(order), key)
 
 
-VISITS_AUGMENTED_PATH = "visits_augmented-20251209150512.csv"
+VISITS_AUGMENTED_PATH = "visits_augmented.csv"
 
 AUGMENT_COMMAND = "python scripts/augment.py input_dir [--output_dir output] [--output_format {csv,parquet}]"
 VISITS_AUGMENTED_GENERATOR = {

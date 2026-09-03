@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import copy
 import csv
+import io
 import json
+import re
 from collections import Counter
 from collections.abc import Iterable, Mapping
+from numbers import Real
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +22,100 @@ FIELD_SEMANTIC_KEYS = {
     "x-codeSystem", "x-bivRule", "x-conversionFactor", "x-decimalPlaces",
     "x-minAgeMonths", "x-referenceStandard",
 }
+
+# Keep the generated fixture's recorded anthropometry readable and aligned
+# with the precision used by clinical measurement entry.  Formatting happens
+# only at CSV serialization: the in-memory values remain full precision through
+# preflight validation, while packaged derivation consumes the bounded CSV values.
+_SYNTHETIC_VISIT_VALUE_DECIMALS = {
+    "weight_oz": 2,
+    "height_in": 2,
+    "head_circ_cm": 1,
+    "BMI": 2,
+    "bmi": 2,
+}
+_SYNTHETIC_ENCOUNTER_DIAGNOSIS_CODES = {
+    "SYN-GROWTH-RECOGNITION": "R62.52",
+    "SYN-GROWTH-WORKUP": "R62.50",
+    "SYN-GROWTH-DIAGNOSIS": "R62.59",
+}
+_ICD10_CODE_RE = re.compile(r"\A[A-Z][0-9][0-9A-Z](?:\.[0-9A-Z]{1,4})?\Z")
+
+
+def _serialized_value(resource_name: str, field_name: str, value: object) -> object:
+    if (
+        resource_name in {"visits", "visits_augmented"}
+        and field_name.startswith("enc_diag_")
+        and isinstance(value, str)
+    ):
+        value = _SYNTHETIC_ENCOUNTER_DIAGNOSIS_CODES.get(value, value)
+    if resource_name in {"visits", "visits_augmented"} and field_name.startswith("enc_diag_"):
+        if value == "":
+            return value
+        if not isinstance(value, str) or _ICD10_CODE_RE.fullmatch(value) is None:
+            raise ValueError(f"{field_name} must contain an ICD-10 code")
+    decimals = (
+        _SYNTHETIC_VISIT_VALUE_DECIMALS.get(field_name)
+        if resource_name in {"visits", "visits_augmented"}
+        else None
+    )
+    if decimals is None or isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        if value == "":
+            return value
+        try:
+            value = float(value)
+        except ValueError:
+            return value
+    if not isinstance(value, Real):
+        return value
+    return f"{value:.{decimals}f}"
+
+
+def format_resource_csv_bytes(resource: dict[str, Any], payload: bytes) -> bytes:
+    """Apply synthetic visit precision to an already serialized CSV resource."""
+    if resource["name"] not in {"visits", "visits_augmented"}:
+        return payload
+    fields = [field["name"] for field in resource["schema"]["fields"]]
+    if not any(
+        field in _SYNTHETIC_VISIT_VALUE_DECIMALS or field.startswith("enc_diag_")
+        for field in fields
+    ):
+        return payload
+    dialect = resource.get("dialect", {})
+    encoding = resource.get("encoding", "utf-8")
+    reader = csv.DictReader(
+        io.StringIO(payload.decode(encoding), newline=""),
+        fieldnames=None,
+        delimiter=dialect.get("delimiter", ","),
+        quotechar=dialect.get("quoteChar", '"'),
+        doublequote=dialect.get("doubleQuote", True),
+        strict=True,
+    )
+    if reader.fieldnames != fields:
+        raise ValueError(f"row header does not match {resource['name']} field order")
+    output = io.StringIO(newline="")
+    writer = csv.DictWriter(
+        output,
+        fieldnames=fields,
+        delimiter=dialect.get("delimiter", ","),
+        quotechar=dialect.get("quoteChar", '"'),
+        doublequote=dialect.get("doubleQuote", True),
+        extrasaction="raise",
+        lineterminator="\n",
+    )
+    writer.writeheader()
+    for row in reader:
+        if tuple(row) != tuple(fields):
+            raise ValueError(f"row keys do not match {resource['name']} field order")
+        writer.writerow(
+            {
+                field_name: _serialized_value(resource["name"], field_name, row[field_name])
+                for field_name in fields
+            }
+        )
+    return output.getvalue().encode(encoding)
 
 
 def write_resource(
@@ -48,7 +145,12 @@ def write_resource(
         for row in rows:
             if tuple(row) != tuple(fields):
                 raise ValueError(f"row keys do not match {resource['name']} field order")
-            writer.writerow(row)
+            writer.writerow(
+                {
+                    field_name: _serialized_value(resource["name"], field_name, row[field_name])
+                    for field_name in fields
+                }
+            )
             count += 1
     return count
 

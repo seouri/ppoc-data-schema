@@ -7,9 +7,9 @@
 - **Columns**: 87 (11 original demographic fields plus 76 derived fields)
 - **Key Uses**: Cohort selection, patient stratification, feature engineering for patient-level predictive modeling.
 - **Tools**: Optimized for R (`dplyr`) or Python (`pandas`).
-- **Augmentation**: Generated from `scripts/augment.py` using `visits_augmented-20251209150512.csv` and `problem_list.csv`.
+- **Augmentation**: Generated from `scripts/augment.py` using `visits_augmented.csv` and `problem_list.csv`; direct augmenter output is timestamped before package export.
 
-**Dataset Overview**: The `patients_augmented.csv` file contains enhanced demographic data for 250,588 unique pediatric patients. It is created by augmenting the original `patients.csv` with longitudinal summaries derived from `visits_augmented-20251209150512.csv` and diagnosis information from `problem_list.csv`. Each row represents a single patient and includes all original demographic data plus new columns summarizing their clinical interactions, such as the total number of visits, the time span of their care, and summary statistics for various growth metrics. This dataset is ideal for patient-level analysis, cohort building, and creating features for predictive models.
+**Dataset Overview**: The `patients_augmented.csv` file contains enhanced demographic data for 250,588 unique pediatric patients. It is created by augmenting the original `patients.csv` with longitudinal summaries derived from `visits_augmented.csv` and diagnosis information from `problem_list.csv`. Each row represents a single patient and includes all original demographic data plus new columns summarizing their clinical interactions, such as the total number of visits, the time span of their care, and summary statistics for various growth metrics. This dataset is ideal for patient-level analysis, cohort building, and creating features for predictive models.
 
 **File Structure**:
 - **Format**: CSV (Comma-Separated Values)
@@ -119,7 +119,7 @@ These statistics are calculated for:
 - `race_1` to `race_8` (cleaned)
 
 **Key Notes**:
-- **Patient-Level Summary**: This dataset provides a high-level summary of each patient's clinical history, complementing the granular data in `visits_augmented-20251209150512.csv`.
+- **Patient-Level Summary**: This dataset provides a high-level summary of each patient's clinical history, complementing the granular data in `visits_augmented.csv`.
 - **Data Cleaning**: The `ethnicity` and `race_*` columns are cleaned as part of the augmentation process, converting values like `Unknown` or `Choose not to Answer` (ethnicity) and `Choose not to answer` (race) to `NA`.
 - **Handling of No-Visit Patients**: Patients present in `patients.csv` but not in `visits.csv` will have a `visits_count` of 0 and `NaN` for all other added columns.
 
@@ -131,7 +131,7 @@ These statistics are calculated for:
 - Use the summary statistics as features in machine learning models to predict patient-level outcomes.
 
 **Important Considerations**:
-- **Linkage**: This dataset can be joined with `visits_augmented-20251209150512.csv` using `patient_id` to combine patient-level summaries with visit-level details.
+- **Linkage**: This dataset can be joined with `visits_augmented.csv` using `patient_id` to combine patient-level summaries with visit-level details.
 - **NaN Values**: The age, span, and Z-score statistic columns will contain `NaN` for patients without any visits or with no relevant measurements. This should be handled appropriately during analysis.
 
 **Example Code**:

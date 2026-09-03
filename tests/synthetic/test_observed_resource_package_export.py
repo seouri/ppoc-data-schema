@@ -140,12 +140,12 @@ def test_export_merges_passing_bundles_deterministically_without_private_evaluat
         "referrals",
     ))
     assert [row["enc_diag_1"] for row in visits if row["age_in_days"] == "1000"] == [
-        "SYN-GROWTH-RECOGNITION",
-        "SYN-GROWTH-RECOGNITION",
+        "R62.52",
+        "R62.52",
     ]
     assert [row["enc_diag_2"] for row in visits if row["age_in_days"] == "1500"] == [
-        "SYN-GROWTH-DIAGNOSIS",
-        "SYN-GROWTH-DIAGNOSIS",
+        "R62.59",
+        "R62.59",
     ]
     assert len(_csv_rows(package, "patients_augmented")) == 2
     assert len(_csv_rows(package, "visits_augmented")) == 10

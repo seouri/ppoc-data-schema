@@ -23,7 +23,7 @@ This dataset contains de-identified electronic health record (EHR) data for 250,
 The datasets are interconnected via unique identifiers for multi-level analysis:
 
 - **Patients** (`patients.csv`, `patients_augmented.csv`): Core demographics (sex, ethnicity, race). Linked to ALL other files via `patient_id`.
-- **Visits** (`visits.csv`, `visits_augmented-20251209150512.csv`): Visit-level records (anthropometrics, diagnoses, encounter types). Linked to patients via `patient_id`; the augmented file also has a complete `visit_id` link to `visits.csv`.
+- **Visits** (`visits.csv`, `visits_augmented.csv`): Visit-level records (anthropometrics, diagnoses, encounter types). Linked to patients via `patient_id`; the augmented file also has a complete `visit_id` link to `visits.csv`.
 - **Labs** (`labs.csv`): Lab orders/results. Linked completely to patients via `patient_id`; `visit_id` is a logical but incomplete link to `visits.csv`.
 - **Medications** (`medications.csv`): Prescriptions/administrations. Linked completely to patients via `patient_id`; `visit_id` is a logical but incomplete link to `visits.csv`.
 - **Problem List** (`problem_list.csv`): Chronic/resolved conditions. Linked ONLY to patients via `patient_id` (not directly to visits; combine with visits for full diagnosis history).
@@ -39,7 +39,7 @@ Patients (patient_id)
 └── Problem List (patient_id)
 ```
 
-**Augmented Files:** `patients_augmented.csv` and `visits_augmented-20251209150512.csv` add computed metrics (e.g., growth velocities, malnutrition flags) derived from base files.
+**Augmented Files:** `patients_augmented.csv` and `visits_augmented.csv` add computed metrics (e.g., growth velocities, malnutrition flags) derived from base files.
 
 ## Dataset Summaries
 
@@ -61,7 +61,7 @@ Patients (patient_id)
 - **Highlights:** Anthropometrics and diagnoses per visit; 72.8% "Office Visit"; up to 33 diagnoses; missing data in measurements.
 - **LLM Uses:** Growth trend analysis; diagnosis prevalence; join with demographics for stratified insights.
 
-### [Visits Augmented (`visits_augmented-20251209150512.csv`)](visits_augmented.md)
+### [Visits Augmented (`visits_augmented.csv`)](visits_augmented.md)
 - **Rows:** 6,494,473 (one per visit)
 - **Key Additions:** Converted units (kg, cm), Z-scores/percentiles (CDC LMS), velocities (kg/year, cm/year), flags (stunting, obesity), BMI categories
 - **Highlights:** Clinically validated growth metrics; BIV filtering; outlier detection; malnutrition flags.
@@ -96,11 +96,11 @@ Patients (patient_id)
 For schema-driven Python loading, see [`schema/README.md`](../schema/README.md) for examples that read `datapackage.json`, resolve resource paths, apply declared encodings and nullable types, and inspect keys.
 
 When using this dataset in prompts:
-- **Specify Files:** "Analyze visits_augmented-20251209150512.csv for growth velocities by sex from patients.csv."
+- **Specify Files:** "Analyze visits_augmented.csv for growth velocities by sex from patients.csv."
 - **Linkages:** "Join problem_list.csv with visits.csv via patient_id to get full diagnosis history."
 - **Calculations:** "Convert age_in_days to years: age_years = age_in_days / 365.25."
 - **Missing Data:** "Handle NaNs in anthropometrics; use flags for malnutrition detection."
-- **Augmented Insights:** "Use Z-scores from visits_augmented-20251209150512.csv for standardized growth comparisons."
+- **Augmented Insights:** "Use Z-scores from visits_augmented.csv for standardized growth comparisons."
 
 ## Important Considerations
 - **Data Quality:** Outliers in measurements; non-response in demographics; BIV-filtered values in augmented files.

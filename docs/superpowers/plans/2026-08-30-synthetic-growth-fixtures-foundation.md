@@ -180,7 +180,7 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_checked_in_schema_fingerprint_is_stable() -> None:
     descriptor = load_descriptor(ROOT / "datapackage.json")
     assert schema_fingerprint(descriptor) == (
-        "795724ec4838df8afa9c09b7c059fa76f644d7f8fb6dcc8ce808da203c2f8597"
+        "e1f10c8bc8f29e8b749355f9a82511d4077d3b43f9fa4d31634cbf01febbe8ec"
     )
 
 
@@ -190,7 +190,7 @@ def test_contract_has_exact_resource_paths_and_field_counts() -> None:
         "patients": ("patients.csv", 11),
         "patients_augmented": ("patients_augmented.csv", 87),
         "visits": ("visits.csv", 43),
-        "visits_augmented": ("visits_augmented-20251209150512.csv", 82),
+        "visits_augmented": ("visits_augmented.csv", 82),
         "labs": ("labs.csv", 12),
         "medications": ("medications.csv", 8),
         "problem_list": ("problem_list.csv", 5),
@@ -981,7 +981,7 @@ git commit -m "feat: write descriptor-shaped base resources"
 
 **Interfaces:**
 - Consumes: `DerivationOracle.derive(package_root, descriptor) -> DerivationResult`.
-- Produces: verified presence of `patients_augmented.csv` and `visits_augmented-20251209150512.csv`, plus a pinned oracle identity.
+- Produces: verified presence of `patients_augmented.csv` and `visits_augmented.csv`, plus a pinned oracle identity.
 
 - [x] **Step 1: Write failing derivation-boundary tests**
 

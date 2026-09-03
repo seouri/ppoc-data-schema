@@ -129,7 +129,7 @@ OUTPUT_FILES = (
     "patients.csv",
     "patients_augmented.csv",
     "visits.csv",
-    "visits_augmented-20251209150512.csv",
+    "visits_augmented.csv",
     "labs.csv",
     "medications.csv",
     "problem_list.csv",

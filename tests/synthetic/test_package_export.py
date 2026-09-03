@@ -147,7 +147,7 @@ def test_metadata_rejects_invalid_tokens_and_digests(
 
 
 def test_checked_in_fingerprint_is_exported_contract() -> None:
-    assert EXPECTED_SCHEMA_FINGERPRINT == "795724ec4838df8afa9c09b7c059fa76f644d7f8fb6dcc8ce808da203c2f8597"
+    assert EXPECTED_SCHEMA_FINGERPRINT == "e1f10c8bc8f29e8b749355f9a82511d4077d3b43f9fa4d31634cbf01febbe8ec"
     assert schema_fingerprint(_descriptor()) == EXPECTED_SCHEMA_FINGERPRINT
 
 

@@ -29,6 +29,8 @@ uv run python -m synthetic.generate --profile development-all-disorders --output
 
 `development-smoke` preserves the visible three-visit healthy smoke contract at ages 730, 1095, and 1460 days. `development-cohort` emits a fixed, full-age, healthy-plus-growth-hormone-deficiency (GHD) development profile. Its age schedule is `(0, 365, 730, 1460, 2190, 3650, 4380, 5114, 5475, 6200, 7305)` days; its module prior is healthy/GHD `0.50/0.50`; weight is observed at every scheduled visit; length is disabled; and height and head circumference have `1.0` availability whenever their age-regime channel is structurally applicable, with zero measurement error, no rounding, recognition, or diagnosis. BMI at exactly 730 days uses the CDC 24-month boundary row; day 729 remains outside the BMI source domain.
 
+Exact-schema synthetic packages serialize recorded weight and height in ounces/inches and BMI (base `BMI`, augmented `bmi`) to two decimal places; head circumference is serialized in centimeters to one decimal place. This is a serialization boundary: in-memory trajectories and preflight validation retain full generated precision, while packaged derivation consumes the bounded CSV values and carries those same bounded raw fields into `visits_augmented.csv`.
+
 The cohort's F/M/U weights are `0.50/0.50/0.00`. The zero U sampling weight is deliberate because the CDC tables contain only M/F rows, while the F/M/U recorded-to-reference mapping remains structurally complete for the native contract. Its versioned demographic weights are fixed development configuration, not a calibration result or a real-population claim. Visible packages contain exactly eight descriptor-named CSV resources: the six base resources plus `patients_augmented` and `visits_augmented`. The `development-cohort` ancillary base resources remain descriptor-shaped and empty; the target-shaped profile's explicit GHD ancillary rows are described next. Latent disorder identity, severity, trajectory state, observation truth, source paths, and patient-level diagnostics are never exported.
 
 `development-realistic` is an opt-in target-shaped variant that preserves the same full age schedule, exact schema, and CDC-backed trajectories while using the checked-in `schema/stats.json` snapshot `2026-08-24` for its fictional inputs. Its healthy/GHD module prior is `214681/250588` (`85.6709%`) and `35907/250588` (`14.3291%`), and recognition/diagnosis recording is enabled so GHD members carry the existing fictional visible event descendants. At each sampled GHD diagnosis visit, the exporter adds the fixed synthetic `E23.0` token recognized by the pinned augmenter; this makes the visible `growth_dx_flag` follow the sampled synthetic disorder mix without accepting arbitrary diagnosis input. The same explicit route projects and validates typed fictional GHD ancillary rows: each recognized member receives one referral, each workup receives two labs, each observed diagnosis receives one problem-list row, and a medication appears only when the latent treatment start is not earlier than the observed diagnosis. The in-memory lab marker `Synthetic` is serialized as the exact descriptor missing-value sentinel (`result_flag=""`) because the unchanged real-data enum has no fictional marker. Its demographic weights use the checked-in snapshot counts, folding source-missing ethnicity/race cells into the visible `Unknown` category and retaining a source-shaped race-multiselect probability of `13191/250588`. The U sex cell remains zero because the pinned CDC reference has no U series. These values are a frozen development scenario prior, not a clinical prevalence estimate or diagnosis claim.
@@ -151,7 +153,7 @@ def build_development_cohort(
     )
 ```
 
-The blank/nonresponse ethnicity or race category remains a distinct aggregate cell and maps explicitly to visible `Unknown`. Race slot one follows the released primary-race weights; when the released multiselect probability draws true, race slot two is drawn from the same weights and slots three through eight remain `Unknown`. This is a documented approximation, not reconstruction of higher-order race combinations; recorded flags do not allocate latent disease. `healthy_flag` and `growth_dx_flag` remain evidence for later prevalence validation, while only the explicit module prior controls latent module sampling.
+The blank/nonresponse ethnicity or race category remains a distinct aggregate cell and maps explicitly to visible `Unknown`. Race slot one follows the released primary-race weights; when the released multiselect probability draws true, race slot two is drawn from the same weights, otherwise it is the empty-string missing sentinel. Slots three through eight are also empty-string missing sentinels because no higher-order aggregate target is modeled. This preserves the source-shaped pattern in which `race_2` is mostly blank and higher-numbered slots are almost always blank; it is a documented approximation, not reconstruction of higher-order race combinations. Recorded flags do not allocate latent disease. `healthy_flag` and `growth_dx_flag` remain evidence for later prevalence validation, while only the explicit module prior controls latent module sampling.
 
 `NativeCohort.to_mapping()` and `CohortMember.to_mapping()` expose only visible summaries, demographics, frames, and optional bundles. Each returned `member.trajectory` and `member.frame.truth` is evaluator-only and must stay outside ordinary mappings, logs, manifests, and visible packages. When a descriptor was supplied, a caller may separately collect the passing non-null bundles and pass them to `export_observed_resource_package` with the same already-loaded descriptor mapping, explicit export metadata, and an injected derivation oracle. `generate_native_cohort` never calls that package bridge or writes a file.
 
@@ -948,7 +950,7 @@ The promoted package contains exactly these eleven output files:
 patients.csv
 patients_augmented.csv
 visits.csv
-visits_augmented-20251209150512.csv
+visits_augmented.csv
 labs.csv
 medications.csv
 problem_list.csv
@@ -970,6 +972,14 @@ in-memory seams; they do not themselves write files or expose hidden truth. The
 exact descriptor fields, order, dialects, encodings, constraints, keys, logical
 links, generated-only descriptor, structural validation report, manifest hashes,
 and atomic lifecycle are shared with the smoke export contract below.
+
+The evaluator-only observed bundle keeps fixed `SYN-GROWTH-*` event tokens for
+internal event-link validation. Exact-schema CSV serialization translates those
+tokens to valid ICD-10-CM encounter diagnoses: recognition `R62.52`, workup
+`R62.50`, and diagnosis `R62.59`. Consequently, every populated `enc_diag_*`
+field in a generated package is an ICD-10 code; malformed or non-ICD values
+fail the package serialization rather than being emitted, and evaluator
+placeholders are never emitted to package files.
 
 The exporter refuses an existing target and redacts bundle or lifecycle failures as `observed package export failed`; a failed lifecycle is retained only as an unvalidated sibling failure archive. A successful package is a synthetic-only development artifact. Its structural success is not privacy/non-matchability or prevalence evidence, and it is not evidence of demographic calibration, unreviewed ancillary clinical pathways, held-out validation, task utility, clinical validity, release readiness, or Synthea conformance. Those remain separate deferred gates with their own approved evidence and governance.
 
@@ -1018,7 +1028,7 @@ validate_structure(output / "baseline", descriptor_mapping)
 validate_structure(output / "intervention", descriptor_mapping)
 ```
 
-The promoted output is one atomic envelope containing exactly `baseline/`, `intervention/`, and `pair-manifest.json`. The top-level envelope is not a PPOC package; pass `output / "baseline"` or `output / "intervention"` to ordinary structural/package tooling. Each child remains an exact eleven-file package: the eight descriptor-named CSVs (`patients.csv`, `patients_augmented.csv`, `visits.csv`, `visits_augmented-20251209150512.csv`, `labs.csv`, `medications.csv`, `problem_list.csv`, and `referrals.csv`), `datapackage.json`, `validation-report.json`, and `manifest.json`. The child packages use the unchanged exact descriptor and augmented-resource lifecycle, and the explicit test-only oracle owns the two augmented resources.
+The promoted output is one atomic envelope containing exactly `baseline/`, `intervention/`, and `pair-manifest.json`. The top-level envelope is not a PPOC package; pass `output / "baseline"` or `output / "intervention"` to ordinary structural/package tooling. Each child remains an exact eleven-file package: the eight descriptor-named CSVs (`patients.csv`, `patients_augmented.csv`, `visits.csv`, `visits_augmented.csv`, `labs.csv`, `medications.csv`, `problem_list.csv`, and `referrals.csv`), `datapackage.json`, `validation-report.json`, and `manifest.json`. The child packages use the unchanged exact descriptor and augmented-resource lifecycle, and the explicit test-only oracle owns the two augmented resources.
 
 The pair manifest is aggregate-only and is not a truth manifest. Its fixed fields are `contract`, `schema_fingerprint`, `matrix_version`, `intervention`, `serialization_projection`, `validation_status`, `validation_check_counts`, visible `metadata`, and `children` entries containing only relative `path` values and child `manifest_sha256` digests. `serialization_projection` is always `ghd-result-flag-empty-v1`: source-world GHD rows whose evaluator-only `labs.result_flag="Synthetic"` marker is copied for serialization as the exact descriptor missing-value sentinel `""`; the in-memory worlds are never mutated, and no other value is normalized. The manifest contains no patient or visit identifiers, row values, ages, latent states, event payloads, hidden truth, trajectories, source objects, evaluator representations, descriptor contents, seeds or indexes from pair context, or temporary paths.
 
@@ -1187,7 +1197,7 @@ An approved growth reference implements:
 value(metric, age_days, reference_sex, z) -> float
 ```
 
-The foundation requests `height_cm` and `bmi` values. A derivation oracle implements `derive(package_root, descriptor)` and returns `DerivationResult(oracle_id, implementation_fingerprint, test_only)`. The oracle must create the two descriptor-named augmented CSVs: `patients_augmented.csv` and `visits_augmented-20251209150512.csv`.
+The foundation requests `height_cm` and `bmi` values. A derivation oracle implements `derive(package_root, descriptor)` and returns `DerivationResult(oracle_id, implementation_fingerprint, test_only)`. The oracle must create the two descriptor-named augmented CSVs: `patients_augmented.csv` and `visits_augmented.csv`.
 
 For a future authoritative oracle, pin the implementation fingerprint through reviewed configuration and set `test_only=False` only after the appropriate parity, clinical, and release gates have passed. The optional Synthea route is now implemented as an external development adapter; it remains separate from this native oracle contract and is documented in the [Synthea backend guide](synthea-backend.md). It does not establish a non-test derivation binding or any clinical, prevalence, privacy, or release claim.
 
@@ -1218,7 +1228,7 @@ smoke/
 ├── patients.csv
 ├── patients_augmented.csv
 ├── visits.csv
-├── visits_augmented-20251209150512.csv
+├── visits_augmented.csv
 ├── labs.csv
 ├── medications.csv
 ├── problem_list.csv

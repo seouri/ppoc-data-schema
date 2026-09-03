@@ -18,7 +18,13 @@ _DESCRIPTOR = "ABzY8!jzV30{`t?TW{OA68<ZKpSpm($Ci`k@|Gqp8l2{`Nq39IIfXz=V~YqyDx~Bj
 
 
 def descriptor():
-    return json.loads(gzip.decompress(base64.b85decode(_DESCRIPTOR)))
+    package = json.loads(gzip.decompress(base64.b85decode(_DESCRIPTOR)))
+    next(
+        resource
+        for resource in package["resources"]
+        if resource["name"] == "visits_augmented"
+    )["path"] = "visits_augmented.csv"
+    return package
 
 
 def field_specs(package, resource_name):

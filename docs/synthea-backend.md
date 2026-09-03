@@ -8,7 +8,9 @@ The bridge runs Synthea revision `d9d07a6eef91ee5144293b42ab64224d84d124f8` with
 
 The adapter projects only the six base resources in `datapackage.json` and delegates the two augmented resources to the existing test-only source-matched augmenter. It creates fresh deterministic PPOC patient and visit IDs, keeps Synthea names, addresses, UUIDs, raw FHIR, and hidden disorder state out of the package, and returns only aggregate run counts and digests in its in-memory report. A successful `manifest.json` has `engine="synthea"` and `test_only_derivation=true`.
 
-Here, `healthy_count` means the member did not receive the fictional GHD event or growth attenuation; it does not mean that every unrelated Synthea condition was removed. Those unrelated synthetic codes may remain in visit diagnosis slots, while Synthea labs, medications, problem-list entries, and referrals are intentionally empty in this first adapter slice.
+Race projection follows the source schema's missing-value convention: an absent primary race is `Unknown`, while unpopulated race slots (including slots after the last FHIR race extension) are empty strings. This keeps `race_2`–`race_8` predominantly blank instead of turning structural missingness into repeated `Unknown` values.
+
+Here, `healthy_count` means the member did not receive the fictional GHD event or growth attenuation; it does not mean that every unrelated Synthea condition was removed. Only conditions carrying an ICD-10 coding-system entry are projected into `enc_diag_*`; non-ICD conditions are discarded, so every populated encounter diagnosis in the generated package is an ICD-10 code. Synthea labs, medications, problem-list entries, and referrals are intentionally empty in this first adapter slice.
 
 ## Prerequisites
 
@@ -49,7 +51,7 @@ The successful package contains exactly the eight descriptor resources plus `dat
 patients.csv                 visits.csv
 labs.csv                     medications.csv
 problem_list.csv             referrals.csv
-patients_augmented.csv       visits_augmented-20251209150512.csv
+patients_augmented.csv       visits_augmented.csv
 datapackage.json             validation-report.json
 manifest.json
 ```

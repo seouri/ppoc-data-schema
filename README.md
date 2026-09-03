@@ -18,7 +18,7 @@ Access to project data is restricted to authorized study personnel who have comp
 
 Funding sponsors are the **Charles H. Hood Foundation** and **Yosemite** for the project *Using Large Language Models for Pediatric Diagnosis*.
 
-These project-governance statements apply to the restricted PPOC source snapshot described above. Ordinary synthetic development uses no PPOC rows or patient records and does not require those source-data approvals; see the [synthetic generator guide](docs/synthetic-generator.md) for its separate content and reproducibility requirements. The evaluator-only excess-weight ancillary pathway is a separate roadmap slice documented in that guide. The pediatric-hypothyroidism ancillary pathway is a separate roadmap slice; see its [plan](docs/superpowers/plans/2026-09-02-pediatric-hypothyroidism-ancillary-pathway.md) and [spec](docs/superpowers/specs/2026-09-02-pediatric-hypothyroidism-ancillary-pathway-design.md). The evaluator-only celiac ancillary pathway is a separate roadmap slice; see its [guide](docs/synthetic-generator.md), [plan](docs/superpowers/plans/2026-09-02-celiac-ancillary-pathway.md), and [spec](docs/superpowers/specs/2026-09-02-celiac-ancillary-pathway-design.md). The evaluator-only SGA ancillary pathway is a separate roadmap slice; see its [guide](docs/synthetic-generator.md), [plan](docs/superpowers/plans/2026-09-02-sga-ancillary-pathway.md), and [spec](docs/superpowers/specs/2026-09-02-sga-ancillary-pathway-design.md). The evaluator-only Turner ancillary pathway is a separate roadmap slice; see its [guide](docs/synthetic-generator.md), [plan](docs/superpowers/plans/2026-09-02-turner-ancillary-pathway.md), and [spec](docs/superpowers/specs/2026-09-02-turner-ancillary-pathway-design.md). The evaluator-only undernutrition ancillary pathway is a separate roadmap slice; see its [guide](docs/synthetic-generator.md), [plan](docs/superpowers/plans/2026-09-02-undernutrition-ancillary-pathway.md), and [spec](docs/superpowers/specs/2026-09-02-undernutrition-ancillary-pathway-design.md).
+These project-governance statements apply to the restricted PPOC source snapshot described above.
 
 ## Contents
 
@@ -38,7 +38,7 @@ These project-governance statements apply to the restricted PPOC source snapshot
 | [`patients.csv`](docs/patients.md) | 250,588 | 11 | Patient demographics |
 | [`patients_augmented.csv`](docs/patients_augmented.md) | 250,588 | 87 | Patient-level growth and diagnosis summaries |
 | [`visits.csv`](docs/visits.md) | 6,494,473 | 43 | Visit-level measurements and diagnoses |
-| [`visits_augmented-20251209150512.csv`](docs/visits_augmented.md) | 6,494,473 | 82 | Visit-level derived growth metrics and flags |
+| [`visits_augmented.csv`](docs/visits_augmented.md) | 6,494,473 | 82 | Visit-level derived growth metrics and flags |
 | [`labs.csv`](docs/labs.md) | 17,230,681 | 12 | Laboratory result components |
 | [`medications.csv`](docs/medications.md) | 3,823,049 | 8 | Medication records |
 | [`problem_list.csv`](docs/problem_list.md) | 1,709,584 | 5 | Problem-list entries |
@@ -49,7 +49,7 @@ The package expects these CSVs beside `datapackage.json`. To keep the descriptor
 ## Relationships
 
 - `patients.csv` and `patients_augmented.csv` contain one row per `patient_id`.
-- `visits.csv` and `visits_augmented-20251209150512.csv` contain `patient_id` and `visit_id`.
+- `visits.csv` and `visits_augmented.csv` contain `patient_id` and `visit_id`.
 - `labs.csv`, `medications.csv`, and `referrals.csv` link to patients through `patient_id`; lab and referral `visit_id` values are nullable, medication `visit_id` is required, and nonnull values in all three resources may not match a visit row.
 - `problem_list.csv` links to patients through `patient_id` and has no direct visit key.
 

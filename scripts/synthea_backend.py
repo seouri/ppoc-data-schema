@@ -35,7 +35,7 @@ from synthetic.schema_contract import field_names, load_descriptor
 
 BACKEND_ERROR = "synthea backend unavailable"
 BACKEND_VERSION = "synthea-backend-v1"
-FHIR_PARSER_VERSION = "synthea-fhir-r4-parser-v1"
+FHIR_PARSER_VERSION = "synthea-fhir-r4-parser-v2"
 GROWTH_OVERLAY_ID = "synthea-growth-overlay-v1"
 MODULE_ID = "synthea-ppoc-ghd-module-v1"
 REPORT_VERSION = "synthea-backend-report-v1"
@@ -52,6 +52,14 @@ _DIGEST_RE = re.compile(r"[0-9a-f]{64}\Z")
 # references to other resource types remain rejected by ``_reference_id``.
 _PATIENT_REFERENCE_RE = re.compile(r"\A(?:Patient/|urn:uuid:)([^/]+)\Z")
 _ENCOUNTER_REFERENCE_RE = re.compile(r"\A(?:Encounter/|urn:uuid:)([^/]+)\Z")
+_ICD10_SYSTEMS = frozenset(
+    {
+        "http://hl7.org/fhir/sid/icd-10-cm",
+        "http://hl7.org/fhir/sid/icd-10",
+        "urn:oid:2.16.840.1.113883.6.90",
+    }
+)
+_ICD10_CODE_RE = re.compile(r"\A[A-Z][0-9][0-9A-Z](?:\.[0-9A-Z]{1,4})?\Z")
 _ETHNICITIES = frozenset(
     {
         "Not Hispanic or Latino",
@@ -205,6 +213,26 @@ def _code_values(resource: Mapping[str, object]) -> tuple[str, ...]:
         except ValueError:
             continue
         if value not in values:
+            values.append(value)
+    return tuple(values)
+
+
+def _icd10_code_values(resource: Mapping[str, object]) -> tuple[str, ...]:
+    code = resource.get("code")
+    if not isinstance(code, Mapping):
+        return ()
+    codings = code.get("coding")
+    if not isinstance(codings, list):
+        return ()
+    values: list[str] = []
+    for coding in codings:
+        if not isinstance(coding, Mapping) or coding.get("system") not in _ICD10_SYSTEMS:
+            continue
+        try:
+            value = _require_text(coding.get("code"))
+        except ValueError:
+            continue
+        if _ICD10_CODE_RE.fullmatch(value) is not None and value not in values:
             values.append(value)
     return tuple(values)
 
@@ -461,6 +489,15 @@ def parse_fhir_documents(
                 birth_date = _resource_date(resource, "birthDate")
                 if birth_date is None:
                     raise _unavailable()
+                race_values = list(
+                    dict.fromkeys(
+                        _allowed_or_unknown(value, _RACES)
+                        for value in _extension_text(resource, "us-core-race")
+                    )
+                )[:8]
+                if not race_values:
+                    race_values.append("Unknown")
+                race_values.extend("" for _ in range(8 - len(race_values)))
                 target["patient"] = (
                     _sex(resource.get("gender")),
                     _allowed_or_unknown(
@@ -472,15 +509,7 @@ def parse_fhir_documents(
                         else "Unknown",
                         _ETHNICITIES,
                     ),
-                    tuple(
-                        list(
-                            dict.fromkeys(
-                                _allowed_or_unknown(value, _RACES)
-                                for value in _extension_text(resource, "us-core-race")
-                            )
-                        )[:8]
-                        + ["Unknown"] * 8
-                    )[:8],
+                    tuple(race_values),
                     birth_date,
                 )
                 continue
@@ -509,7 +538,7 @@ def parse_fhir_documents(
                 if observation is not None:
                     target["observations"].append(observation)
             else:
-                codes = _code_values(resource)
+                codes = _icd10_code_values(resource)
                 if not codes:
                     continue
                 encounter = resource.get("encounter")

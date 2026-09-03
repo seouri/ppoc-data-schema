@@ -17,7 +17,7 @@
 - Patient IDs and visit IDs remain synthetic; missing values use the existing empty-string convention; no latent truth, source events, hashes, stream identities, or private references enter mappings, repr, reports, or files.
 - Only `WEIGHT`, `HEIGHT`, `HEAD_CIRCUMFERENCE`, and derived `BMI` map to descriptor-shaped visit fields; observed `LENGTH` raises `ResourceProjectionUnavailable`.
 - Fixed unit conversions are weight kilograms × `35.274` to ounces and height centimeters ÷ `2.54` to inches; no clipping, resampling, or hidden-value substitution.
-- Recognition, workup, and diagnosis descendants use only `RECORDED_EVENT_CODES`; codes remain fictional and are not asserted to be clinical terminology.
+- Recognition, workup, and diagnosis descendants use only `RECORDED_EVENT_CODES` in the evaluator-only in-memory contract; the exact-schema package exporter translates those three placeholders to valid ICD-10-CM codes (`R62.52`, `R62.50`, and `R62.59`, respectively) before writing `enc_diag_*` fields.
 - Labs, medications, problem-list, and referral rows remain empty until separately reviewed causal/resource contracts exist.
 - Reports expose only fixed `PASS`, `FAIL`, and `UNEVALUABLE` statuses, check names, reason codes, and counts.
 - Boundary tests must show no imports or calls into calibration, held-out validation, privacy audit, CSV/package writers, smoke generation, schema file loading, or real-data paths.

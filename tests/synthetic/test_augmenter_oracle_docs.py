@@ -49,6 +49,8 @@ def test_candidate_guide_states_the_runtime_and_export_contract() -> None:
         "exactly two",
         "visits_augmented-YYYYMMDDHHMMSS.csv",
         "patients_augmented-YYYYMMDDHHMMSS.csv",
+        "visits_augmented.csv",
+        "patients_augmented.csv",
         "CSV only",
     ):
         assert required in guide

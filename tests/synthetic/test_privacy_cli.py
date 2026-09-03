@@ -78,7 +78,7 @@ def test_cli_promotes_nonpassing_aggregate_reports_with_gate_exit(
     if mode == "fail":
         package = Path(command[command.index("--synthetic-root") + 1])
         original = write_real_package(tmp_path / "copy-source")
-        filename = "visits_augmented-20251209150512.csv"
+        filename = "visits_augmented.csv"
         (package / filename).write_bytes(
             (original / filename).read_bytes().replace(b"REAL-", b"GEN-")
         )

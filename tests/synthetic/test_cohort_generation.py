@@ -127,7 +127,12 @@ def test_generation_has_unique_ids_closed_demographics_and_mixed_modules() -> No
     assert all(member.demographics.sex in {"F", "M", "U"} for member in cohort.members)
     assert all(member.demographics.ethnicity for member in cohort.members)
     assert all(len(member.demographics.races) == 8 for member in cohort.members)
-    assert all(all(race for race in member.demographics.races) for member in cohort.members)
+    assert all(member.demographics.races[0] for member in cohort.members)
+    assert all(
+        race in cohort_module._RACE_CATEGORIES
+        for member in cohort.members
+        for race in member.demographics.races
+    )
     assert all(member.bundle is None for member in cohort.members)
 
     for member in cohort.members:
@@ -137,6 +142,25 @@ def test_generation_has_unique_ids_closed_demographics_and_mixed_modules() -> No
             for point in member.trajectory.physiology.points
         )
         assert validate_observation_frame(member.frame).status is ObservationValidationStatus.PASS
+
+
+def test_generation_leaves_unselected_race_slots_blank() -> None:
+    calibration = dataclasses.replace(
+        _calibration(),
+        race_multiselect_probability=0.0,
+    )
+
+    generated = generate_native_cohort(
+        _config(patient_count=16),
+        RegimeLinearTestReference(),
+        calibration,
+        modules=_modules(),
+    )
+
+    assert all(
+        member.demographics.races[1:] == ("",) * 7
+        for member in generated.members
+    )
 
 
 def test_seed_changes_draws_without_changing_identifier_contract() -> None:

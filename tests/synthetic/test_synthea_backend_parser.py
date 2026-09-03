@@ -118,7 +118,7 @@ def test_parser_projects_exact_schema_rows_and_discards_source_identifiers() -> 
     assert patient["sex"] == "F"
     assert patient["ethnicity"] == "Not Hispanic or Latino"
     assert patient["race_1"] == "White"
-    assert all(patient[f"race_{index}"] == "Unknown" for index in range(2, 9))
+    assert all(patient[f"race_{index}"] == "" for index in range(2, 9))
 
     visits = projection.base_rows["visits"]
     assert len(visits) == 2
@@ -129,6 +129,43 @@ def test_parser_projects_exact_schema_rows_and_discards_source_identifiers() -> 
     assert visits[1]["BMI"] == pytest.approx(13 / (0.88**2))
     assert visits[1]["enc_diag_1"] == "E23.0"
     assert all("source" not in value for row in visits for value in row.values() if isinstance(value, str))
+
+
+def test_projection_only_keeps_icd10_condition_codes_in_encounter_slots() -> None:
+    bundle = _fixture_bundle()
+    condition = next(
+        entry["resource"]
+        for entry in bundle["entry"]
+        if entry["resource"]["resourceType"] == "Condition"
+    )
+    condition["code"]["coding"] = [
+        {"system": "http://snomed.info/sct", "code": "111111111"},
+        {"system": "http://hl7.org/fhir/sid/icd-10-cm", "code": "E23.0"},
+    ]
+
+    patients = parse_fhir_documents([json.dumps(bundle).encode("utf-8")])
+    visits = project_fhir_patients(patients, DESCRIPTOR, seed=11).base_rows["visits"]
+
+    assert visits[1]["enc_diag_1"] == "E23.0"
+    assert all(
+        value != "111111111"
+        for row in visits
+        for field_name, value in row.items()
+        if field_name.startswith("enc_diag_")
+    )
+
+
+def test_parser_uses_unknown_only_for_absent_primary_race_and_blanks_trailing_slots() -> None:
+    patient = {
+        "resourceType": "Patient",
+        "id": "p-no-race",
+        "gender": "unknown",
+        "birthDate": "2018-01-01",
+    }
+
+    parsed = parse_fhir_documents([json.dumps(patient).encode("utf-8")])
+
+    assert parsed[0].races == ("Unknown", "", "", "", "", "", "", "")
 
 
 def test_ghd_overlay_is_monotone_bmi_consistent_and_healthy_is_unchanged() -> None:

@@ -417,16 +417,25 @@ def test_private_sampling_and_projection_helpers_use_fixed_visible_rules() -> No
     assert cohort._select_weighted_category(weights, 0.999999) == "second"
     assert cohort._project_visible_category("") == "Unknown"
     assert cohort._project_visible_category("White") == "White"
-    assert cohort._project_race_slots("", None) == ("Unknown",) * 8
+    assert cohort._project_race_slots("", None) == (
+        "Unknown",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+    )
     assert cohort._project_race_slots("White", "Asian") == (
         "White",
         "Asian",
-        "Unknown",
-        "Unknown",
-        "Unknown",
-        "Unknown",
-        "Unknown",
-        "Unknown",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
     )
 
 

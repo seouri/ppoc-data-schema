@@ -57,9 +57,10 @@ or arbitrary column list is accepted by the projection API.
 
 `SyntheticDemographics` is a frozen fictional-only value object containing the
 frame patient ID, `sex` (`F`, `M`, or `U`), one descriptor-valid ethnicity, and
-eight descriptor-valid race slots. If omitted, the projection uses `U` and
-`Unknown` for all demographic values. These defaults are placeholders for row
-shape, not a demographic distribution or calibration target.
+eight descriptor-valid race slots. If omitted, the projection uses `U`,
+`Unknown` for ethnicity and race slot one, and the empty-string missing
+sentinel for race slots two through eight. These defaults are placeholders for
+row shape, not a demographic distribution or calibration target.
 
 ## Immutable in-memory outputs
 
@@ -109,10 +110,14 @@ measurements map without resampling:
 `LENGTH` observation is not representable in this exact base schema and causes a
 `ResourceProjectionUnavailable` error. The projection never substitutes
 length for height, fills a missing value from private truth, clips a value, or
-independently samples BMI. Fictional event codes are placed in the first empty
-`enc_diag_*` slots for their linked visit; all event codes come from the fixed
-`RECORDED_EVENT_CODES` registry and are not asserted to be ICD, SNOMED, LOINC,
-or clinical terminology.
+independently samples BMI. Fictional evaluator event codes are placed in the
+first empty `enc_diag_*` slots for their linked visit; all event codes come
+from the fixed `RECORDED_EVENT_CODES` registry and are not asserted to be ICD,
+SNOMED, LOINC, or clinical terminology. When this in-memory bundle is
+serialized through the exact-schema package exporter, those three
+evaluator-only growth placeholders are translated to valid ICD-10-CM codes
+(`R62.52`, `R62.50`, and `R62.59`, respectively); package `enc_diag_*` fields
+therefore never contain the fictional placeholders.
 
 ### Clinical descendants and ancillary resources
 

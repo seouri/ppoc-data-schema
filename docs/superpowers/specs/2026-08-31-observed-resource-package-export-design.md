@@ -84,7 +84,7 @@ The descriptor argument is an already-loaded mapping. The exporter copies it
 through JSON-compatible in-memory data and never accepts or opens a descriptor
 path. It must have exactly the repository's eight resources and the checked-in
 schema fingerprint
-`795724ec4838df8afa9c09b7c059fa76f644d7f8fb6dcc8ce808da203c2f8597`.
+`e1f10c8bc8f29e8b749355f9a82511d4077d3b43f9fa4d31634cbf01febbe8ec`.
 The exporter rejects unknown/missing resources, changed field order, changed
 paths, changed types/constraints, unsafe resource paths, and non-JSON mapping
 values before creating output. The fingerprint is exposed as

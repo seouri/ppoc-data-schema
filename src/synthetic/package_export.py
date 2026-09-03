@@ -19,7 +19,11 @@ from pathlib import Path
 from typing import Any
 
 from synthetic.base_resources import BASE_RESOURCES
-from synthetic.csv_package import write_resource, write_synthetic_descriptor
+from synthetic.csv_package import (
+    format_resource_csv_bytes,
+    write_resource,
+    write_synthetic_descriptor,
+)
 from synthetic.derivation import DerivationOracle, DerivationUnavailable
 from synthetic.derivation_binding import BoundDerivationOracle, DerivationBinding
 from synthetic.manifest import RunManifest
@@ -1313,7 +1317,11 @@ def export_exact_schema_package(
                     target = run.partial_path / resource["path"]
                     target.parent.mkdir(parents=True, exist_ok=True)
                     with target.open("xb") as handle:
-                        handle.write(staged_payloads[resource["path"]])
+                        handle.write(
+                            format_resource_csv_bytes(
+                                resource, staged_payloads[resource["path"]]
+                            )
+                        )
         finally:
             os.close(partial_descriptor)
 

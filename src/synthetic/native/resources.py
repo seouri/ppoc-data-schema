@@ -51,6 +51,7 @@ _ETHNICITY_VALUES = frozenset(
 )
 _RACE_VALUES = frozenset(
     {
+        "",
         "American Indian or Alaska Native",
         "Another Race",
         "Asian",
@@ -200,7 +201,7 @@ class SyntheticDemographics:
     patient_id: str
     sex: str = "U"
     ethnicity: str = "Unknown"
-    races: tuple[str, ...] = ("Unknown",) * 8
+    races: tuple[str, ...] = ("Unknown", "", "", "", "", "", "", "")
 
     def __post_init__(self) -> None:
         _require_synthetic_patient_id(self.patient_id)

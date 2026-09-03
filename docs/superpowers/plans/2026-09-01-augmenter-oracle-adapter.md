@@ -17,7 +17,7 @@
 - The checked-in `data/augment-runtime-manifest.json` must match the fixed manifest SHA-256 `b50afc36eca61684380154129cdacf484e62d56fa6da55914adab18c2d94d1d6`; every listed file must be a regular non-symlink with the recorded size and digest.
 - The supported subprocess command uses the current `sys.executable`, `-E -s`, no shell, private runtime `cwd`, private descriptor-relative synthetic input snapshot as `input_dir`, private output directory, and fixed `--output_format csv`.
 - The output directory must contain exactly one `visits_augmented-YYYYMMDDHHMMSS.csv` and one `patients_augmented-YYYYMMDDHHMMSS.csv`, both regular non-symlink files; any other entry or duplicate fails closed.
-- Only descriptor-named `visits_augmented` and `patients_augmented` destinations may be created, with exclusive creation and safe relative paths; base resources must remain byte-for-byte unchanged.
+- Only stable descriptor-named `visits_augmented.csv` and `patients_augmented.csv` destinations may be created, with exclusive creation and safe relative paths; base resources must remain byte-for-byte unchanged.
 - Public failures use fixed `DerivationUnavailable` text and never expose subprocess output, input/output paths, rows, identifiers, diagnosis values, or runtime exception details.
 - Tests and documentation use wholly synthetic exact-schema inputs; no patient, governed, calibration, held-out, privacy, network, or Synthea input is added, and the production command remains fail closed.
 - The authoritative repository gate is `uv run ruff check src tests`; root and vendored-source Ruff findings remain informational because changing byte-preserved source is out of scope.

@@ -89,8 +89,9 @@ The temporary output directory must contain exactly two regular, non-symlink
 CSV files matching one each of
 `visits_augmented-YYYYMMDDHHMMSS.csv` and
 `patients_augmented-YYYYMMDDHHMMSS.csv`. The two files' bytes are copied into
-the descriptor paths `visits_augmented` and `patients_augmented` beneath the
-staged package root using exclusive creation. Any extra file, directory,
+the stable descriptor paths `visits_augmented.csv` and
+`patients_augmented.csv` beneath the staged package root using exclusive
+creation. Any extra file, directory,
 symlink, duplicate timestamped output, pre-existing destination, or unsafe
 descriptor path fails closed. The adapter does not mutate any base resource;
 the existing package exporter remains responsible for hash, schema, and

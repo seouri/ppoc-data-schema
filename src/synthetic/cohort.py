@@ -238,12 +238,18 @@ def _project_race_slots(
     primary_race: str,
     secondary_race: str | None,
 ) -> tuple[str, ...]:
-    """Project approved primary/optional secondary draws into eight race slots."""
+    """Project approved primary/optional secondary draws into eight race slots.
+
+    Empty trailing slots are represented by the schema's empty-string missing
+    sentinel.  ``Unknown`` remains reserved for a sampled or otherwise
+    explicitly unavailable race value, rather than for a slot that was never
+    selected.
+    """
 
     races = [_project_visible_category(primary_race)]
     if secondary_race is not None:
         races.append(_project_visible_category(secondary_race))
-    races.extend("Unknown" for _ in range(8 - len(races)))
+    races.extend("" for _ in range(8 - len(races)))
     return tuple(races)
 
 

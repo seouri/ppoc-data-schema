@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - The descriptor argument to the new package APIs is an already-loaded mapping; no descriptor path, real-data path, CSV reader, calibration artifact, held-out report, privacy input, Synthea module, or CLI flag is accepted.
-- The descriptor must have exactly the repository's eight resources and fingerprint `795724ec4838df8afa9c09b7c059fa76f644d7f8fb6dcc8ce808da203c2f8597`; expose this value once as `EXPECTED_SCHEMA_FINGERPRINT` from `synthetic.schema_contract`.
+- The descriptor must have exactly the repository's eight resources and fingerprint `e1f10c8bc8f29e8b749355f9a82511d4077d3b43f9fa4d31634cbf01febbe8ec`; expose this value once as `EXPECTED_SCHEMA_FINGERPRINT` from `synthetic.schema_contract`.
 - Base input keys are exactly `patients`, `visits`, `labs`, `medications`, `problem_list`, and `referrals`; augmented rows are never caller input and may be supplied only by the injected derivation oracle.
 - Bundle input is completely fictional, every bundle validation must be `PASS`, patient IDs and visit IDs must be globally unique, and bundle order is normalized by synthetic patient ID before merging.
 - Output contains exactly the eight descriptor-named CSVs plus `datapackage.json`, `validation-report.json`, and `manifest.json`; no truth manifest, source frame, evaluator report, calibration artifact, held-out report, privacy report, or arbitrary extra file is exported.

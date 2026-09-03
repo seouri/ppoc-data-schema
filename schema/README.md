@@ -13,7 +13,7 @@ The descriptor records the data’s nullable fields, incomplete logical visit li
 
 ## Python usage
 
-Resolve each resource path relative to `datapackage.json` when the CSVs are packaged together; set `PPOC_DATA_ROOT` when they live in another directory. In the current snapshot, the logical `visits_augmented` resource points to `visits_augmented-20251209150512.csv`. This example inspects the package and loads a small sample without hard-coding the column list:
+Resolve each resource path relative to `datapackage.json` when the CSVs are packaged together; set `PPOC_DATA_ROOT` when they live in another directory. The logical `visits_augmented` resource points to the stable package path `visits_augmented.csv`; direct `scripts/augment.py` runs may emit timestamped intermediate files before package export. This example inspects the package and loads a small sample without hard-coding the column list:
 
 ```python
 import json

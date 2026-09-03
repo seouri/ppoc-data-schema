@@ -74,7 +74,8 @@ def test_projection_emits_descriptor_ordered_rows_with_default_demographics_and_
         "patient_id": "syn-observation-patient",
         "sex": "U",
         "ethnicity": "Unknown",
-        **{f"race_{index}": "Unknown" for index in range(1, 9)},
+        "race_1": "Unknown",
+        **{f"race_{index}": "" for index in range(2, 9)},
     }
     assert tuple(visit_1000) == expected_visit_fields
     assert visit_1000["encounter_type"] == "Office Visit"

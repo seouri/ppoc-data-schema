@@ -86,6 +86,7 @@ _REALISTIC_GROWTH_DIAGNOSIS_CODE = "E23.0"
 _REALISTIC_ANCILLARY_POLICY_ID = "development-realistic-ghd"
 _REALISTIC_ANCILLARY_POLICY_VERSION = "development-realistic-ghd-v1"
 _REALISTIC_ANCILLARY_RESULT_DELAY_DAYS = 7
+_RACE_SLOT_PROJECTION_VERSION = "race-slot-projection-v2"
 _ALL_DISORDER_PROFILE = "development-all-disorders-v1"
 _ALL_DISORDER_PACKAGE_PROFILE = "development-all-disorders"
 _ALL_DISORDER_OBSERVATION_POLICY_VERSION = (
@@ -614,6 +615,7 @@ def _configuration_sha256(
             "parameters": age_regime_parameters,
         },
         "clinical_module_versions": clinical_module_versions,
+        "race_slot_projection_version": _RACE_SLOT_PROJECTION_VERSION,
         "calibration": {
             "artifact_id": calibration.artifact_id,
             "target_registry_version": calibration.target_registry_version,

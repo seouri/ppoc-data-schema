@@ -114,6 +114,30 @@ def _resource_path(descriptor: dict[str, object], name: str) -> str:
     raise AssertionError(f"descriptor is missing resource {name}")
 
 
+def _assert_max_decimal_places(rows: list[dict[str, str]], field: str, places: int) -> None:
+    for row in rows:
+        value = row[field]
+        if not value:
+            continue
+        fraction = value.partition(".")[2]
+        assert fraction.isdigit(), (field, value)
+        assert len(fraction) <= places, (field, value, places)
+
+
+def _assert_valid_encounter_diagnoses(rows: list[dict[str, str]]) -> None:
+    with (ROOT / "data" / "icd10cm-tabular-2026.csv").open(
+        encoding="utf-8", newline=""
+    ) as stream:
+        valid_codes = {row["diag_name"] for row in csv.DictReader(stream)}
+    diagnoses = [
+        value
+        for row in rows
+        for field_name, value in row.items()
+        if field_name.startswith("enc_diag_") and value
+    ]
+    assert set(diagnoses) <= valid_codes
+
+
 def test_no_profile_remains_fail_closed(tmp_path: Path) -> None:
     """Catches a CLI fallback that enables a reference without explicit opt-in."""
     output = tmp_path / "no-profile"
@@ -257,6 +281,23 @@ def test_development_realistic_cli_exports_target_shaped_package(tmp_path: Path)
     assert manifest["test_only_derivation"] is True
     assert manifest["status"] == "STRUCTURE_VALIDATED_TEST_ORACLE"
     visits_path = _resource_path(descriptor, "visits")
+    for resource_name, bmi_field in (("visits", "BMI"), ("visits_augmented", "bmi")):
+        visits = _csv_rows(output / _resource_path(descriptor, resource_name))
+        _assert_valid_encounter_diagnoses(visits)
+        _assert_max_decimal_places(visits, "weight_oz", 2)
+        _assert_max_decimal_places(visits, "height_in", 2)
+        _assert_max_decimal_places(visits, "head_circ_cm", 1)
+        _assert_max_decimal_places(visits, bmi_field, 2)
+    for resource_name in ("patients", "patients_augmented"):
+        patients = _csv_rows(output / _resource_path(descriptor, resource_name))
+        if resource_name == "patients":
+            assert all(row["race_1"] for row in patients)
+        assert all(
+            row[f"race_{index}"] == ""
+            for row in patients
+            for index in range(3, 9)
+        )
+        assert sum(row["race_2"] == "" for row in patients) >= 0.85 * len(patients)
     diagnosis_codes = [
         value
         for row in _csv_rows(output / visits_path)
@@ -264,9 +305,9 @@ def test_development_realistic_cli_exports_target_shaped_package(tmp_path: Path)
         if field_name.startswith("enc_diag_") and value
     ]
     assert {code: diagnosis_codes.count(code) for code in set(diagnosis_codes)} == {
-        "SYN-GROWTH-RECOGNITION": 20,
-        "SYN-GROWTH-WORKUP": 20,
-        "SYN-GROWTH-DIAGNOSIS": 20,
+        "R62.52": 20,
+        "R62.50": 20,
+        "R62.59": 20,
         "E23.0": 20,
     }
     augmented_path = _resource_path(descriptor, "patients_augmented")
@@ -318,6 +359,7 @@ def test_development_all_disorders_cli_exports_every_visible_pathway(tmp_path: P
 
     patients = _csv_rows(output / _resource_path(descriptor, "patients"))
     visits = _csv_rows(output / _resource_path(descriptor, "visits"))
+    _assert_valid_encounter_diagnoses(visits)
     patient_ids = [row["patient_id"] for row in patients]
     visit_ids = [row["visit_id"] for row in visits]
     assert len(patient_ids) == len(set(patient_ids)) == 512
@@ -330,11 +372,7 @@ def test_development_all_disorders_cli_exports_every_visible_pathway(tmp_path: P
         for field_name, value in row.items()
         if field_name.startswith("enc_diag_") and value
     ]
-    for code in (
-        "SYN-GROWTH-RECOGNITION",
-        "SYN-GROWTH-WORKUP",
-        "SYN-GROWTH-DIAGNOSIS",
-    ):
+    for code in ("R62.52", "R62.50", "R62.59"):
         assert code in diagnosis_codes
 
     labs = _csv_rows(output / _resource_path(descriptor, "labs"))
