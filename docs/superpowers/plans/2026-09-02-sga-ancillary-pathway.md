@@ -65,7 +65,7 @@ contracts, pytest, Ruff, schema checker.
   resource constants, and `project_sga_ancillary_resources(member, shape,
   policy)` for Task 2 and the docs.
 
-- [ ] **Step 1: Write failing model and projection tests**
+- [x] **Step 1: Write failing model and projection tests**
 
   Use fictional SGA fixtures and the checked-in descriptor. Cover frozen
   models, safe tokens, exact resource order, immutable mappings, descriptor
@@ -75,13 +75,13 @@ contracts, pytest, Ruff, schema checker.
   always-empty medications, deterministic replay, no mutation, and fixed
   redacted errors.
 
-- [ ] **Step 2: Run focused tests to verify they fail**
+- [x] **Step 2: Run focused tests to verify they fail**
 
   ```bash
   UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_sga_ancillary_models.py tests/synthetic/test_sga_ancillary_projection.py
   ```
 
-- [ ] **Step 3: Implement models and projection**
+- [x] **Step 3: Implement models and projection**
 
   Define a separate frozen policy, projection, and redacted exception. Validate
   observation frame/member truth binding as the reviewed ancillary paths do.
@@ -101,7 +101,7 @@ contracts, pytest, Ruff, schema checker.
   ) -> SgaAncillaryProjection: ...
   ```
 
-- [ ] **Step 4: Run focused tests and lint**
+- [x] **Step 4: Run focused tests and lint**
 
   ```bash
   UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_sga_ancillary_models.py tests/synthetic/test_sga_ancillary_projection.py
@@ -109,7 +109,7 @@ contracts, pytest, Ruff, schema checker.
   git diff --check
   ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
   ```bash
   git add src/synthetic/native/sga_ancillary.py tests/synthetic/test_sga_ancillary_models.py tests/synthetic/test_sga_ancillary_projection.py
@@ -130,7 +130,7 @@ contracts, pytest, Ruff, schema checker.
   `SgaAncillaryValidationReport`, and
   `validate_sga_ancillary_resources(member, projection, policy)` for Task 3.
 
-- [ ] **Step 1: Write failing validator and boundary tests**
+- [x] **Step 1: Write failing validator and boundary tests**
 
   Cover fixed order/status precedence, valid target/non-target reports, wrong
   constants/IDs/types, duplicates/count violations, result delay, timing,
@@ -139,13 +139,13 @@ contracts, pytest, Ruff, schema checker.
   randomness/no obesity flag, visible-event checks with missing or invalid
   truth, and valid-frame/member trajectory mismatch.
 
-- [ ] **Step 2: Run focused tests to verify they fail**
+- [x] **Step 2: Run focused tests to verify they fail**
 
   ```bash
   UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_sga_ancillary_validation.py tests/synthetic/test_sga_ancillary_boundaries.py
   ```
 
-- [ ] **Step 3: Implement the validator**
+- [x] **Step 3: Implement the validator**
 
   Independently validate visible row structure, actual frame visits, always
   empty medications, expected counts/ages, and source-independent constants
@@ -165,7 +165,7 @@ contracts, pytest, Ruff, schema checker.
   ) -> SgaAncillaryValidationReport: ...
   ```
 
-- [ ] **Step 4: Run focused tests and lint**
+- [x] **Step 4: Run focused tests and lint**
 
   ```bash
   UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_sga_ancillary_validation.py tests/synthetic/test_sga_ancillary_boundaries.py
@@ -173,7 +173,7 @@ contracts, pytest, Ruff, schema checker.
   git diff --check
   ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
   ```bash
   git add src/synthetic/native/sga_ancillary.py tests/synthetic/test_sga_ancillary_validation.py tests/synthetic/test_sga_ancillary_boundaries.py
@@ -192,14 +192,14 @@ contracts, pytest, Ruff, schema checker.
 - Produces: the ordinary-development guide section and README roadmap links;
   no runtime or package code changes.
 
-- [ ] **Step 1: Write failing documentation tests**
+- [x] **Step 1: Write failing documentation tests**
 
   Assert the guide names every public API type and function, exact fictional
   constants, exact-schema/in-memory/evaluator-only status, birth-state and
   always-empty medication rule, and deferred boundaries; assert README links
   the guide and SGA roadmap slice.
 
-- [ ] **Step 2: Implement documentation and tests**
+- [x] **Step 2: Implement documentation and tests**
 
   Add a concise SGA section beside the existing ancillary guidance. State that
   the descriptor has no dedicated gestational-age resource, so fictional lab
@@ -208,14 +208,14 @@ contracts, pytest, Ruff, schema checker.
   privacy, clinical, release, real/held-out, and Synthea material deferred.
   Add one concise README roadmap sentence without copying guide text.
 
-- [ ] **Step 3: Run focused docs checks**
+- [x] **Step 3: Run focused docs checks**
 
   ```bash
   UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_sga_ancillary_docs.py
   git diff --check
   ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
   ```bash
   git add docs/synthetic-generator.md README.md tests/synthetic/test_sga_ancillary_docs.py
@@ -224,11 +224,11 @@ contracts, pytest, Ruff, schema checker.
 
 ### Task 4: Review, verify, merge, and push
 
-- [ ] Run the complete repository suite, Ruff, schema check, lock check, and
+- [x] Run the complete repository suite, Ruff, schema check, lock check, and
   whitespace check.
-- [ ] Package an independent broad review from this item's merge base; fix
+- [x] Package an independent broad review from this item's merge base; fix
   every Critical/Important/Minor finding and run scoped rereviews.
-- [ ] Inspect staged names/stat/diff, excluding untracked `__pycache__`
+- [x] Inspect staged names/stat/diff, excluding untracked `__pycache__`
   directories; commit final checklist metadata only after verification.
 - [ ] Push `main`, fetch, and verify `HEAD` equals `origin/main`.
 - [ ] Mark this plan complete only after publication parity exists.
