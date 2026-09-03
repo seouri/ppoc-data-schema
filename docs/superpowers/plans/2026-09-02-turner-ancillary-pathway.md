@@ -40,7 +40,7 @@
 - Consumes: typed `CohortMember`, `AgeRegimeDisorderTrajectory`, `ClinicalEvent`, `RecordedEvent`, `RecordedEventKind`, `ResourceShape`, and `ResourceRow`.
 - Produces: the frozen `TurnerAncillaryPolicy` and `TurnerAncillaryProjection` models, the fixed fictional constants, `TurnerAncillaryProjectionUnavailable`, and `project_turner_ancillary_resources(member, shape, policy)` for Task 2 and the documentation task.
 
-- [ ] **Step 1: Write failing model and projection tests**
+- [x] **Step 1: Write failing model and projection tests**
 
   Build only fictional in-memory fixtures from `tests/synthetic/fakes.py` and
   the checked-in descriptor mapping. Assert the following exact contracts:
@@ -83,7 +83,7 @@
   or includes an input patient/visit identifier other than the required
   synthetic patient link.
 
-- [ ] **Step 2: Run focused tests to verify they fail**
+- [x] **Step 2: Run focused tests to verify they fail**
 
   ```bash
   PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_turner_ancillary_models.py tests/synthetic/test_turner_ancillary_projection.py
@@ -92,7 +92,7 @@
   Expected: test collection fails because the Turner ancillary module and its
   public models do not yet exist.
 
-- [ ] **Step 3: Implement strict models and projection**
+- [x] **Step 3: Implement strict models and projection**
 
   Add `TurnerAncillaryPolicy(policy_id, policy_version, result_delay_days)` as
   a frozen aggregate-safe policy and
@@ -140,7 +140,7 @@
   values, source state, paths, or keys. Do not modify any existing ancillary
   module, runtime, exporter, descriptor, or Synthea code.
 
-- [ ] **Step 4: Run focused tests and lint**
+- [x] **Step 4: Run focused tests and lint**
 
   ```bash
   PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_turner_ancillary_models.py tests/synthetic/test_turner_ancillary_projection.py
@@ -148,7 +148,7 @@
   git diff --check
   ```
 
-- [ ] **Step 5: Commit the projection task**
+- [x] **Step 5: Commit the projection task**
 
   ```bash
   git add src/synthetic/native/turner_ancillary.py tests/synthetic/test_turner_ancillary_models.py tests/synthetic/test_turner_ancillary_projection.py
@@ -168,7 +168,7 @@
 - Consumes: Task 1's immutable projection, policy, exact row contract, fictional constants, and source-point/visit mapping.
 - Produces: `TURNER_ANCILLARY_CHECK_NAMES`, fixed reason-code vocabulary, `TurnerAncillaryValidationStatus`, `TurnerAncillaryCheck`, `TurnerAncillaryValidationReport`, and `validate_turner_ancillary_resources(member, projection, policy)`.
 
-- [ ] **Step 1: Write failing validator and boundary tests**
+- [x] **Step 1: Write failing validator and boundary tests**
 
   Assert the exact check order:
 
@@ -209,7 +209,7 @@
   randomness, Synthea, or `obesity_flag`. Reject public signatures that take
   paths, rows, keys, reports, output destinations, or descriptor mappings.
 
-- [ ] **Step 2: Run focused validator tests to verify they fail**
+- [x] **Step 2: Run focused validator tests to verify they fail**
 
   ```bash
   PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_turner_ancillary_validation.py tests/synthetic/test_turner_ancillary_boundaries.py
@@ -218,7 +218,7 @@
   Expected: collection or assertions fail because the validator and boundary
   regression tests are not implemented.
 
-- [ ] **Step 3: Implement the fixed aggregate validator**
+- [x] **Step 3: Implement the fixed aggregate validator**
 
   Add the public validator signature:
 
@@ -252,7 +252,7 @@
   compare source-point-specific event links and the deterministic expected
   projection. Never include source objects or row payloads in a report.
 
-- [ ] **Step 4: Run focused validation tests and lint**
+- [x] **Step 4: Run focused validation tests and lint**
 
   ```bash
   PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_turner_ancillary_validation.py tests/synthetic/test_turner_ancillary_boundaries.py
@@ -260,7 +260,7 @@
   git diff --check
   ```
 
-- [ ] **Step 5: Commit the validator task**
+- [x] **Step 5: Commit the validator task**
 
   ```bash
   git add src/synthetic/native/turner_ancillary.py tests/synthetic/test_turner_ancillary_validation.py tests/synthetic/test_turner_ancillary_boundaries.py
@@ -280,7 +280,7 @@
 - Consumes: finalized Task 1/2 public symbols, fictional vocabulary, and the existing Turner module/event semantics.
 - Produces: a concise ordinary-development guide section, one README roadmap link, and documentation drift tests; no runtime or package integration.
 
-- [ ] **Step 1: Write failing documentation tests**
+- [x] **Step 1: Write failing documentation tests**
 
   Assert that the guide names every public type and function:
   `TurnerAncillaryPolicy`, `TurnerAncillaryProjection`,
@@ -299,7 +299,7 @@
   optional Synthea conformance. Assert README links the guide, Turner plan,
   and Turner spec without copying the full guide.
 
-- [ ] **Step 2: Implement documentation and tests**
+- [x] **Step 2: Implement documentation and tests**
 
   Add one concise `## Evaluator-only Turner ancillary pathway` section beside
   the existing excess-weight, hypothyroidism, celiac, and SGA sections in
@@ -320,14 +320,14 @@
   section; deferred claims are boundaries of what this ordinary-development
   fixture contract asserts, not prerequisites for using it.
 
-- [ ] **Step 3: Run focused documentation checks**
+- [x] **Step 3: Run focused documentation checks**
 
   ```bash
   PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/synthetic/test_turner_ancillary_docs.py
   git diff --check
   ```
 
-- [ ] **Step 4: Commit the documentation task**
+- [x] **Step 4: Commit the documentation task**
 
   ```bash
   git add docs/synthetic-generator.md README.md tests/synthetic/test_turner_ancillary_docs.py
@@ -345,7 +345,7 @@
 - Consumes: the Task 1–3 commits, focused reports, exact descriptor contract, and existing repository validation gates.
 - Produces: a reviewed Turner ancillary slice ready to merge without modifying native growth generation, real-data boundaries, runtime composition, or package inventory.
 
-- [ ] **Step 1: Run the complete verification matrix**
+- [x] **Step 1: Run the complete verification matrix**
 
   ```bash
   PYTHONDONTWRITEBYTECODE=1 UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q -p no:cacheprovider
@@ -362,7 +362,7 @@
   and run the existing fail-closed CLI checks. Record commands/results in the
   ignored SDD ledger and task reports without staging those artifacts.
 
-- [ ] **Step 2: Dispatch scoped task reviews and one broad review**
+- [x] **Step 2: Dispatch scoped task reviews and one broad review**
 
   Create review packages from the exact Task 1, Task 2, and Task 3 base/head
   ranges, and dispatch an independent reviewer for each. Then create a
