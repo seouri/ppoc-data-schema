@@ -454,7 +454,7 @@ contracts, pytest, Ruff, schema checker.
   and Minor finding through the SDD fix/re-review loop before publication;
   record any parked ruling in the ledger.
 
-- [ ] **Step 3: Inspect, merge, rerun, and push**
+- [x] **Step 3: Inspect, merge, rerun, and push**
 
   Before publication, inspect `git status --short`, staged names/stat/diff,
   and `git diff --check`, preserving unrelated untracked caches and reports.
@@ -469,7 +469,7 @@ contracts, pytest, Ruff, schema checker.
   test "$(git rev-parse main)" = "$(git rev-parse origin/main)"
   ```
 
-- [ ] **Step 4: Mark the plan complete after parity**
+- [x] **Step 4: Mark the plan complete after parity**
 
   Update the ignored ledger and this plan's final checklist only after the
   pushed commit and parity check exist. The published slice must still have
