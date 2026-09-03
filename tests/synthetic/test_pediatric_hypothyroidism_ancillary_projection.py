@@ -237,9 +237,10 @@ def test_projection_is_empty_for_healthy_and_non_target_members() -> None:
     healthy = CohortMember(
         SyntheticDemographics(PATIENT_ID), healthy_trajectory, healthy_frame, None
     )
+    ghd = _member(kind=DisorderKind.GROWTH_HORMONE_DEFICIENCY)
     non_target = _member(kind=DisorderKind.EXCESS_WEIGHT)
 
-    for member in (healthy, non_target):
+    for member in (healthy, ghd, non_target):
         projection = project_pediatric_hypothyroidism_ancillary_resources(
             member, _shape(), _policy_ancillary()
         )
@@ -276,7 +277,21 @@ def test_projection_replays_deterministically_without_mutating_member() -> None:
         member, _shape(), _policy_ancillary()
     )
 
-    assert first.to_mapping() == second.to_mapping()
+    first_resources = first.to_mapping()["resources"]
+    second_resources = second.to_mapping()["resources"]
+    assert first_resources == second_resources
+    assert first_resources["labs"][0]["lab_order_id"] == first_resources["labs"][1]["lab_order_id"]  # type: ignore[index]
+    role_ids = {
+        first_resources["referrals"][0]["referral_id"],  # type: ignore[index]
+        first_resources["labs"][0]["lab_order_id"],  # type: ignore[index]
+        first_resources["problem_list"][0]["problem_list_id"],  # type: ignore[index]
+        first_resources["medications"][0]["med_record_id"],  # type: ignore[index]
+    }
+    assert len(role_ids) == 4
+    assert all(
+        isinstance(identifier, str) and identifier.startswith("syn-")
+        for identifier in role_ids
+    )
     assert member.frame.to_mapping() == before
     assert "truth" not in repr(first).lower()
     assert "trajectory" not in repr(first).lower()
