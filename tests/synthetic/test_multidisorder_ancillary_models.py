@@ -16,8 +16,17 @@ from synthetic.native.multidisorder_ancillary import (
     MultidisorderAncillaryValidationStatus,
     project_multidisorder_ancillary_resources,
 )
+from synthetic.native.resources import ResourceRow
 from tests.synthetic.test_ancillary_projection import _member as _ghd_member
 from tests.synthetic.test_multidisorder_ancillary_projection import _policy, _shape
+
+
+class _StringSubclass(str):
+    pass
+
+
+class _IntegerSubclass(int):
+    pass
 
 
 @pytest.mark.parametrize(
@@ -25,12 +34,16 @@ from tests.synthetic.test_multidisorder_ancillary_projection import _policy, _sh
     (
         ("policy_id", 3),
         ("policy_id", "unsafe/path"),
+        ("policy_id", "uuid"),
         ("policy_id", ["mutable"]),
+        ("policy_id", _StringSubclass("mutable-token")),
         ("policy_version", object()),
         ("policy_version", "patient-version"),
+        ("policy_version", _StringSubclass("1")),
         ("result_delay_days", True),
         ("result_delay_days", -1),
         ("result_delay_days", []),
+        ("result_delay_days", _IntegerSubclass(7)),
     ),
 )
 def test_policy_rejects_non_scalar_unsafe_and_negative_values(
@@ -45,6 +58,48 @@ def test_policy_rejects_non_scalar_unsafe_and_negative_values(
 
     with pytest.raises((TypeError, ValueError)):
         MultidisorderAncillaryPolicy(**values)  # type: ignore[arg-type]
+
+
+def test_policy_reserves_space_for_every_concrete_kind_suffix() -> None:
+    longest_suffix = "-growth_hormone_deficiency"
+    maximum = "a" * (128 - len(longest_suffix))
+
+    accepted = MultidisorderAncillaryPolicy(maximum, "1", 7)
+    assert accepted.policy_id == maximum
+    with pytest.raises(ValueError, match="policy_id"):
+        MultidisorderAncillaryPolicy(f"{maximum}a", "1", 7)
+
+
+def test_policy_and_projection_constructors_reject_subclassed_records() -> None:
+    class PolicySubclass(MultidisorderAncillaryPolicy):
+        pass
+
+    with pytest.raises(TypeError):
+        PolicySubclass("multidisorder-ancillary-v1", "1", 7)
+
+    member = _ghd_member()
+    projection = project_multidisorder_ancillary_resources(member, _shape(), _policy())
+
+    class ProjectionSubclass(type(projection)):
+        pass
+
+    with pytest.raises(TypeError):
+        ProjectionSubclass(projection.patient_id, projection.shape, projection.rows)
+
+    class RowsSubclass(dict[str, tuple[ResourceRow, ...]]):
+        pass
+
+    with pytest.raises(TypeError):
+        type(projection)(projection.patient_id, projection.shape, RowsSubclass(projection.rows))
+
+    class RowSubclass(ResourceRow):
+        pass
+
+    rows = dict(projection.rows)
+    source = rows["labs"][0]
+    rows["labs"] = (RowSubclass(source.resource_name, source.values), *rows["labs"][1:])
+    with pytest.raises(TypeError):
+        type(projection)(projection.patient_id, projection.shape, rows)
 
 
 def test_policy_and_projection_are_frozen_and_aggregate_safe() -> None:

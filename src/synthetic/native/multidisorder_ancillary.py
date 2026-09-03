@@ -17,7 +17,12 @@ from types import MappingProxyType
 from typing import ClassVar
 
 from synthetic.cohort import CohortMember
-from synthetic.models import AgeRegimeDisorderTrajectory, DisorderKind
+from synthetic.models import (
+    AgeRegimeDisorderTrajectory,
+    AgeRegimeTrajectory,
+    DisorderKind,
+    LatentDisorderState,
+)
 from synthetic.native.ancillary import (
     AncillaryResourceProjection,
     AncillaryValidationStatus,
@@ -53,10 +58,13 @@ from synthetic.native.pediatric_hypothyroidism_ancillary import (
 )
 from synthetic.native.resources import (
     BASE_RESOURCE_NAMES,
+    ClinicalDescendant,
     ObservedResourceBundle,
     ResourceRow,
     ResourceShape,
+    ResourceSpec,
     ResourceValidationStatus,
+    SyntheticDemographics,
     validate_observed_resources,
 )
 from synthetic.native.sga_ancillary import (
@@ -145,6 +153,11 @@ _EMPTY_KINDS = frozenset(
         DisorderKind.CONSTITUTIONAL_DELAY,
     }
 )
+_CONCRETE_KIND_SUFFIXES = tuple(
+    kind.value
+    for kind in DisorderKind
+    if kind not in _EMPTY_KINDS
+)
 _SYNTHETIC_PATIENT_TOKEN = re.compile(r"^syn-[A-Za-z0-9][A-Za-z0-9._-]*$")
 _NATIVE_VISIT_ID = re.compile(r"^syn-[0-9a-f]{32}$")
 _AGGREGATE_TOKEN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
@@ -164,6 +177,7 @@ _AGGREGATE_UNSAFE_COMPONENTS = frozenset(
         "row",
         "sequence",
         "truth",
+        "uuid",
         "visit",
     }
 )
@@ -178,7 +192,7 @@ class MultidisorderAncillaryBundleUnavailable(ValueError):
 
 
 def _require_aggregate_safe_token(value: object, field_name: str) -> str:
-    if not isinstance(value, str):
+    if type(value) is not str:
         raise TypeError(f"{field_name} must be a string")
     if (
         _AGGREGATE_TOKEN.fullmatch(value) is None
@@ -194,11 +208,57 @@ def _require_aggregate_safe_token(value: object, field_name: str) -> str:
 
 
 def _require_nonnegative_integer(value: object, field_name: str) -> int:
-    if isinstance(value, bool) or not isinstance(value, int):
+    if type(value) is not int:
         raise TypeError(f"{field_name} must be a nonnegative integer")
     if value < 0:
         raise ValueError(f"{field_name} must be a nonnegative integer")
     return value
+
+
+def _shape_records_are_exact(shape: object) -> bool:
+    if type(shape) is not ResourceShape or type(shape.resources) is not tuple:
+        return False
+    for resource in shape.resources:
+        if (
+            type(resource) is not ResourceSpec
+            or type(resource.name) is not str
+            or type(resource.field_names) is not tuple
+            or not all(type(name) is str for name in resource.field_names)
+        ):
+            return False
+    return True
+
+
+def _resource_row_is_exact(row: object) -> bool:
+    if (
+        type(row) is not ResourceRow
+        or type(row.resource_name) is not str
+        or type(row.values) is not tuple
+    ):
+        return False
+    return all(
+        type(pair) is tuple
+        and len(pair) == 2
+        and type(pair[0]) is str
+        and type(pair[1]) in {str, int, float}
+        for pair in row.values
+    )
+
+
+def _policy_fields_are_valid(policy: object) -> bool:
+    if type(policy) is not MultidisorderAncillaryPolicy:
+        return False
+    try:
+        _require_aggregate_safe_token(policy.policy_id, "policy_id")
+        _require_aggregate_safe_token(policy.policy_version, "policy_version")
+        _require_nonnegative_integer(policy.result_delay_days, "result_delay_days")
+        for suffix in _CONCRETE_KIND_SUFFIXES:
+            _require_aggregate_safe_token(
+                f"{policy.policy_id}-{suffix}", "derived policy_id"
+            )
+    except (AttributeError, TypeError, ValueError):
+        return False
+    return True
 
 
 @dataclass(frozen=True, repr=False)
@@ -210,9 +270,15 @@ class MultidisorderAncillaryPolicy:
     result_delay_days: int
 
     def __post_init__(self) -> None:
+        if type(self) is not MultidisorderAncillaryPolicy:
+            raise TypeError("policy must be an exact MultidisorderAncillaryPolicy")
         _require_aggregate_safe_token(self.policy_id, "policy_id")
         _require_aggregate_safe_token(self.policy_version, "policy_version")
         _require_nonnegative_integer(self.result_delay_days, "result_delay_days")
+        for suffix in _CONCRETE_KIND_SUFFIXES:
+            _require_aggregate_safe_token(
+                f"{self.policy_id}-{suffix}", "derived policy_id"
+            )
 
     def __repr__(self) -> str:
         return "MultidisorderAncillaryPolicy(<aggregate-only>)"
@@ -229,14 +295,18 @@ class MultidisorderAncillaryProjection:
     PROJECTION_VERSION: ClassVar[str] = "multidisorder-ancillary-projection-v1"
 
     def __post_init__(self) -> None:
+        if type(self) is not MultidisorderAncillaryProjection:
+            raise TypeError(
+                "projection must be an exact MultidisorderAncillaryProjection"
+            )
         if (
-            not isinstance(self.patient_id, str)
+            type(self.patient_id) is not str
             or _SYNTHETIC_PATIENT_TOKEN.fullmatch(self.patient_id) is None
         ):
             raise ValueError("patient_id must identify a fictional synthetic patient")
-        if not isinstance(self.shape, ResourceShape):
+        if not _shape_records_are_exact(self.shape):
             raise TypeError("shape must be a ResourceShape")
-        if not isinstance(self.rows, Mapping):
+        if type(self.rows) not in {dict, MappingProxyType}:
             raise TypeError("rows must be a mapping")
         if tuple(self.rows) != MULTIDISORDER_ANCILLARY_RESOURCE_NAMES:
             raise ValueError("rows must contain four ancillary resources in fixed order")
@@ -244,9 +314,9 @@ class MultidisorderAncillaryProjection:
         normalized: dict[str, tuple[ResourceRow, ...]] = {}
         for resource_name in MULTIDISORDER_ANCILLARY_RESOURCE_NAMES:
             resource_rows = self.rows[resource_name]
-            if not isinstance(resource_rows, tuple):
+            if type(resource_rows) is not tuple:
                 raise TypeError("resource rows must be tuples")
-            if not all(isinstance(row, ResourceRow) for row in resource_rows):
+            if not all(_resource_row_is_exact(row) for row in resource_rows):
                 raise TypeError("resource rows must contain ResourceRow values")
             expected_fields = self.shape.field_names(resource_name)
             for row in resource_rows:
@@ -254,7 +324,7 @@ class MultidisorderAncillaryProjection:
                     raise ValueError("resource rows must use their fixed resource name")
                 if tuple(name for name, _ in row.values) != expected_fields:
                     raise ValueError("resource rows must match descriptor field order")
-                if row.to_mapping().get("patient_id") != self.patient_id:
+                if dict(row.values).get("patient_id") != self.patient_id:
                     raise ValueError("resource rows must identify the projection patient")
             normalized[resource_name] = resource_rows
         object.__setattr__(self, "rows", MappingProxyType(normalized))
@@ -438,11 +508,75 @@ _CONCRETE_ADAPTERS: Mapping[DisorderKind, _ConcreteAdapter] = MappingProxyType(
 )
 
 
+def _member_records_are_exact(member: object) -> bool:
+    if type(member) is not CohortMember:
+        return False
+    try:
+        demographics = member.demographics
+        trajectory = member.trajectory
+        frame = member.frame
+        return (
+            type(demographics) is SyntheticDemographics
+            and type(trajectory) is AgeRegimeDisorderTrajectory
+            and type(trajectory.physiology) is AgeRegimeTrajectory
+            and type(trajectory.disorder) is LatentDisorderState
+            and type(trajectory.events) is tuple
+            and type(frame) is ObservationFrame
+        )
+    except AttributeError:
+        return False
+
+
+def _projection_records_are_exact(projection: object) -> bool:
+    if type(projection) is not MultidisorderAncillaryProjection:
+        return False
+    try:
+        if (
+            type(projection.patient_id) is not str
+            or not _shape_records_are_exact(projection.shape)
+            or type(projection.rows) is not MappingProxyType
+            or tuple(projection.rows) != MULTIDISORDER_ANCILLARY_RESOURCE_NAMES
+        ):
+            return False
+        return all(
+            type(projection.rows[name]) is tuple
+            and all(_resource_row_is_exact(row) for row in projection.rows[name])
+            for name in MULTIDISORDER_ANCILLARY_RESOURCE_NAMES
+        )
+    except (AttributeError, KeyError, TypeError, ValueError):
+        return False
+
+
+def _bundle_rows_are_exact(bundle: object) -> bool:
+    if type(bundle) is not ObservedResourceBundle:
+        return False
+    try:
+        if (
+            type(bundle.patient_id) is not str
+            or not _shape_records_are_exact(bundle.shape)
+            or type(bundle.rows) is not MappingProxyType
+            or tuple(bundle.rows) != BASE_RESOURCE_NAMES
+            or type(bundle.clinical_descendants) is not tuple
+            or not all(
+                type(item) is ClinicalDescendant
+                for item in bundle.clinical_descendants
+            )
+        ):
+            return False
+        return all(
+            type(bundle.rows[name]) is tuple
+            and all(_resource_row_is_exact(row) for row in bundle.rows[name])
+            for name in BASE_RESOURCE_NAMES
+        )
+    except (AttributeError, KeyError, TypeError, ValueError):
+        return False
+
+
 def _member_kind(member: CohortMember) -> DisorderKind:
+    if not _member_records_are_exact(member):
+        raise TypeError("member records are malformed")
     trajectory = member.trajectory
-    if not isinstance(trajectory, AgeRegimeDisorderTrajectory) or not isinstance(
-        trajectory.disorder.kind, DisorderKind
-    ):
+    if type(trajectory.disorder.kind) is not DisorderKind:
         raise TypeError("member trajectory is malformed")
     return trajectory.disorder.kind
 
@@ -460,11 +594,13 @@ def _concrete_policy(
 
 
 def _empty_member_is_valid(member: CohortMember) -> bool:
+    if not _member_records_are_exact(member):
+        return False
     frame = member.frame
     trajectory = member.trajectory
     if (
-        not isinstance(frame, ObservationFrame)
-        or not isinstance(trajectory, AgeRegimeDisorderTrajectory)
+        type(frame) is not ObservationFrame
+        or type(trajectory) is not AgeRegimeDisorderTrajectory
         or validate_observation_frame(frame).status is not ObservationValidationStatus.PASS
     ):
         return False
@@ -488,14 +624,16 @@ def project_multidisorder_ancillary_resources(
     """Dispatch one typed member to its single reviewed ancillary pathway."""
 
     if (
-        not isinstance(member, CohortMember)
-        or not isinstance(shape, ResourceShape)
-        or not isinstance(policy, MultidisorderAncillaryPolicy)
+        type(member) is not CohortMember
+        or type(shape) is not ResourceShape
+        or type(policy) is not MultidisorderAncillaryPolicy
     ):
         raise MultidisorderAncillaryProjectionUnavailable(
             "multidisorder ancillary projection unavailable"
         )
     try:
+        if not _shape_records_are_exact(shape) or not _policy_fields_are_valid(policy):
+            raise ValueError("typed inputs are malformed")
         kind = _member_kind(member)
         adapter = _CONCRETE_ADAPTERS.get(kind)
         if adapter is None:
@@ -581,14 +719,18 @@ def validate_multidisorder_ancillary_resources(
     """Validate one adapted projection without exposing concrete diagnostics."""
 
     if (
-        not isinstance(member, CohortMember)
-        or not isinstance(projection, MultidisorderAncillaryProjection)
-        or not isinstance(policy, MultidisorderAncillaryPolicy)
+        type(member) is not CohortMember
+        or type(projection) is not MultidisorderAncillaryProjection
+        or type(policy) is not MultidisorderAncillaryPolicy
     ):
         raise MultidisorderAncillaryProjectionUnavailable(
             "multidisorder ancillary projection unavailable"
         )
     try:
+        if not _projection_records_are_exact(
+            projection
+        ) or not _policy_fields_are_valid(policy):
+            raise ValueError("typed inputs are malformed")
         kind = _member_kind(member)
         adapter = _CONCRETE_ADAPTERS.get(kind)
         if adapter is None:
@@ -630,7 +772,7 @@ def _zeroed_base(bundle: ObservedResourceBundle) -> ObservedResourceBundle:
 def _zeroed_base_validation_view(
     bundle: ObservedResourceBundle,
 ) -> ObservedResourceBundle:
-    if isinstance(bundle.source_frame, ObservationFrame):
+    if type(bundle.source_frame) is ObservationFrame:
         return _zeroed_base(bundle)
     rows = dict(bundle.rows)
     for resource_name in MULTIDISORDER_ANCILLARY_RESOURCE_NAMES:
@@ -644,7 +786,7 @@ def _patient_row_matches_member(
     bundle: ObservedResourceBundle, member: CohortMember
 ) -> bool:
     patient_rows = bundle.rows["patients"]
-    if len(patient_rows) != 1 or not isinstance(patient_rows[0], ResourceRow):
+    if len(patient_rows) != 1 or type(patient_rows[0]) is not ResourceRow:
         return False
     visible = patient_rows[0].to_mapping()
     expected = member.demographics.to_mapping()
@@ -657,7 +799,7 @@ def _has_independent_visible_base_failure(bundle: ObservedResourceBundle) -> boo
         return True
     try:
         return any(
-            not isinstance(row, ResourceRow)
+            type(row) is not ResourceRow
             or _NATIVE_VISIT_ID.fullmatch(row.to_mapping().get("visit_id", "")) is None
             for row in view.rows["visits"]
         )
@@ -671,7 +813,7 @@ def _projection_visits_resolve(
     visit_ids = {
         row.to_mapping().get("visit_id")
         for row in bundle.rows["visits"]
-        if isinstance(row, ResourceRow)
+        if type(row) is ResourceRow
     }
     for resource_name in ("labs", "medications", "referrals"):
         for row in projection.rows[resource_name]:
@@ -696,11 +838,14 @@ def _inputs_are_bound(
 def _bundle_identity_state(
     bundle: object, member: object
 ) -> tuple[MultidisorderAncillaryValidationStatus, str]:
-    if not isinstance(bundle, ObservedResourceBundle) or not isinstance(
-        member, CohortMember
-    ):
+    if type(bundle) is not ObservedResourceBundle or type(member) is not CohortMember:
         return MultidisorderAncillaryValidationStatus.UNEVALUABLE, "MALFORMED_ANCILLARY"
     try:
+        if not _bundle_rows_are_exact(bundle) or not _member_records_are_exact(member):
+            return (
+                MultidisorderAncillaryValidationStatus.UNEVALUABLE,
+                "MALFORMED_ANCILLARY",
+            )
         if (
             bundle.patient_id != member.demographics.patient_id
             or not _patient_row_matches_member(bundle, member)
@@ -709,9 +854,9 @@ def _bundle_identity_state(
                 MultidisorderAncillaryValidationStatus.FAIL,
                 "BUNDLE_IDENTITY_INVALID",
             )
-        if not isinstance(bundle.source_frame, ObservationFrame) or not isinstance(
-            member.frame, ObservationFrame
-        ):
+        if type(bundle.source_frame) is not ObservationFrame or type(
+            member.frame
+        ) is not ObservationFrame:
             return (
                 MultidisorderAncillaryValidationStatus.UNEVALUABLE,
                 "INSUFFICIENT_EVIDENCE",
@@ -729,9 +874,11 @@ def _bundle_identity_state(
 def _base_resources_state(
     bundle: object,
 ) -> tuple[MultidisorderAncillaryValidationStatus, str]:
-    if not isinstance(bundle, ObservedResourceBundle):
+    if type(bundle) is not ObservedResourceBundle:
         return MultidisorderAncillaryValidationStatus.UNEVALUABLE, "MALFORMED_ANCILLARY"
     try:
+        if not _bundle_rows_are_exact(bundle):
+            return MultidisorderAncillaryValidationStatus.FAIL, "BASE_RESOURCES_INVALID"
         if _has_independent_visible_base_failure(bundle):
             return MultidisorderAncillaryValidationStatus.FAIL, "BASE_RESOURCES_INVALID"
         status = validate_observed_resources(_zeroed_base_validation_view(bundle)).status
@@ -753,12 +900,21 @@ def _ancillary_resources_state(
     policy: object,
 ) -> tuple[MultidisorderAncillaryValidationStatus, str]:
     if (
-        not isinstance(bundle, ObservedResourceBundle)
-        or not isinstance(member, CohortMember)
-        or not isinstance(policy, MultidisorderAncillaryPolicy)
+        type(bundle) is not ObservedResourceBundle
+        or type(member) is not CohortMember
+        or type(policy) is not MultidisorderAncillaryPolicy
     ):
         return MultidisorderAncillaryValidationStatus.UNEVALUABLE, "MALFORMED_ANCILLARY"
     try:
+        if (
+            not _bundle_rows_are_exact(bundle)
+            or not _member_records_are_exact(member)
+            or not _policy_fields_are_valid(policy)
+        ):
+            return (
+                MultidisorderAncillaryValidationStatus.UNEVALUABLE,
+                "MALFORMED_ANCILLARY",
+            )
         projection = MultidisorderAncillaryProjection(
             bundle.patient_id,
             bundle.shape,
@@ -797,9 +953,9 @@ def _ancillary_resources_state(
 
 def _visible_scalar_is_safe(value: object) -> bool:
     return (
-        isinstance(value, str)
-        or (isinstance(value, int) and not isinstance(value, bool))
-        or (isinstance(value, float) and isfinite(value))
+        type(value) is str
+        or type(value) is int
+        or (type(value) is float and isfinite(value))
     )
 
 
@@ -850,9 +1006,14 @@ def _visible_mapping_is_safe(
 def _truth_boundary_state(
     bundle: object,
 ) -> tuple[MultidisorderAncillaryValidationStatus, str]:
-    if not isinstance(bundle, ObservedResourceBundle):
+    if type(bundle) is not ObservedResourceBundle:
         return MultidisorderAncillaryValidationStatus.UNEVALUABLE, "MALFORMED_ANCILLARY"
     try:
+        if not _bundle_rows_are_exact(bundle):
+            return (
+                MultidisorderAncillaryValidationStatus.FAIL,
+                "TRUTH_BOUNDARY_INVALID",
+            )
         mapping = bundle.to_mapping()
         expected_keys = {
             "contract",
@@ -882,6 +1043,24 @@ def validate_multidisorder_ancillary_bundle(
 ) -> MultidisorderAncillaryValidationReport:
     """Return fixed aggregate checks for one empty or merged sidecar bundle."""
 
+    if (
+        type(bundle) is not ObservedResourceBundle
+        or type(member) is not CohortMember
+        or type(policy) is not MultidisorderAncillaryPolicy
+        or not _member_records_are_exact(member)
+        or not _policy_fields_are_valid(policy)
+    ):
+        checks = tuple(
+            MultidisorderAncillaryCheck(
+                name,
+                MultidisorderAncillaryValidationStatus.UNEVALUABLE,
+                "MALFORMED_ANCILLARY",
+            )
+            for name in MULTIDISORDER_ANCILLARY_BUNDLE_CHECK_NAMES
+        )
+        return MultidisorderAncillaryValidationReport(
+            MultidisorderAncillaryValidationStatus.UNEVALUABLE, checks
+        )
     states = (
         ("bundle_identity", _bundle_identity_state(bundle, member)),
         ("base_resources", _base_resources_state(bundle)),
@@ -904,7 +1083,13 @@ def _validated_components(
     projection: MultidisorderAncillaryProjection,
     policy: MultidisorderAncillaryPolicy,
 ) -> bool:
-    if not _inputs_are_bound(bundle, member, projection):
+    if (
+        not _bundle_rows_are_exact(bundle)
+        or not _member_records_are_exact(member)
+        or not _projection_records_are_exact(projection)
+        or not _policy_fields_are_valid(policy)
+        or not _inputs_are_bound(bundle, member, projection)
+    ):
         return False
     if any(bundle.rows[name] for name in MULTIDISORDER_ANCILLARY_RESOURCE_NAMES):
         return False
@@ -928,10 +1113,10 @@ def merge_multidisorder_ancillary_resources(
 
     if not all(
         (
-            isinstance(bundle, ObservedResourceBundle),
-            isinstance(member, CohortMember),
-            isinstance(projection, MultidisorderAncillaryProjection),
-            isinstance(policy, MultidisorderAncillaryPolicy),
+            type(bundle) is ObservedResourceBundle,
+            type(member) is CohortMember,
+            type(projection) is MultidisorderAncillaryProjection,
+            type(policy) is MultidisorderAncillaryPolicy,
         )
     ):
         raise MultidisorderAncillaryBundleUnavailable(

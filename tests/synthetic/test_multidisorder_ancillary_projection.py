@@ -164,3 +164,66 @@ def test_projector_uses_one_fixed_redacted_boundary_for_malformed_inputs() -> No
         ) as error:
             project_multidisorder_ancillary_resources(*args)  # type: ignore[arg-type]
         assert member.demographics.patient_id not in str(error.value)
+
+
+@pytest.mark.parametrize("kind", (DisorderKind.HEALTHY, DisorderKind.GROWTH_HORMONE_DEFICIENCY))
+@pytest.mark.parametrize("invalid_id", ("uuid", "a" * 128))
+def test_dispatch_revalidates_policy_identity_at_the_fixed_boundary(
+    kind: DisorderKind, invalid_id: str,
+) -> None:
+    policy = _policy()
+    object.__setattr__(policy, "policy_id", invalid_id)
+
+    with pytest.raises(
+        MultidisorderAncillaryProjectionUnavailable,
+        match=r"^multidisorder ancillary projection unavailable$",
+    ):
+        project_multidisorder_ancillary_resources(
+            _member_for_kind(kind), _shape(), policy
+        )
+
+
+def test_projector_rejects_public_record_subclasses_without_reading_them() -> None:
+    class StatefulPolicy(MultidisorderAncillaryPolicy):
+        def __getattribute__(self, name: str):
+            if name == "result_delay_days" and object.__getattribute__(self, "armed"):
+                reads = object.__getattribute__(self, "reads")
+                object.__setattr__(self, "reads", reads + 1)
+                return 7 + reads
+            return object.__getattribute__(self, name)
+
+    policy = object.__new__(StatefulPolicy)
+    object.__setattr__(policy, "policy_id", "multidisorder-ancillary-v1")
+    object.__setattr__(policy, "policy_version", "1")
+    object.__setattr__(policy, "result_delay_days", 7)
+    object.__setattr__(policy, "reads", 0)
+    object.__setattr__(policy, "armed", True)
+
+    class MemberSubclass(type(_ghd_member())):
+        pass
+
+    source_member = _ghd_member()
+    member = object.__new__(MemberSubclass)
+    for name in ("demographics", "trajectory", "frame", "bundle"):
+        object.__setattr__(member, name, getattr(source_member, name))
+
+    class ShapeSubclass(ResourceShape):
+        pass
+
+    shape = ShapeSubclass(_shape().resources)
+
+    for candidate_member, candidate_shape, candidate_policy in (
+        (_ghd_member(), _shape(), policy),
+        (member, _shape(), _policy()),
+        (_ghd_member(), shape, _policy()),
+    ):
+        for _ in range(2):
+            with pytest.raises(
+                MultidisorderAncillaryProjectionUnavailable,
+                match=r"^multidisorder ancillary projection unavailable$",
+            ):
+                project_multidisorder_ancillary_resources(
+                    candidate_member, candidate_shape, candidate_policy
+                )
+
+    assert object.__getattribute__(policy, "reads") == 0
