@@ -141,8 +141,8 @@
 
 ### Task 4: Review, verify, merge, and push
 
-- [ ] Run the complete synthetic suite, Ruff, schema check, lock check, and whitespace check.
-- [ ] Package a review diff for an independent broad reviewer; address every Critical/Important/Minor finding and rereview any fix.
-- [ ] Inspect staged names/stat/diff, excluding untracked `__pycache__` directories; commit any final scoped fixes.
-- [ ] Merge to `main`, push `origin/main`, fetch, and verify `HEAD` equals `origin/main`.
-- [ ] Mark this plan complete only after the pushed commit and verification evidence exist.
+- [x] Run the complete synthetic suite, Ruff, schema check, lock check, and whitespace check.
+- [x] Package a review diff for an independent broad reviewer; address every Critical/Important/Minor finding and rereview any fix.
+- [x] Inspect staged names/stat/diff, excluding untracked `__pycache__` directories; commit any final scoped fixes.
+- [x] Merge to `main`, push `origin/main`, fetch, and verify `HEAD` equals `origin/main`.
+- [x] Mark this plan complete only after the pushed commit and verification evidence exist.
