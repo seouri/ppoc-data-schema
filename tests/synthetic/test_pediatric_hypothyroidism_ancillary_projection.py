@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 import json
 from pathlib import Path
 
@@ -117,6 +118,13 @@ def _resources(member: CohortMember, **policy_changes: object) -> dict[str, obje
         _shape(),
         _policy_ancillary(**policy_changes),
     ).to_mapping()["resources"]  # type: ignore[no-any-return]
+
+
+def _expected_ancillary_id(role: str) -> str:
+    material = (
+        f"pediatric-hypothyroidism-ancillary-id-v1\x1f{PATIENT_ID}\x1f{role}"
+    ).encode()
+    return f"syn-{hashlib.sha256(material).hexdigest()}"
 
 
 def test_diagnosed_hypothyroidism_projects_exact_four_resource_contract() -> None:
@@ -292,6 +300,15 @@ def test_projection_replays_deterministically_without_mutating_member() -> None:
         isinstance(identifier, str) and identifier.startswith("syn-")
         for identifier in role_ids
     )
+    assert {
+        "referral": first_resources["referrals"][0]["referral_id"],  # type: ignore[index]
+        "lab-order": first_resources["labs"][0]["lab_order_id"],  # type: ignore[index]
+        "problem-list": first_resources["problem_list"][0]["problem_list_id"],  # type: ignore[index]
+        "medication": first_resources["medications"][0]["med_record_id"],  # type: ignore[index]
+    } == {
+        role: _expected_ancillary_id(role)
+        for role in ("referral", "lab-order", "problem-list", "medication")
+    }
     assert member.frame.to_mapping() == before
     assert "truth" not in repr(first).lower()
     assert "trajectory" not in repr(first).lower()
