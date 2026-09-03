@@ -18,7 +18,7 @@ Access to project data is restricted to authorized study personnel who have comp
 
 Funding sponsors are the **Charles H. Hood Foundation** and **Yosemite** for the project *Using Large Language Models for Pediatric Diagnosis*.
 
-These project-governance statements apply to the restricted PPOC source snapshot described above. Ordinary synthetic development uses no PPOC rows or patient records and does not require those source-data approvals; see the [synthetic generator guide](docs/synthetic-generator.md) for its separate content and reproducibility requirements. The evaluator-only excess-weight and pediatric-hypothyroidism ancillary pathways are separate roadmap slices documented in that guide; the latter's [plan](docs/superpowers/plans/2026-09-02-pediatric-hypothyroidism-ancillary-pathway.md) and [spec](docs/superpowers/specs/2026-09-02-pediatric-hypothyroidism-ancillary-pathway-design.md) define its contract.
+These project-governance statements apply to the restricted PPOC source snapshot described above. Ordinary synthetic development uses no PPOC rows or patient records and does not require those source-data approvals; see the [synthetic generator guide](docs/synthetic-generator.md) for its separate content and reproducibility requirements. The evaluator-only excess-weight ancillary pathway is a separate roadmap slice documented in that guide. The pediatric-hypothyroidism ancillary pathway is a separate roadmap slice; see its [plan](docs/superpowers/plans/2026-09-02-pediatric-hypothyroidism-ancillary-pathway.md) and [spec](docs/superpowers/specs/2026-09-02-pediatric-hypothyroidism-ancillary-pathway-design.md).
 
 ## Contents
 
