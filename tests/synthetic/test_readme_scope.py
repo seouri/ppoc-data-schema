@@ -14,7 +14,9 @@ def test_readme_points_to_the_dedicated_synthetic_generator_guide() -> None:
     section = readme.split(heading, maxsplit=1)[1].split("\n## ", maxsplit=1)[0]
     assert section == (
         "\nSee the [synthetic generator guide](docs/synthetic-generator.md) for "
-        "ordinary development-only synthetic fixture generation and validation. "
+        "ordinary development-only synthetic fixture generation and validation, "
+        "including the [all-disorder profile specification](docs/superpowers/specs/2026-09-03-all-disorder-development-profile-design.md) "
+        "and [implementation plan](docs/superpowers/plans/2026-09-03-all-disorder-coverage-profile.md). "
         "Optional governed comparison, privacy, and release workflows are documented "
         "there separately and are not required to generate development fixtures.\n"
     )
