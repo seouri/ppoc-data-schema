@@ -17,6 +17,47 @@ ROOT = Path(__file__).resolve().parents[2]
 GUIDE = ROOT / "docs" / "synthetic-generator.md"
 README = ROOT / "README.md"
 SECTION_HEADING = "## Evaluator-only undernutrition ancillary pathway\n"
+EMITTED_RESOURCE_FIELDS = {
+    "labs": (
+        "patient_id",
+        "visit_id",
+        "lab_order_id",
+        "result_line_num",
+        "lab_order_date_age_in_days",
+        "lab_procedure_name",
+        "lab_procedure_description",
+        "lab_result_date_age_in_days",
+        "result_component_name",
+        "result_loinc_code",
+        "result_value",
+        "result_flag",
+    ),
+    "medications": (
+        "patient_id",
+        "visit_id",
+        "med_record_id",
+        "med_order_date_age_in_days",
+        "med_start_date_age_in_days",
+        "med_end_date_age_in_days",
+        "med_record_type",
+        "med_simple_generic_name",
+    ),
+    "problem_list": (
+        "patient_id",
+        "problem_list_id",
+        "noted_date_age_in_days",
+        "resolved_date_age_in_days",
+        "pl_diag",
+    ),
+    "referrals": (
+        "patient_id",
+        "visit_id",
+        "referral_id",
+        "referral_date_age_in_days",
+        "requested_specialty",
+        "referral_number_of_visits",
+    ),
+}
 
 
 def _section() -> str:
@@ -29,6 +70,11 @@ def test_guide_names_the_public_api_and_exact_fictional_contract() -> None:
     section = _section()
 
     for api_name in (
+        "UNDERNUTRITION_ANCILLARY_RESOURCE_NAMES",
+        "UNDERNUTRITION_LAB_COMPONENT_NAMES",
+        "UNDERNUTRITION_ANCILLARY_CHECK_NAMES",
+        "UNDERNUTRITION_ANCILLARY_REASON_CODES_BY_STATUS",
+        "UNDERNUTRITION_ANCILLARY_REASON_CODES",
         "UndernutritionAncillaryPolicy",
         "UndernutritionAncillaryProjection",
         "UndernutritionAncillaryProjectionUnavailable",
@@ -76,9 +122,12 @@ def test_guide_states_schema_source_and_link_boundaries() -> None:
         "exact-schema",
         "in-memory",
         "evaluator-only",
-        "four named resource shapes",
-        "descriptor field order",
+        "six-resource input shape",
+        "`patients`, `visits`, `labs`, `medications`, `problem_list`, and `referrals`",
+        "four-resource projection output",
+        "supplied descriptor field order",
         "empty-string missing-value conventions",
+        "`problem_list` has no visit key",
         "`UndernutritionModule`",
         "weight/BMI-first decline",
         "delayed height effect",
@@ -87,6 +136,35 @@ def test_guide_states_schema_source_and_link_boundaries() -> None:
         "source-point visit link",
     ):
         assert term in section, f"guide is missing boundary term: {term}"
+
+    for resource_name, field_names in EMITTED_RESOURCE_FIELDS.items():
+        expected = f"{resource_name}: {', '.join(field_names)}"
+        assert expected in section, f"guide is missing exact {resource_name} field order"
+
+    for empty_field in (
+        "lab_procedure_name",
+        "lab_procedure_description",
+        "result_loinc_code",
+        "result_value",
+        "med_end_date_age_in_days",
+        "resolved_date_age_in_days",
+    ):
+        assert f"`{empty_field}`" in section
+    assert "remain empty strings" in section
+
+
+def test_guide_documents_validator_and_delayed_lab_contract() -> None:
+    section = _section()
+
+    for term in (
+        "`UndernutritionAncillaryPolicy.result_delay_days`",
+        "lab result age equals the workup order age plus `result_delay_days`",
+        "weight component first and height component second",
+        "`PASS`, `FAIL`, and `UNEVALUABLE`",
+        "`FAIL` > `UNEVALUABLE` > `PASS`",
+        "`pathway_scope`, `row_schema`, `causal_timing`, `cross_resource_links`, and `source_evidence`",
+    ):
+        assert term in section, f"guide is missing validator or delay term: {term}"
 
 
 def test_guide_documents_descendants_treatment_gating_and_empty_non_targets() -> None:
@@ -119,13 +197,23 @@ def test_guide_keeps_fictional_labels_and_deferred_work_explicit() -> None:
         "not icd",
         "loinc",
         "rxnorm",
-        "runtime/package integration",
-        "prevalence/demographic calibration",
-        "privacy/non-matchability",
-        "clinical/nutrition/release claims",
-        "real or held-out data",
-        "dedicated resource/terminology expansion",
+        "runtime integration",
+        "package export",
+        "prevalence calibration",
+        "demographic calibration",
+        "privacy/non-matchability evaluation",
+        "clinical review",
+        "nutrition guidance",
+        "release authorization",
+        "real data",
+        "held-out data",
+        "dedicated nutrition resources",
+        "clinical terminology mappings",
+        "serialization of the in-memory `synthetic` marker",
+        "separate reviewed contract",
         "optional synthea conformance",
+        "no deferred workflow may introduce patient rows",
+        "alter this typed projection contract",
     ):
         assert term in section, f"guide is missing deferred boundary: {term}"
     assert "remain deferred" in section
@@ -151,3 +239,6 @@ def test_readme_links_the_undernutrition_slice_without_copying_the_guide() -> No
     assert "SYN-UNDERNUTRITION" not in readme
     assert "Synthetic Pediatric Nutrition" not in readme
     assert "UndernutritionAncillaryPolicy" not in readme
+    assert "UNDERNUTRITION_" not in readme
+    assert "result_delay_days" not in readme
+    assert "pathway_scope" not in readme
