@@ -17,7 +17,12 @@ from types import MappingProxyType
 from typing import ClassVar
 
 from synthetic.cohort import CohortMember
-from synthetic.models import MAX_AGE_DAYS, AgeRegimeDisorderTrajectory, DisorderKind
+from synthetic.models import (
+    MAX_AGE_DAYS,
+    AgeRegimeDisorderTrajectory,
+    ClinicalEvent,
+    DisorderKind,
+)
 from synthetic.native.observations import (
     ObservationValidationStatus,
     RecordedEvent,
@@ -809,6 +814,54 @@ def _source_independent_row_reason(
     return None
 
 
+def _typed_treatment_start_age(
+    trajectory: AgeRegimeDisorderTrajectory,
+) -> tuple[bool, int | None]:
+    """Return typed treatment timing, or unknown when the object is malformed."""
+
+    try:
+        events = trajectory.events
+        if not isinstance(events, tuple):
+            return False, None
+        points = trajectory.physiology.points
+        if not points:
+            return False, None
+        patient_id = points[0].patient_id
+        treatment_ages: list[int] = []
+        for event in events:
+            if not isinstance(event, ClinicalEvent):
+                return False, None
+            if (
+                not isinstance(event.event_type, str)
+                or event.event_type
+                not in {
+                    "latent_onset",
+                    "observable_phenotype",
+                    "recognition_opportunity",
+                    "workup",
+                    "recorded_diagnosis",
+                    "treatment_start",
+                    "treatment_response",
+                    "treatment_nonresponse",
+                }
+                or event.patient_id != patient_id
+                or isinstance(event.age_days, bool)
+                or not isinstance(event.age_days, int)
+                or not 0 <= event.age_days <= MAX_AGE_DAYS
+                or event.code is not None
+                or type(event.hidden) is not bool
+                or event.hidden is not (event.event_type == "latent_onset")
+            ):
+                return False, None
+            if event.event_type == "treatment_start":
+                treatment_ages.append(event.age_days)
+        if len(treatment_ages) > 1:
+            return False, None
+        return True, treatment_ages[0] if treatment_ages else None
+    except (AttributeError, TypeError, ValueError):
+        return False, None
+
+
 def _pediatric_hypothyroidism_ancillary_report(
     states: Mapping[
         str,
@@ -868,6 +921,9 @@ def validate_pediatric_hypothyroidism_ancillary_resources(
     # All checks in this block use visible rows and visible events only.  The
     # private observation evidence is deliberately consulted afterwards.
     target_kind: bool | None = None
+    typed_treatment_known = False
+    typed_treatment_age: int | None = None
+    trajectory: AgeRegimeDisorderTrajectory | None = None
     member_id: object = None
     visible_row_values: dict[str, list[dict[str, object]]] = {
         resource_name: []
@@ -906,6 +962,10 @@ def validate_pediatric_hypothyroidism_ancillary_resources(
                 trajectory.disorder.kind
                 is DisorderKind.PEDIATRIC_HYPOTHYROIDISM
             )
+            if target_kind:
+                typed_treatment_known, typed_treatment_age = (
+                    _typed_treatment_start_age(trajectory)
+                )
 
         rows = projection.rows
         if not isinstance(rows, Mapping):
@@ -1201,6 +1261,15 @@ def validate_pediatric_hypothyroidism_ancillary_resources(
             )
 
         if target_kind:
+            diagnosis = visible_events.get(RecordedEventKind.DIAGNOSIS)
+            medication_expected_count: int | None = None
+            if diagnosis is None:
+                medication_expected_count = 0
+            elif typed_treatment_known:
+                medication_expected_count = int(
+                    typed_treatment_age is not None
+                    and typed_treatment_age >= diagnosis.age_days
+                )
             expected_counts = {
                 "labs": 2 if RecordedEventKind.WORKUP in visible_events else 0,
                 "problem_list": 1
@@ -1210,6 +1279,8 @@ def validate_pediatric_hypothyroidism_ancillary_resources(
                 if RecordedEventKind.RECOGNITION in visible_events
                 else 0,
             }
+            if medication_expected_count is not None:
+                expected_counts["medications"] = medication_expected_count
             for resource_name, expected_count in expected_counts.items():
                 resource_rows = rows.get(resource_name)
                 actual_count = (
@@ -1222,14 +1293,7 @@ def validate_pediatric_hypothyroidism_ancillary_resources(
                         "PATHWAY_SCOPE_INVALID",
                     )
 
-            diagnosis = visible_events.get(RecordedEventKind.DIAGNOSIS)
             medication_values = visible_row_values["medications"]
-            if diagnosis is None and medication_values:
-                mark(
-                    "pathway_scope",
-                    PediatricHypothyroidismAncillaryValidationStatus.FAIL,
-                    "PATHWAY_SCOPE_INVALID",
-                )
             if len(medication_values) > 1:
                 mark(
                     "pathway_scope",
@@ -1301,9 +1365,7 @@ def validate_pediatric_hypothyroidism_ancillary_resources(
                     "TIMING_INVALID",
                 )
 
-            if diagnosis is None and medication_values:
-                pass
-            elif diagnosis is not None and len(medication_values) == 1:
+            if diagnosis is not None and len(medication_values) == 1:
                 medication = medication_values[0]
                 order_age = medication.get("med_order_date_age_in_days")
                 start_age = medication.get("med_start_date_age_in_days")
@@ -1359,6 +1421,33 @@ def validate_pediatric_hypothyroidism_ancillary_resources(
             "source_evidence",
             PediatricHypothyroidismAncillaryValidationStatus.UNEVALUABLE,
             "SOURCE_EVIDENCE_UNAVAILABLE",
+        )
+        return _pediatric_hypothyroidism_ancillary_report(states)
+
+    # Observation validation authenticates the frame against its own private
+    # truth.  The ancillary boundary also requires that truth to be the same
+    # typed trajectory supplied by the member before any row comparison.
+    binding_valid = False
+    try:
+        truth = member.frame.truth
+        truth_trajectory = truth.latent_trajectory
+        binding_valid = (
+            isinstance(trajectory, AgeRegimeDisorderTrajectory)
+            and isinstance(truth_trajectory, AgeRegimeDisorderTrajectory)
+            and member.frame.patient_id == member_id
+            and truth.patient_id == member_id
+            and bool(trajectory.physiology.points)
+            and trajectory.physiology.points[0].patient_id == member_id
+            and trajectory == truth_trajectory
+            and trajectory.events == truth.source_events
+        )
+    except Exception:  # noqa: BLE001 - source details stay redacted
+        binding_valid = False
+    if not binding_valid:
+        mark(
+            "source_evidence",
+            PediatricHypothyroidismAncillaryValidationStatus.FAIL,
+            "SOURCE_EVIDENCE_INVALID",
         )
         return _pediatric_hypothyroidism_ancillary_report(states)
 

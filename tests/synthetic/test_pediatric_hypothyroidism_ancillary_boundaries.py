@@ -9,7 +9,12 @@ from synthetic.native import pediatric_hypothyroidism_ancillary
 _ALLOWED_REPOSITORY_SYMBOLS = {
     "synthetic.cohort": frozenset({"CohortMember"}),
     "synthetic.models": frozenset(
-        {"MAX_AGE_DAYS", "AgeRegimeDisorderTrajectory", "DisorderKind"}
+        {
+            "MAX_AGE_DAYS",
+            "AgeRegimeDisorderTrajectory",
+            "ClinicalEvent",
+            "DisorderKind",
+        }
     ),
     "synthetic.native.observations": frozenset(
         {

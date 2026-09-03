@@ -7,7 +7,11 @@ from types import MappingProxyType
 import pytest
 
 from synthetic.models import DisorderKind
-from synthetic.native.observations import RecordedEventKind
+from synthetic.native.observations import (
+    ObservationValidationStatus,
+    RecordedEventKind,
+    validate_observation_frame,
+)
 from synthetic.native.pediatric_hypothyroidism_ancillary import (
     PEDIATRIC_HYPOTHYROIDISM_ANCILLARY_CHECK_NAMES,
     PEDIATRIC_HYPOTHYROIDISM_ANCILLARY_REASON_CODES,
@@ -452,6 +456,73 @@ def test_injected_referral_without_visible_events_fails_before_private_truth(
     assert _check(report, "pathway_scope") == (
         PediatricHypothyroidismAncillaryValidationStatus.FAIL,
         "PATHWAY_SCOPE_INVALID",
+    )
+
+
+@pytest.mark.parametrize("source_state", ["missing_truth", "invalid_source"])
+def test_deleted_eligible_medication_fails_before_private_truth(
+    source_state: str,
+) -> None:
+    member, projection = _target()
+    rows = dict(projection.rows)
+    rows["medications"] = ()
+    object.__setattr__(projection, "rows", MappingProxyType(rows))
+
+    member = _source_variant(member, source_state)
+    report = validate_pediatric_hypothyroidism_ancillary_resources(
+        member, projection, _policy_ancillary()  # type: ignore[arg-type]
+    )
+    assert report.status is PediatricHypothyroidismAncillaryValidationStatus.FAIL
+    assert _check(report, "pathway_scope") == (
+        PediatricHypothyroidismAncillaryValidationStatus.FAIL,
+        "PATHWAY_SCOPE_INVALID",
+    )
+
+
+@pytest.mark.parametrize("source_state", ["missing_truth", "invalid_source"])
+def test_injected_medication_without_hidden_treatment_fails_before_private_truth(
+    source_state: str,
+) -> None:
+    member = _member(treatment=False)
+    projection = project_pediatric_hypothyroidism_ancillary_resources(
+        member, _shape(), _policy_ancillary()
+    )
+    target_projection = _target()[1]
+    rows = dict(projection.rows)
+    rows["medications"] = target_projection.rows["medications"]
+    object.__setattr__(projection, "rows", MappingProxyType(rows))
+
+    member = _source_variant(member, source_state)
+    report = validate_pediatric_hypothyroidism_ancillary_resources(
+        member, projection, _policy_ancillary()  # type: ignore[arg-type]
+    )
+    assert report.status is PediatricHypothyroidismAncillaryValidationStatus.FAIL
+    assert _check(report, "pathway_scope") == (
+        PediatricHypothyroidismAncillaryValidationStatus.FAIL,
+        "PATHWAY_SCOPE_INVALID",
+    )
+
+
+def test_valid_frame_with_member_truth_binding_mismatch_is_invalid_source() -> None:
+    member, projection = _target()
+    changed_disorder = dataclasses.replace(
+        member.trajectory.disorder,
+        severity=0.7,
+    )
+    changed_trajectory = dataclasses.replace(
+        member.trajectory,
+        disorder=changed_disorder,
+    )
+    object.__setattr__(member, "trajectory", changed_trajectory)
+    assert validate_observation_frame(member.frame).status is ObservationValidationStatus.PASS
+
+    report = validate_pediatric_hypothyroidism_ancillary_resources(
+        member, projection, _policy_ancillary()
+    )
+    assert report.status is PediatricHypothyroidismAncillaryValidationStatus.FAIL
+    assert _check(report, "source_evidence") == (
+        PediatricHypothyroidismAncillaryValidationStatus.FAIL,
+        "SOURCE_EVIDENCE_INVALID",
     )
 
 
