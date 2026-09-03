@@ -123,7 +123,7 @@ def test_documentation_describes_synthetic_only_import_boundary() -> None:
     assert "through the exact-schema exporter" in guide
     assert "The default/no-profile and production generator paths do not invoke the imported CLI" in guide
     assert (
-        "Explicit `development-smoke`, `development-cohort`, and `development-realistic` profiles may use the separately "
+        "Explicit `development-smoke`, `development-cohort`, `development-realistic`, and `development-all-disorders` profiles may use the separately "
         "documented, opt-in, test-only `SourceMatchedAugmenterOracle`"
     ) in guide
     assert "does not alter the default/native/production generator path or confer authority" not in guide
@@ -135,7 +135,7 @@ def test_documentation_describes_synthetic_only_import_boundary() -> None:
     assert "test-only adapter" in oracle_guide
     assert "exact-schema exporter" in oracle_guide
     assert (
-        "Explicit `development-smoke`, `development-cohort`, and `development-realistic` profiles may compose this test-only "
+        "Explicit `development-smoke`, `development-cohort`, `development-realistic`, and `development-all-disorders` profiles may compose this test-only "
         "adapter through the exact-schema exporter. The default/no-profile and production "
         "`synthetic.generate` paths remain fail-closed; the adapter remains wholly synthetic, "
         "non-authoritative, and outside governed-data, calibration, privacy, counterfactual, Synthea, "
@@ -156,7 +156,7 @@ def test_documentation_describes_synthetic_only_import_boundary() -> None:
         assert "through the exact-schema exporter" in document
         assert "The default/no-profile and production generator paths do not invoke the imported CLI" in document
         assert (
-            "Explicit `development-smoke`, `development-cohort`, and `development-realistic` profiles may use the separately "
+            "Explicit `development-smoke`, `development-cohort`, `development-realistic`, and `development-all-disorders` profiles may use the separately "
             "documented, opt-in, test-only `SourceMatchedAugmenterOracle`"
         ) in document
         assert "not invoked automatically" not in document

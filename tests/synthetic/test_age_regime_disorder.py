@@ -211,6 +211,32 @@ def test_constitutional_delay_shifts_puberty_once() -> None:
     assert result.events[0].event_type == "latent_onset"
 
 
+def test_constitutional_delay_uses_reserved_sampling_headroom() -> None:
+    """Catches baseline puberty sampling that consumes the delay's reserved headroom."""
+    physiology = AgeRegimeTrajectoryKernel(
+        RegimeLinearTestReference(),
+        AgeRegimeConfig(
+            puberty_min_age_days=4380,
+            puberty_max_age_days=4740,
+            puberty_sampling_max_age_days=4380,
+        ),
+    )
+    module = ConstitutionalDelayModule(
+        ConstitutionalDelayConfig(
+            expected_puberty_age_days=4380,
+            puberty_delay_min_days=360,
+            puberty_delay_max_days=360,
+        )
+    )
+
+    result = AgeRegimeDisorderKernel(physiology, module).generate(
+        PATIENT, (4380, 4740, 5100), NamedRandomStreams(9, 0)
+    )
+
+    assert result.physiology.state.puberty_onset_age_days == 4740
+    assert result.disorder.puberty_delay_days == 360
+
+
 def test_growth_hormone_deficiency_keeps_treatment_events_and_changes_growth() -> None:
     physiology = AgeRegimeTrajectoryKernel(
         RegimeLinearTestReference(), AgeRegimeConfig(residual_sd=0.0)

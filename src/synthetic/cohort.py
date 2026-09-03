@@ -350,6 +350,9 @@ class CohortConfig:
     module_weights: tuple[CohortModuleWeight, ...]
     reference_sex_mapping: tuple[tuple[str, str], ...]
     age_regime_config: AgeRegimeConfig = field(default_factory=AgeRegimeConfig)
+    module_weights_by_reference_sex: tuple[
+        tuple[str, tuple[CohortModuleWeight, ...]], ...
+    ] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
         require_aggregate_safe_token(self.profile, "profile")
@@ -373,6 +376,7 @@ class CohortConfig:
             raise TypeError("observation_policy must be an ObservationPolicy")
         self._validate_module_weights()
         self._validate_reference_sex_mapping()
+        self._validate_module_weights_by_reference_sex()
 
     def _validate_module_weights(self) -> None:
         if not isinstance(self.module_weights, tuple) or not self.module_weights:
@@ -419,6 +423,53 @@ class CohortConfig:
             raise ValueError(
                 "reference_sex_mapping must map F, M, and U one-to-one"
             )
+
+    def _validate_module_weights_by_reference_sex(self) -> None:
+        rows = self.module_weights_by_reference_sex
+        if not isinstance(rows, tuple):
+            raise TypeError("module_weights_by_reference_sex must be a tuple")
+        base_kinds = tuple(weight.kind for weight in self.module_weights)
+        seen_reference_sexes: set[str] = set()
+        for entry in rows:
+            if not isinstance(entry, tuple) or len(entry) != 2:
+                raise TypeError(
+                    "module_weights_by_reference_sex must contain reference-sex rows"
+                )
+            reference_sex, weights = entry
+            if not isinstance(reference_sex, str):
+                raise TypeError("module weight reference sex must be a string")
+            if reference_sex not in _REFERENCE_SEX_VALUES:
+                raise ValueError("module weight reference sex must be F, M, or U")
+            if reference_sex in seen_reference_sexes:
+                raise ValueError("module weight reference sexes must be unique")
+            seen_reference_sexes.add(reference_sex)
+            if not isinstance(weights, tuple) or not weights:
+                raise TypeError("conditional module weights must be a nonempty tuple")
+            if not all(isinstance(weight, CohortModuleWeight) for weight in weights):
+                raise TypeError(
+                    "conditional module weights must contain CohortModuleWeight values"
+                )
+            kinds = tuple(weight.kind for weight in weights)
+            if kinds != base_kinds:
+                raise ValueError(
+                    "conditional module weights must match the flat module registry"
+                )
+            if sum(weight.probability for weight in weights) <= 0:
+                raise ValueError("conditional module weights must have positive total probability")
+            if not any(
+                weight.kind is DisorderKind.HEALTHY and weight.probability > 0
+                for weight in weights
+            ):
+                raise ValueError(
+                    "conditional module weights must include a positive healthy module"
+                )
+            if not any(
+                weight.kind is not DisorderKind.HEALTHY and weight.probability > 0
+                for weight in weights
+            ):
+                raise ValueError(
+                    "conditional module weights must include a positive nonhealthy module"
+                )
 
 
 @dataclass(frozen=True, repr=False)
@@ -1127,6 +1178,19 @@ def generate_native_cohort(
             key=lambda item: item[0].value,
         )
     )
+    weights_by_reference_sex = {
+        reference_sex: tuple(
+            sorted(
+                (
+                    (weight.kind, weight.probability)
+                    for weight in weights
+                    if weight.probability > 0
+                ),
+                key=lambda item: item[0].value,
+            )
+        )
+        for reference_sex, weights in config.module_weights_by_reference_sex
+    }
     required_kinds = tuple(kind for kind, _ in positive_weights)
     try:
         copied_modules = dict(modules)
@@ -1227,8 +1291,11 @@ def generate_native_cohort(
                 recorded_sex=recorded_sex,
                 reference_sex=reference_sex_by_recorded[recorded_sex],
             )
+            selection_weights = positive_weights
+            if weights_by_reference_sex:
+                selection_weights = weights_by_reference_sex[patient.reference_sex]
             eligible_weights = _eligible_module_weights(
-                positive_weights,
+                selection_weights,
                 copied_modules,
                 patient.reference_sex,
             )

@@ -282,6 +282,140 @@ def test_development_realistic_cli_exports_target_shaped_package(tmp_path: Path)
         assert forbidden not in published.lower()
 
 
+def test_development_all_disorders_cli_exports_every_visible_pathway(tmp_path: Path) -> None:
+    """Catches the all-disorder route dropping a module, sidecar, or exact-schema boundary."""
+    output = tmp_path / "development-all-disorders"
+
+    result = _run(
+        _command(
+            output,
+            profile="development-all-disorders",
+            patient_count=512,
+            seed=20260903,
+        )
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == ""
+    assert result.stderr == ""
+    descriptor = load_descriptor(ROOT / "datapackage.json")
+    generated_descriptor = load_descriptor(output / "datapackage.json")
+    assert tuple(resource["name"] for resource in generated_descriptor["resources"]) == (
+        "patients",
+        "patients_augmented",
+        "visits",
+        "visits_augmented",
+        "labs",
+        "medications",
+        "problem_list",
+        "referrals",
+    )
+    assert schema_fingerprint(generated_descriptor) == EXPECTED_SCHEMA_FINGERPRINT
+    assert {path.name for path in output.glob("*.csv")} == {
+        resource["path"] for resource in descriptor["resources"]
+    }
+    assert not validate_structure(output, descriptor).errors
+
+    patients = _csv_rows(output / _resource_path(descriptor, "patients"))
+    visits = _csv_rows(output / _resource_path(descriptor, "visits"))
+    patient_ids = [row["patient_id"] for row in patients]
+    visit_ids = [row["visit_id"] for row in visits]
+    assert len(patient_ids) == len(set(patient_ids)) == 512
+    assert len(visit_ids) == len(set(visit_ids))
+    assert all(value.startswith("syn-") for value in (*patient_ids, *visit_ids))
+
+    diagnosis_codes = [
+        value
+        for row in visits
+        for field_name, value in row.items()
+        if field_name.startswith("enc_diag_") and value
+    ]
+    for code in (
+        "SYN-GROWTH-RECOGNITION",
+        "SYN-GROWTH-WORKUP",
+        "SYN-GROWTH-DIAGNOSIS",
+    ):
+        assert code in diagnosis_codes
+
+    labs = _csv_rows(output / _resource_path(descriptor, "labs"))
+    medications = _csv_rows(output / _resource_path(descriptor, "medications"))
+    problem_list = _csv_rows(output / _resource_path(descriptor, "problem_list"))
+    referrals = _csv_rows(output / _resource_path(descriptor, "referrals"))
+    assert labs and medications and problem_list and referrals
+    assert {row["result_flag"] for row in labs} == {""}
+    expected_pathway_codes = {
+        "SYN-GHD",
+        "SYN-PEDIATRIC-HYPOTHYROIDISM",
+        "SYN-CELIAC-DISEASE",
+        "SYN-SGA",
+        "SYN-TURNER-SYNDROME",
+        "SYN-UNDERNUTRITION",
+        "SYN-EXCESS-WEIGHT",
+    }
+    assert {row["pl_diag"] for row in problem_list} == expected_pathway_codes
+
+    ghd_patient_ids = {
+        row["patient_id"] for row in problem_list if row["pl_diag"] == "SYN-GHD"
+    }
+    e23_patient_ids = {
+        row["patient_id"]
+        for row in visits
+        if "E23.0" in {
+            value for field_name, value in row.items() if field_name.startswith("enc_diag_")
+        }
+    }
+    augmented = _csv_rows(output / _resource_path(descriptor, "patients_augmented"))
+    flagged_patient_ids = {
+        row["patient_id"] for row in augmented if row["growth_dx_flag"] == "1"
+    }
+    assert e23_patient_ids == ghd_patient_ids == flagged_patient_ids
+
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["profile"] == "development-all-disorders"
+    assert manifest["schema_fingerprint"] == EXPECTED_SCHEMA_FINGERPRINT
+    assert manifest["reference_id"] == "cdc-lms-reference-v1"
+    assert manifest["reference_sha256"] == CdcGrowthReference.from_repository(ROOT).source_sha256
+    assert manifest["derivation_fingerprint"] == AUGMENTER_RUNTIME_MANIFEST_SHA256
+    assert manifest["test_only_derivation"] is True
+    assert manifest["status"] == "STRUCTURE_VALIDATED_TEST_ORACLE"
+    for artifact in output.rglob("*"):
+        if artifact.is_file():
+            published = artifact.read_bytes().lower()
+            for forbidden in (b"latent", b"severity", b"truth", b"turner_syndrome"):
+                assert forbidden not in published
+
+
+@pytest.mark.scale
+@pytest.mark.skipif(
+    not _SCALE_ENABLED,
+    reason="set SYNTHETIC_RUN_SCALE=1 to run the development CLI composition scale profile",
+)
+def test_development_all_disorders_cli_scale_profile_exports_visible_exact_schema(
+    tmp_path: Path,
+) -> None:
+    """Catches the explicit all-disorder CLI route failing at the scheduled scale."""
+    output = tmp_path / "development-all-disorders-scale"
+
+    result = _run(
+        _command(
+            output,
+            profile="development-all-disorders",
+            patient_count=_SCALE_PATIENT_COUNT,
+            seed=20260903,
+        )
+    )
+
+    assert result.returncode == 0, result.stderr
+    descriptor = load_descriptor(ROOT / "datapackage.json")
+    generated_descriptor = load_descriptor(output / "datapackage.json")
+    assert schema_fingerprint(generated_descriptor) == EXPECTED_SCHEMA_FINGERPRINT
+    assert not validate_structure(output, descriptor).errors
+    assert len(_csv_rows(output / _resource_path(descriptor, "patients"))) == 10_000
+    assert json.loads((output / "manifest.json").read_text(encoding="utf-8"))[
+        "profile"
+    ] == "development-all-disorders"
+
+
 @pytest.mark.scale
 @pytest.mark.skipif(
     not _SCALE_ENABLED,

@@ -127,3 +127,19 @@ def test_existing_latent_point_positional_contract_is_unchanged() -> None:
     point = LatentPoint("syn-patient-a", 730, 90.0, 16.0, 12.96, 0.0, 0.0)
     assert point.age_days == 730
     assert point.weight_kg == pytest.approx(12.96)
+
+
+@pytest.mark.parametrize(
+    ("sampling_max", "message"),
+    ((-1, "nonnegative integer"), (5115, "puberty sampling maximum")),
+)
+def test_puberty_sampling_max_must_stay_within_puberty_bounds(
+    sampling_max: int,
+    message: str,
+) -> None:
+    """Catches a baseline sampling bound that exceeds the validated state domain."""
+    with pytest.raises(ValueError, match=message):
+        AgeRegimeConfig(
+            puberty_max_age_days=5114,
+            puberty_sampling_max_age_days=sampling_max,
+        )

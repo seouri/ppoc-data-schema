@@ -30,6 +30,7 @@ from synthetic.derivation_binding import (
     DerivationBinding,
 )
 from synthetic.models import DisorderKind
+from synthetic.native.age_regimes import AgeRegimeConfig
 from synthetic.native.ancillary import (
     GHD_LAB_COMPONENT_NAMES,
     GHD_LAB_RESULT_FLAG,
@@ -38,8 +39,21 @@ from synthetic.native.ancillary import (
 )
 from synthetic.native.ancillary_bundle import merge_ghd_ancillary_resources
 from synthetic.native.clinical_modules import (
+    CeliacDiseaseModule,
+    ConstitutionalDelayModule,
+    ExcessWeightModule,
+    FamilialShortStatureModule,
     GrowthHormoneDeficiencyModule,
     HealthyGrowthModule,
+    PediatricHypothyroidismModule,
+    SmallForGestationalAgeModule,
+    TurnerSyndromeModule,
+    UndernutritionModule,
+)
+from synthetic.native.multidisorder_ancillary import (
+    MultidisorderAncillaryPolicy,
+    merge_multidisorder_ancillary_resources,
+    project_multidisorder_ancillary_resources,
 )
 from synthetic.native.observations import CensoringMode, ObservationPolicy, RecordedEventKind
 from synthetic.native.resources import (
@@ -72,6 +86,16 @@ _REALISTIC_GROWTH_DIAGNOSIS_CODE = "E23.0"
 _REALISTIC_ANCILLARY_POLICY_ID = "development-realistic-ghd"
 _REALISTIC_ANCILLARY_POLICY_VERSION = "development-realistic-ghd-v1"
 _REALISTIC_ANCILLARY_RESULT_DELAY_DAYS = 7
+_ALL_DISORDER_PROFILE = "development-all-disorders-v1"
+_ALL_DISORDER_PACKAGE_PROFILE = "development-all-disorders"
+_ALL_DISORDER_OBSERVATION_POLICY_VERSION = (
+    "development-all-disorders-observation-v1"
+)
+_ALL_DISORDER_TARGET_SNAPSHOT = "schema-stats-2026-08-24"
+_ALL_DISORDER_ELIGIBILITY_POLICY_VERSION = "reference-sex-module-eligibility-v1"
+_ALL_DISORDER_ANCILLARY_POLICY_ID = "development-all-disorders"
+_ALL_DISORDER_ANCILLARY_POLICY_VERSION = "development-all-disorders-ancillary-v1"
+_ALL_DISORDER_ANCILLARY_RESULT_DELAY_DAYS = 7
 _REALISTIC_DENOMINATOR = 250_588
 _REALISTIC_GROWTH_DX_COUNT = 35_907
 _REALISTIC_SEX_WEIGHTS = (
@@ -109,6 +133,51 @@ _REALISTIC_RACE_MULTISELECT_PROBABILITY = (
 _COHORT_AGES_DAYS = (0, 365, 730, 1460, 2190, 3650, 4380, 5114, 5475, 6200, 7305)
 _REFERENCE_SEX_MAPPING = (("F", "F"), ("M", "M"), ("U", "U"))
 _PACKAGE_EXPORT_FAILURE = "observed package export failed"
+_ALL_DISORDER_MODULE_CLASSES = (
+    HealthyGrowthModule,
+    FamilialShortStatureModule,
+    ConstitutionalDelayModule,
+    GrowthHormoneDeficiencyModule,
+    PediatricHypothyroidismModule,
+    CeliacDiseaseModule,
+    SmallForGestationalAgeModule,
+    TurnerSyndromeModule,
+    UndernutritionModule,
+    ExcessWeightModule,
+)
+
+
+def _all_disorder_module_weights(
+    *, nonhealthy_probability: float, turner_probability: float
+) -> tuple[CohortModuleWeight, ...]:
+    return tuple(
+        CohortModuleWeight(
+            kind,
+            (
+                0.5
+                if kind is DisorderKind.HEALTHY
+                else turner_probability
+                if kind is DisorderKind.TURNER_SYNDROME
+                else nonhealthy_probability
+            ),
+        )
+        for kind in DisorderKind
+    )
+
+
+_ALL_DISORDER_F_PRIOR = _all_disorder_module_weights(
+    nonhealthy_probability=1 / 18,
+    turner_probability=1 / 18,
+)
+_ALL_DISORDER_M_PRIOR = _all_disorder_module_weights(
+    nonhealthy_probability=1 / 16,
+    turner_probability=0.0,
+)
+
+
+def _all_disorder_modules() -> dict[DisorderKind, object]:
+    modules = tuple(module_class() for module_class in _ALL_DISORDER_MODULE_CLASSES)
+    return {module.kind: module for module in modules}
 
 
 @dataclass(frozen=True)
@@ -355,12 +424,75 @@ def development_realistic_config(patient_count: int, seed: int) -> CohortConfig:
     )
 
 
+def development_all_disorders_calibration_profile() -> CalibrationSamplingProfile:
+    """Return the snapshot-shaped demographics for fictional module coverage."""
+    return CalibrationSamplingProfile(
+        artifact_id=_ALL_DISORDER_PROFILE,
+        target_registry_version=TARGET_REGISTRY_VERSION,
+        sex_weights=_REALISTIC_SEX_WEIGHTS,
+        ethnicity_weights=_REALISTIC_ETHNICITY_WEIGHTS,
+        race_weights=_REALISTIC_RACE_WEIGHTS,
+        race_multiselect_probability=_REALISTIC_RACE_MULTISELECT_PROBABILITY,
+        recorded_healthy_probability=0.0,
+        recorded_growth_dx_probability=0.0,
+    )
+
+
+def development_all_disorders_config(patient_count: int, seed: int) -> CohortConfig:
+    """Return the fixed conditional-prior all-disorder coverage configuration."""
+    return CohortConfig(
+        profile=_ALL_DISORDER_PROFILE,
+        patient_count=patient_count,
+        seed=seed,
+        ages_days=_COHORT_AGES_DAYS,
+        observation_policy=ObservationPolicy(
+            policy_version=_ALL_DISORDER_OBSERVATION_POLICY_VERSION,
+            window_start_age_days=0,
+            window_end_age_days=7306,
+            censoring_mode=CensoringMode.NONE,
+            censor_age_days=None,
+            visit_probability=1.0,
+            length_availability_probability=0.0,
+            height_availability_probability=1.0,
+            weight_availability_probability=1.0,
+            head_circumference_availability_probability=1.0,
+            length_error_sd_cm=0.0,
+            height_error_sd_cm=0.0,
+            weight_error_sd_kg=0.0,
+            head_circumference_error_sd_cm=0.0,
+            rounding_digits=None,
+            recognition_probability=1.0,
+            diagnosis_probability=1.0,
+            recognition_delay_days=0,
+        ),
+        module_weights=_ALL_DISORDER_F_PRIOR,
+        reference_sex_mapping=_REFERENCE_SEX_MAPPING,
+        module_weights_by_reference_sex=(
+            ("F", _ALL_DISORDER_F_PRIOR),
+            ("M", _ALL_DISORDER_M_PRIOR),
+        ),
+        age_regime_config=AgeRegimeConfig(
+            puberty_max_age_days=5834,
+            puberty_sampling_max_age_days=5114,
+        ),
+    )
+
+
 def development_realistic_ancillary_policy() -> GhdAncillaryPolicy:
     """Return the fixed synthetic GHD ancillary-row policy for package export."""
     return GhdAncillaryPolicy(
         policy_id=_REALISTIC_ANCILLARY_POLICY_ID,
         policy_version=_REALISTIC_ANCILLARY_POLICY_VERSION,
         result_delay_days=_REALISTIC_ANCILLARY_RESULT_DELAY_DAYS,
+    )
+
+
+def development_all_disorders_ancillary_policy() -> MultidisorderAncillaryPolicy:
+    """Return the fixed all-disorder fictional ancillary sidecar policy."""
+    return MultidisorderAncillaryPolicy(
+        policy_id=_ALL_DISORDER_ANCILLARY_POLICY_ID,
+        policy_version=_ALL_DISORDER_ANCILLARY_POLICY_VERSION,
+        result_delay_days=_ALL_DISORDER_ANCILLARY_RESULT_DELAY_DAYS,
     )
 
 
@@ -386,6 +518,7 @@ def _build_development_native_cohort(
     config: CohortConfig,
     calibration: CalibrationSamplingProfile,
     descriptor: Mapping[str, object],
+    modules: Mapping[DisorderKind, object] | None = None,
 ) -> NativeCohort:
     """Build and validate a native cohort for an explicit development profile."""
     if not isinstance(runtime, DevelopmentRuntime):
@@ -394,10 +527,14 @@ def _build_development_native_cohort(
         config,
         runtime.reference,
         calibration,
-        modules={
-            DisorderKind.HEALTHY: HealthyGrowthModule(),
-            DisorderKind.GROWTH_HORMONE_DEFICIENCY: GrowthHormoneDeficiencyModule(),
-        },
+        modules=(
+            {
+                DisorderKind.HEALTHY: HealthyGrowthModule(),
+                DisorderKind.GROWTH_HORMONE_DEFICIENCY: GrowthHormoneDeficiencyModule(),
+            }
+            if modules is None
+            else modules
+        ),
         descriptor=descriptor,
     )
     if type(cohort) is not NativeCohort:
@@ -428,11 +565,40 @@ def build_development_realistic_cohort(
     )
 
 
+def build_development_all_disorders_cohort(
+    runtime: DevelopmentRuntime,
+    *,
+    descriptor: Mapping[str, object],
+    patient_count: int,
+    seed: int,
+) -> NativeCohort:
+    """Build the deterministic cohort containing every native disorder module."""
+    return _build_development_native_cohort(
+        runtime,
+        config=development_all_disorders_config(patient_count, seed),
+        calibration=development_all_disorders_calibration_profile(),
+        descriptor=descriptor,
+        modules=_all_disorder_modules(),
+    )
+
+
 def _configuration_sha256(
     runtime: DevelopmentRuntime,
     config: CohortConfig,
     calibration: CalibrationSamplingProfile,
 ) -> str:
+    age_regime_parameters = asdict(config.age_regime_config)
+    if age_regime_parameters.get("puberty_sampling_max_age_days") is None:
+        del age_regime_parameters["puberty_sampling_max_age_days"]
+    clinical_module_versions = {
+        DisorderKind.HEALTHY.value: HealthyGrowthModule.module_version,
+        DisorderKind.GROWTH_HORMONE_DEFICIENCY.value: GrowthHormoneDeficiencyModule.module_version,
+    }
+    if config.profile == _ALL_DISORDER_PROFILE:
+        clinical_module_versions = {
+            module_class.kind.value: module_class.module_version
+            for module_class in _ALL_DISORDER_MODULE_CLASSES
+        }
     configuration = {
         "profile": config.profile,
         "generation_domain_policy": CDC_GENERATION_DOMAIN_POLICY,
@@ -445,12 +611,9 @@ def _configuration_sha256(
         "reference_sex_mapping": config.reference_sex_mapping,
         "age_regime": {
             "module_version": config.age_regime_config.module_version,
-            "parameters": asdict(config.age_regime_config),
+            "parameters": age_regime_parameters,
         },
-        "clinical_module_versions": {
-            DisorderKind.HEALTHY.value: HealthyGrowthModule.module_version,
-            DisorderKind.GROWTH_HORMONE_DEFICIENCY.value: GrowthHormoneDeficiencyModule.module_version,
-        },
+        "clinical_module_versions": clinical_module_versions,
         "calibration": {
             "artifact_id": calibration.artifact_id,
             "target_registry_version": calibration.target_registry_version,
@@ -475,6 +638,27 @@ def _configuration_sha256(
             "policy_version": policy.policy_version,
             "result_delay_days": policy.result_delay_days,
         }
+    if config.profile == _ALL_DISORDER_PROFILE:
+        policy = development_all_disorders_ancillary_policy()
+        configuration["module_weights_by_reference_sex"] = tuple(
+            (
+                reference_sex,
+                tuple((weight.kind.value, weight.probability) for weight in weights),
+            )
+            for reference_sex, weights in config.module_weights_by_reference_sex
+        )
+        configuration["all_disorder_target_snapshot"] = _ALL_DISORDER_TARGET_SNAPSHOT
+        configuration["all_disorder_eligibility_policy"] = (
+            _ALL_DISORDER_ELIGIBILITY_POLICY_VERSION
+        )
+        configuration["all_disorder_growth_diagnosis_code"] = (
+            _REALISTIC_GROWTH_DIAGNOSIS_CODE
+        )
+        configuration["all_disorder_ancillary_policy"] = {
+            "policy_id": policy.policy_id,
+            "policy_version": policy.policy_version,
+            "result_delay_days": policy.result_delay_days,
+        }
     payload = json.dumps(configuration, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(payload).hexdigest()
 
@@ -483,11 +667,17 @@ def _visible_base_rows(
     cohort: NativeCohort,
     *,
     include_realistic_pathway: bool = False,
+    include_all_disorder_pathways: bool = False,
 ) -> dict[str, list[dict[str, object]]]:
     rows = {resource_name: [] for resource_name in BASE_RESOURCE_NAMES}
     ancillary_policy = (
         development_realistic_ancillary_policy()
         if include_realistic_pathway
+        else None
+    )
+    all_disorder_policy = (
+        development_all_disorders_ancillary_policy()
+        if include_all_disorder_pathways
         else None
     )
     for member in cohort.members:
@@ -503,6 +693,18 @@ def _visible_base_rows(
             bundle = merge_ghd_ancillary_resources(
                 bundle, member, projection, ancillary_policy
             )
+        if all_disorder_policy is not None:
+            projection = project_multidisorder_ancillary_resources(
+                member,
+                bundle.shape,
+                all_disorder_policy,
+            )
+            bundle = merge_multidisorder_ancillary_resources(
+                bundle,
+                member,
+                projection,
+                all_disorder_policy,
+            )
         member_rows = {
             resource_name: [row.to_mapping() for row in bundle.rows[resource_name]]
             for resource_name in BASE_RESOURCE_NAMES
@@ -517,6 +719,10 @@ def _visible_base_rows(
                     row.get("result_component_name") in GHD_LAB_COMPONENT_NAMES
                     and row.get("result_flag") == GHD_LAB_RESULT_FLAG
                 ):
+                    row["result_flag"] = ""
+        if include_all_disorder_pathways:
+            for row in member_rows["labs"]:
+                if row.get("result_flag") == "Synthetic":
                     row["result_flag"] = ""
         if (
             include_realistic_pathway
@@ -554,6 +760,43 @@ def _visible_base_rows(
             )
             if diagnosis_slot is None:
                 raise ValueError("realistic growth diagnosis slot is missing")
+            diagnosis_visit[diagnosis_slot] = _REALISTIC_GROWTH_DIAGNOSIS_CODE
+        if (
+            include_all_disorder_pathways
+            and member.trajectory.disorder.kind
+            is DisorderKind.GROWTH_HORMONE_DEFICIENCY
+        ):
+            diagnosis_event = next(
+                (
+                    event
+                    for event in member.frame.events
+                    if event.event_kind is RecordedEventKind.DIAGNOSIS
+                ),
+                None,
+            )
+            if diagnosis_event is None:
+                raise ValueError("all-disorder GHD diagnosis event is missing")
+            diagnosis_visit = next(
+                (
+                    row
+                    for row in member_rows["visits"]
+                    if row.get("age_in_days") == diagnosis_event.age_days
+                ),
+                None,
+            )
+            if diagnosis_visit is None:
+                raise ValueError("all-disorder GHD diagnosis visit is missing")
+            diagnosis_slot = next(
+                (
+                    field_name
+                    for field_name in diagnosis_visit
+                    if field_name.startswith("enc_diag_")
+                    and diagnosis_visit[field_name] == ""
+                ),
+                None,
+            )
+            if diagnosis_slot is None:
+                raise ValueError("all-disorder GHD diagnosis slot is missing")
             diagnosis_visit[diagnosis_slot] = _REALISTIC_GROWTH_DIAGNOSIS_CODE
         for resource_name in BASE_RESOURCE_NAMES:
             rows[resource_name].extend(member_rows[resource_name])
@@ -632,6 +875,50 @@ def generate_development_realistic_cohort(
             output,
             metadata=PackageExportMetadata(
                 profile=_REALISTIC_PACKAGE_PROFILE,
+                seed=seed,
+                reference_time=reference_time,
+                reference_id=runtime.reference.reference_id,
+                reference_sha256=runtime.reference.source_sha256,
+                configuration_sha256=_configuration_sha256(runtime, config, calibration),
+                software_revision=software_revision,
+            ),
+            derivation_oracle=runtime.derivation_oracle,
+            derivation_binding=runtime.derivation_binding,
+        )
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except Exception:  # noqa: BLE001 - package failures must expose only the fixed contract.
+        raise PackageExportUnavailable(_PACKAGE_EXPORT_FAILURE) from None
+
+
+def generate_development_all_disorders_cohort(
+    runtime: DevelopmentRuntime,
+    *,
+    descriptor_path: Path,
+    output: Path,
+    patient_count: int,
+    seed: int,
+    reference_time: str,
+    software_revision: str,
+) -> Path:
+    """Generate the exact-schema package for every native disorder pathway."""
+    try:
+        _require_output_available(output)
+        descriptor = load_descriptor(descriptor_path)
+        cohort = build_development_all_disorders_cohort(
+            runtime,
+            descriptor=descriptor,
+            patient_count=patient_count,
+            seed=seed,
+        )
+        config = development_all_disorders_config(patient_count, seed)
+        calibration = development_all_disorders_calibration_profile()
+        return export_exact_schema_package(
+            descriptor,
+            _visible_base_rows(cohort, include_all_disorder_pathways=True),
+            output,
+            metadata=PackageExportMetadata(
+                profile=_ALL_DISORDER_PACKAGE_PROFILE,
                 seed=seed,
                 reference_time=reference_time,
                 reference_id=runtime.reference.reference_id,

@@ -60,6 +60,7 @@ class AgeRegimeConfig:
     puberty_height_spurt_max: float = 0.8
     puberty_bmi_shift_min: float = -0.2
     puberty_bmi_shift_max: float = 0.3
+    puberty_sampling_max_age_days: int | None = None
 
     def __post_init__(self) -> None:
         for name in (
@@ -90,6 +91,19 @@ class AgeRegimeConfig:
 
         if self.puberty_min_age_days > self.puberty_max_age_days:
             raise ValueError("puberty age bounds must be ordered")
+        if self.puberty_sampling_max_age_days is not None:
+            _nonnegative_int(
+                "puberty_sampling_max_age_days",
+                self.puberty_sampling_max_age_days,
+            )
+            if not (
+                self.puberty_min_age_days
+                <= self.puberty_sampling_max_age_days
+                <= self.puberty_max_age_days
+            ):
+                raise ValueError(
+                    "puberty sampling maximum must stay within puberty age bounds"
+                )
         if self.puberty_tempo_min_days > self.puberty_tempo_max_days:
             raise ValueError("puberty tempo bounds must be ordered")
         if self.puberty_height_spurt_min > self.puberty_height_spurt_max:
@@ -360,7 +374,11 @@ class AgeRegimeTrajectoryKernel:
                 float(
                     puberty.uniform(
                         self.config.puberty_min_age_days,
-                        self.config.puberty_max_age_days,
+                        (
+                            self.config.puberty_max_age_days
+                            if self.config.puberty_sampling_max_age_days is None
+                            else self.config.puberty_sampling_max_age_days
+                        ),
                     )
                 )
             )

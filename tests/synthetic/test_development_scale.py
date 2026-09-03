@@ -26,6 +26,10 @@ from synthetic.cohort_validation import (
     validate_native_cohort,
 )
 from synthetic.derivation_binding import DerivationBinding
+from synthetic.development_runtime import (
+    build_development_all_disorders_cohort,
+    build_development_runtime,
+)
 from synthetic.models import DisorderKind
 from synthetic.native.clinical_modules import (
     GrowthHormoneDeficiencyModule,
@@ -453,3 +457,28 @@ def test_development_scale_profile(seed: int, tmp_path: Path) -> None:
         )
     )
     assert _package_inventory(package) == expected_inventory
+
+
+@pytest.mark.scale
+@pytest.mark.skipif(
+    not _SCALE_ENABLED,
+    reason="set SYNTHETIC_RUN_SCALE=1 to run the development scale profile",
+)
+def test_development_all_disorder_scale_profile_covers_every_module() -> None:
+    """Catches the all-disorder native composition failing at 10,000 members."""
+    cohort = build_development_all_disorders_cohort(
+        build_development_runtime(ROOT),
+        descriptor=_descriptor(),
+        patient_count=_SCALE_PATIENT_COUNT,
+        seed=20260903,
+    )
+
+    assert len(cohort.members) == _SCALE_PATIENT_COUNT
+    assert {member.trajectory.disorder.kind for member in cohort.members} == set(
+        DisorderKind
+    )
+    assert all(
+        member.trajectory.disorder.kind is not DisorderKind.TURNER_SYNDROME
+        or member.demographics.sex == "F"
+        for member in cohort.members
+    )
