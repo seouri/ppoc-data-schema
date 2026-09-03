@@ -48,10 +48,38 @@ ROOT = Path(__file__).resolve().parents[2]
 PATIENT_ID = "syn-observation-patient"
 PATIENT = PatientState(PATIENT_ID, "F", "F")
 DEFAULT_PHYSIOLOGY_AGES = (100, 500, 590, 710, 730, 740, 770, 800, 1165, 1500, 2000)
+_INTEGER_FIELDS = frozenset(
+    {
+        "result_line_num",
+        "lab_order_date_age_in_days",
+        "lab_result_date_age_in_days",
+        "med_order_date_age_in_days",
+        "med_start_date_age_in_days",
+        "med_end_date_age_in_days",
+        "noted_date_age_in_days",
+        "resolved_date_age_in_days",
+        "referral_date_age_in_days",
+        "referral_number_of_visits",
+    }
+)
 
 
 def _shape() -> ResourceShape:
     descriptor = json.loads((ROOT / "datapackage.json").read_text(encoding="utf-8"))
+    return ResourceShape.from_descriptor(descriptor)
+
+
+def _shape_without_lab_procedure_fields() -> ResourceShape:
+    descriptor = json.loads((ROOT / "datapackage.json").read_text(encoding="utf-8"))
+    labs = next(
+        resource for resource in descriptor["resources"] if resource["name"] == "labs"
+    )
+    labs["schema"]["fields"] = [
+        field
+        for field in labs["schema"]["fields"]
+        if field["name"]
+        not in {"lab_procedure_name", "lab_procedure_description"}
+    ]
     return ResourceShape.from_descriptor(descriptor)
 
 
@@ -252,12 +280,13 @@ def test_all_visible_events_project_exact_descriptor_order_and_values() -> None:
         "med_record_type": UNDERNUTRITION_MEDICATION_RECORD_TYPE,
         "med_simple_generic_name": UNDERNUTRITION_MEDICATION_NAME,
     }
-    assert all(
-        isinstance(value, (str, int, float)) and not isinstance(value, bool)
-        for rows in resources.values()  # type: ignore[union-attr]
-        for row in rows
-        for value in row.values()
-    )
+    for rows in resources.values():  # type: ignore[union-attr]
+        for row in rows:
+            for field_name, value in row.items():
+                if field_name in _INTEGER_FIELDS:
+                    assert value == "" or type(value) is int
+                else:
+                    assert type(value) is str
 
 
 def test_projection_follows_each_visible_event_prefix_and_zero_severity() -> None:
@@ -436,3 +465,88 @@ def test_projection_uses_fixed_redacted_errors_for_malformed_typed_inputs() -> N
     assert "truth" not in message
     assert "path" not in message
     assert "key" not in message
+
+
+def test_projection_rejects_shape_without_lab_procedure_fields() -> None:
+    with pytest.raises(
+        UndernutritionAncillaryProjectionUnavailable,
+        match="^undernutrition ancillary projection failed$",
+    ):
+        project_undernutrition_ancillary_resources(
+            _member(),
+            _shape_without_lab_procedure_fields(),
+            _ancillary_policy(),
+        )
+
+
+def test_public_boundary_rejects_mutable_subclasses() -> None:
+    class MutableMember(CohortMember):
+        pass
+
+    class MutableShape(ResourceShape):
+        pass
+
+    class MutablePolicy(UndernutritionAncillaryPolicy):
+        pass
+
+    member = _member()
+    shape = _shape()
+    policy = _ancillary_policy()
+    mutable_member = object.__new__(MutableMember)
+    object.__setattr__(mutable_member, "demographics", member.demographics)
+    object.__setattr__(mutable_member, "trajectory", member.trajectory)
+    object.__setattr__(mutable_member, "frame", member.frame)
+    object.__setattr__(mutable_member, "bundle", member.bundle)
+    mutable_shape = MutableShape(shape.resources)
+    mutable_policy = MutablePolicy(
+        policy.policy_id,
+        policy.policy_version,
+        policy.result_delay_days,
+    )
+    mutable_member.hostile = True
+    mutable_shape.hostile = True
+    mutable_policy.hostile = True
+
+    for candidate in (
+        (mutable_member, shape, policy),
+        (member, mutable_shape, policy),
+        (member, shape, mutable_policy),
+    ):
+        with pytest.raises(
+            UndernutritionAncillaryProjectionUnavailable,
+            match="^undernutrition ancillary projection unavailable$",
+        ):
+            project_undernutrition_ancillary_resources(*candidate)
+
+
+def test_projection_rejects_mutable_trajectory_subclass() -> None:
+    class MutableTrajectory(AgeRegimeDisorderTrajectory):
+        pass
+
+    member = _member()
+    mutable_trajectory = MutableTrajectory(
+        member.trajectory.physiology,
+        member.trajectory.disorder,
+        member.trajectory.events,
+    )
+    mutable_trajectory.hostile = True
+    object.__setattr__(member, "trajectory", mutable_trajectory)
+    object.__setattr__(
+        member.frame.truth,
+        "latent_trajectory",
+        mutable_trajectory,
+    )
+    assert (
+        validate_observation_frame(member.frame).status
+        is ObservationValidationStatus.PASS
+    )
+
+    with pytest.raises(
+        UndernutritionAncillaryProjectionUnavailable,
+        match="^undernutrition ancillary projection failed$",
+    ):
+        project_undernutrition_ancillary_resources(
+            member,
+            _shape(),
+            _ancillary_policy(),
+        )

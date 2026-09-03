@@ -81,6 +81,8 @@ _REQUIRED_FIELDS: Mapping[str, frozenset[str]] = MappingProxyType(
                 "lab_order_id",
                 "result_line_num",
                 "lab_order_date_age_in_days",
+                "lab_procedure_name",
+                "lab_procedure_description",
                 "lab_result_date_age_in_days",
                 "result_component_name",
                 "result_loinc_code",
@@ -290,9 +292,9 @@ def project_undernutrition_ancillary_resources(
     """Project visible fictional descendants into exact-schema resource rows."""
 
     if (
-        not isinstance(member, CohortMember)
-        or not isinstance(shape, ResourceShape)
-        or not isinstance(policy, UndernutritionAncillaryPolicy)
+        type(member) is not CohortMember
+        or type(shape) is not ResourceShape
+        or type(policy) is not UndernutritionAncillaryPolicy
     ):
         raise UndernutritionAncillaryProjectionUnavailable(
             "undernutrition ancillary projection unavailable"
@@ -309,7 +311,7 @@ def project_undernutrition_ancillary_resources(
         truth_trajectory = frame.truth.latent_trajectory
         if (
             patient_id != frame.patient_id
-            or not isinstance(trajectory, AgeRegimeDisorderTrajectory)
+            or type(trajectory) is not AgeRegimeDisorderTrajectory
             or not isinstance(truth_trajectory, AgeRegimeDisorderTrajectory)
             or not trajectory.physiology.points
             or trajectory.physiology.points[0].patient_id != patient_id
@@ -406,6 +408,8 @@ def project_undernutrition_ancillary_resources(
                         "lab_order_id": lab_order_id,
                         "result_line_num": line_number,
                         "lab_order_date_age_in_days": event.age_days,
+                        "lab_procedure_name": "",
+                        "lab_procedure_description": "",
                         "lab_result_date_age_in_days": result_age,
                         "result_component_name": component,
                         "result_loinc_code": "",
