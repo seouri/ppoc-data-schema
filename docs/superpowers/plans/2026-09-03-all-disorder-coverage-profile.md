@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** Implementation, independent review, verification, and publication are complete; this plan is retained as historical provenance.
+
 **Goal:** Add an explicit `development-all-disorders` route that generates deterministic exact-schema fixtures covering every native growth trajectory and every reviewed ancillary projection without changing existing profiles.
 
 **Architecture:** Add one engine-neutral multidisorder adapter that dispatches to the existing typed projections and validates/merges a fresh six-resource bundle. Extend native module selection with optional reference-sex eligibility, then add a separate runtime/CLI profile using conditional fictional coverage weights; the existing realistic GHD route remains unchanged. Update the guide, README roadmap link, and companion design/plan references so profile names and content boundaries stay consistent.

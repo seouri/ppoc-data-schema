@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** Implementation, independent review, verification, and publication are complete; this plan is retained as historical provenance.
+
 **Goal:** Add a deterministic evaluator-only projection and validator for fictional Turner-syndrome referral, workup, problem-list, and treatment rows in the exact PPOC schema, without changing the native Turner trajectory, visible runtime, or package export.
 
 **Architecture:** A separate `synthetic.native.turner_ancillary` module consumes one typed `CohortMember`, an extracted `ResourceShape`, and a strict `TurnerAncillaryPolicy`. It owns a closed fictional vocabulary and the independent `turner-ancillary-id-v1` namespace, emits immutable exact-schema rows, and returns a fixed aggregate-only validation report. The native `TurnerSyndromeModule` remains responsible for female-reference eligibility, no birth-state deficit, progressive height/BMI behavior, and hidden treatment state; the ancillary projection exposes only descendants allowed by visible events and the private treatment gate.

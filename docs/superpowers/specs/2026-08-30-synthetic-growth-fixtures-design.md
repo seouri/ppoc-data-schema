@@ -505,6 +505,9 @@ A scheduled development-profile test exercises bounded-memory generation, all ei
 
 The ordinary development route is complete when its content and integrity criteria (exact schema, coherent trajectories, deterministic generation, hidden-truth exclusion, and counterfactual invariants) pass. The additional criteria below apply when the project seeks population, clinical, privacy, task-utility, Synthea, or release claims; they are not prerequisites for ordinary development fixtures.
 
+For ordinary development, the content and integrity conditions in the preceding paragraph are sufficient.
+For each optional claim, apply only the relevant additional criteria:
+
 The full native implementation is complete for its applicable claims when:
 
 1. The authoritative augmentation implementation or approved parity harness is pinned and its boundary cases pass.
@@ -521,7 +524,7 @@ The full native implementation is complete for its applicable claims when:
 12. A governed privacy audit can produce an aggregate report without exporting patient-level comparison data.
 13. Documentation clearly distinguishes ordinary synthetic development utility and content controls from optional statistical fidelity, task utility, privacy evidence, clinical validation, and release authorization.
 
-An optional Synthea-backed implementation is accepted only after all applicable criteria above and the engine-conformance suite pass. It is not required for release one.
+An optional engine-conformance claim for a Synthea-backed implementation is accepted only after all applicable criteria above and the engine-conformance suite pass. It is not required for release one.
 
 ## Design decisions
 

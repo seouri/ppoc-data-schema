@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** Implementation, independent review, verification, and publication are complete; this plan is retained as historical provenance.
+
 **Goal:** Add a deterministic evaluator-only projection and validator for fictional pediatric-hypothyroidism referral, thyroid laboratory, problem-list, and medication rows in the exact PPOC schema, without changing the GHD or visible runtime/export routes.
 
 **Architecture:** A separate `synthetic.native.pediatric_hypothyroidism_ancillary` module consumes one typed `CohortMember`, an extracted `ResourceShape`, and a strict `PediatricHypothyroidismAncillaryPolicy`. It owns fictional constants and a distinct deterministic ID namespace, emits immutable exact-schema rows, and returns a fixed aggregate-only validation report. It remains evaluator-only and is not integrated into `development-realistic`, package export, calibration, or Synthea.

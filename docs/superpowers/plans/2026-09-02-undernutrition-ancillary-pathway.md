@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** Implementation, independent review, verification, and publication are complete; this plan is retained as historical provenance.
+
 **Goal:** Add a deterministic evaluator-only projection and validator for
 fictional undernutrition recognition/referral, nutrition workup, unresolved
 diagnosis, and causally gated nutrition-supplement rows in the exact PPOC

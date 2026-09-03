@@ -1,8 +1,9 @@
 # All-disorder coverage development profile design
 
 **Date:** 2026-09-03  
-**Status:** Design approved for implementation  
+**Status:** Ordinary-development profile implemented, independently reviewed, verified, and published; fictional coverage scenario
 **Parent:** [Synthetic Pediatric Growth Fixture System Design](2026-08-30-synthetic-growth-fixtures-design.md)
+**Implementation plan:** [All-disorder coverage development profile Implementation Plan](../plans/2026-09-03-all-disorder-coverage-profile.md)
 
 ## Purpose
 

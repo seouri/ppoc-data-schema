@@ -1,8 +1,9 @@
 # Native Undernutrition Ancillary Pathway Contract
 
 **Date:** 2026-09-02
-**Status:** Approved for implementation; evaluator-only fictional pathway
+**Status:** Implementation complete; evaluator-only fictional pathway consumed by the published `development-all-disorders` route
 **Parent:** [Synthetic Pediatric Growth Fixture System Design](2026-08-30-synthetic-growth-fixtures-design.md)
+**Implementation plan:** [Native Undernutrition Ancillary Pathway Implementation Plan](../plans/2026-09-02-undernutrition-ancillary-pathway.md)
 
 ## Purpose
 

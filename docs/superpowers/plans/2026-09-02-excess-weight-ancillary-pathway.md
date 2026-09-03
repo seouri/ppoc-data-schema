@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** Implementation, independent review, verification, and publication are complete; this plan is retained as historical provenance.
+
 **Goal:** Add a deterministic evaluator-only projection and validator for fictional excess-weight laboratory, problem-list, and referral rows in the exact PPOC resource schema, with no medication descendant and no change to the existing GHD runtime/export path.
 
 **Architecture:** A separate `synthetic.native.excess_weight_ancillary` module consumes one typed `CohortMember`, an extracted `ResourceShape`, and an aggregate-safe `ExcessWeightAncillaryPolicy`. It returns immutable rows for the four ancillary resources and a fixed aggregate report. The module mirrors the reviewed GHD contract but owns its fictional constants and ID namespace. It never integrates into `development-realistic`, `ancillary_bundle`, package export, calibration, or Synthea in this slice.
