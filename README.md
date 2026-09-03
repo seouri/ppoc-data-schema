@@ -77,4 +77,4 @@ The Python usage example includes schema-driven pandas loading, declared CSV enc
 
 ## Synthetic generator
 
-See the [synthetic generator guide](docs/synthetic-generator.md) for ordinary development-only synthetic fixture generation and validation. Optional governed comparison, privacy, and release workflows are documented there separately and are not required to generate development fixtures.
+See the [synthetic generator guide](docs/synthetic-generator.md) for ordinary development-only synthetic fixture generation and validation, including the [all-disorder profile specification](docs/superpowers/specs/2026-09-03-all-disorder-development-profile-design.md) and [implementation plan](docs/superpowers/plans/2026-09-03-all-disorder-coverage-profile.md). Optional governed comparison, privacy, and release workflows are documented there separately and are not required to generate development fixtures.

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add an explicit, reproducible development CLI that uses the pinned CDC tables and source-matched augmenter to emit exact-schema smoke, healthy-plus-GHD coverage, and target-shaped cohort packages, including the typed GHD ancillary pathway for the realistic profile, while retaining test-only classification and all real-data/release gates.
+**Goal:** Add an explicit, reproducible development CLI that uses the pinned CDC tables and source-matched augmenter to emit the original exact-schema smoke, healthy-plus-GHD coverage, and target-shaped cohort packages, including the typed GHD ancillary pathway for the realistic profile, while retaining test-only classification and all real-data/release gates.
 
 **Architecture:** Keep `scripts/augment.py` byte-for-byte unchanged and add a strict `CdcGrowthReference` adapter plus a small development runtime factory. The CLI composes those identities with the existing smoke generator, native cohort/resource projection, and atomic exact-schema exporter; no-profile invocation remains fail-closed and every successful package is marked `test_only_derivation=true`.
 
@@ -16,7 +16,7 @@
 - Treat the CDC/augmenter pair as development-authoritative only: reproducibility within the explicit profiles is in scope; clinical validity, prevalence, demographic representativeness, privacy/non-matchability, and release approval are not.
 - Set `test_only=true` in the development binding and never call `require_approved_derivation_binding` or mark a package clinically valid.
 - Read no patient, visit, governed calibration, held-out, privacy, network, Synthea, model, or arbitrary diagnosis input; only the repository descriptor, pinned runtime/reference files, source metadata, and wholly generated rows are allowed.
-- Use exact mapping/version tokens `cdc-lms-reference-v1`, `cdc-lms-mapping-v1`, `development-generator-v1`, `development-cohort-v1`, `development-realistic-v1`, `development-augmenter-v1`, and `augment-runtime-v1` where their corresponding identities are required.
+- Use exact mapping/version tokens `cdc-lms-reference-v1`, `cdc-lms-mapping-v1`, `development-generator-v1`, `development-cohort-v1`, `development-realistic-v1`, `development-all-disorders-v1`, `development-augmenter-v1`, and `augment-runtime-v1` where their corresponding identities are required.
 - Resolve the descriptor from the repository checkout by default, use metadata defaults `2026-09-01T00:00:00Z` and `development-generator-v1`, and reject output collisions without overwriting.
 - Support only CDC reference sex `M` and `F`; keep the required `F/M/U` mapping structurally complete but assign the development cohort zero probability for visible `U`.
 - Use the exact age schedules, observation probabilities, module prior, demographic weights, BMI 730-day boundary rule, `abs(L) < 1e-6` branch, `age_days / 30.4375` coordinate, and dependency digest stated in the spec.
@@ -325,6 +325,7 @@ Require the guide to contain the exact commands for all explicit profiles:
 uv run python -m synthetic.generate --profile development-smoke --output /tmp/ppoc-development-smoke --patients 1000 --seed 20260901
 uv run python -m synthetic.generate --profile development-cohort --output /tmp/ppoc-development-cohort --patients 1000 --seed 20260901
 uv run python -m synthetic.generate --profile development-realistic --output /tmp/ppoc-development-realistic --patients 1000 --seed 20260901
+uv run python -m synthetic.generate --profile development-all-disorders --output /tmp/ppoc-development-all-disorders --patients 1000 --seed 20260901
 ```
 
 Also require `development-authoritative`, `cdc-lms-reference-v1`, `test_only_derivation=true`, the fixed age schedule, the zero-U rationale, the 730-day BMI boundary, exact eight-resource output, no-profile fixed message, no real/governed inputs, and explicit deferred clinical/prevalence/privacy/non-matchability/held-out/Synthea/release gates. Update the candidate-guide cross-document test to accept the new statement that only explicit development profiles compose the candidate while retaining the exact no-profile failure string.
@@ -443,6 +444,10 @@ schema-valid; no typed projection or descriptor is mutated.
 - [x] Kept the source-matched augmenter, exact descriptor, generic validator, and test-only binding unchanged.
 - [x] Updated the GHD pathway, bundle-integration, CLI, parent-spec, and user-guide wording to describe the narrow target-profile exception and preserve paired-counterfactual/non-target/authoritative deferrals.
 - [x] Ran focused projection/validation/CLI tests and the full repository verification suite.
+
+### 2026-09-03 follow-on: all-disorder coverage profile
+
+The historical three-profile scope above remains compatible: `development-smoke`, `development-cohort`, and `development-realistic` retain their existing contracts, including the realistic route's GHD ancillary projection. The separate [all-disorder coverage plan](2026-09-03-all-disorder-coverage-profile.md) adds the explicit `development-all-disorders` route with all ten trajectory modules and the reviewed ancillary dispatch boundary; it is a fictional coverage profile, not a prevalence or representativeness claim.
 
 ### Task 7: Fresh review, integration, and publication
 
