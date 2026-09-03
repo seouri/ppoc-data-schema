@@ -77,4 +77,12 @@ The Python usage example includes schema-driven pandas loading, declared CSV enc
 
 ## Synthetic generator
 
+For realistic development fixtures, run:
+
+```sh
+uv run python -m synthetic.generate --profile development-realistic --output /tmp/ppoc-development-realistic --patients 1000 --seed 20260901
+```
+
+This produces deterministic, exact-schema healthy/GHD growth trajectories with the configured fictional demographic mix. Use `development-all-disorders` only when you need coverage across every supported disorder subtype. Choose a new output path if the example path already exists.
+
 See the [synthetic generator guide](docs/synthetic-generator.md) for ordinary development-only synthetic fixture generation and validation, including the [all-disorder profile specification](docs/superpowers/specs/2026-09-03-all-disorder-development-profile-design.md) and [implementation plan](docs/superpowers/plans/2026-09-03-all-disorder-coverage-profile.md). Optional governed comparison, privacy, and release workflows are documented there separately and are not required to generate development fixtures.

@@ -13,7 +13,16 @@ def test_readme_points_to_the_dedicated_synthetic_generator_guide() -> None:
     assert heading in readme
     section = readme.split(heading, maxsplit=1)[1].split("\n## ", maxsplit=1)[0]
     assert section == (
-        "\nSee the [synthetic generator guide](docs/synthetic-generator.md) for "
+        "\nFor realistic development fixtures, run:\n\n"
+        "```sh\n"
+        "uv run python -m synthetic.generate --profile development-realistic "
+        "--output /tmp/ppoc-development-realistic --patients 1000 --seed 20260901\n"
+        "```\n\n"
+        "This produces deterministic, exact-schema healthy/GHD growth trajectories "
+        "with the configured fictional demographic mix. Use `development-all-disorders` "
+        "only when you need coverage across every supported disorder subtype. Choose a "
+        "new output path if the example path already exists.\n\n"
+        "See the [synthetic generator guide](docs/synthetic-generator.md) for "
         "ordinary development-only synthetic fixture generation and validation, "
         "including the [all-disorder profile specification](docs/superpowers/specs/2026-09-03-all-disorder-development-profile-design.md) "
         "and [implementation plan](docs/superpowers/plans/2026-09-03-all-disorder-coverage-profile.md). "
