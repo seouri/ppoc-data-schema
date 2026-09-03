@@ -312,7 +312,7 @@ def project_undernutrition_ancillary_resources(
         if (
             patient_id != frame.patient_id
             or type(trajectory) is not AgeRegimeDisorderTrajectory
-            or not isinstance(truth_trajectory, AgeRegimeDisorderTrajectory)
+            or type(truth_trajectory) is not AgeRegimeDisorderTrajectory
             or not trajectory.physiology.points
             or trajectory.physiology.points[0].patient_id != patient_id
             or trajectory != truth_trajectory

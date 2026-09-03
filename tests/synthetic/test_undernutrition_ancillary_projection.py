@@ -550,3 +550,37 @@ def test_projection_rejects_mutable_trajectory_subclass() -> None:
             _shape(),
             _ancillary_policy(),
         )
+
+
+def test_projection_rejects_mutable_truth_trajectory_subclass() -> None:
+    class MutableTruthTrajectory(AgeRegimeDisorderTrajectory):
+        def __eq__(self, other: object) -> bool:
+            return isinstance(other, AgeRegimeDisorderTrajectory)
+
+    member = _member()
+    mutable_truth = MutableTruthTrajectory(
+        member.trajectory.physiology,
+        member.trajectory.disorder,
+        member.trajectory.events,
+    )
+    mutable_truth.hostile = True
+    object.__setattr__(
+        member.frame.truth,
+        "latent_trajectory",
+        mutable_truth,
+    )
+    assert type(member.trajectory) is AgeRegimeDisorderTrajectory
+    assert (
+        validate_observation_frame(member.frame).status
+        is ObservationValidationStatus.PASS
+    )
+
+    with pytest.raises(
+        UndernutritionAncillaryProjectionUnavailable,
+        match="^undernutrition ancillary projection failed$",
+    ):
+        project_undernutrition_ancillary_resources(
+            member,
+            _shape(),
+            _ancillary_policy(),
+        )
