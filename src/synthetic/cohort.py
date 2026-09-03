@@ -205,6 +205,27 @@ def _select_weighted_category(
     return checked[-1][0]
 
 
+def _eligible_module_weights(
+    positive_weights: tuple[tuple[DisorderKind, float], ...],
+    modules: dict[DisorderKind, GrowthDisorderModule],
+    reference_sex: str,
+) -> tuple[tuple[DisorderKind, float], ...]:
+    """Retain module weights compatible with one sampled reference sex."""
+
+    eligible: list[tuple[DisorderKind, float]] = []
+    missing = object()
+    for kind, probability in positive_weights:
+        required_reference_sex = getattr(modules[kind], "required_reference_sex", missing)
+        if required_reference_sex is missing:
+            eligible.append((kind, probability))
+            continue
+        if not isinstance(required_reference_sex, str) or not required_reference_sex.strip():
+            raise TypeError("module required_reference_sex must be a nonempty string")
+        if required_reference_sex == reference_sex:
+            eligible.append((kind, probability))
+    return tuple(eligible)
+
+
 def _project_visible_category(category: str) -> str:
     """Map the released blank aggregate cell into the visible vocabulary."""
 
@@ -1201,17 +1222,22 @@ def generate_native_cohort(
                 races=_project_race_slots(primary_race, secondary_race),
             )
 
-            module_stream = streams.generator("cohort.module")
-            module_kind = DisorderKind(
-                _select_weighted_category(
-                    tuple((kind.value, probability) for kind, probability in positive_weights),
-                    float(module_stream.random()),
-                )
-            )
             patient = PatientState(
                 patient_id=patient_id,
                 recorded_sex=recorded_sex,
                 reference_sex=reference_sex_by_recorded[recorded_sex],
+            )
+            eligible_weights = _eligible_module_weights(
+                positive_weights,
+                copied_modules,
+                patient.reference_sex,
+            )
+            module_stream = streams.generator("cohort.module")
+            module_kind = DisorderKind(
+                _select_weighted_category(
+                    tuple((kind.value, probability) for kind, probability in eligible_weights),
+                    float(module_stream.random()),
+                )
             )
             trajectory = kernels[module_kind].generate(
                 patient,
