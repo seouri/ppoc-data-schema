@@ -30,6 +30,7 @@ def test_guide_names_the_evaluator_api_shape_and_exact_fictional_constants() -> 
         "ExcessWeightAncillaryPolicy",
         "ExcessWeightAncillaryProjection",
         "ExcessWeightAncillaryProjectionUnavailable",
+        "ExcessWeightAncillaryCheck",
         "ExcessWeightAncillaryValidationStatus",
         "ExcessWeightAncillaryValidationReport",
         "project_excess_weight_ancillary_resources",
