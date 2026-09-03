@@ -99,9 +99,11 @@ Add `merge_multidisorder_ancillary_resources` and
 only an empty-ancillary `ObservedResourceBundle`, the matching immutable
 projection, and the explicit policy; validates identity, descriptor shape,
 source-frame binding, base resources, concrete pathway rows, and visit links;
-then returns a fresh six-resource bundle. A second merge or any failed
-validation is rejected atomically with `multidisorder ancillary bundle
-unavailable`. Bundle reports use fixed aggregate checks in the order
+then returns a fresh six-resource bundle. A second merge that would append
+nonempty ancillary rows, or any failed validation, is rejected atomically with
+`multidisorder ancillary bundle unavailable`; an empty projection for a member without a reviewed ancillary
+pathway is the required immutable no-op and cannot carry a hidden merge marker.
+Bundle reports use fixed aggregate checks in the order
 `bundle_identity`, `base_resources`, `ancillary_resources`, `truth_boundary`
 and the existing precedence `FAIL > UNEVALUABLE > PASS`. Public mappings and
 `repr` contain no source frame, trajectory, hidden event, treatment state, row
