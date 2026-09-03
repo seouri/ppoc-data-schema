@@ -687,14 +687,14 @@ class UndernutritionAncillaryValidationReport:
 
 def _is_synthetic_patient_id(value: object) -> bool:
     return (
-        isinstance(value, str)
+        type(value) is str
         and _SYNTHETIC_PATIENT_TOKEN.fullmatch(value) is not None
     )
 
 
 def _is_synthetic_visit_id(value: object) -> bool:
     return (
-        isinstance(value, str)
+        type(value) is str
         and _SYNTHETIC_VISIT_TOKEN.fullmatch(value) is not None
     )
 
@@ -702,16 +702,15 @@ def _is_synthetic_visit_id(value: object) -> bool:
 def _ancillary_row_types_are_valid(values: Mapping[str, object]) -> bool:
     for field_name, value in values.items():
         if field_name in _UNDERNUTRITION_INTEGER_FIELDS:
-            if value == "":
-                if field_name not in _UNDERNUTRITION_OPTIONAL_INTEGER_FIELDS:
+            if type(value) is str:
+                if (
+                    field_name not in _UNDERNUTRITION_OPTIONAL_INTEGER_FIELDS
+                    or value != ""
+                ):
                     return False
-            elif (
-                isinstance(value, bool)
-                or not isinstance(value, int)
-                or value < 0
-            ):
+            elif type(value) is not int or value < 0:
                 return False
-        elif not isinstance(value, str):
+        elif type(value) is not str:
             return False
     return True
 
@@ -721,7 +720,7 @@ def _source_independent_row_reason(
     values: Mapping[str, object],
     patient_id: object,
 ) -> str | None:
-    if not isinstance(patient_id, str):
+    if type(patient_id) is not str:
         return "PATIENT_MISMATCH"
     expected: dict[str, object] = {name: "" for name in values}
     expected["patient_id"] = patient_id
@@ -805,9 +804,11 @@ def _typed_treatment_start_age(
             return False, None
         events = trajectory.events
         points = trajectory.physiology.points
-        if not isinstance(events, tuple) or not points:
+        if type(events) is not tuple or not points:
             return False, None
         patient_id = points[0].patient_id
+        if type(patient_id) is not str:
+            return False, None
         treatment_ages: list[int] = []
         allowed_event_types = {
             "latent_onset",
@@ -823,10 +824,11 @@ def _typed_treatment_start_age(
             if type(event) is not ClinicalEvent:
                 return False, None
             if (
-                event.event_type not in allowed_event_types
+                type(event.event_type) is not str
+                or event.event_type not in allowed_event_types
+                or type(event.patient_id) is not str
                 or event.patient_id != patient_id
-                or isinstance(event.age_days, bool)
-                or not isinstance(event.age_days, int)
+                or type(event.age_days) is not int
                 or not 0 <= event.age_days <= MAX_AGE_DAYS
                 or event.code is not None
                 or type(event.hidden) is not bool
@@ -894,6 +896,7 @@ def validate_undernutrition_ancillary_resources(
             states[name] = (status, reason_code)
 
     target_kind: bool | None = None
+    private_member_malformed = False
     typed_treatment_known = False
     typed_treatment_age: int | None = None
     trajectory: AgeRegimeDisorderTrajectory | None = None
@@ -934,11 +937,25 @@ def validate_undernutrition_ancillary_resources(
                 "MALFORMED_MEMBER",
             )
         else:
-            target_kind = trajectory.disorder.kind is DisorderKind.UNDERNUTRITION
-            if target_kind:
-                typed_treatment_known, typed_treatment_age = (
-                    _typed_treatment_start_age(trajectory)
+            try:
+                disorder_kind = trajectory.disorder.kind
+                if type(disorder_kind) is not DisorderKind:
+                    raise TypeError("malformed disorder kind")
+            except (AttributeError, TypeError, ValueError):
+                private_member_malformed = True
+                mark(
+                    "pathway_scope",
+                    UndernutritionAncillaryValidationStatus.UNEVALUABLE,
+                    "MALFORMED_MEMBER",
                 )
+            else:
+                target_kind = disorder_kind is DisorderKind.UNDERNUTRITION
+                if target_kind:
+                    typed_treatment_known, typed_treatment_age = (
+                        _typed_treatment_start_age(trajectory)
+                    )
+                    if not typed_treatment_known:
+                        private_member_malformed = True
 
         rows = projection.rows
         if not isinstance(rows, Mapping) or tuple(rows) != (
@@ -1363,6 +1380,13 @@ def validate_undernutrition_ancillary_resources(
             "SOURCE_EVIDENCE_UNAVAILABLE",
         )
         return _undernutrition_ancillary_report(states)
+    if private_member_malformed:
+        mark(
+            "source_evidence",
+            UndernutritionAncillaryValidationStatus.UNEVALUABLE,
+            "SOURCE_EVIDENCE_UNAVAILABLE",
+        )
+        return _undernutrition_ancillary_report(states)
 
     binding_valid = False
     try:
@@ -1393,17 +1417,18 @@ def validate_undernutrition_ancillary_resources(
         states[name][0] is UndernutritionAncillaryValidationStatus.FAIL
         for name in UNDERNUTRITION_ANCILLARY_CHECK_NAMES[:-1]
     )
-    if not visible_failed and type(projection.shape) is ResourceShape:
+    if type(projection.shape) is ResourceShape:
         try:
             expected = project_undernutrition_ancillary_resources(
                 member, projection.shape, policy
             )
         except Exception:  # noqa: BLE001 - source details stay redacted
-            mark(
-                "source_evidence",
-                UndernutritionAncillaryValidationStatus.UNEVALUABLE,
-                "SOURCE_EVIDENCE_UNAVAILABLE",
-            )
+            if not visible_failed:
+                mark(
+                    "source_evidence",
+                    UndernutritionAncillaryValidationStatus.UNEVALUABLE,
+                    "SOURCE_EVIDENCE_UNAVAILABLE",
+                )
     if expected is not None:
         try:
             for resource_name in UNDERNUTRITION_ANCILLARY_RESOURCE_NAMES:

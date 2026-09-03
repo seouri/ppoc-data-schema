@@ -90,6 +90,55 @@ _ALLOWED_BARE_CALLS = frozenset(
         "zip",
     }
 )
+_ALLOWED_RECEIVER_CALLS = frozenset(
+    {
+        "UNDERNUTRITION_ANCILLARY_REASON_CODES_BY_STATUS.values",
+        "_AGGREGATE_TOKEN.fullmatch",
+        "_AGGREGATE_UNSAFE_COMPONENTS.intersection",
+        "_PATH_EXTENSION.search",
+        "_REQUIRED_FIELDS.issubset",
+        "_SYNTHETIC_PATIENT_TOKEN.fullmatch",
+        "_SYNTHETIC_VISIT_TOKEN.fullmatch",
+        "actual_values.get",
+        "age_sets.add",
+        "check.to_mapping",
+        "classified.update",
+        "differing.intersection",
+        "expected.items",
+        "expected.update",
+        "expected_counts.items",
+        "lab_ids.add",
+        "lab_pairs.append",
+        "lab_results.add",
+        "lab_visits.add",
+        "medication.get",
+        "medication_orders.add",
+        "medication_starts.add",
+        "medication_visits.add",
+        "name.endswith",
+        "nonempty_resources.add",
+        "object.__setattr__",
+        "problem_values.get",
+        "projection.rows.get",
+        "referral_values.get",
+        "row.to_mapping",
+        "rows.get",
+        "seen.add",
+        "self.CHECK_NAMES.index",
+        "self.shape.field_names",
+        "shape.field_names",
+        "shape_fields.get",
+        "str.encode",
+        "treatment_ages.append",
+        "value.lower",
+        "values.get",
+        "values.items",
+        "values_by_resource.append",
+        "visible_events.get",
+        "visible_events.setdefault",
+        "visit_by_source_point.get",
+    }
+)
 
 
 def _dotted_name(node: ast.expr) -> str | None:
@@ -160,7 +209,10 @@ def _call_violations(tree: ast.AST) -> set[str]:
                 and qualified not in _ALLOWED_BARE_CALLS
             ):
                 violations.add(qualified)
-        elif name not in _ALLOWED_BARE_CALLS and name not in local_names and "." not in name:
+        elif "." in name:
+            if name not in _ALLOWED_RECEIVER_CALLS:
+                violations.add(name)
+        elif name not in _ALLOWED_BARE_CALLS and name not in local_names:
             violations.add(name)
     return violations
 
@@ -208,6 +260,10 @@ def test_allowlist_rejects_forbidden_imports_and_calls() -> None:
         "from .resources import ResourceShape": ({".resources"}, set()),
         "open('fixture')": (set(), {"open"}),
         "import random\nrandom.random()": ({"random"}, {"random.random"}),
+        "member.frame.write_text('unsafe')": (set(), {"member.frame.write_text"}),
+        "projection.export('unsafe')": (set(), {"projection.export"}),
+        "member.frame.connect()": (set(), {"member.frame.connect"}),
+        "member.frame.values()": (set(), {"member.frame.values"}),
     }
     for source, (expected_imports, expected_calls) in cases.items():
         tree = ast.parse(source)
@@ -215,19 +271,36 @@ def test_allowlist_rejects_forbidden_imports_and_calls() -> None:
         assert _call_violations(tree) == expected_calls
 
 
-def test_public_functions_have_only_typed_in_memory_parameters() -> None:
-    for function, expected in (
+def test_public_functions_have_exact_typed_in_memory_signatures() -> None:
+    for function, expected_names, expected_annotations in (
         (
             undernutrition_ancillary.project_undernutrition_ancillary_resources,
             ("member", "shape", "policy"),
+            {
+                "member": "CohortMember",
+                "shape": "ResourceShape",
+                "policy": "UndernutritionAncillaryPolicy",
+                "return": "UndernutritionAncillaryProjection",
+            },
         ),
         (
             undernutrition_ancillary.validate_undernutrition_ancillary_resources,
             ("member", "projection", "policy"),
+            {
+                "member": "CohortMember",
+                "projection": "UndernutritionAncillaryProjection",
+                "policy": "UndernutritionAncillaryPolicy",
+                "return": "UndernutritionAncillaryValidationReport",
+            },
         ),
     ):
-        parameters = inspect.signature(function).parameters
-        assert tuple(parameters) == expected
+        signature = inspect.signature(function)
+        parameters = signature.parameters
+        assert tuple(parameters) == expected_names
+        assert {
+            **{name: parameter.annotation for name, parameter in parameters.items()},
+            "return": signature.return_annotation,
+        } == expected_annotations
         assert not set(parameters).intersection(
             {
                 "path",

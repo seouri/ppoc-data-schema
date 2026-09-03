@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import dataclasses
 import json
 from types import MappingProxyType
@@ -240,6 +241,32 @@ def test_validator_rejects_fixed_value_id_scalar_and_empty_tampering(
     assert _check(report, "row_schema").reason_code == reason
 
 
+@pytest.mark.parametrize(
+    ("resource_name", "index", "field_name", "value"),
+    [
+        ("labs", 0, "result_line_num", type("FancyInt", (int,), {})(1)),
+        ("labs", 0, "result_flag", type("FancyStr", (str,), {})("Synthetic")),
+        ("problem_list", 0, "resolved_date_age_in_days", type("FancyStr", (str,), {})("")),
+    ],
+)
+def test_validator_rejects_scalar_subclasses(
+    resource_name: str,
+    index: int,
+    field_name: str,
+    value: object,
+) -> None:
+    member, projection = _target()
+    _change_field(projection, resource_name, index, field_name, value)
+    report = validate_undernutrition_ancillary_resources(
+        member, projection, _ancillary_policy()
+    )
+    assert _check(report, "row_schema") == UndernutritionAncillaryCheck(
+        "row_schema",
+        UndernutritionAncillaryValidationStatus.FAIL,
+        "INVALID_VALUE",
+    )
+
+
 def test_validator_rejects_field_order_malformed_rows_and_duplicates() -> None:
     member, projection = _target()
     row = projection.rows["labs"][0]
@@ -476,6 +503,35 @@ def test_source_point_specific_linkage_rejects_a_different_real_visit() -> None:
     )
 
 
+def test_source_point_linkage_still_fails_with_another_visible_failure() -> None:
+    member, projection = _target(same_age_events=True)
+    workup_visit = projection.rows["labs"][0].to_mapping()["visit_id"]
+    different_real_visit = next(
+        visit.visit_id
+        for visit in member.frame.visits
+        if visit.visit_id != workup_visit
+    )
+    for index in range(2):
+        _change_field(projection, "labs", index, "visit_id", different_real_visit)
+    _change_field(projection, "labs", 0, "result_flag", "Wrong marker")
+
+    report = validate_undernutrition_ancillary_resources(
+        member, projection, _ancillary_policy()
+    )
+    assert _check(report, "row_schema").status is (
+        UndernutritionAncillaryValidationStatus.FAIL
+    )
+    assert _check(report, "cross_resource_links") == UndernutritionAncillaryCheck(
+        "cross_resource_links",
+        UndernutritionAncillaryValidationStatus.FAIL,
+        "VISIT_REFERENCE_INVALID",
+    )
+    rendered = repr(report) + json.dumps(report.to_mapping(), sort_keys=True)
+    assert PATIENT_ID not in rendered
+    assert str(different_real_visit) not in rendered
+    assert "Wrong marker" not in rendered
+
+
 def test_problem_row_retains_descriptor_no_visit_key_semantics() -> None:
     _member_value, projection = _target()
     assert "visit_id" not in projection.rows["problem_list"][0].to_mapping()
@@ -643,6 +699,109 @@ def test_malformed_typed_treatment_leaves_count_unknown_before_source_result() -
         UndernutritionAncillaryValidationStatus.FAIL,
         UndernutritionAncillaryValidationStatus.UNEVALUABLE,
     }
+
+
+@pytest.mark.parametrize(
+    ("field_name", "replacement"),
+    [
+        ("age_days", type("FancyInt", (int,), {})(800)),
+        ("event_type", type("FancyStr", (str,), {})("treatment_start")),
+    ],
+)
+def test_private_treatment_scalar_subclasses_are_source_unavailable(
+    field_name: str,
+    replacement: object,
+) -> None:
+    member, projection = _target()
+    trajectory = copy.deepcopy(member.trajectory)
+    treatment = next(
+        event for event in trajectory.events if event.event_type == "treatment_start"
+    )
+    object.__setattr__(treatment, field_name, replacement)
+    object.__setattr__(member, "trajectory", trajectory)
+
+    report = validate_undernutrition_ancillary_resources(
+        member, projection, _ancillary_policy()
+    )
+    assert _check(report, "pathway_scope").status is (
+        UndernutritionAncillaryValidationStatus.PASS
+    )
+    assert _check(report, "row_schema").status is (
+        UndernutritionAncillaryValidationStatus.PASS
+    )
+    assert _check(report, "source_evidence") == UndernutritionAncillaryCheck(
+        "source_evidence",
+        UndernutritionAncillaryValidationStatus.UNEVALUABLE,
+        "SOURCE_EVIDENCE_UNAVAILABLE",
+    )
+    assert report.status is UndernutritionAncillaryValidationStatus.UNEVALUABLE
+
+
+@pytest.mark.parametrize(
+    ("kind", "malform_kind"),
+    [
+        (DisorderKind.UNDERNUTRITION, False),
+        (DisorderKind.CELIAC_DISEASE, True),
+    ],
+)
+def test_malformed_disorder_is_private_unavailable_not_projection_failure(
+    kind: DisorderKind,
+    malform_kind: bool,
+) -> None:
+    member = _member(kind=kind)
+    projection = project_undernutrition_ancillary_resources(
+        member, _shape(), _ancillary_policy()
+    )
+    trajectory = dataclasses.replace(member.trajectory)
+    if malform_kind:
+        disorder = dataclasses.replace(trajectory.disorder)
+        object.__setattr__(disorder, "kind", object())
+        object.__setattr__(trajectory, "disorder", disorder)
+    else:
+        object.__setattr__(trajectory, "disorder", object())
+    object.__setattr__(member, "trajectory", trajectory)
+
+    report = validate_undernutrition_ancillary_resources(
+        member, projection, _ancillary_policy()
+    )
+    assert _check(report, "pathway_scope") == UndernutritionAncillaryCheck(
+        "pathway_scope",
+        UndernutritionAncillaryValidationStatus.UNEVALUABLE,
+        "MALFORMED_MEMBER",
+    )
+    assert _check(report, "row_schema").status is (
+        UndernutritionAncillaryValidationStatus.PASS
+    )
+    assert _check(report, "source_evidence") == UndernutritionAncillaryCheck(
+        "source_evidence",
+        UndernutritionAncillaryValidationStatus.UNEVALUABLE,
+        "SOURCE_EVIDENCE_UNAVAILABLE",
+    )
+    assert report.status is UndernutritionAncillaryValidationStatus.UNEVALUABLE
+
+
+def test_invalid_observation_precedes_malformed_private_member() -> None:
+    member, projection = _target()
+    trajectory = dataclasses.replace(member.trajectory)
+    object.__setattr__(trajectory, "disorder", object())
+    object.__setattr__(member, "trajectory", trajectory)
+    object.__setattr__(member.frame.truth, "truth_hash", "0" * 64)
+
+    report = validate_undernutrition_ancillary_resources(
+        member, projection, _ancillary_policy()
+    )
+    assert _check(report, "pathway_scope").status is (
+        UndernutritionAncillaryValidationStatus.UNEVALUABLE
+    )
+    assert _check(report, "row_schema").status is (
+        UndernutritionAncillaryValidationStatus.PASS
+    )
+    assert _check(report, "source_evidence") == UndernutritionAncillaryCheck(
+        "source_evidence",
+        UndernutritionAncillaryValidationStatus.FAIL,
+        "SOURCE_EVIDENCE_INVALID",
+    )
+    assert report.status is UndernutritionAncillaryValidationStatus.FAIL
 
 
 def test_validator_rejects_mutable_trajectory_subclasses_as_invalid_source() -> None:
