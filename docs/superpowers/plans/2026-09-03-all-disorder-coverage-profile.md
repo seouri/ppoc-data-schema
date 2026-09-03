@@ -14,6 +14,7 @@
 
 - The new profile name is `development-all-disorders`; its configuration/artifact identity is `development-all-disorders-v1`.
 - The F-reference prior is healthy `1/2` plus `1/18` for each of the nine nonhealthy kinds; the M-reference prior is healthy `1/2` plus `1/16` for each of the eight non-Turner kinds and Turner `0`.
+- `CohortConfig.module_weights_by_reference_sex` is optional and defaults empty; when present, generation selects the matching canonical row before eligibility filtering, preserving all legacy callers and the unchanged `generate_native_cohort` signature.
 - Demographic weights reuse the existing snapshot-shaped F/M/U, ethnicity, race, and race-multiselect values, but remain orthogonal to the fictional latent coverage prior.
 - Turner may be selected only when `PatientState.reference_sex == "F"`; existing callers without sex-constrained modules keep their current selection behavior.
 - Exact visible resources remain the six base resources plus `patients_augmented` and `visits_augmented`; the generic empty-ancillary validator and all existing profile APIs remain unchanged.
@@ -130,7 +131,7 @@
 
 - [ ] **Step 3: Implement the profile using existing exporter boundaries.**
 
-  Add fixed profile/policy/version constants and a canonical ten-kind module factory. Define the all-disorder demographic builder by copying only the existing realistic aggregate-shaped values with a distinct artifact identity. Define conditional F/M prior tuples exactly as the spec states; include them in the configuration hash together with all ten module versions, eligibility policy, observation policy, snapshot identity, and ancillary policy. Pass all ten modules to `generate_native_cohort`, preserving the existing two-profile module map for legacy routes.
+  Add fixed profile/policy/version constants and a canonical ten-kind module factory. Define the all-disorder demographic builder by copying only the existing realistic aggregate-shaped values with a distinct artifact identity. Define conditional F/M prior tuples exactly as the spec states; bind them through the optional validated `CohortConfig.module_weights_by_reference_sex` table, select the matching row before Task 2 eligibility filtering, and include the table in the configuration hash together with all ten module versions, eligibility policy, observation policy, snapshot identity, and ancillary policy. Pass all ten modules to `generate_native_cohort`, preserving the existing two-profile module map for legacy routes.
 
   Add the all-disorder runtime builders and route. In visible projection, call the multidisorder projector/merge once per member, convert every typed `Synthetic` lab marker to `""`, and add only the existing `E23.0` token at GHD diagnosis visits. Keep the old `include_realistic_pathway` branch and GHD policy untouched. Wrap failures in the existing fixed package-export message. Add `development-all-disorders` to the explicit profile set and dispatch only that name to the new runner; do not add input flags or change no-profile behavior. Update profile phrase assertions in augmenter-boundary tests to recognize the fourth explicit development profile.
 

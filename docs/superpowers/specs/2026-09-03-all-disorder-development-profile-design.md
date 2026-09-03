@@ -69,6 +69,15 @@ Thus a male-reference member cannot be assigned Turner, while F/M demographic
 weights remain intact. Existing callers without sex-constrained modules see
 unchanged selection behavior.
 
+The native cohort configuration gains one optional, validated
+`module_weights_by_reference_sex` table. Its default is empty, preserving the
+legacy flat `module_weights` behavior and `generate_native_cohort` signature.
+When present, a sampled reference-sex key selects its canonical weight tuple
+before the existing eligibility filter; the all-disorder profile binds the
+exact F and M rows above and retains the flat tuple only as the kernel/module
+registry superset. The U row is not sampled because its demographic weight is
+zero.
+
 ## All-disorder ancillary contract
 
 Add `synthetic.native.multidisorder_ancillary` as a pure in-memory adapter over
