@@ -6,6 +6,7 @@ import hashlib
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from enum import Enum
 from types import MappingProxyType
 from typing import ClassVar
 
@@ -144,7 +145,15 @@ def _require_patient_id(value: object) -> str:
 
 
 def _row_values(row: ResourceRow) -> dict[str, object]:
-    return dict(row.values)
+    values: dict[str, object] = {}
+    for pair in row.values:
+        if not isinstance(pair, tuple) or len(pair) != 2:
+            raise TypeError("row values must contain field/value pairs")
+        field_name, value = pair
+        if not isinstance(field_name, str) or field_name in values:
+            raise ValueError("row values must contain unique field names")
+        values[field_name] = value
+    return values
 
 
 @dataclass(frozen=True, repr=False)
@@ -351,3 +360,441 @@ def project_sga_ancillary_resources(
         return SgaAncillaryProjection(patient_id, shape, rows)
     except Exception:  # noqa: BLE001 - evaluator boundary is intentionally redacted
         raise SgaAncillaryProjectionUnavailable("sga ancillary projection failed") from None
+
+
+SGA_ANCILLARY_CHECK_NAMES = (
+    "pathway_scope",
+    "row_schema",
+    "causal_timing",
+    "cross_resource_links",
+    "source_evidence",
+)
+
+
+class SgaAncillaryValidationStatus(str, Enum):
+    """Aggregate status for one fictional pathway validation report."""
+
+    PASS = "PASS"
+    FAIL = "FAIL"
+    UNEVALUABLE = "UNEVALUABLE"
+
+
+SGA_ANCILLARY_REASON_CODES_BY_STATUS: Mapping[
+    SgaAncillaryValidationStatus, frozenset[str]
+] = MappingProxyType(
+    {
+        SgaAncillaryValidationStatus.PASS: frozenset({"OK"}),
+        SgaAncillaryValidationStatus.FAIL: frozenset(
+            {
+                "PATIENT_MISMATCH", "SCHEMA_SHAPE_INVALID", "ROW_SCHEMA_INVALID",
+                "PATHWAY_SCOPE_INVALID", "CAUSAL_TIMING_INVALID",
+                "CROSS_RESOURCE_LINK_INVALID", "SOURCE_EVIDENCE_INVALID",
+                "MALFORMED_PROJECTION", "INVALID_ID", "INVALID_CODE", "INVALID_VALUE",
+                "DUPLICATE_ROW", "EVENT_ORDER_INVALID", "TIMING_INVALID",
+                "VISIT_REFERENCE_INVALID", "PATHWAY_OUT_OF_SCOPE",
+            }
+        ),
+        SgaAncillaryValidationStatus.UNEVALUABLE: frozenset(
+            {"MALFORMED_ANCILLARY", "MALFORMED_MEMBER", "INSUFFICIENT_EVIDENCE", "SOURCE_EVIDENCE_UNAVAILABLE"}
+        ),
+    }
+)
+SGA_ANCILLARY_REASON_CODES = frozenset(
+    reason
+    for reasons in SGA_ANCILLARY_REASON_CODES_BY_STATUS.values()
+    for reason in reasons
+)
+
+_SGA_INTEGER_FIELDS = frozenset(
+    {
+        "result_line_num", "lab_order_date_age_in_days", "lab_result_date_age_in_days",
+        "med_order_date_age_in_days", "med_start_date_age_in_days", "med_end_date_age_in_days",
+        "noted_date_age_in_days", "resolved_date_age_in_days", "referral_date_age_in_days",
+        "referral_number_of_visits",
+    }
+)
+_SGA_OPTIONAL_INTEGER_FIELDS = frozenset({"med_end_date_age_in_days", "resolved_date_age_in_days"})
+_SGA_AGE_FIELDS = frozenset(
+    name for name in _SGA_INTEGER_FIELDS if name not in {"result_line_num", "referral_number_of_visits"}
+)
+
+
+def _validation_status_for_checks(
+    checks: tuple[SgaAncillaryCheck, ...],
+) -> SgaAncillaryValidationStatus:
+    if any(check.status is SgaAncillaryValidationStatus.FAIL for check in checks):
+        return SgaAncillaryValidationStatus.FAIL
+    if any(check.status is SgaAncillaryValidationStatus.UNEVALUABLE for check in checks):
+        return SgaAncillaryValidationStatus.UNEVALUABLE
+    return SgaAncillaryValidationStatus.PASS
+
+
+@dataclass(frozen=True, repr=False)
+class SgaAncillaryCheck:
+    """One fixed aggregate-only validation check."""
+
+    name: str
+    status: SgaAncillaryValidationStatus
+    reason_code: str
+
+    CHECK_NAMES: ClassVar[tuple[str, ...]] = SGA_ANCILLARY_CHECK_NAMES
+    REASON_CODES: ClassVar[frozenset[str]] = SGA_ANCILLARY_REASON_CODES
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.name, str) or self.name not in self.CHECK_NAMES:
+            raise ValueError("unknown sga ancillary check name")
+        if not isinstance(self.status, SgaAncillaryValidationStatus):
+            raise TypeError("status must be a SgaAncillaryValidationStatus")
+        if not isinstance(self.reason_code, str) or self.reason_code not in SGA_ANCILLARY_REASON_CODES_BY_STATUS[self.status]:
+            raise ValueError("reason_code must be compatible with status")
+
+    @property
+    def check_id(self) -> str:
+        return self.name
+
+    def to_mapping(self) -> dict[str, str]:
+        return {"name": self.name, "status": self.status.value, "reason_code": self.reason_code}
+
+    def __repr__(self) -> str:
+        return f"SgaAncillaryCheck(name={self.name!r}, status={self.status.value!r})"
+
+
+@dataclass(frozen=True, repr=False)
+class SgaAncillaryValidationReport:
+    """Immutable aggregate report with no row or source evidence."""
+
+    status: SgaAncillaryValidationStatus
+    checks: tuple[SgaAncillaryCheck, ...]
+
+    CHECK_NAMES: ClassVar[tuple[str, ...]] = SGA_ANCILLARY_CHECK_NAMES
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.status, SgaAncillaryValidationStatus):
+            raise TypeError("status must be a SgaAncillaryValidationStatus")
+        if not isinstance(self.checks, tuple) or not self.checks:
+            raise ValueError("checks must be a nonempty tuple")
+        if not all(isinstance(check, SgaAncillaryCheck) for check in self.checks):
+            raise TypeError("checks must contain SgaAncillaryCheck values")
+        names = tuple(check.name for check in self.checks)
+        if len(names) != len(set(names)) or set(names) != set(self.CHECK_NAMES):
+            raise ValueError("checks must contain every fixed sga ancillary check exactly once")
+        ordered = tuple(sorted(self.checks, key=lambda check: self.CHECK_NAMES.index(check.name)))
+        if self.status is not _validation_status_for_checks(ordered):
+            raise ValueError("status must match sga check statuses")
+        object.__setattr__(self, "checks", ordered)
+
+    @property
+    def check_counts(self) -> Mapping[str, int]:
+        return MappingProxyType({status.value: sum(check.status is status for check in self.checks) for status in SgaAncillaryValidationStatus})
+
+    def to_mapping(self) -> dict[str, object]:
+        return {"status": self.status.value, "check_counts": dict(self.check_counts), "checks": [check.to_mapping() for check in self.checks]}
+
+    def __repr__(self) -> str:
+        return f"SgaAncillaryValidationReport(status={self.status.value!r}, checks={len(self.checks)})"
+
+
+def _is_synthetic_patient_id(value: object) -> bool:
+    return isinstance(value, str) and _SYNTHETIC_PATIENT_TOKEN.fullmatch(value) is not None
+
+
+def _is_synthetic_visit_id(value: object) -> bool:
+    return isinstance(value, str) and _SYNTHETIC_VISIT_TOKEN.fullmatch(value) is not None
+
+
+def _row_types_are_valid(values: Mapping[str, object]) -> bool:
+    for field_name, value in values.items():
+        if field_name in _SGA_INTEGER_FIELDS:
+            if value == "":
+                if field_name not in _SGA_OPTIONAL_INTEGER_FIELDS:
+                    return False
+            elif isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                return False
+        elif not isinstance(value, str):
+            return False
+    return True
+
+
+def _source_independent_row_reason(name: str, values: Mapping[str, object], patient_id: object) -> str | None:
+    if not isinstance(patient_id, str):
+        return "PATIENT_MISMATCH"
+    expected: dict[str, object] = {field: "" for field in values}
+    expected["patient_id"] = patient_id
+    identifiers = {"labs": "lab_order_id", "problem_list": "problem_list_id", "referrals": "referral_id"}
+    if name == "labs":
+        expected.update({"lab_order_id": _synthetic_ancillary_id(patient_id, "lab-order"), "result_loinc_code": "", "result_value": "", "result_flag": SGA_LAB_RESULT_FLAG})
+        if values.get("result_component_name") not in SGA_LAB_COMPONENT_NAMES:
+            return "INVALID_CODE"
+    elif name == "problem_list":
+        expected.update({"problem_list_id": _synthetic_ancillary_id(patient_id, "problem-list"), "resolved_date_age_in_days": "", "pl_diag": SGA_DIAGNOSIS_CODE})
+        if values.get("pl_diag") != SGA_DIAGNOSIS_CODE:
+            return "INVALID_CODE"
+    elif name == "referrals":
+        expected.update({"referral_id": _synthetic_ancillary_id(patient_id, "referral"), "requested_specialty": SGA_REFERRAL_SPECIALTY, "referral_number_of_visits": 1})
+    else:
+        return None
+    if values.get(identifiers[name]) != expected[identifiers[name]]:
+        return "INVALID_ID"
+    for field_name, expected_value in expected.items():
+        if field_name not in _SGA_INTEGER_FIELDS and field_name not in {"patient_id", "visit_id", "result_component_name"} and values.get(field_name) != expected_value:
+            return "INVALID_VALUE"
+    if any(values.get(field_name) != "" for field_name in _SGA_OPTIONAL_INTEGER_FIELDS if field_name in values):
+        return "INVALID_VALUE"
+    return None
+
+
+def _sga_ancillary_report(states: Mapping[str, tuple[SgaAncillaryValidationStatus, str]]) -> SgaAncillaryValidationReport:
+    checks = tuple(SgaAncillaryCheck(name, *states[name]) for name in SGA_ANCILLARY_CHECK_NAMES)
+    return SgaAncillaryValidationReport(_validation_status_for_checks(checks), checks)
+
+
+def validate_sga_ancillary_resources(
+    member: CohortMember,
+    projection: SgaAncillaryProjection,
+    policy: SgaAncillaryPolicy,
+) -> SgaAncillaryValidationReport:
+    """Return fixed aggregate checks for one fictional SGA projection."""
+
+    if (
+        not isinstance(member, CohortMember)
+        or not isinstance(projection, SgaAncillaryProjection)
+        or not isinstance(policy, SgaAncillaryPolicy)
+    ):
+        raise SgaAncillaryProjectionUnavailable("sga ancillary projection unavailable")
+    states: dict[str, tuple[SgaAncillaryValidationStatus, str]] = {
+        name: (SgaAncillaryValidationStatus.PASS, "OK")
+        for name in SGA_ANCILLARY_CHECK_NAMES
+    }
+
+    def mark(name: str, status: SgaAncillaryValidationStatus, reason: str) -> None:
+        current = states[name][0]
+        if current is SgaAncillaryValidationStatus.FAIL:
+            return
+        if status is SgaAncillaryValidationStatus.FAIL or current is SgaAncillaryValidationStatus.PASS:
+            states[name] = (status, reason)
+
+    target_kind: bool | None = None
+    trajectory: AgeRegimeDisorderTrajectory | None = None
+    member_id: object = None
+    rows: Mapping[str, tuple[ResourceRow, ...]] | dict[str, tuple[ResourceRow, ...]] = {}
+    shape_fields: dict[str, tuple[str, ...]] = {}
+    values_by_resource: dict[str, list[dict[str, object]]] = {
+        name: [] for name in SGA_ANCILLARY_RESOURCE_NAMES
+    }
+    visible_events: dict[RecordedEventKind, RecordedEvent] = {}
+    visible_visit_ids: frozenset[object] = frozenset()
+    ages: dict[str, set[object]] = {"labs": set(), "problem_list": set(), "referrals": set()}
+    try:
+        member_id = member.demographics.patient_id
+        if projection.patient_id != member_id or not _is_synthetic_patient_id(projection.patient_id):
+            mark("cross_resource_links", SgaAncillaryValidationStatus.FAIL, "PATIENT_MISMATCH")
+        trajectory = member.trajectory
+        if not isinstance(trajectory, AgeRegimeDisorderTrajectory):
+            mark("pathway_scope", SgaAncillaryValidationStatus.UNEVALUABLE, "MALFORMED_MEMBER")
+        else:
+            target_kind = trajectory.disorder.kind is DisorderKind.SMALL_FOR_GESTATIONAL_AGE
+        rows = projection.rows
+        if not isinstance(rows, Mapping) or tuple(rows) != SGA_ANCILLARY_RESOURCE_NAMES:
+            mark("row_schema", SgaAncillaryValidationStatus.FAIL, "SCHEMA_SHAPE_INVALID")
+            rows = {}
+        shape = projection.shape
+        if not isinstance(shape, ResourceShape):
+            mark("row_schema", SgaAncillaryValidationStatus.FAIL, "SCHEMA_SHAPE_INVALID")
+        else:
+            for name in SGA_ANCILLARY_RESOURCE_NAMES:
+                try:
+                    fields = shape.field_names(name)
+                except Exception:  # noqa: BLE001 - malformed shapes are redacted
+                    mark("row_schema", SgaAncillaryValidationStatus.FAIL, "SCHEMA_SHAPE_INVALID")
+                    continue
+                shape_fields[name] = fields
+                if not _REQUIRED_FIELDS[name].issubset(fields):
+                    mark("row_schema", SgaAncillaryValidationStatus.FAIL, "SCHEMA_SHAPE_INVALID")
+        try:
+            visible_visit_ids = frozenset(visit.visit_id for visit in member.frame.visits)
+        except Exception:  # noqa: BLE001 - only visible links are read here
+            visible_visit_ids = frozenset()
+        for name in SGA_ANCILLARY_RESOURCE_NAMES:
+            resource_rows = rows.get(name)
+            if not isinstance(resource_rows, tuple):
+                mark("row_schema", SgaAncillaryValidationStatus.FAIL, "SCHEMA_SHAPE_INVALID")
+                continue
+            if name == "medications" and resource_rows:
+                mark("pathway_scope", SgaAncillaryValidationStatus.FAIL, "PATHWAY_SCOPE_INVALID")
+            if len(resource_rows) > (2 if name == "labs" else 1):
+                mark("row_schema", SgaAncillaryValidationStatus.FAIL, "DUPLICATE_ROW")
+            fields = shape_fields.get(name)
+            if fields is None:
+                continue
+            seen: set[tuple[tuple[str, object], ...]] = set()
+            lab_pairs: set[tuple[object, object]] = set()
+            lab_ids: set[object] = set()
+            lab_visits: set[object] = set()
+            lab_results: set[object] = set()
+            for row in resource_rows:
+                if not isinstance(row, ResourceRow) or row.resource_name != name:
+                    mark("row_schema", SgaAncillaryValidationStatus.FAIL, "ROW_SCHEMA_INVALID")
+                    continue
+                if tuple(field for field, _ in row.values) != fields:
+                    mark("row_schema", SgaAncillaryValidationStatus.FAIL, "SCHEMA_SHAPE_INVALID")
+                try:
+                    if row.values in seen:
+                        mark("row_schema", SgaAncillaryValidationStatus.FAIL, "DUPLICATE_ROW")
+                    seen.add(row.values)
+                    values = _row_values(row)
+                except (AttributeError, TypeError, ValueError):
+                    mark("row_schema", SgaAncillaryValidationStatus.FAIL, "ROW_SCHEMA_INVALID")
+                    continue
+                values_by_resource[name].append(values)
+                types_valid = _row_types_are_valid(values)
+                if not types_valid:
+                    mark("row_schema", SgaAncillaryValidationStatus.FAIL, "INVALID_VALUE")
+                fixed_reason = _source_independent_row_reason(name, values, projection.patient_id)
+                if fixed_reason is not None:
+                    mark("row_schema", SgaAncillaryValidationStatus.FAIL, fixed_reason)
+                if not _is_synthetic_patient_id(values.get("patient_id")) or values.get("patient_id") != projection.patient_id:
+                    mark("cross_resource_links", SgaAncillaryValidationStatus.FAIL, "PATIENT_MISMATCH")
+                if name in {"labs", "referrals"}:
+                    visit_id = values.get("visit_id")
+                    if not _is_synthetic_visit_id(visit_id) or visit_id not in visible_visit_ids:
+                        mark("cross_resource_links", SgaAncillaryValidationStatus.FAIL, "VISIT_REFERENCE_INVALID")
+                if types_valid:
+                    for field_name in _SGA_AGE_FIELDS:
+                        value = values.get(field_name)
+                        if field_name in values and value != "" and (
+                            isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= MAX_AGE_DAYS
+                        ):
+                            mark("causal_timing", SgaAncillaryValidationStatus.FAIL, "TIMING_INVALID")
+                if name == "labs" and types_valid:
+                    ages["labs"].add(values.get("lab_order_date_age_in_days"))
+                    lab_pairs.add((values.get("result_line_num"), values.get("result_component_name")))
+                    lab_ids.add(values.get("lab_order_id"))
+                    lab_visits.add(values.get("visit_id"))
+                    lab_results.add(values.get("lab_result_date_age_in_days"))
+                elif name == "problem_list" and types_valid:
+                    ages["problem_list"].add(values.get("noted_date_age_in_days"))
+                elif name == "referrals" and types_valid:
+                    ages["referrals"].add(values.get("referral_date_age_in_days"))
+            if name == "labs" and resource_rows:
+                if lab_pairs != {(1, SGA_GESTATIONAL_AGE_COMPONENT), (2, SGA_BIRTH_SIZE_COMPONENT)} or len(lab_ids) != 1:
+                    mark("row_schema", SgaAncillaryValidationStatus.FAIL, "ROW_SCHEMA_INVALID")
+                if len(lab_visits) != 1:
+                    mark("cross_resource_links", SgaAncillaryValidationStatus.FAIL, "VISIT_REFERENCE_INVALID")
+                if len(ages["labs"]) != 1 or len(lab_results) != 1:
+                    mark("causal_timing", SgaAncillaryValidationStatus.FAIL, "TIMING_INVALID")
+                else:
+                    order_age = next(iter(ages["labs"]))
+                    result_age = next(iter(lab_results))
+                    if not isinstance(order_age, int) or isinstance(order_age, bool) or result_age != order_age + policy.result_delay_days:
+                        mark("causal_timing", SgaAncillaryValidationStatus.FAIL, "TIMING_INVALID")
+        if ages["referrals"] and ages["labs"] and max(ages["referrals"]) > min(ages["labs"]):
+            mark("causal_timing", SgaAncillaryValidationStatus.FAIL, "TIMING_INVALID")
+        if ages["labs"] and ages["problem_list"] and max(ages["labs"]) > min(ages["problem_list"]):
+            mark("causal_timing", SgaAncillaryValidationStatus.FAIL, "TIMING_INVALID")
+        frame_events = member.frame.events
+        if isinstance(frame_events, tuple):
+            for event in frame_events:
+                if (
+                    isinstance(event, RecordedEvent)
+                    and isinstance(event.event_kind, RecordedEventKind)
+                    and event.patient_id == member_id
+                    and not isinstance(event.age_days, bool)
+                    and isinstance(event.age_days, int)
+                    and 0 <= event.age_days <= MAX_AGE_DAYS
+                ):
+                    visible_events.setdefault(event.event_kind, event)
+        if target_kind is False and any(rows.get(name, ()) for name in SGA_ANCILLARY_RESOURCE_NAMES):
+            mark("pathway_scope", SgaAncillaryValidationStatus.FAIL, "PATHWAY_SCOPE_INVALID")
+        if target_kind:
+            expected_counts = {
+                "labs": 2 if RecordedEventKind.WORKUP in visible_events else 0,
+                "medications": 0,
+                "problem_list": 1 if RecordedEventKind.DIAGNOSIS in visible_events else 0,
+                "referrals": 1 if RecordedEventKind.RECOGNITION in visible_events else 0,
+            }
+            for name, expected_count in expected_counts.items():
+                if len(rows.get(name, ())) != expected_count:
+                    mark("pathway_scope", SgaAncillaryValidationStatus.FAIL, "PATHWAY_SCOPE_INVALID")
+            recognition = visible_events.get(RecordedEventKind.RECOGNITION)
+            workup = visible_events.get(RecordedEventKind.WORKUP)
+            diagnosis = visible_events.get(RecordedEventKind.DIAGNOSIS)
+            if (recognition and workup and recognition.age_days > workup.age_days) or (workup and diagnosis and workup.age_days > diagnosis.age_days):
+                mark("causal_timing", SgaAncillaryValidationStatus.FAIL, "TIMING_INVALID")
+            if recognition and len(values_by_resource["referrals"]) == 1 and values_by_resource["referrals"][0].get("referral_date_age_in_days") != recognition.age_days:
+                mark("causal_timing", SgaAncillaryValidationStatus.FAIL, "TIMING_INVALID")
+            if workup and len(values_by_resource["labs"]) == 2 and any(
+                values.get("lab_order_date_age_in_days") != workup.age_days
+                or values.get("lab_result_date_age_in_days") != workup.age_days + policy.result_delay_days
+                for values in values_by_resource["labs"]
+            ):
+                mark("causal_timing", SgaAncillaryValidationStatus.FAIL, "TIMING_INVALID")
+            if diagnosis and len(values_by_resource["problem_list"]) == 1 and values_by_resource["problem_list"][0].get("noted_date_age_in_days") != diagnosis.age_days:
+                mark("causal_timing", SgaAncillaryValidationStatus.FAIL, "TIMING_INVALID")
+    except Exception:  # noqa: BLE001 - malformed visible values stay redacted
+        mark("row_schema", SgaAncillaryValidationStatus.FAIL, "MALFORMED_PROJECTION")
+
+    # Private source validation deliberately follows every visible check.
+    try:
+        observation = validate_observation_frame(member.frame)
+    except Exception:  # noqa: BLE001 - source details never leave this boundary
+        mark("source_evidence", SgaAncillaryValidationStatus.UNEVALUABLE, "SOURCE_EVIDENCE_UNAVAILABLE")
+        return _sga_ancillary_report(states)
+    if observation.status is ObservationValidationStatus.FAIL:
+        mark("source_evidence", SgaAncillaryValidationStatus.FAIL, "SOURCE_EVIDENCE_INVALID")
+        if any(check.name == "event_order" and check.status.name == "FAIL" for check in observation.checks):
+            mark("causal_timing", SgaAncillaryValidationStatus.FAIL, "EVENT_ORDER_INVALID")
+        return _sga_ancillary_report(states)
+    if observation.status is not ObservationValidationStatus.PASS:
+        mark("source_evidence", SgaAncillaryValidationStatus.UNEVALUABLE, "SOURCE_EVIDENCE_UNAVAILABLE")
+        return _sga_ancillary_report(states)
+    try:
+        truth = member.frame.truth
+        binding_valid = (
+            isinstance(trajectory, AgeRegimeDisorderTrajectory)
+            and isinstance(truth.latent_trajectory, AgeRegimeDisorderTrajectory)
+            and member.frame.patient_id == member_id
+            and truth.patient_id == member_id
+            and bool(trajectory.physiology.points)
+            and trajectory.physiology.points[0].patient_id == member_id
+            and trajectory == truth.latent_trajectory
+            and trajectory.events == truth.source_events
+        )
+    except Exception:  # noqa: BLE001 - source details never leave this boundary
+        binding_valid = False
+    if not binding_valid:
+        mark("source_evidence", SgaAncillaryValidationStatus.FAIL, "SOURCE_EVIDENCE_INVALID")
+        return _sga_ancillary_report(states)
+    if not any(states[name][0] is SgaAncillaryValidationStatus.FAIL for name in SGA_ANCILLARY_CHECK_NAMES[:-1]):
+        try:
+            expected = project_sga_ancillary_resources(member, projection.shape, policy)
+            for name in SGA_ANCILLARY_RESOURCE_NAMES:
+                actual_rows = projection.rows.get(name, ())
+                wanted_rows = expected.rows[name]
+                if len(actual_rows) != len(wanted_rows):
+                    mark("pathway_scope", SgaAncillaryValidationStatus.FAIL, "PATHWAY_SCOPE_INVALID")
+                    continue
+                for actual, wanted in zip(actual_rows, wanted_rows, strict=True):
+                    if not isinstance(actual, ResourceRow):
+                        continue
+                    actual_values = _row_values(actual)
+                    wanted_values = _row_values(wanted)
+                    differing = {
+                        field_name
+                        for field_name in wanted_values
+                        if actual_values.get(field_name) != wanted_values[field_name]
+                    }
+                    if "patient_id" in differing:
+                        mark("cross_resource_links", SgaAncillaryValidationStatus.FAIL, "PATIENT_MISMATCH")
+                    if "visit_id" in differing:
+                        mark("cross_resource_links", SgaAncillaryValidationStatus.FAIL, "VISIT_REFERENCE_INVALID")
+                    if any("age_in_days" in field_name for field_name in differing):
+                        mark("causal_timing", SgaAncillaryValidationStatus.FAIL, "TIMING_INVALID")
+                    if any(field_name.endswith("_id") for field_name in differing):
+                        mark("row_schema", SgaAncillaryValidationStatus.FAIL, "INVALID_ID")
+                    if any(field_name in {"result_component_name", "pl_diag"} for field_name in differing):
+                        mark("row_schema", SgaAncillaryValidationStatus.FAIL, "INVALID_CODE")
+                    if differing and not differing.intersection({"patient_id", "visit_id"}) and not any("age_in_days" in field_name for field_name in differing) and not any(field_name.endswith("_id") for field_name in differing) and not any(field_name in {"result_component_name", "pl_diag"} for field_name in differing):
+                        mark("row_schema", SgaAncillaryValidationStatus.FAIL, "INVALID_VALUE")
+        except Exception:  # noqa: BLE001 - deterministic source comparison is redacted
+            mark("source_evidence", SgaAncillaryValidationStatus.UNEVALUABLE, "SOURCE_EVIDENCE_UNAVAILABLE")
+    return _sga_ancillary_report(states)
