@@ -430,6 +430,29 @@ def test_validator_rejects_reversed_visible_phases_and_line_numbers() -> None:
     assert _check(report, "row_schema").reason_code == "ROW_SCHEMA_INVALID"
 
 
+def test_reversed_same_age_visible_events_fail_before_unavailable_truth() -> None:
+    member, projection = _target(same_age_events=True)
+    frame = dataclasses.replace(
+        member.frame,
+        events=tuple(reversed(member.frame.events)),
+    )
+    object.__setattr__(frame, "truth", None)
+    member = dataclasses.replace(member, frame=frame)
+
+    report = validate_turner_ancillary_resources(
+        member, projection, _policy_ancillary()
+    )
+    assert report.status is TurnerAncillaryValidationStatus.FAIL
+    assert _check(report, "causal_timing") == TurnerAncillaryCheck(
+        "causal_timing",
+        TurnerAncillaryValidationStatus.FAIL,
+        "EVENT_ORDER_INVALID",
+    )
+    assert _check(report, "source_evidence").status is (
+        TurnerAncillaryValidationStatus.UNEVALUABLE
+    )
+
+
 def test_validator_rejects_wrong_field_order_and_non_synthetic_ids() -> None:
     member, projection = _target()
     row = projection.rows["labs"][0]

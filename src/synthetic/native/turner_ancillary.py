@@ -1236,6 +1236,13 @@ def validate_turner_ancillary_resources(
 
         frame_events = member.frame.events
         if isinstance(frame_events, tuple):
+            previous_event_age = -1
+            previous_event_phase = -1
+            event_phases = {
+                RecordedEventKind.RECOGNITION: 0,
+                RecordedEventKind.WORKUP: 1,
+                RecordedEventKind.DIAGNOSIS: 2,
+            }
             for event in frame_events:
                 if (
                     isinstance(event, RecordedEvent)
@@ -1245,6 +1252,18 @@ def validate_turner_ancillary_resources(
                     and isinstance(event.age_days, int)
                     and 0 <= event.age_days <= MAX_AGE_DAYS
                 ):
+                    phase = event_phases[event.event_kind]
+                    if (
+                        event.age_days < previous_event_age
+                        or phase <= previous_event_phase
+                    ):
+                        mark(
+                            "causal_timing",
+                            TurnerAncillaryValidationStatus.FAIL,
+                            "EVENT_ORDER_INVALID",
+                        )
+                    previous_event_age = event.age_days
+                    previous_event_phase = phase
                     visible_events.setdefault(event.event_kind, event)
 
         if target_kind is not None and not target_kind and nonempty_resources:
