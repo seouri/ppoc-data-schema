@@ -343,16 +343,92 @@ def test_development_all_disorders_cli_exports_every_visible_pathway(tmp_path: P
     referrals = _csv_rows(output / _resource_path(descriptor, "referrals"))
     assert labs and medications and problem_list and referrals
     assert {row["result_flag"] for row in labs} == {""}
-    expected_pathway_codes = {
-        "SYN-GHD",
-        "SYN-PEDIATRIC-HYPOTHYROIDISM",
-        "SYN-CELIAC-DISEASE",
-        "SYN-SGA",
-        "SYN-TURNER-SYNDROME",
-        "SYN-UNDERNUTRITION",
-        "SYN-EXCESS-WEIGHT",
+    expected_pathways = {
+        "SYN-GHD": (
+            {"SYN-GHD-IGF1", "SYN-GHD-STIM"},
+            "Synthetic Pediatric Endocrinology",
+            {"Synthetic growth hormone"},
+        ),
+        "SYN-PEDIATRIC-HYPOTHYROIDISM": (
+            {"SYN-HYPOTHYROIDISM-TSH", "SYN-HYPOTHYROIDISM-FREE-T4"},
+            "Synthetic Pediatric Endocrinology",
+            {"Synthetic levothyroxine"},
+        ),
+        "SYN-CELIAC-DISEASE": (
+            {"SYN-CELIAC-TTG-IGA", "SYN-CELIAC-TOTAL-IGA"},
+            "Synthetic Pediatric Gastroenterology",
+            {"Synthetic gluten-free intervention"},
+        ),
+        "SYN-SGA": (
+            {"SYN-SGA-GESTATIONAL-AGE", "SYN-SGA-BIRTH-SIZE"},
+            "Synthetic Neonatology Follow-up",
+            set(),
+        ),
+        "SYN-TURNER-SYNDROME": (
+            {"SYN-TURNER-KARYOTYPE", "SYN-TURNER-ENDOCRINE-EVIDENCE"},
+            "Synthetic Pediatric Endocrinology",
+            set(),
+        ),
+        "SYN-UNDERNUTRITION": (
+            {
+                "SYN-UNDERNUTRITION-WEIGHT-EVIDENCE",
+                "SYN-UNDERNUTRITION-HEIGHT-EVIDENCE",
+            },
+            "Synthetic Pediatric Nutrition",
+            {"Synthetic nutrition-supplement intervention"},
+        ),
+        "SYN-EXCESS-WEIGHT": (
+            {"SYN-EXCESS-WEIGHT-LIPID", "SYN-EXCESS-WEIGHT-A1C"},
+            "Synthetic Pediatric Nutrition",
+            set(),
+        ),
     }
-    assert {row["pl_diag"] for row in problem_list} == expected_pathway_codes
+    assert {row["pl_diag"] for row in problem_list} == set(expected_pathways)
+
+    diagnosis_by_patient = {row["patient_id"]: row["pl_diag"] for row in problem_list}
+    assert len(diagnosis_by_patient) == len(problem_list)
+    ancillary_rows = (*labs, *medications, *referrals)
+    assert all(row["patient_id"] in diagnosis_by_patient for row in ancillary_rows)
+
+    visit_patient_by_id = {row["visit_id"]: row["patient_id"] for row in visits}
+    for row in ancillary_rows:
+        if visit_id := row.get("visit_id"):
+            assert visit_patient_by_id.get(visit_id) == row["patient_id"]
+
+    for diagnosis_code, (components, specialty, medication_names) in expected_pathways.items():
+        pathway_patient_ids = {
+            patient_id
+            for patient_id, patient_diagnosis in diagnosis_by_patient.items()
+            if patient_diagnosis == diagnosis_code
+        }
+        pathway_labs = [row for row in labs if row["patient_id"] in pathway_patient_ids]
+        pathway_referrals = [
+            row for row in referrals if row["patient_id"] in pathway_patient_ids
+        ]
+        pathway_medications = [
+            row for row in medications if row["patient_id"] in pathway_patient_ids
+        ]
+
+        labs_by_patient: defaultdict[str, set[str]] = defaultdict(set)
+        for row in pathway_labs:
+            labs_by_patient[row["patient_id"]].add(row["result_component_name"])
+        assert set(labs_by_patient) == pathway_patient_ids
+        assert all(
+            patient_components == components
+            for patient_components in labs_by_patient.values()
+        )
+        assert len(pathway_labs) == 2 * len(pathway_patient_ids)
+
+        assert {row["patient_id"] for row in pathway_referrals} == pathway_patient_ids
+        assert {row["requested_specialty"] for row in pathway_referrals} == {specialty}
+        assert len(pathway_referrals) == len(pathway_patient_ids)
+
+        assert {
+            row["med_simple_generic_name"] for row in pathway_medications
+        } == medication_names
+        assert len(pathway_medications) == len(
+            {row["patient_id"] for row in pathway_medications}
+        )
 
     ghd_patient_ids = {
         row["patient_id"] for row in problem_list if row["pl_diag"] == "SYN-GHD"

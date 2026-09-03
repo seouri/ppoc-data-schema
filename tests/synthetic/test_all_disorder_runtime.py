@@ -132,14 +132,16 @@ def test_all_disorder_cohort_is_deterministic_covers_every_kind_and_filters_turn
 
     first_counts = Counter(member.trajectory.disorder.kind for member in first.members)
     replay_counts = Counter(member.trajectory.disorder.kind for member in replay.members)
+    first_kind_vector = tuple(member.trajectory.disorder.kind for member in first.members)
+    replay_kind_vector = tuple(member.trajectory.disorder.kind for member in replay.members)
+    changed_kind_vector = tuple(member.trajectory.disorder.kind for member in changed.members)
     assert set(first_counts) == set(DisorderKind)
     assert first_counts == replay_counts
+    assert first_kind_vector == replay_kind_vector
     assert [member.to_mapping() for member in first.members] == [
         member.to_mapping() for member in replay.members
     ]
-    assert [member.to_mapping() for member in first.members] != [
-        member.to_mapping() for member in changed.members
-    ]
+    assert first_kind_vector != changed_kind_vector
     assert all(
         member.trajectory.disorder.kind is not DisorderKind.TURNER_SYNDROME
         or member.demographics.sex == "F"
