@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import dataclasses
 import math
+import re
 from pathlib import Path
 from types import MappingProxyType
 
@@ -25,6 +26,200 @@ from synthetic.native.celiac_ancillary import (
 from synthetic.native.resources import ResourceRow, ResourceShape, ResourceSpec
 
 PATIENT_ID = "syn-celiac-ancillary-patient"
+
+_ALLOWED_REPOSITORY_SYMBOLS = {
+    "synthetic.cohort": frozenset({"CohortMember"}),
+    "synthetic.models": frozenset(
+        {"MAX_AGE_DAYS", "AgeRegimeDisorderTrajectory", "DisorderKind"}
+    ),
+    "synthetic.native.observations": frozenset(
+        {
+            "ObservationValidationStatus",
+            "RecordedEvent",
+            "RecordedEventKind",
+            "validate_observation_frame",
+        }
+    ),
+    "synthetic.native.resources": frozenset({"ResourceRow", "ResourceShape"}),
+}
+
+_FORBIDDEN_MODULES = frozenset(
+    {
+        "builtins",
+        "csv",
+        "duckdb",
+        "glob",
+        "http",
+        "httpx",
+        "io",
+        "multiprocessing",
+        "numpy.random",
+        "os",
+        "pathlib",
+        "random",
+        "requests",
+        "secrets",
+        "shutil",
+        "socket",
+        "sqlalchemy",
+        "sqlite3",
+        "subprocess",
+        "sys",
+        "tempfile",
+        "urllib",
+        "uuid",
+    }
+)
+
+_FORBIDDEN_NAME_PARTS = frozenset(
+    {
+        "calibrate",
+        "calibration",
+        "derivation",
+        "export",
+        "fileio",
+        "filesystem",
+        "governed",
+        "heldout",
+        "manifest",
+        "obesity",
+        "package",
+        "privacy",
+        "synthea",
+    }
+)
+
+_FORBIDDEN_CALL_NAMES = frozenset(
+    {
+        "check_call",
+        "check_output",
+        "connect",
+        "create_connection",
+        "environ",
+        "execute",
+        "exit",
+        "getenv",
+        "mkdir",
+        "makedirs",
+        "open",
+        "popen",
+        "print",
+        "quit",
+        "read",
+        "read_bytes",
+        "read_text",
+        "remove",
+        "rename",
+        "replace",
+        "rmdir",
+        "run",
+        "seed",
+        "system",
+        "token_hex",
+        "unlink",
+        "urlopen",
+        "uuid4",
+        "write",
+        "write_bytes",
+        "write_text",
+    }
+)
+
+
+def _dotted_name(node: ast.expr) -> str | None:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        parent = _dotted_name(node.value)
+        return f"{parent}.{node.attr}" if parent else None
+    return None
+
+
+def _resolve_dotted_name(name: str, aliases: dict[str, str]) -> str:
+    root, *suffix = name.split(".")
+    resolved_root = aliases.get(root, root)
+    return ".".join((resolved_root, *suffix)).lower()
+
+
+def _allowed_repository_name(name: str) -> bool:
+    return any(
+        name == f"{module}.{symbol}".lower()
+        for module, symbols in _ALLOWED_REPOSITORY_SYMBOLS.items()
+        for symbol in symbols
+    )
+
+
+def _is_forbidden_dependency(name: str) -> bool:
+    normalized = name.lower()
+    if normalized == "relative-import":
+        return True
+    if normalized.startswith("synthetic."):
+        return not _allowed_repository_name(normalized)
+    if any(
+        normalized == module or normalized.startswith(f"{module}.")
+        for module in _FORBIDDEN_MODULES
+    ):
+        return True
+    parts = tuple(part for part in re.split(r"[._]+", normalized) if part)
+    return bool(
+        _FORBIDDEN_NAME_PARTS.intersection(parts)
+        or parts
+        and parts[-1] in _FORBIDDEN_CALL_NAMES
+    )
+
+
+class _DependencyScanner(ast.NodeVisitor):
+    def __init__(self) -> None:
+        self.names: set[str] = set()
+        self.aliases: dict[str, str] = {}
+
+    def visit_Import(self, node: ast.Import) -> None:
+        for alias in node.names:
+            origin = alias.name.lower()
+            self.names.add(origin)
+            local_name = alias.asname or alias.name.split(".", 1)[0]
+            self.aliases[local_name] = origin if alias.asname else local_name
+        self.generic_visit(node)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        if node.level:
+            self.names.add("relative-import")
+        module = (node.module or "").lower()
+        for alias in node.names:
+            origin = f"{module}.{alias.name}".strip(".").lower()
+            self.names.add(origin)
+            self.aliases[alias.asname or alias.name] = origin
+        self.generic_visit(node)
+
+    def _record_assignment(self, targets: list[ast.expr], value: ast.expr) -> None:
+        origin = _dotted_name(value)
+        if origin is None:
+            return
+        resolved = _resolve_dotted_name(origin, self.aliases)
+        for target in targets:
+            if isinstance(target, ast.Name):
+                self.aliases[target.id] = resolved
+
+    def visit_Assign(self, node: ast.Assign) -> None:
+        self._record_assignment(node.targets, node.value)
+        self.generic_visit(node)
+
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
+        if node.value is not None:
+            self._record_assignment([node.target], node.value)
+        self.generic_visit(node)
+
+    def visit_Call(self, node: ast.Call) -> None:
+        name = _dotted_name(node.func)
+        if name:
+            self.names.add(_resolve_dotted_name(name, self.aliases))
+        self.generic_visit(node)
+
+
+def _unsafe_dependency_names(source: str) -> set[str]:
+    scanner = _DependencyScanner()
+    scanner.visit(ast.parse(source))
+    return {name for name in scanner.names if _is_forbidden_dependency(name)}
 
 
 def _shape() -> ResourceShape:
@@ -200,45 +395,108 @@ def test_projection_normalizes_mapping_and_requires_synthetic_patient_ids() -> N
 
 def test_module_has_no_io_or_ancillary_runtime_coupling() -> None:
     source = Path(celiac_ancillary.__file__).read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    forbidden = {
-        "calibration",
-        "csv",
-        "duckdb",
-        "export",
+    assert not _unsafe_dependency_names(source)
+    assert "obesity_flag" not in source
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    (
+        ("import synthetic.native.ancillary", "synthetic.native.ancillary"),
+        (
+            "from synthetic.native import excess_weight_ancillary",
+            "synthetic.native.excess_weight_ancillary",
+        ),
+        (
+            "import synthetic.native.ancillary_bundle",
+            "synthetic.native.ancillary_bundle",
+        ),
+        (
+            "from synthetic.native import ancillary_contract",
+            "synthetic.native.ancillary_contract",
+        ),
+        (
+            "import synthetic.native.pediatric_hypothyroidism_ancillary as thyroid",
+            "synthetic.native.pediatric_hypothyroidism_ancillary",
+        ),
+        ("import synthetic.package_export", "synthetic.package_export"),
+        ("import synthetic.csv_package as package", "synthetic.csv_package"),
+        ("from pathlib import Path; Path('x').read_text()", "pathlib"),
+        (
+            "import pathlib as filesystem; filesystem.Path('x').write_text('x')",
+            "pathlib",
+        ),
+        (
+            "import os as environment; read = environment.getenv; read('TOKEN')",
+            "os.getenv",
+        ),
+        (
+            "import socket as network; connect = network.create_connection; connect(('x', 80))",
+            "socket.create_connection",
+        ),
+        ("import urllib.request as network; network.urlopen('https://x')", "urllib"),
+        ("from random import randint as choose; choose(0, 1)", "random.randint"),
+        ("import secrets as randomizer; randomizer.token_hex()", "secrets"),
+        ("import subprocess as process; process.run(['command'])", "subprocess.run"),
+        ("import synthetic.derivation", "synthetic.derivation"),
+        (
+            "import synthetic.development_runtime",
+            "synthetic.development_runtime",
+        ),
+        (
+            "from synthetic.calibration_input import load as governed; governed()",
+            "synthetic.calibration_input",
+        ),
+        ("from synthetic.heldout import compare", "synthetic.heldout"),
+        ("import synthetic.privacy", "synthetic.privacy"),
+        ("from synthetic import calibration", "synthetic.calibration"),
+        ("import synthetic.cdc_reference", "synthetic.cdc_reference"),
+        ("import synthetic.privacy_audit", "synthetic.privacy_audit"),
+        ("import synthetic.synthea_conformance", "synthetic.synthea_conformance"),
+        ("import synthea", "synthea"),
+        (
+            "import builtins as platform; read = platform.open; read('x')",
+            "builtins.open",
+        ),
+        ("import io as stream; stream.open('x')", "io.open"),
+        ("import uuid as identifiers; identifiers.uuid4()", "uuid"),
+        ("from .resources import ResourceRow", "relative-import"),
+    ),
+    ids=(
+        "ghd-ancillary",
+        "excess-weight-ancillary",
+        "ancillary-bundle",
+        "ancillary-contract",
+        "hypothyroidism-ancillary",
+        "package-export",
+        "csv-package-export",
         "filesystem",
-        "heldout",
-        "manifest",
-        "obesity_flag",
-        "package",
-        "pathlib",
+        "pathlib-alias-io",
+        "environment-alias",
+        "network-alias",
+        "urllib-network",
+        "random-alias",
+        "secrets-alias",
+        "subprocess-alias",
+        "governed-derivation",
+        "development-runtime",
+        "governed-calibration",
+        "held-out",
         "privacy",
-        "random",
-        "subprocess",
+        "calibration",
+        "governed-reference",
+        "privacy-audit",
+        "synthea-conformance",
         "synthea",
-        "synthetic.native.ancillary",
-        "synthetic.native.excess_weight_ancillary",
-        "synthetic.native.pediatric_hypothyroidism_ancillary",
-    }
-    imports = {
-        f"{node.module}.{alias.name}".lower()
-        for node in ast.walk(tree)
-        if isinstance(node, ast.ImportFrom)
-        for alias in node.names
-    }
-    imports.update(
-        alias.name.lower()
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Import)
-        for alias in node.names
-    )
-    assert not any(
-        any(part in imported.split(".") for part in forbidden)
-        for imported in imports
-    )
-    calls = {
-        node.func.id.lower()
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-    }
-    assert not calls.intersection({"open", "print", "write", "seed", "randint"})
+        "attribute-io-alias",
+        "attribute-io-module",
+        "uuid-alias",
+        "relative-import",
+    ),
+)
+def test_dependency_scanner_rejects_forbidden_dependencies(
+    source: str, expected: str
+) -> None:
+    findings = _unsafe_dependency_names(source)
+    assert findings
+    assert any(expected in finding for finding in findings)
