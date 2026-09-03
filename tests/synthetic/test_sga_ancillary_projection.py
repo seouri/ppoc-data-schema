@@ -143,6 +143,38 @@ def test_target_projects_only_visible_fictional_referral_labs_and_problem() -> N
     assert "visit_id" not in problem
 
 
+def test_emitted_rows_keep_actual_descriptor_order_and_scalar_conventions() -> None:
+    member = _member()
+    shape = _shape()
+    projection = project_sga_ancillary_resources(member, shape, _policy_ancillary())
+    integer_fields = frozenset(
+        {
+            "result_line_num",
+            "lab_order_date_age_in_days",
+            "lab_result_date_age_in_days",
+            "noted_date_age_in_days",
+            "referral_date_age_in_days",
+            "referral_number_of_visits",
+        }
+    )
+
+    assert projection.rows["medications"] == ()
+    for resource_name in ("labs", "problem_list", "referrals"):
+        for row in projection.rows[resource_name]:
+            assert tuple(field_name for field_name, _ in row.values) == shape.field_names(
+                resource_name
+            )
+            for field_name, value in row.values:
+                assert isinstance(value, int) if field_name in integer_fields else isinstance(value, str)
+
+    labs = projection.rows["labs"]
+    assert all(dict(row.values)["lab_procedure_name"] == "" for row in labs)
+    assert all(dict(row.values)["lab_procedure_description"] == "" for row in labs)
+    assert all(dict(row.values)["result_loinc_code"] == "" for row in labs)
+    assert all(dict(row.values)["result_value"] == "" for row in labs)
+    assert dict(projection.rows["problem_list"][0].values)["resolved_date_age_in_days"] == ""
+
+
 def test_each_visible_event_and_hidden_birth_branch_controls_only_its_descendant() -> None:
     for member, expected in (
         (_member(diagnosed=False), (2, 0, 0, 1)),
