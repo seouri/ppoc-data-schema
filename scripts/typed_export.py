@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import atexit
 import csv
 import json
@@ -11,7 +12,7 @@ import stat
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from hashlib import sha256
@@ -1412,6 +1413,56 @@ def export_duckdb_bundle(config: ExportConfig) -> Path:
     finally:
         if connection is not None:
             connection.close()
+
+
+def parse_args(artifact_type: str, argv: Sequence[str] | None = None) -> ExportConfig:
+    """Parse the common, explicit analytical-export operator interface."""
+    if artifact_type not in {"parquet", "duckdb"}:
+        raise ValueError("unsupported CLI artifact type")
+    parser = argparse.ArgumentParser(
+        description=(
+            "Export typed PPOC Parquet resources"
+            if artifact_type == "parquet"
+            else "Build a materialized typed PPOC DuckDB"
+        )
+    )
+    parser.add_argument("--descriptor", type=Path, default=DEFAULT_DESCRIPTOR)
+    parser.add_argument("--data-root", type=Path)
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--replace", action="store_true")
+    args = parser.parse_args(argv)
+    data_root = args.data_root
+    if data_root is None:
+        value = os.environ.get("PPOC_DATA_ROOT")
+        if not value:
+            parser.error("--data-root is required when PPOC_DATA_ROOT is unset")
+        data_root = Path(value)
+    return ExportConfig(args.descriptor, data_root, args.output, args.replace)
+
+
+def cli_main(artifact_type: str, argv: Sequence[str] | None = None) -> int:
+    """Run an export while keeping expected operator failures redacted."""
+    try:
+        config = parse_args(artifact_type, argv)
+        output = (
+            export_parquet_bundle(config)
+            if artifact_type == "parquet"
+            else export_duckdb_bundle(config)
+        )
+        manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+        total_rows = sum(item["rowCount"] for item in manifest["sources"])
+        print(
+            f"artifact={manifest['artifactType']} output={output} "
+            f"snapshot={manifest['package']['snapshot']} resources=8 "
+            f"rows={total_rows} status={manifest['status']}"
+        )
+        return 0
+    except ExportError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    except Exception:  # noqa: BLE001 - public CLI boundary must redact unexpected failures.
+        print("analytical export failed", file=sys.stderr)
+        return 1
 
 
 @atexit.register

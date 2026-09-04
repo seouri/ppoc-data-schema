@@ -39,6 +39,8 @@ These project-governance statements apply to the restricted PPOC source snapshot
 - [`schema/build.py`](schema/build.py): regenerate and validate `datapackage.json`.
 - [`schema/profile.py`](schema/profile.py): recompute the snapshot statistics from the CSVs.
 - [`schema/stats.json`](schema/stats.json): the statistics `build.py` reads, so the descriptor rebuilds without the data.
+- [`scripts/export_parquet.py`](scripts/export_parquet.py): export the eight typed CSV resources as a verified Parquet bundle.
+- [`scripts/build_duckdb.py`](scripts/build_duckdb.py): build a verified, materialized typed DuckDB bundle.
 - [`docs/synthetic-generator.md`](docs/synthetic-generator.md): ordinary synthetic generation and optional governed aggregate-calibration boundaries.
 
 ## Resources
@@ -84,6 +86,24 @@ python3 schema/build.py
 ```
 
 The Python usage example includes schema-driven pandas loading, declared CSV encodings, nullable types, column selection, and key inspection.
+
+## Analytical exports
+
+CSV plus `datapackage.json` remains the canonical package. Parquet and DuckDB outputs are derived restricted-data artifacts subject to the same IRB, Data Use Agreement, training, and information-security controls; the scripts refuse to write them inside this repository.
+
+With an approved secure source and output location, create a typed Parquet bundle or a materialized typed DuckDB bundle with explicit paths:
+
+```sh
+uv run python scripts/export_parquet.py \
+  --data-root /secure/ppoc-csv \
+  --output /secure/ppoc-parquet
+
+uv run python scripts/build_duckdb.py \
+  --data-root /secure/ppoc-csv \
+  --output /secure/ppoc-duckdb
+```
+
+Both commands default to this repository's `datapackage.json`; pass `--descriptor` only to select another approved descriptor. `PPOC_DATA_ROOT` is a fallback for `--data-root`, not a replacement for an explicitly supplied `--data-root`. Outputs are non-overwriting by default; use `--replace` only to replace a verified prior bundle. See the [operator and consumer guide](schema/README.md) for inventories, validation and provenance records, recovery behavior, and read-only consumption examples. Do not use these commands against real data unless the source and destination are approved under the applicable controls.
 
 ## Synthetic generator
 
