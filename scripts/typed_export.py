@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import math
 import stat
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path, PurePosixPath
+from types import MappingProxyType
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -110,7 +112,7 @@ def load_package_contract(path: Path) -> PackageContract:
     statistics = _object(descriptor, "x-statisticsSource", "statistics source")
     snapshot = _scalar_string(statistics, "snapshot", "descriptor snapshot")
     resources = _resources(descriptor)
-    descriptor_copy = json.loads(json.dumps(descriptor))
+    descriptor_copy = _freeze(descriptor)
     return PackageContract(
         name=name,
         version=version,
@@ -167,6 +169,8 @@ def _resource(resource: dict[str, Any], resource_names: set[str]) -> ResourceCon
     if encoding not in ENCODING_MAP:
         raise DescriptorError("unsupported encoding")
     dialect = _object(resource, "dialect", "resource dialect")
+    if set(dialect) != {"header", "delimiter", "quoteChar", "doubleQuote"}:
+        raise DescriptorError("unsupported dialect")
     if dialect.get("header") is not True or dialect.get("delimiter") != "," or dialect.get("quoteChar") != '"' or dialect.get("doubleQuote") is not True:
         raise DescriptorError("unsupported dialect")
     schema = _object(resource, "schema", "resource schema")
@@ -278,6 +282,8 @@ def _number(value: Any, label: str) -> int | float | None:
         return None
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise DescriptorError(f"{label} is invalid")
+    if isinstance(value, float) and not math.isfinite(value):
+        raise DescriptorError(f"{label} must be finite")
     return value
 
 
@@ -304,4 +310,12 @@ def _scalar_string(parent: dict[str, Any], key: str, label: str) -> str:
     value = parent.get(key)
     if not isinstance(value, str) or not value:
         raise DescriptorError(f"{label} must be scalar")
+    return value
+
+
+def _freeze(value: Any) -> Any:
+    if isinstance(value, dict):
+        return MappingProxyType({key: _freeze(item) for key, item in value.items()})
+    if isinstance(value, list):
+        return tuple(_freeze(item) for item in value)
     return value

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 import os
 from dataclasses import FrozenInstanceError
 from pathlib import Path
@@ -96,6 +97,30 @@ def test_load_package_contract_rejects_unknown_relationship_field(tmp_path: Path
         load_package_contract(fixture.descriptor)
 
 
+@pytest.mark.parametrize("constraint", ["minimum", "maximum"])
+@pytest.mark.parametrize("value", [math.nan, math.inf, -math.inf])
+def test_load_package_contract_rejects_non_finite_numeric_constraints(
+    tmp_path: Path, constraint: str, value: float
+) -> None:
+    fixture = write_tiny_snapshot(tmp_path)
+    descriptor = json.loads(fixture.descriptor.read_text(encoding="utf-8"))
+    descriptor["resources"][2]["schema"]["fields"][2]["constraints"][constraint] = value
+    fixture.descriptor.write_text(json.dumps(descriptor), encoding="utf-8")
+
+    with pytest.raises(DescriptorError, match="finite"):
+        load_package_contract(fixture.descriptor)
+
+
+def test_load_package_contract_rejects_extra_dialect_semantics(tmp_path: Path) -> None:
+    fixture = write_tiny_snapshot(tmp_path)
+    descriptor = json.loads(fixture.descriptor.read_text(encoding="utf-8"))
+    descriptor["resources"][0]["dialect"]["skipInitialSpace"] = True
+    fixture.descriptor.write_text(json.dumps(descriptor), encoding="utf-8")
+
+    with pytest.raises(DescriptorError, match="unsupported dialect"):
+        load_package_contract(fixture.descriptor)
+
+
 def test_load_package_contract_rejects_non_object_json(tmp_path: Path) -> None:
     descriptor = tmp_path / "datapackage.json"
     descriptor.write_text("[]", encoding="utf-8")
@@ -147,3 +172,15 @@ def test_tiny_snapshot_has_exact_keys_and_declared_labs_encoding(tmp_path: Path)
     labs = next(resource for resource in contract.resources if resource.name == "labs")
     assert labs.encoding == "iso-8859-1"
     assert fixture.data_root.joinpath("labs.csv").read_bytes().startswith(b"patient_id,")
+
+
+def test_package_contract_descriptor_is_deeply_immutable(tmp_path: Path) -> None:
+    fixture = write_tiny_snapshot(tmp_path)
+    contract = load_package_contract(fixture.descriptor)
+
+    with pytest.raises(TypeError):
+        contract.descriptor["name"] = "changed"
+    with pytest.raises(TypeError):
+        contract.descriptor["resources"][0]["name"] = "changed"
+    with pytest.raises(AttributeError):
+        contract.descriptor["resources"].append({})
