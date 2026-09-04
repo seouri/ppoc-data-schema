@@ -1243,6 +1243,12 @@ _DUCKDB_META_SCHEMAS = {
     "descriptor": (("descriptor_sha256", "VARCHAR", "NO"), ("descriptor_json", "VARCHAR", "NO")),
     "validations": (("ordinal", "INTEGER", "NO"), ("resource_name", "VARCHAR", "NO"), ("field_name", "VARCHAR", "YES"), ("rule", "VARCHAR", "NO"), ("expected_json", "VARCHAR", "NO"), ("observed_json", "VARCHAR", "NO"), ("status", "VARCHAR", "NO")),
 }
+_DUCKDB_META_NON_NULL_CONSTRAINTS = {
+    "build": (),
+    "resources": (),
+    "descriptor": (),
+    "validations": (("CHECK", "CHECK((status = 'PASS'))"),),
+}
 
 
 def _canonical_json(value: object) -> str:
@@ -1323,10 +1329,9 @@ def _verify_duckdb_database(path: Path, package: PackageContract, manifest: dict
                 raise ValueError
         for table, expected_columns in _DUCKDB_META_SCHEMAS.items():
             columns = connection.execute(f"DESCRIBE ppoc_meta.{quote_identifier(table)}").fetchall()
-            if [(column[0], column[1], column[2]) for column in columns] != list(expected_columns):
+            constraints = tuple(item for item in _table_constraints(connection, "ppoc_meta", table) if item[0] != "NOT NULL")
+            if [(column[0], column[1], column[2]) for column in columns] != list(expected_columns) or constraints != _DUCKDB_META_NON_NULL_CONSTRAINTS[table]:
                 raise ValueError
-        if _table_constraints(connection, "ppoc_meta", "validations") != (("CHECK", "CHECK((status = 'PASS'))"), ("NOT NULL", "NOT NULL"), ("NOT NULL", "NOT NULL"), ("NOT NULL", "NOT NULL"), ("NOT NULL", "NOT NULL"), ("NOT NULL", "NOT NULL"), ("NOT NULL", "NOT NULL")):
-            raise ValueError
         constraints = connection.execute("SELECT constraint_type FROM duckdb_constraints() WHERE schema_name IN ('main', 'ppoc_meta')").fetchall()
         if any(kind in {'PRIMARY KEY', 'FOREIGN KEY'} for (kind,) in constraints) or connection.execute("SELECT count(*) FROM duckdb_indexes() WHERE schema_name IN ('main', 'ppoc_meta')").fetchone() != (0,) or connection.execute("SELECT count(*) FROM duckdb_views() WHERE schema_name IN ('main', 'ppoc_meta') AND NOT internal").fetchone() != (0,) or connection.execute("SELECT count(*) FROM duckdb_sequences() WHERE schema_name IN ('main', 'ppoc_meta')").fetchone() != (0,) or connection.execute("SELECT count(*) FROM duckdb_functions() WHERE schema_name IN ('main', 'ppoc_meta') AND function_type = 'macro' AND NOT internal").fetchone() != (0,):
             raise ValueError

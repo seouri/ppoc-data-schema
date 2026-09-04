@@ -257,3 +257,21 @@ def test_verify_duckdb_bundle_rejects_rehashed_incomplete_validation_metadata(tm
     _rehash_database_bundle(output)
     with pytest.raises(LifecycleError):
         verify_duckdb_bundle(output, package)
+
+
+def test_verify_duckdb_bundle_rejects_rehashed_extra_build_constraint(tmp_path: Path) -> None:
+    """Catches a rehashed bundle whose otherwise-identical build table has an extra CHECK."""
+    fixture = write_tiny_snapshot(tmp_path / "input")
+    package = load_package_contract(fixture.descriptor)
+    output = export_duckdb_bundle(ExportConfig(fixture.descriptor, fixture.data_root, tmp_path / "duckdb"))
+    connection = duckdb.connect(str(output / "ppoc.duckdb"))
+    try:
+        connection.execute("ALTER TABLE ppoc_meta.build RENAME TO build_original")
+        connection.execute("CREATE TABLE ppoc_meta.build (manifest_version INTEGER NOT NULL CHECK (manifest_version = 1), package_name VARCHAR NOT NULL, package_version VARCHAR NOT NULL, snapshot VARCHAR NOT NULL, created_at_utc VARCHAR NOT NULL, descriptor_sha256 VARCHAR NOT NULL, python_version VARCHAR NOT NULL, duckdb_version VARCHAR NOT NULL, pyarrow_version VARCHAR NOT NULL, exporter_git_revision VARCHAR, exporter_git_dirty BOOLEAN, exporter_module_sha256 VARCHAR NOT NULL)")
+        connection.execute("INSERT INTO ppoc_meta.build SELECT * FROM ppoc_meta.build_original")
+        connection.execute("DROP TABLE ppoc_meta.build_original")
+    finally:
+        connection.close()
+    _rehash_database_bundle(output)
+    with pytest.raises(LifecycleError):
+        verify_duckdb_bundle(output, package)
