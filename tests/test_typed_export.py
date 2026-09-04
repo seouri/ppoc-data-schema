@@ -82,6 +82,55 @@ def test_preflight_collects_all_eight_sources_before_hashing(tmp_path: Path) -> 
     assert all(state.path.parent == fixture.data_root.resolve() for state in states)
 
 
+@pytest.mark.parametrize("mutation", ["truncate", "append"])
+def test_preflight_rejects_declared_row_count_mismatch(tmp_path: Path, mutation: str) -> None:
+    fixture = write_tiny_snapshot(tmp_path)
+    path = fixture.data_root / "patients.csv"
+    original_lines = path.read_bytes().splitlines(keepends=True)
+    if mutation == "truncate":
+        path.write_bytes(b"".join(original_lines[:2]))
+    else:
+        path.write_bytes(b"".join(original_lines + [original_lines[1]]))
+    package = load_package_contract(fixture.descriptor)
+
+    with pytest.raises(ExportError, match="patients"):
+        preflight_sources(package, fixture.data_root)
+
+
+def test_preflight_collects_multiple_failures_before_any_hash_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fixture = write_tiny_snapshot(tmp_path)
+    patients_path = fixture.data_root / "patients.csv"
+    visits_path = fixture.data_root / "visits.csv"
+    patients_original = patients_path.read_bytes()
+    visits_original = visits_path.read_bytes()
+    patients_path.write_bytes(b"SECRET-HEADER\n" + patients_original.split(b"\n", 1)[1])
+    visits_path.unlink()
+    package = load_package_contract(fixture.descriptor)
+    opened_modes: list[str] = []
+    original_open = Path.open
+
+    def tracking_open(path: Path, mode: str = "r", *args, **kwargs):
+        opened_modes.append(mode)
+        return original_open(path, mode, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", tracking_open)
+
+    with pytest.raises(ExportError) as error:
+        preflight_sources(package, fixture.data_root)
+
+    assert "patients" in str(error.value)
+    assert "visits" in str(error.value)
+    assert "rb" not in opened_modes
+
+    patients_path.write_bytes(patients_original)
+    visits_path.write_bytes(visits_original)
+    states = preflight_sources(package, fixture.data_root)
+    fingerprint_sources(states)
+    assert "rb" in opened_modes
+
+
 def test_preflight_rejects_header_order_mismatch_without_echoing_header(tmp_path: Path) -> None:
     fixture = write_tiny_snapshot(tmp_path)
     path = fixture.data_root / "patients.csv"

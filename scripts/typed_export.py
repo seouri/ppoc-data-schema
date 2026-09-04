@@ -373,9 +373,13 @@ def _source_failure(resource: ResourceContract, data_root: Path) -> str:
     try:
         metadata = _source_stat(path)
         with path.open("r", encoding=ENCODING_MAP[resource.encoding], newline="") as handle:
-            header = next(csv.reader(handle, delimiter=resource.delimiter, quotechar=resource.quote_char))
+            rows = csv.reader(handle, delimiter=resource.delimiter, quotechar=resource.quote_char)
+            header = next(rows)
+            row_count = sum(1 for _ in rows)
         expected = [field.name for field in resource.fields]
         if header != expected:
+            return resource.name
+        if row_count != resource.row_count:
             return resource.name
         if metadata.st_size < 0:
             return resource.name

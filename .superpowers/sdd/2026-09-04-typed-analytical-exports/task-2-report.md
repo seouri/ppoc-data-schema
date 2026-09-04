@@ -47,3 +47,34 @@ The seven failures are pre-existing, unrelated baseline failures in synthetic an
 - Source CSVs are read without rewriting or modifying them.
 - Header, encoding, file-type, conversion, quoting, fingerprint, metadata, and mutation boundaries are covered.
 - No unrelated files were changed.
+
+## Round 1 review fix
+
+### Findings addressed
+
+1. `preflight_sources` now counts data records while reading each already-required CSV header and rejects a resource when the actual count differs from the descriptor `row_count`. The error remains resource-level and redacted. The existing one-pass 1 MiB-block SHA-256 implementation is unchanged.
+2. Added a regression test that truncates and appends a source and a stronger multi-source failure test. The latter corrupts two independent resources, asserts both resource names are reported, records file-open modes to prove no binary hash read occurs on failed preflight, then restores the synthetic files and proves binary reads occur only after successful preflight.
+
+### TDD evidence
+
+The new row-count tests were run before the production change:
+
+```text
+UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/test_typed_export.py -k "row_count or preflight_collects_multiple"
+2 failed, 1 passed, 49 deselected
+```
+
+After the fix:
+
+```text
+UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/test_typed_export.py -k "row_count or preflight_collects_multiple"
+3 passed, 49 deselected
+
+UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run pytest -q tests/test_typed_export.py
+52 passed in 0.47s
+
+UV_CACHE_DIR=/tmp/ppoc-uv-cache uv run ruff check scripts/typed_export.py tests/analytical_export_fixtures.py tests/test_typed_export.py
+All checks passed!
+
+git diff --check
+```
