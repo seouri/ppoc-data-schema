@@ -6,6 +6,7 @@ import json
 import math
 import os
 import stat
+import traceback
 from dataclasses import FrozenInstanceError
 from pathlib import Path
 
@@ -698,9 +699,37 @@ def test_bundle_promotion_redacts_untrusted_verifier_exceptions(tmp_path: Path) 
     run = BundleRun.start(tmp_path / "published", "parquet-bundle", False)
     (run.staging / "artifact").write_text("tiny", encoding="utf-8")
     os.chmod(run.staging / "artifact", 0o600)
+    secret = "SECRET-SOURCE-VALUE"
+
+    def unsafe_verifier(_: Path) -> None:
+        raise RuntimeError(secret)
+
     with pytest.raises(LifecycleError) as caught:
-        run.promote(lambda _: (_ for _ in ()).throw(RuntimeError("SECRET-SOURCE-VALUE")))
+        run.promote(unsafe_verifier)
     assert "SECRET-SOURCE-VALUE" not in str(caught.value)
+    assert caught.value.__cause__ is None
+    assert "SECRET-SOURCE-VALUE" not in "".join(traceback.format_exception(caught.value))
+
+
+def test_bundle_promotion_rechecks_modes_after_verifier_callback(tmp_path: Path) -> None:
+    """Catches a callback relaxing an artifact permission after the first lifecycle check."""
+    output = tmp_path / "published"
+    run = BundleRun.start(output, "parquet-bundle", False)
+    artifact = run.staging / "artifact"
+    artifact.write_text("tiny", encoding="utf-8")
+    os.chmod(artifact, 0o600)
+
+    calls = 0
+
+    def relax_permission(_: Path) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            os.chmod(artifact, 0o644)
+
+    with pytest.raises(LifecycleError):
+        run.promote(relax_permission)
+    assert not output.exists()
 
 
 @pytest.mark.parametrize("unsafe_path", ["C:\\private\\clinical.csv", "\\\\server\\share\\clinical.csv"])

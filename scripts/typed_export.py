@@ -445,11 +445,12 @@ class BundleRun:
         import shutil
         shutil.rmtree(self.staging)
 
-    def _verify_staging_invariant(self) -> None:
+    def _verify_staging_invariant(self, root: Path | None = None) -> None:
+        checked_root = self.staging if root is None else root
         try:
-            if self.staging.is_symlink() or not self.staging.is_dir() or stat.S_IMODE(self.staging.lstat().st_mode) != 0o700:
+            if checked_root.is_symlink() or not checked_root.is_dir() or stat.S_IMODE(checked_root.lstat().st_mode) != 0o700:
                 raise OSError
-            for item in self.staging.rglob("*"):
+            for item in checked_root.rglob("*"):
                 mode = item.lstat().st_mode
                 if stat.S_ISLNK(mode) or not (stat.S_ISREG(mode) or stat.S_ISDIR(mode)):
                     raise OSError
@@ -465,17 +466,19 @@ class BundleRun:
             verify(path)
         except ExportError:
             raise
-        except Exception as exc:
-            raise LifecycleError("bundle verification failed") from exc
+        except Exception:  # noqa: BLE001 - verifier is an untrusted callback boundary.
+            raise LifecycleError("bundle verification failed") from None
 
     def promote(self, verify: Callable[[Path], None]) -> Path:
         try:
             self._verify_staging_invariant()
             self._verify(self.staging, verify)
+            self._verify_staging_invariant()
             if not self.output.exists():
                 os.rename(self.staging, self.output)
                 try:
                     self._verify(self.output, verify)
+                    self._verify_staging_invariant(self.output)
                 except Exception:
                     os.rename(self.output, self.staging)
                     self.discard_staging()
@@ -484,11 +487,14 @@ class BundleRun:
             if not self.replace:
                 raise OutputCollisionError("output already exists; rerun with --replace")
             verify_bundle_manifest(self.output, self.artifact_type, _BUNDLE_INVENTORIES[self.artifact_type])
+            self._verify_staging_invariant()
             self.backup = self.output.with_name(f".{self.output.name}.{self.artifact_type}.backup-{secrets.token_hex(8)}")
             os.rename(self.output, self.backup)
             try:
+                self._verify_staging_invariant()
                 os.rename(self.staging, self.output)
                 self._verify(self.output, verify)
+                self._verify_staging_invariant(self.output)
             except Exception:
                 if self.output.exists():
                     os.rename(self.output, self.staging)
