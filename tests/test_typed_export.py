@@ -21,6 +21,7 @@ from scripts.typed_export import (
     ExportError,
     LifecycleError,
     OutputCollisionError,
+    OutputFingerprint,
     PackageContract,
     SourceFingerprint,
     UnsafePathError,
@@ -31,6 +32,7 @@ from scripts.typed_export import (
     preflight_sources,
     quote_identifier,
     quote_literal,
+    sha256_file,
     typed_csv_query,
     verify_bundle_manifest,
     verify_sources_unchanged,
@@ -614,29 +616,22 @@ def test_bundle_start_permissions_collision_and_stale_recovery(tmp_path: Path) -
 
 def test_bundle_replacement_restores_verified_old_bundle_after_post_backup_failure(tmp_path: Path) -> None:
     """Catches replacement that discards a verified target after final verification fails."""
-    output = tmp_path / "published"
-    output.mkdir()
-    (output / "data").write_text("old", encoding="utf-8")
-    os.chmod(output, 0o700)
-    os.chmod(output / "data", 0o600)
-    manifest = {"manifestVersion": 1, "status": "PASS", "artifactType": "parquet-bundle", "package": {}, "build": {}, "descriptor": {}, "sources": [], "outputs": [{"basename": "data"}], "validation": {"status": "PASS", "checkCount": 0, "failedChecks": 0}}
-    write_manifest(output / "manifest.json", manifest)
-    verify_bundle_manifest(output, "parquet-bundle", frozenset({"manifest.json", "data"}))
-    os.chmod(output / "data", 0o644)
+    output, _ = _complete_manifest_bundle(tmp_path)
+    original = (output / "ppoc.duckdb").read_bytes()
+    os.chmod(output / "ppoc.duckdb", 0o644)
     with pytest.raises(LifecycleError):
-        verify_bundle_manifest(output, "parquet-bundle", frozenset({"manifest.json", "data"}))
-    os.chmod(output / "data", 0o600)
-    run = BundleRun.start(output, "parquet-bundle", True)
+        verify_bundle_manifest(output, "duckdb-bundle", frozenset({"manifest.json", "ppoc.duckdb"}))
+    os.chmod(output / "ppoc.duckdb", 0o600)
+    run = BundleRun.start(output, "duckdb-bundle", True)
     (run.staging / "data").write_text("new", encoding="utf-8")
     os.chmod(run.staging / "data", 0o600)
-    write_manifest(run.staging / "manifest.json", manifest)
     def fail_only_after_backup(path: Path) -> None:
         if path == output:
             raise RuntimeError("post promote")
 
-    with pytest.raises(RuntimeError, match="post promote"):
+    with pytest.raises(LifecycleError, match="bundle verification failed"):
         run.promote(fail_only_after_backup)
-    assert (output / "data").read_text(encoding="utf-8") == "old"
+    assert (output / "ppoc.duckdb").read_bytes() == original
     assert not run.staging.exists()
 
 
@@ -649,3 +644,70 @@ def test_verify_bundle_manifest_rejects_wrong_kind_and_unknown_inventory(tmp_pat
     (bundle / "unexpected").write_text("x", encoding="utf-8")
     with pytest.raises(LifecycleError):
         verify_bundle_manifest(bundle, "parquet-bundle", frozenset({"manifest.json"}))
+
+
+def _complete_manifest_bundle(tmp_path: Path) -> tuple[Path, dict[str, object]]:
+    fixture = write_tiny_snapshot(tmp_path / "input")
+    bundle = tmp_path / "bundle"
+    bundle.mkdir(mode=0o700)
+    artifact = bundle / "ppoc.duckdb"
+    artifact.write_bytes(b"tiny synthetic artifact")
+    os.chmod(artifact, 0o600)
+    package = load_package_contract(fixture.descriptor)
+    manifest = build_manifest(
+        "duckdb-bundle", package, _provenance(),
+        fingerprint_sources(preflight_sources(package, fixture.data_root)),
+        (OutputFingerprint("ppoc.duckdb", artifact.stat().st_size, sha256_file(artifact)),), (),
+    )
+    write_manifest(bundle / "manifest.json", manifest)
+    return bundle, manifest
+
+
+@pytest.mark.parametrize("mutation", ["missing-size", "missing-hash", "modified-output", "noncanonical"])
+def test_verify_bundle_manifest_rejects_incomplete_modified_and_noncanonical_contracts(tmp_path: Path, mutation: str) -> None:
+    """Catches acceptance of a manifest that cannot bind the complete bundle bytes."""
+    bundle, manifest = _complete_manifest_bundle(tmp_path)
+    if mutation == "missing-size":
+        del manifest["outputs"][0]["size"]
+    elif mutation == "missing-hash":
+        del manifest["outputs"][0]["sha256"]
+    elif mutation == "modified-output":
+        (bundle / "ppoc.duckdb").write_bytes(b"modified")
+        os.chmod(bundle / "ppoc.duckdb", 0o600)
+    else:
+        (bundle / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+        os.chmod(bundle / "manifest.json", 0o600)
+    if mutation in {"missing-size", "missing-hash"}:
+        write_manifest(bundle / "manifest.json", manifest)
+    with pytest.raises(LifecycleError):
+        verify_bundle_manifest(bundle, "duckdb-bundle", frozenset({"manifest.json", "ppoc.duckdb"}))
+
+
+def test_bundle_promotion_rejects_relaxed_staged_file_modes_with_noop_verifier(tmp_path: Path) -> None:
+    """Catches lifecycle promotion of world-readable artifacts when a callback is lax."""
+    output = tmp_path / "published"
+    run = BundleRun.start(output, "parquet-bundle", False)
+    (run.staging / "artifact").write_text("tiny", encoding="utf-8")
+    with pytest.raises(LifecycleError):
+        run.promote(lambda _: None)
+    assert not output.exists()
+
+
+def test_bundle_promotion_redacts_untrusted_verifier_exceptions(tmp_path: Path) -> None:
+    """Catches source/value text leaking through an arbitrary verifier exception."""
+    run = BundleRun.start(tmp_path / "published", "parquet-bundle", False)
+    (run.staging / "artifact").write_text("tiny", encoding="utf-8")
+    os.chmod(run.staging / "artifact", 0o600)
+    with pytest.raises(LifecycleError) as caught:
+        run.promote(lambda _: (_ for _ in ()).throw(RuntimeError("SECRET-SOURCE-VALUE")))
+    assert "SECRET-SOURCE-VALUE" not in str(caught.value)
+
+
+@pytest.mark.parametrize("unsafe_path", ["C:\\private\\clinical.csv", "\\\\server\\share\\clinical.csv"])
+def test_manifest_rejects_windows_absolute_paths_on_every_host(tmp_path: Path, unsafe_path: str) -> None:
+    """Catches host-dependent parsing that would serialize Windows source paths on POSIX."""
+    fixture = write_tiny_snapshot(tmp_path / "input")
+    manifest = build_manifest("parquet-bundle", load_package_contract(fixture.descriptor), _provenance(), (), (), ())
+    manifest["build"] = {"unsafe": unsafe_path}
+    with pytest.raises(LifecycleError):
+        write_manifest(tmp_path / "manifest.json", manifest)

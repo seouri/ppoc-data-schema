@@ -175,6 +175,10 @@ _MANIFEST_KEYS = frozenset({
     "sources", "outputs", "validation",
 })
 _ARTIFACT_TYPES = frozenset({"parquet-bundle", "duckdb-bundle"})
+_BUNDLE_INVENTORIES = {
+    "parquet-bundle": frozenset({"manifest.json", "source-datapackage.json", *(f"{name}.parquet" for name in EXPECTED_RESOURCE_NAMES)}),
+    "duckdb-bundle": frozenset({"manifest.json", "ppoc.duckdb"}),
+}
 
 
 def sha256_file(path: Path) -> str:
@@ -221,18 +225,55 @@ def _valid_digest(value: str) -> bool:
     return len(value) == 64 and all(character in "0123456789abcdef" for character in value)
 
 
+def _valid_git_revision(value: object) -> bool:
+    return isinstance(value, str) and len(value) == 40 and all(character in "0123456789abcdef" for character in value)
+
+
 def _manifest_payload_is_safe(payload: Mapping[str, object]) -> bool:
     return set(payload) == _MANIFEST_KEYS and payload.get("manifestVersion") == 1 and payload.get("status") == "PASS" and payload.get("artifactType") in _ARTIFACT_TYPES
 
 
 def _contains_absolute_path(value: object) -> bool:
     if isinstance(value, str):
-        return Path(value).is_absolute()
+        return Path(value).is_absolute() or (len(value) >= 3 and value[0].isalpha() and value[1:3] in {":\\", ":/"}) or value.startswith("\\\\")
     if isinstance(value, Mapping):
         return any(_contains_absolute_path(key) or _contains_absolute_path(item) for key, item in value.items())
     if isinstance(value, (list, tuple)):
         return any(_contains_absolute_path(item) for item in value)
     return False
+
+
+def _is_int(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _strict_manifest(payload: object, artifact_type: str, expected_names: frozenset[str]) -> dict[str, Any] | None:
+    if not isinstance(payload, dict) or _contains_absolute_path(payload) or not _manifest_payload_is_safe(payload) or payload["artifactType"] != artifact_type or expected_names != _BUNDLE_INVENTORIES[artifact_type]:
+        return None
+    package = payload["package"]
+    build = payload["build"]
+    descriptor = payload["descriptor"]
+    sources = payload["sources"]
+    outputs = payload["outputs"]
+    validation = payload["validation"]
+    if not all(isinstance(item, dict) for item in (package, build, descriptor, validation)) or not isinstance(sources, list) or not isinstance(outputs, list):
+        return None
+    if set(package) != {"name", "version", "snapshot"} or not all(isinstance(value, str) and value for value in package.values()):
+        return None
+    if set(build) != {"createdAtUtc", "pythonVersion", "duckdbVersion", "pyarrowVersion", "exporterGitRevision", "exporterGitDirty", "exporterModuleSha256"} or not all(isinstance(build[key], str) and build[key] for key in ("createdAtUtc", "pythonVersion", "duckdbVersion", "pyarrowVersion")) or not (build["exporterGitRevision"] is None or _valid_git_revision(build["exporterGitRevision"])) or not (build["exporterGitDirty"] is None or isinstance(build["exporterGitDirty"], bool)) or not _valid_digest(build["exporterModuleSha256"]):
+        return None
+    if set(descriptor) != {"basename", "size", "sha256"} or not _safe_basename(descriptor["basename"]) or not _is_int(descriptor["size"]) or descriptor["size"] < 0 or not _valid_digest(descriptor["sha256"]):
+        return None
+    source_keys = {"resource", "basename", "size", "sha256", "rowCount", "fieldCount"}
+    if len(sources) != len(EXPECTED_RESOURCE_NAMES) or tuple(item.get("resource") if isinstance(item, dict) else None for item in sources) != EXPECTED_RESOURCE_NAMES or any(not isinstance(item, dict) or set(item) != source_keys or not isinstance(item["resource"], str) or not _safe_basename(item["basename"]) or not all(_is_int(item[key]) and item[key] >= 0 for key in ("size", "rowCount", "fieldCount")) or not _valid_digest(item["sha256"]) for item in sources):
+        return None
+    output_keys = {"basename", "size", "sha256", "rowCount", "fieldCount", "columns", "tables"}
+    output_names = {item.get("basename") for item in outputs if isinstance(item, dict)}
+    if output_names != expected_names - {"manifest.json"} or len(outputs) != len(output_names) or any(not isinstance(item, dict) or set(item) != output_keys or not _safe_basename(item["basename"]) or not _is_int(item["size"]) or item["size"] < 0 or not _valid_digest(item["sha256"]) or not (item["rowCount"] is None or _is_int(item["rowCount"]) and item["rowCount"] >= 0) or not (item["fieldCount"] is None or _is_int(item["fieldCount"]) and item["fieldCount"] >= 0) or not isinstance(item["columns"], list) or any(not isinstance(pair, list) or len(pair) != 2 or not all(isinstance(value, str) and value for value in pair) for pair in item["columns"]) or not isinstance(item["tables"], list) or any(not isinstance(table, list) or len(table) != 3 or not isinstance(table[0], str) or not table[0] or not all(_is_int(value) and value >= 0 for value in table[1:]) for table in item["tables"]) for item in outputs):
+        return None
+    if set(validation) != {"status", "checkCount", "failedChecks"} or validation["status"] != "PASS" or not _is_int(validation["checkCount"]) or validation["checkCount"] < 0 or validation["failedChecks"] != 0:
+        return None
+    return payload
 
 
 def build_manifest(
@@ -304,12 +345,29 @@ def verify_bundle_manifest(bundle: Path, artifact_type: str, expected_names: fro
             for item in root.iterdir()
         ):
             raise OSError
-        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        raw = manifest_path.read_bytes()
+        payload = json.loads(raw.decode("utf-8"), object_pairs_hook=lambda pairs: _no_duplicate_json_keys(pairs))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise LifecycleError("existing bundle is not a verified bundle") from exc
-    if not isinstance(payload, dict) or not _manifest_payload_is_safe(payload) or payload["artifactType"] != artifact_type:
+    if raw != (json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n").encode("utf-8"):
         raise LifecycleError("existing bundle is not a verified bundle")
-    return payload
+    verified = _strict_manifest(payload, artifact_type, expected_names)
+    if verified is None:
+        raise LifecycleError("existing bundle is not a verified bundle")
+    for output in verified["outputs"]:
+        path = root / output["basename"]
+        if path.stat().st_size != output["size"] or sha256_file(path) != output["sha256"]:
+            raise LifecycleError("existing bundle is not a verified bundle")
+    return verified
+
+
+def _no_duplicate_json_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate JSON key")
+        result[key] = value
+    return result
 
 
 def _equal_or_below(candidate: Path, boundary: Path) -> bool:
@@ -387,13 +445,37 @@ class BundleRun:
         import shutil
         shutil.rmtree(self.staging)
 
+    def _verify_staging_invariant(self) -> None:
+        try:
+            if self.staging.is_symlink() or not self.staging.is_dir() or stat.S_IMODE(self.staging.lstat().st_mode) != 0o700:
+                raise OSError
+            for item in self.staging.rglob("*"):
+                mode = item.lstat().st_mode
+                if stat.S_ISLNK(mode) or not (stat.S_ISREG(mode) or stat.S_ISDIR(mode)):
+                    raise OSError
+                if stat.S_ISREG(mode) and stat.S_IMODE(mode) != 0o600:
+                    raise OSError
+                if stat.S_ISDIR(mode) and stat.S_IMODE(mode) != 0o700:
+                    raise OSError
+        except OSError as exc:
+            raise LifecycleError("staging bundle is unsafe") from exc
+
+    def _verify(self, path: Path, verify: Callable[[Path], None]) -> None:
+        try:
+            verify(path)
+        except ExportError:
+            raise
+        except Exception as exc:
+            raise LifecycleError("bundle verification failed") from exc
+
     def promote(self, verify: Callable[[Path], None]) -> Path:
         try:
-            verify(self.staging)
+            self._verify_staging_invariant()
+            self._verify(self.staging, verify)
             if not self.output.exists():
                 os.rename(self.staging, self.output)
                 try:
-                    verify(self.output)
+                    self._verify(self.output, verify)
                 except Exception:
                     os.rename(self.output, self.staging)
                     self.discard_staging()
@@ -401,14 +483,12 @@ class BundleRun:
                 return self.output
             if not self.replace:
                 raise OutputCollisionError("output already exists; rerun with --replace")
-            existing = json.loads((self.output / "manifest.json").read_text(encoding="utf-8"))
-            expected = frozenset({"manifest.json", *(item["basename"] for item in existing.get("outputs", []) if isinstance(item, dict) and isinstance(item.get("basename"), str))})
-            verify_bundle_manifest(self.output, self.artifact_type, expected)
+            verify_bundle_manifest(self.output, self.artifact_type, _BUNDLE_INVENTORIES[self.artifact_type])
             self.backup = self.output.with_name(f".{self.output.name}.{self.artifact_type}.backup-{secrets.token_hex(8)}")
             os.rename(self.output, self.backup)
             try:
                 os.rename(self.staging, self.output)
-                verify(self.output)
+                self._verify(self.output, verify)
             except Exception:
                 if self.output.exists():
                     os.rename(self.output, self.staging)
