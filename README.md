@@ -22,7 +22,11 @@ Any manuscript that uses these data must include the following sentence verbatim
 
 Access to project data is restricted to authorized study personnel who have completed all required IRB and information-security training, obtained certificates documenting completion, and been formally listed as study personnel on the approved IRB protocol.
 
-Funding sponsors are the **Charles H. Hood Foundation** and **Yosemite** for the project *Using Large Language Models for Pediatric Diagnosis*.
+### Required funding acknowledgment
+
+Any manuscript that uses these data must include the following sentence verbatim:
+
+> This work was supported by the Charles H. Hood Foundation and Yosemite.
 
 These project-governance statements apply to the restricted PPOC source snapshot described above.
 
