@@ -270,8 +270,16 @@ def _strict_manifest(payload: object, artifact_type: str, expected_names: frozen
     if len(sources) != len(EXPECTED_RESOURCE_NAMES) or tuple(item.get("resource") if isinstance(item, dict) else None for item in sources) != EXPECTED_RESOURCE_NAMES or any(not isinstance(item, dict) or set(item) != source_keys or not isinstance(item["resource"], str) or not _safe_basename(item["basename"]) or not all(_is_int(item[key]) and item[key] >= 0 for key in ("size", "rowCount", "fieldCount")) or not _valid_digest(item["sha256"]) for item in sources):
         return None
     output_keys = {"basename", "size", "sha256", "rowCount", "fieldCount", "columns", "tables"}
-    output_names = {item.get("basename") for item in outputs if isinstance(item, dict)}
-    if output_names != expected_names - {"manifest.json"} or len(outputs) != len(output_names) or any(not isinstance(item, dict) or set(item) != output_keys or not _safe_basename(item["basename"]) or not _is_int(item["size"]) or item["size"] < 0 or not _valid_digest(item["sha256"]) or not (item["rowCount"] is None or _is_int(item["rowCount"]) and item["rowCount"] >= 0) or not (item["fieldCount"] is None or _is_int(item["fieldCount"]) and item["fieldCount"] >= 0) or not isinstance(item["columns"], list) or any(not isinstance(pair, list) or len(pair) != 2 or not all(isinstance(value, str) and value for value in pair) for pair in item["columns"]) or not isinstance(item["tables"], list) or any(not isinstance(table, list) or len(table) != 3 or not isinstance(table[0], str) or not table[0] or not all(_is_int(value) and value >= 0 for value in table[1:]) for table in item["tables"]) for item in outputs):
+    expected_output_order = (
+        tuple(f"{name}.parquet" for name in EXPECTED_RESOURCE_NAMES)
+        + ("source-datapackage.json",)
+        if artifact_type == "parquet-bundle"
+        else ("ppoc.duckdb",)
+    )
+    output_names = tuple(
+        item.get("basename") if isinstance(item, dict) else None for item in outputs
+    )
+    if output_names != expected_output_order or set(output_names) != expected_names - {"manifest.json"} or any(not isinstance(item, dict) or set(item) != output_keys or not _safe_basename(item["basename"]) or not _is_int(item["size"]) or item["size"] < 0 or not _valid_digest(item["sha256"]) or not (item["rowCount"] is None or _is_int(item["rowCount"]) and item["rowCount"] >= 0) or not (item["fieldCount"] is None or _is_int(item["fieldCount"]) and item["fieldCount"] >= 0) or not isinstance(item["columns"], list) or any(not isinstance(pair, list) or len(pair) != 2 or not all(isinstance(value, str) and value for value in pair) for pair in item["columns"]) or not isinstance(item["tables"], list) or any(not isinstance(table, list) or len(table) != 3 or not isinstance(table[0], str) or not table[0] or not all(_is_int(value) and value >= 0 for value in table[1:]) for table in item["tables"]) for item in outputs):
         return None
     if set(validation) != {"status", "checkCount", "failedChecks"} or validation["status"] != "PASS" or not _is_int(validation["checkCount"]) or validation["checkCount"] < 0 or validation["failedChecks"] != 0:
         return None
@@ -567,6 +575,8 @@ def _resources(descriptor: dict[str, Any]) -> tuple[ResourceContract, ...]:
         raise DescriptorError("descriptor has duplicate resource name")
     resource_names = set(EXPECTED_RESOURCE_NAMES)
     contracts = tuple(_resource(resource, resource_names) for resource in raw_resources)
+    if len({resource.csv_path for resource in contracts}) != len(contracts):
+        raise DescriptorError("descriptor has duplicate resource path")
     field_names = {
         resource["name"]: {field["name"] for field in resource["schema"]["fields"]}
         for resource in raw_resources
@@ -685,6 +695,8 @@ def _relationships(
             raise DescriptorError("relationship reference is invalid")
         orphan_rows = _optional_nonnegative_int(relationship.get("orphanRows"), "logical relationship count")
         null_rows = _optional_nonnegative_int(relationship.get("nullRows"), "logical relationship count")
+        if kind == "logical" and orphan_rows is None:
+            raise DescriptorError("logical relationship count is invalid")
         result.append(RelationshipContract(field, reference_resource, reference_field, orphan_rows, null_rows))
     return tuple(result)
 
@@ -870,7 +882,12 @@ def _number_expression(resource: str, field: str) -> str:
     )
 
 
-def typed_csv_query(resource: ResourceContract, source_path: Path) -> str:
+def typed_csv_query(
+    resource: ResourceContract,
+    source_path: Path,
+    *,
+    temporary_directory: Path | None = None,
+) -> str:
     csv_path = Path(source_path)
     duckdb_encoding = ENCODING_MAP[resource.encoding]
     if resource.encoding == "iso-8859-1":
@@ -879,7 +896,11 @@ def typed_csv_query(resource: ResourceContract, source_path: Path) -> str:
         # descriptor source remains untouched.
         decoded = csv_path.read_bytes().decode("iso-8859-1")
         with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", newline="", delete=False
+            mode="w",
+            encoding="utf-8",
+            newline="",
+            delete=False,
+            dir=temporary_directory,
         ) as temporary:
             temporary.write(decoded)
         csv_path = Path(temporary.name)
@@ -1165,11 +1186,18 @@ def export_parquet_bundle(config: ExportConfig) -> Path:
         connection.execute(f"SET temp_directory={quote_literal(str(spill))}")
         for source in sources:
             target = run.staging / f"{source.resource.name}.parquet"
-            query = typed_csv_query(source.resource, source.path)
-            connection.execute(
-                f"COPY ({query}) TO {quote_literal(str(target))} "
-                "(FORMAT PARQUET, COMPRESSION ZSTD)"
+            query = typed_csv_query(
+                source.resource,
+                source.path,
+                temporary_directory=run.staging,
             )
+            try:
+                connection.execute(
+                    f"COPY ({query}) TO {quote_literal(str(target))} "
+                    "(FORMAT PARQUET, COMPRESSION ZSTD)"
+                )
+            finally:
+                _remove_transcoded_sources()
             target.chmod(0o600)
         records = validate_artifact(
             connection,
@@ -1393,7 +1421,17 @@ def export_duckdb_bundle(config: ExportConfig) -> Path:
         connection = duckdb.connect(str(database))
         for source in sources:
             connection.execute(resource_table_ddl(source.resource))
-            connection.execute(f"INSERT INTO main.{quote_identifier(source.resource.name)} {typed_csv_query(source.resource, source.path)}")
+            query = typed_csv_query(
+                source.resource,
+                source.path,
+                temporary_directory=run.staging,
+            )
+            try:
+                connection.execute(
+                    f"INSERT INTO main.{quote_identifier(source.resource.name)} {query}"
+                )
+            finally:
+                _remove_transcoded_sources()
         records = validate_artifact(connection, package, lambda resource: f"main.{quote_identifier(resource.name)}")
         verify_sources_unchanged(sources)
         _populate_duckdb_metadata(connection, package, provenance, source_hashes, records)
@@ -1467,7 +1505,8 @@ def cli_main(artifact_type: str, argv: Sequence[str] | None = None) -> int:
 
 @atexit.register
 def _remove_transcoded_sources() -> None:
-    for path in _TRANSCODED_SOURCES:
+    while _TRANSCODED_SOURCES:
+        path = _TRANSCODED_SOURCES.pop()
         try:
             path.unlink()
         except FileNotFoundError:

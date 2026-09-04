@@ -305,6 +305,7 @@ def test_export_config_is_immutable(tmp_path: Path) -> None:
     ("mutation", "message"),
     [
         (lambda d: d["resources"][1].update(name=d["resources"][0]["name"]), "duplicate resource name"),
+        (lambda d: d["resources"][1].update(path=d["resources"][0]["path"]), "duplicate resource path"),
         (lambda d: d["resources"][0]["schema"]["fields"].append(copy.deepcopy(d["resources"][0]["schema"]["fields"][0])), "duplicate field name"),
         (lambda d: d["resources"][0].update(path="nested/patients.csv"), "multi-component resource path"),
         (lambda d: d["resources"][0].update(format="json"), "resource format"),
@@ -314,6 +315,7 @@ def test_export_config_is_immutable(tmp_path: Path) -> None:
         (lambda d: d["resources"][0]["schema"].update(missingValues=["NA"]), "missingValues"),
         (lambda d: d["resources"][0]["schema"].update(primaryKey=["patient_id"]), "scalar primary key"),
         (lambda d: d["resources"][4]["x-logicalForeignKeys"][0].update(orphanRows=-1), "logical relationship count"),
+        (lambda d: d["resources"][4]["x-logicalForeignKeys"][0].pop("orphanRows"), "logical relationship count"),
         (lambda d: d["x-statisticsSource"].pop("snapshot"), "snapshot"),
     ],
 )

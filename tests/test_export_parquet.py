@@ -13,10 +13,12 @@ from scripts.typed_export import (
     ExportError,
     LifecycleError,
     OutputCollisionError,
+    export_duckdb_bundle,
     export_parquet_bundle,
     load_package_contract,
     sha256_file,
     verify_parquet_bundle,
+    write_manifest,
 )
 from tests.analytical_export_fixtures import (
     replace_csv_cell,
@@ -85,6 +87,43 @@ def test_export_parquet_bundle_preserves_nulls_latin_1_and_manifest_hashes(tmp_p
         path = output / item["basename"]
         assert item["size"] == path.stat().st_size
         assert item["sha256"] == sha256_file(path)
+
+
+def test_verify_parquet_bundle_rejects_reordered_manifest_outputs(tmp_path: Path) -> None:
+    """Catches a manifest verifier that ignores descriptor output order."""
+    fixture = write_tiny_snapshot(tmp_path / "input")
+    output = export_parquet_bundle(
+        ExportConfig(fixture.descriptor, fixture.data_root, tmp_path / "parquet")
+    )
+    manifest_path = output / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["outputs"] = list(reversed(manifest["outputs"]))
+    write_manifest(manifest_path, manifest)
+
+    with pytest.raises(LifecycleError):
+        verify_parquet_bundle(output, load_package_contract(fixture.descriptor))
+
+
+@pytest.mark.parametrize(
+    ("export_bundle", "bundle_name"),
+    ((export_parquet_bundle, "parquet"), (export_duckdb_bundle, "duckdb")),
+)
+def test_export_bundle_leaves_no_transcoded_source_in_system_temp(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, export_bundle, bundle_name: str
+) -> None:
+    """Catches a persistent ISO-8859-1 source copy outside the bundle lifecycle."""
+    import scripts.typed_export as exporter
+
+    system_temp = tmp_path / "system-temp"
+    system_temp.mkdir()
+    monkeypatch.setattr(exporter.tempfile, "tempdir", str(system_temp))
+    fixture = write_tiny_snapshot(tmp_path / "input")
+
+    export_bundle(
+        ExportConfig(fixture.descriptor, fixture.data_root, tmp_path / bundle_name)
+    )
+
+    assert list(system_temp.iterdir()) == []
 
 
 def test_export_parquet_bundle_is_schema_and_row_stable_across_fresh_outputs(tmp_path: Path) -> None:
