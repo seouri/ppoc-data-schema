@@ -5,6 +5,7 @@ import hashlib
 import json
 import math
 import os
+import stat
 from dataclasses import FrozenInstanceError
 from pathlib import Path
 
@@ -13,18 +14,27 @@ import pytest
 
 from scripts.typed_export import (
     EXPECTED_RESOURCE_NAMES,
+    BuildProvenance,
+    BundleRun,
     DescriptorError,
     ExportConfig,
     ExportError,
+    LifecycleError,
+    OutputCollisionError,
     PackageContract,
     SourceFingerprint,
+    UnsafePathError,
+    build_manifest,
+    ensure_safe_output,
     fingerprint_sources,
     load_package_contract,
     preflight_sources,
     quote_identifier,
     quote_literal,
     typed_csv_query,
+    verify_bundle_manifest,
     verify_sources_unchanged,
+    write_manifest,
 )
 from tests.analytical_export_fixtures import (
     replace_csv_cell,
@@ -542,3 +552,100 @@ def test_validate_artifact_compares_logical_orphans_without_strict_fk_failure(tm
 
     logical = [record for record in records if record.resource == "labs" and record.rule == "logical orphan count"]
     assert [(record.expected, record.observed) for record in logical] == [(1, 1)]
+
+
+def _provenance() -> BuildProvenance:
+    return BuildProvenance("2026-09-04T00:00:00Z", "3.13", "1", "1", None, None, "a" * 64)
+
+
+def test_manifest_is_canonical_private_and_contains_no_absolute_paths(tmp_path: Path) -> None:
+    """Catches noncanonical or world-readable manifest publication."""
+    fixture = write_tiny_snapshot(tmp_path / "input")
+    manifest = build_manifest("parquet-bundle", load_package_contract(fixture.descriptor), _provenance(), (), (), ())
+    destination = tmp_path / "manifest.json"
+    write_manifest(destination, manifest)
+    payload = destination.read_text(encoding="utf-8")
+    assert payload == json.dumps(manifest, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+    assert set(json.loads(payload)) == {"manifestVersion", "status", "artifactType", "package", "build", "descriptor", "sources", "outputs", "validation"}
+    assert str(fixture.data_root) not in payload
+    assert stat.S_IMODE(destination.stat().st_mode) == 0o600
+    manifest["build"] = {"unsafe": str(fixture.data_root)}
+    with pytest.raises(LifecycleError):
+        write_manifest(tmp_path / "unsafe-manifest.json", manifest)
+
+
+def test_safe_output_rejects_checkout_inputs_symlinks_and_special_files(tmp_path: Path) -> None:
+    """Catches output paths that could overwrite inputs or escape through links."""
+    fixture = write_tiny_snapshot(tmp_path / "input")
+    package = load_package_contract(fixture.descriptor)
+    sources = preflight_sources(package, fixture.data_root)
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    for candidate in (repo, repo / "below", fixture.descriptor, fixture.data_root, fixture.data_root / "patients.csv"):
+        with pytest.raises(UnsafePathError):
+            ensure_safe_output(repo, package, sources, candidate)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    link = outside / "link"
+    link.symlink_to(fixture.data_root, target_is_directory=True)
+    with pytest.raises(UnsafePathError):
+        ensure_safe_output(repo, package, sources, link)
+    fifo = outside / "fifo"
+    os.mkfifo(fifo)
+    with pytest.raises(UnsafePathError):
+        ensure_safe_output(repo, package, sources, fifo)
+
+
+def test_bundle_start_permissions_collision_and_stale_recovery(tmp_path: Path) -> None:
+    """Catches unsafe staging permissions and accidental stale-artifact cleanup."""
+    output = tmp_path / "published"
+    run = BundleRun.start(output, "parquet-bundle", False)
+    assert stat.S_IMODE(run.staging.stat().st_mode) == 0o700
+    (run.staging / "data").write_text("tiny", encoding="utf-8")
+    os.chmod(run.staging / "data", 0o600)
+    run.promote(lambda bundle: None)
+    with pytest.raises(OutputCollisionError, match="rerun with --replace"):
+        BundleRun.start(output, "parquet-bundle", False)
+    assert (output / "data").read_text(encoding="utf-8") == "tiny"
+    (tmp_path / ".new.parquet-bundle.partial-deadbeefdeadbeef").mkdir()
+    with pytest.raises(LifecycleError, match="new"):
+        BundleRun.start(tmp_path / "new", "parquet-bundle", False)
+
+
+def test_bundle_replacement_restores_verified_old_bundle_after_post_backup_failure(tmp_path: Path) -> None:
+    """Catches replacement that discards a verified target after final verification fails."""
+    output = tmp_path / "published"
+    output.mkdir()
+    (output / "data").write_text("old", encoding="utf-8")
+    os.chmod(output, 0o700)
+    os.chmod(output / "data", 0o600)
+    manifest = {"manifestVersion": 1, "status": "PASS", "artifactType": "parquet-bundle", "package": {}, "build": {}, "descriptor": {}, "sources": [], "outputs": [{"basename": "data"}], "validation": {"status": "PASS", "checkCount": 0, "failedChecks": 0}}
+    write_manifest(output / "manifest.json", manifest)
+    verify_bundle_manifest(output, "parquet-bundle", frozenset({"manifest.json", "data"}))
+    os.chmod(output / "data", 0o644)
+    with pytest.raises(LifecycleError):
+        verify_bundle_manifest(output, "parquet-bundle", frozenset({"manifest.json", "data"}))
+    os.chmod(output / "data", 0o600)
+    run = BundleRun.start(output, "parquet-bundle", True)
+    (run.staging / "data").write_text("new", encoding="utf-8")
+    os.chmod(run.staging / "data", 0o600)
+    write_manifest(run.staging / "manifest.json", manifest)
+    def fail_only_after_backup(path: Path) -> None:
+        if path == output:
+            raise RuntimeError("post promote")
+
+    with pytest.raises(RuntimeError, match="post promote"):
+        run.promote(fail_only_after_backup)
+    assert (output / "data").read_text(encoding="utf-8") == "old"
+    assert not run.staging.exists()
+
+
+def test_verify_bundle_manifest_rejects_wrong_kind_and_unknown_inventory(tmp_path: Path) -> None:
+    """Catches replacement acceptance of a bundle the lifecycle does not own."""
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    manifest = {"manifestVersion": 1, "status": "PASS", "artifactType": "duckdb-bundle", "package": {}, "build": {}, "descriptor": {}, "sources": [], "outputs": [], "validation": {"status": "PASS", "checkCount": 0, "failedChecks": 0}}
+    write_manifest(bundle / "manifest.json", manifest)
+    (bundle / "unexpected").write_text("x", encoding="utf-8")
+    with pytest.raises(LifecycleError):
+        verify_bundle_manifest(bundle, "parquet-bundle", frozenset({"manifest.json"}))

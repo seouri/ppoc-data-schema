@@ -4,10 +4,15 @@ import atexit
 import csv
 import json
 import math
+import os
+import secrets
 import stat
+import subprocess
+import sys
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from hashlib import sha256
 from pathlib import Path, PurePosixPath
 from types import MappingProxyType
@@ -42,6 +47,18 @@ class DescriptorError(ExportError):
 
 
 class ValidationError(ExportError):
+    pass
+
+
+class UnsafePathError(ExportError):
+    pass
+
+
+class OutputCollisionError(ExportError):
+    pass
+
+
+class LifecycleError(ExportError):
     pass
 
 
@@ -122,6 +139,28 @@ class SourceFingerprint:
 
 
 @dataclass(frozen=True)
+class OutputFingerprint:
+    basename: str
+    size: int
+    sha256: str
+    row_count: int | None = None
+    field_count: int | None = None
+    columns: tuple[tuple[str, str], ...] = ()
+    tables: tuple[tuple[str, int, int], ...] = ()
+
+
+@dataclass(frozen=True)
+class BuildProvenance:
+    created_at_utc: str
+    python_version: str
+    duckdb_version: str
+    pyarrow_version: str
+    exporter_git_revision: str | None
+    exporter_git_dirty: bool | None
+    exporter_module_sha256: str
+
+
+@dataclass(frozen=True)
 class ValidationRecord:
     resource: str
     field: str | None
@@ -129,6 +168,267 @@ class ValidationRecord:
     expected: int | float | str | list[object]
     observed: int | float | str | list[object]
     status: str = "PASS"
+
+
+_MANIFEST_KEYS = frozenset({
+    "manifestVersion", "status", "artifactType", "package", "build", "descriptor",
+    "sources", "outputs", "validation",
+})
+_ARTIFACT_TYPES = frozenset({"parquet-bundle", "duckdb-bundle"})
+
+
+def sha256_file(path: Path) -> str:
+    """Hash a regular file without loading its contents into memory."""
+    digest = sha256()
+    with Path(path).open("rb") as handle:
+        while block := handle.read(1024 * 1024):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def build_provenance() -> BuildProvenance:
+    """Capture attributable exporter provenance without making Git mandatory."""
+    revision: str | None = None
+    dirty: bool | None = None
+    try:
+        revision = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, check=True, capture_output=True,
+            text=True,
+        ).stdout.strip()
+        dirty = bool(subprocess.run(
+            ["git", "status", "--porcelain"], cwd=ROOT, check=True, capture_output=True,
+            text=True,
+        ).stdout)
+    except (OSError, subprocess.SubprocessError):
+        revision = None
+        dirty = None
+    try:
+        import pyarrow
+        pyarrow_version = pyarrow.__version__
+    except ImportError:
+        pyarrow_version = "unavailable"
+    return BuildProvenance(
+        datetime.now(UTC).isoformat().replace("+00:00", "Z"), sys.version.split()[0],
+        duckdb.__version__, pyarrow_version, revision, dirty, sha256_file(Path(__file__)),
+    )
+
+
+def _safe_basename(value: str) -> bool:
+    return bool(value) and Path(value).name == value and value not in {".", ".."}
+
+
+def _valid_digest(value: str) -> bool:
+    return len(value) == 64 and all(character in "0123456789abcdef" for character in value)
+
+
+def _manifest_payload_is_safe(payload: Mapping[str, object]) -> bool:
+    return set(payload) == _MANIFEST_KEYS and payload.get("manifestVersion") == 1 and payload.get("status") == "PASS" and payload.get("artifactType") in _ARTIFACT_TYPES
+
+
+def _contains_absolute_path(value: object) -> bool:
+    if isinstance(value, str):
+        return Path(value).is_absolute()
+    if isinstance(value, Mapping):
+        return any(_contains_absolute_path(key) or _contains_absolute_path(item) for key, item in value.items())
+    if isinstance(value, (list, tuple)):
+        return any(_contains_absolute_path(item) for item in value)
+    return False
+
+
+def build_manifest(
+    artifact_type: str, package: PackageContract, provenance: BuildProvenance,
+    sources: tuple[SourceFingerprint, ...], outputs: tuple[OutputFingerprint, ...],
+    validations: tuple[ValidationRecord, ...],
+) -> dict[str, object]:
+    if artifact_type not in _ARTIFACT_TYPES:
+        raise LifecycleError("unsupported bundle artifact type")
+    if not _valid_digest(package.descriptor_sha256) or not _valid_digest(provenance.exporter_module_sha256):
+        raise LifecycleError("manifest fingerprint is invalid")
+    if any(not _safe_basename(item.basename) or not _valid_digest(item.sha256) for item in (*sources, *outputs)):
+        raise LifecycleError("manifest fingerprint is invalid")
+    if any(item.size < 0 or item.row_count is not None and item.row_count < 0 or item.field_count is not None and item.field_count < 0 for item in outputs):
+        raise LifecycleError("manifest fingerprint is invalid")
+    failures = sum(record.status != "PASS" for record in validations)
+    return {
+        "manifestVersion": 1, "status": "PASS" if not failures else "FAIL", "artifactType": artifact_type,
+        "package": {"name": package.name, "version": package.version, "snapshot": package.snapshot},
+        "build": {"createdAtUtc": provenance.created_at_utc, "pythonVersion": provenance.python_version, "duckdbVersion": provenance.duckdb_version, "pyarrowVersion": provenance.pyarrow_version, "exporterGitRevision": provenance.exporter_git_revision, "exporterGitDirty": provenance.exporter_git_dirty, "exporterModuleSha256": provenance.exporter_module_sha256},
+        "descriptor": {"basename": package.descriptor_path.name, "size": len(package.descriptor_bytes), "sha256": package.descriptor_sha256},
+        "sources": [{"resource": item.resource_name, "basename": item.basename, "size": item.size, "sha256": item.sha256, "rowCount": item.row_count, "fieldCount": item.field_count} for item in sources],
+        "outputs": [{"basename": item.basename, "size": item.size, "sha256": item.sha256, "rowCount": item.row_count, "fieldCount": item.field_count, "columns": [list(pair) for pair in item.columns], "tables": [list(table) for table in item.tables]} for item in outputs],
+        "validation": {"status": "PASS" if not failures else "FAIL", "checkCount": len(validations), "failedChecks": failures},
+    }
+
+
+def write_manifest(path: Path, payload: Mapping[str, object]) -> None:
+    if not _manifest_payload_is_safe(payload) or _contains_absolute_path(payload):
+        raise LifecycleError("manifest contract is invalid")
+    destination = Path(path)
+    if not _safe_basename(destination.name) or not destination.parent.is_dir():
+        raise LifecycleError("manifest destination is invalid")
+    encoded = (json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n").encode("utf-8")
+    temporary = destination.with_name(f".{destination.name}.tmp-{secrets.token_hex(8)}")
+    try:
+        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(encoded)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, destination)
+        os.chmod(destination, 0o600)
+    except OSError as exc:
+        raise LifecycleError("manifest write failed") from exc
+
+
+def verify_bundle_manifest(bundle: Path, artifact_type: str, expected_names: frozenset[str]) -> dict[str, Any]:
+    root = Path(bundle)
+    try:
+        root_mode = root.lstat().st_mode
+        manifest_path = root / "manifest.json"
+        manifest_mode = manifest_path.lstat().st_mode
+        if (
+            not stat.S_ISDIR(root_mode)
+            or stat.S_ISLNK(root_mode)
+            or stat.S_IMODE(root_mode) != 0o700
+            or not stat.S_ISREG(manifest_mode)
+            or stat.S_ISLNK(manifest_mode)
+            or stat.S_IMODE(manifest_mode) != 0o600
+        ):
+            raise OSError
+        actual = {item.name for item in root.iterdir()}
+        if actual != set(expected_names) or any(
+            stat.S_ISLNK(item.lstat().st_mode)
+            or not stat.S_ISREG(item.lstat().st_mode)
+            or stat.S_IMODE(item.lstat().st_mode) != 0o600
+            for item in root.iterdir()
+        ):
+            raise OSError
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise LifecycleError("existing bundle is not a verified bundle") from exc
+    if not isinstance(payload, dict) or not _manifest_payload_is_safe(payload) or payload["artifactType"] != artifact_type:
+        raise LifecycleError("existing bundle is not a verified bundle")
+    return payload
+
+
+def _equal_or_below(candidate: Path, boundary: Path) -> bool:
+    try:
+        candidate.relative_to(boundary)
+        return True
+    except ValueError:
+        return False
+
+
+def ensure_safe_output(repo_root: Path, package: PackageContract, sources: tuple[SourceState, ...], output: Path) -> Path:
+    target = Path(output)
+    try:
+        if target.exists() or target.is_symlink():
+            mode = target.lstat().st_mode
+            if stat.S_ISLNK(mode) or not stat.S_ISDIR(mode):
+                raise UnsafePathError("output path is unsafe")
+        parent = target.parent.resolve(strict=True)
+        if not parent.is_dir():
+            raise UnsafePathError("output parent is unsafe")
+        resolved = (parent / target.name).resolve(strict=False)
+    except (OSError, ValueError) as exc:
+        raise UnsafePathError("output path is unsafe") from exc
+    boundaries = [Path(repo_root).resolve(), package.descriptor_path.resolve(), *(state.path.resolve() for state in sources)]
+    if any(_equal_or_below(resolved, boundary) or _equal_or_below(boundary, resolved) for boundary in boundaries):
+        raise UnsafePathError("output path is unsafe")
+    return resolved
+
+
+@dataclass
+class BundleRun:
+    output: Path
+    artifact_type: str
+    replace: bool
+    staging: Path
+    backup: Path | None = None
+
+    @classmethod
+    def start(cls, output: Path, artifact_type: str, replace: bool) -> BundleRun:
+        target = Path(output)
+        if artifact_type not in _ARTIFACT_TYPES:
+            raise LifecycleError("unsupported bundle artifact type")
+        try:
+            parent = target.parent.resolve(strict=True)
+            if not parent.is_dir():
+                raise OSError
+        except OSError as exc:
+            raise UnsafePathError("output parent is unsafe") from exc
+        target = parent / target.name
+        pattern = f".{target.name}.{artifact_type}."
+        if any(item.name.startswith(pattern) and (".partial-" in item.name or ".backup-" in item.name) for item in parent.iterdir()):
+            raise LifecycleError(f"recovery required for {target.name}")
+        if target.exists() or target.is_symlink():
+            mode = target.lstat().st_mode
+            if stat.S_ISLNK(mode) or not stat.S_ISDIR(mode):
+                raise UnsafePathError("output path is unsafe")
+            if not replace:
+                raise OutputCollisionError("output already exists; rerun with --replace")
+        token = secrets.token_hex(8)
+        staging = parent / f".{target.name}.{artifact_type}.partial-{token}"
+        staging.mkdir(mode=0o700)
+        os.chmod(staging, 0o700)
+        return cls(target, artifact_type, replace, staging)
+
+    def discard_staging(self) -> None:
+        if not self.staging.exists() and not self.staging.is_symlink():
+            return
+        if self.staging.is_symlink() or not self.staging.is_dir():
+            raise LifecycleError("staging cleanup failed")
+        for item in self.staging.iterdir():
+            if item.is_dir() and not item.is_symlink():
+                for nested in item.rglob("*"):
+                    if nested.is_symlink():
+                        raise LifecycleError("staging cleanup failed")
+        import shutil
+        shutil.rmtree(self.staging)
+
+    def promote(self, verify: Callable[[Path], None]) -> Path:
+        try:
+            verify(self.staging)
+            if not self.output.exists():
+                os.rename(self.staging, self.output)
+                try:
+                    verify(self.output)
+                except Exception:
+                    os.rename(self.output, self.staging)
+                    self.discard_staging()
+                    raise
+                return self.output
+            if not self.replace:
+                raise OutputCollisionError("output already exists; rerun with --replace")
+            existing = json.loads((self.output / "manifest.json").read_text(encoding="utf-8"))
+            expected = frozenset({"manifest.json", *(item["basename"] for item in existing.get("outputs", []) if isinstance(item, dict) and isinstance(item.get("basename"), str))})
+            verify_bundle_manifest(self.output, self.artifact_type, expected)
+            self.backup = self.output.with_name(f".{self.output.name}.{self.artifact_type}.backup-{secrets.token_hex(8)}")
+            os.rename(self.output, self.backup)
+            try:
+                os.rename(self.staging, self.output)
+                verify(self.output)
+            except Exception:
+                if self.output.exists():
+                    os.rename(self.output, self.staging)
+                os.rename(self.backup, self.output)
+                self.discard_staging()
+                raise
+            self.discard_backup()
+            return self.output
+        except OSError as exc:
+            raise LifecycleError("bundle promotion failed") from exc
+
+    def discard_backup(self) -> None:
+        if self.backup is None:
+            return
+        import shutil
+        if self.backup.is_dir() and not self.backup.is_symlink():
+            shutil.rmtree(self.backup)
+            self.backup = None
+        else:
+            raise LifecycleError("backup cleanup failed")
 
 
 def load_package_contract(path: Path) -> PackageContract:
