@@ -6,11 +6,14 @@ import json
 import math
 import stat
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path, PurePosixPath
 from types import MappingProxyType
 from typing import Any
+
+import duckdb
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DESCRIPTOR = ROOT / "datapackage.json"
@@ -35,6 +38,10 @@ class ExportError(RuntimeError):
 
 
 class DescriptorError(ExportError):
+    pass
+
+
+class ValidationError(ExportError):
     pass
 
 
@@ -112,6 +119,16 @@ class SourceFingerprint:
     sha256: str
     row_count: int
     field_count: int
+
+
+@dataclass(frozen=True)
+class ValidationRecord:
+    resource: str
+    field: str | None
+    rule: str
+    expected: int | float | str | list[object]
+    observed: int | float | str | list[object]
+    status: str = "PASS"
 
 
 def load_package_contract(path: Path) -> PackageContract:
@@ -499,6 +516,154 @@ def typed_csv_query(resource: ResourceContract, source_path: Path) -> str:
             expression = f"NULLIF({quote_identifier(field.name)}, '')"
         projections.append(f"{expression} AS {quote_identifier(field.name)}")
     return f"SELECT {', '.join(projections)} FROM {read_csv}"
+
+
+def _validation_record(
+    resource: ResourceContract,
+    field: str | None,
+    rule: str,
+    expected: float | str | list[object],
+    observed: float | str | list[object],
+) -> ValidationRecord:
+    if observed != expected:
+        target = resource.name if field is None else f"{resource.name}.{field}"
+        raise ValidationError(f"{target} {rule} did not match")
+    return ValidationRecord(resource.name, field, rule, expected, observed)
+
+
+def validate_relation_schema(
+    connection: duckdb.DuckDBPyConnection,
+    resource: ResourceContract,
+    relation: str,
+) -> list[ValidationRecord]:
+    """Validate ordered names and mapped types through DESCRIBE."""
+    described = connection.execute(f"DESCRIBE SELECT * FROM {relation}").fetchall()
+    observed = [[str(column[0]), str(column[1]).upper()] for column in described]
+    expected = [[field.name, field.duckdb_type] for field in resource.fields]
+    return [_validation_record(resource, None, "schema", expected, observed)]
+
+
+def validate_resource_rules(
+    connection: duckdb.DuckDBPyConnection,
+    resource: ResourceContract,
+    relation: str,
+) -> list[ValidationRecord]:
+    """Validate row count, requiredness, enum, minimum, and maximum rules."""
+    checks: list[tuple[str | None, str, str, int]] = [
+        (None, "row count", "count(*)", resource.row_count)
+    ]
+    for field in resource.fields:
+        column = quote_identifier(field.name)
+        if field.required:
+            checks.append((field.name, "required count", f"count(*) FILTER (WHERE {column} IS NULL)", 0))
+        if field.enum is not None:
+            values = ", ".join(quote_literal(value) for value in field.enum)
+            checks.append(
+                (field.name, "enum count", f"count(*) FILTER (WHERE {column} IS NOT NULL AND {column} NOT IN ({values}))", 0)
+            )
+        if field.minimum is not None:
+            checks.append(
+                (field.name, "minimum count", f"count(*) FILTER (WHERE {column} IS NOT NULL AND {column} < {quote_literal(field.minimum)})", 0)
+            )
+        if field.maximum is not None:
+            checks.append(
+                (field.name, "maximum count", f"count(*) FILTER (WHERE {column} IS NOT NULL AND {column} > {quote_literal(field.maximum)})", 0)
+            )
+    aggregates = ", ".join(f"{expression} AS check_{index}" for index, (_, _, expression, _) in enumerate(checks))
+    observed = connection.execute(f"SELECT {aggregates} FROM {relation}").fetchone()
+    return [
+        _validation_record(resource, field, rule, expected, int(value))
+        for (field, rule, _, expected), value in zip(checks, observed, strict=True)
+    ]
+
+
+def validate_primary_key(
+    connection: duckdb.DuckDBPyConnection,
+    resource: ResourceContract,
+    relation: str,
+) -> list[ValidationRecord]:
+    """Validate a scalar primary key when declared."""
+    if resource.primary_key is None:
+        return []
+    key = quote_identifier(resource.primary_key)
+    null_count, duplicate_count = connection.execute(
+        f"SELECT "
+        f"(SELECT count(*) FILTER (WHERE {key} IS NULL) FROM {relation}), "
+        f"(SELECT count(*) FROM (SELECT {key} FROM {relation} WHERE {key} IS NOT NULL "
+        f"GROUP BY {key} HAVING count(*) > 1))"
+    ).fetchone()
+    records = []
+    if int(null_count) != 0:
+        raise ValidationError(f"{resource.name} primary key was not complete")
+    records.append(ValidationRecord(resource.name, resource.primary_key, "primary key completeness", 0, int(null_count)))
+    if int(duplicate_count) != 0:
+        raise ValidationError(f"{resource.name} primary key was not unique")
+    records.append(ValidationRecord(resource.name, resource.primary_key, "primary key uniqueness", 0, int(duplicate_count)))
+    return records
+
+
+def validate_foreign_keys(
+    connection: duckdb.DuckDBPyConnection,
+    resource: ResourceContract,
+    relations: dict[str, str],
+) -> list[ValidationRecord]:
+    """Validate every strict scalar foreign key by aggregate anti-join."""
+    child_relation = relations[resource.name]
+    records = []
+    for relationship in resource.foreign_keys:
+        child = quote_identifier(relationship.field)
+        reference = quote_identifier(relationship.reference_field)
+        parent_relation = relations[relationship.reference_resource]
+        (observed,) = connection.execute(
+            f"SELECT count(*) FILTER (WHERE child.{child} IS NOT NULL AND NOT EXISTS "
+            f"(SELECT 1 FROM {parent_relation} AS parent WHERE parent.{reference} = child.{child})) "
+            f"FROM {child_relation} AS child"
+        ).fetchone()
+        records.append(_validation_record(resource, relationship.field, "foreign key count", 0, int(observed)))
+    return records
+
+
+def validate_logical_foreign_keys(
+    connection: duckdb.DuckDBPyConnection,
+    resource: ResourceContract,
+    relations: dict[str, str],
+) -> list[ValidationRecord]:
+    """Compare null and nonnull-orphan counts with descriptor metadata."""
+    child_relation = relations[resource.name]
+    records = []
+    for relationship in resource.logical_foreign_keys:
+        child = quote_identifier(relationship.field)
+        reference = quote_identifier(relationship.reference_field)
+        parent_relation = relations[relationship.reference_resource]
+        null_rows, orphan_rows = connection.execute(
+            f"SELECT count(*) FILTER (WHERE child.{child} IS NULL), "
+            f"count(*) FILTER (WHERE child.{child} IS NOT NULL AND NOT EXISTS "
+            f"(SELECT 1 FROM {parent_relation} AS parent WHERE parent.{reference} = child.{child})) "
+            f"FROM {child_relation} AS child"
+        ).fetchone()
+        records.append(
+            _validation_record(resource, relationship.field, "logical null count", relationship.null_rows or 0, int(null_rows))
+        )
+        records.append(
+            _validation_record(resource, relationship.field, "logical orphan count", relationship.orphan_rows or 0, int(orphan_rows))
+        )
+    return records
+
+
+def validate_artifact(
+    connection: duckdb.DuckDBPyConnection,
+    package: PackageContract,
+    relation_for: Callable[[ResourceContract], str],
+) -> tuple[ValidationRecord, ...]:
+    records: list[ValidationRecord] = []
+    relations = {resource.name: relation_for(resource) for resource in package.resources}
+    for resource in package.resources:
+        records.extend(validate_relation_schema(connection, resource, relations[resource.name]))
+        records.extend(validate_resource_rules(connection, resource, relations[resource.name]))
+        records.extend(validate_primary_key(connection, resource, relations[resource.name]))
+        records.extend(validate_foreign_keys(connection, resource, relations))
+        records.extend(validate_logical_foreign_keys(connection, resource, relations))
+    return tuple(records)
 
 
 def _redacted_duckdb_error(error: Exception, package: PackageContract, fallback: str) -> ExportError:

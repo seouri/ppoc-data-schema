@@ -16,6 +16,7 @@ from scripts.typed_export import (
     DescriptorError,
     ExportConfig,
     ExportError,
+    PackageContract,
     SourceFingerprint,
     fingerprint_sources,
     load_package_contract,
@@ -410,3 +411,134 @@ def test_package_contract_descriptor_is_deeply_immutable(tmp_path: Path) -> None
         contract.descriptor["resources"][0]["name"] = "changed"
     with pytest.raises(AttributeError):
         contract.descriptor["resources"].append({})
+
+
+def _load_tiny_tables(fixture) -> tuple[PackageContract, duckdb.DuckDBPyConnection]:
+    package = load_package_contract(fixture.descriptor)
+    sources = preflight_sources(package, fixture.data_root)
+    connection = duckdb.connect()
+    for source in sources:
+        table = quote_identifier(source.resource.name)
+        connection.execute(
+            f"CREATE TABLE main.{table} AS {typed_csv_query(source.resource, source.path)}"
+        )
+    return package, connection
+
+
+def test_validate_artifact_passes_complete_tiny_snapshot(tmp_path: Path) -> None:
+    from scripts.typed_export import validate_artifact
+
+    fixture = write_tiny_snapshot(tmp_path)
+    package, connection = _load_tiny_tables(fixture)
+
+    records = validate_artifact(connection, package, lambda resource: f'main."{resource.name}"')
+
+    assert records
+    assert {record.status for record in records} == {"PASS"}
+    assert all(record.observed is not None for record in records)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (
+            'UPDATE main."patients" SET "patient_id" = \'SYN-P001\' WHERE "patient_id" = \'SYN-P002\'',
+            "patients primary key was not unique",
+        ),
+        (
+            'DELETE FROM main."patients" WHERE "patient_id" = \'SYN-P002\'',
+            "patients row count did not match",
+        ),
+        (
+            'UPDATE main."patients" SET "patient_id" = NULL WHERE "patient_id" = \'SYN-P001\'',
+            "patients.patient_id required count did not match",
+        ),
+        (
+            'UPDATE main."patients" SET "sex" = \'X\' WHERE "patient_id" = \'SYN-P001\'',
+            "patients.sex enum count did not match",
+        ),
+        (
+            'UPDATE main."visits" SET "bmi_percentile" = -1 WHERE "visit_id" = \'SYN-V001\'',
+            "visits.bmi_percentile minimum count did not match",
+        ),
+        (
+            'UPDATE main."visits" SET "bmi_percentile" = 101 WHERE "visit_id" = \'SYN-V001\'',
+            "visits.bmi_percentile maximum count did not match",
+        ),
+        (
+            'UPDATE main."labs" SET "patient_id" = \'SYN-ORPHAN\'',
+            "labs.patient_id foreign key count did not match",
+        ),
+        (
+            'UPDATE main."labs" SET "visit_id" = \'SYN-ORPHAN\'',
+            "labs.visit_id logical orphan count did not match",
+        ),
+        (
+            'UPDATE main."labs" SET "visit_id" = NULL',
+            "labs.visit_id logical null count did not match",
+        ),
+    ],
+)
+def test_validate_artifact_rejects_aggregate_rule_violations(
+    tmp_path: Path, mutation: str, message: str
+) -> None:
+    from scripts.typed_export import ValidationError, validate_artifact
+
+    fixture = write_tiny_snapshot(tmp_path)
+    package, connection = _load_tiny_tables(fixture)
+    connection.execute(mutation)
+
+    with pytest.raises(ValidationError, match=message) as caught:
+        validate_artifact(connection, package, lambda resource: f'main."{resource.name}"')
+
+    assert "SYN-P001" not in str(caught.value)
+    assert "SYN-ORPHAN" not in str(caught.value)
+
+
+def test_validate_artifact_rejects_output_column_name_order_and_type(tmp_path: Path) -> None:
+    from scripts.typed_export import ValidationError, validate_artifact
+
+    fixture = write_tiny_snapshot(tmp_path)
+    package, connection = _load_tiny_tables(fixture)
+
+    for relation, message in (
+        ('(SELECT "patient_id" AS "wrong_name", * EXCLUDE ("patient_id") FROM main."patients")', "patients schema did not match"),
+        ('(SELECT "sex", "patient_id", * EXCLUDE ("sex", "patient_id") FROM main."patients")', "patients schema did not match"),
+        ('(SELECT cast("patient_id" AS BIGINT) AS "patient_id", * EXCLUDE ("patient_id") FROM main."patients")', "patients schema did not match"),
+    ):
+        with pytest.raises(ValidationError, match=message):
+            validate_artifact(
+                connection,
+                package,
+                lambda resource, relation=relation: relation if resource.name == "patients" else f'main."{resource.name}"',
+            )
+
+
+def test_validate_artifact_rejects_missing_primary_key_value(tmp_path: Path) -> None:
+    from scripts.typed_export import ValidationError, validate_artifact
+
+    fixture = write_tiny_snapshot(tmp_path)
+    descriptor = json.loads(fixture.descriptor.read_text(encoding="utf-8"))
+    descriptor["resources"][0]["schema"]["fields"][0]["constraints"]["required"] = False
+    fixture.descriptor.write_text(json.dumps(descriptor), encoding="utf-8")
+    package, connection = _load_tiny_tables(fixture)
+    connection.execute('UPDATE main."patients" SET "patient_id" = NULL WHERE "patient_id" = \'SYN-P001\'')
+
+    with pytest.raises(ValidationError, match="patients primary key was not complete"):
+        validate_artifact(connection, package, lambda resource: f'main."{resource.name}"')
+
+
+def test_validate_artifact_compares_logical_orphans_without_strict_fk_failure(tmp_path: Path) -> None:
+    from scripts.typed_export import validate_artifact
+
+    fixture = write_tiny_snapshot(tmp_path)
+    descriptor = json.loads(fixture.descriptor.read_text(encoding="utf-8"))
+    descriptor["resources"][4]["x-logicalForeignKeys"][0]["orphanRows"] = 1
+    fixture.descriptor.write_text(json.dumps(descriptor), encoding="utf-8")
+    package, connection = _load_tiny_tables(fixture)
+    connection.execute('UPDATE main."labs" SET "visit_id" = \'SYN-ORPHAN\'')
+
+    records = validate_artifact(connection, package, lambda resource: f'main."{resource.name}"')
+
+    logical = [record for record in records if record.resource == "labs" and record.rule == "logical orphan count"]
+    assert [(record.expected, record.observed) for record in logical] == [(1, 1)]
