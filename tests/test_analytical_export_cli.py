@@ -10,7 +10,16 @@ import duckdb
 import pyarrow.parquet as pq
 import pytest
 
-from scripts.typed_export import DEFAULT_DESCRIPTOR, parse_args, sha256_file
+from scripts.typed_export import (
+    DEFAULT_DESCRIPTOR,
+    load_package_contract,
+    parse_args,
+    quote_literal,
+    sha256_file,
+    validate_artifact,
+    verify_duckdb_bundle,
+    verify_parquet_bundle,
+)
 from tests.analytical_export_fixtures import replace_csv_cell, write_tiny_snapshot
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -208,6 +217,30 @@ def _duckdb_shape(bundle: Path) -> dict[str, tuple[list[tuple[str, str]], int, l
         }
 
 
+def _validation_shape(bundle: Path, script: str, package: object) -> tuple[object, ...]:
+    if script == "export_parquet.py":
+        connection = duckdb.connect()
+        relation_for = lambda resource: (
+            f"read_parquet({quote_literal(str(bundle / (resource.name + '.parquet')))})"
+        )
+    else:
+        connection = duckdb.connect(str(bundle / "ppoc.duckdb"), read_only=True)
+        relation_for = lambda resource: f'main."{resource.name}"'
+    try:
+        return validate_artifact(connection, package, relation_for)
+    finally:
+        connection.close()
+
+
+def _duckdb_constraint_shape(bundle: Path) -> list[tuple[str, str, str, str]]:
+    with duckdb.connect(str(bundle / "ppoc.duckdb"), read_only=True) as connection:
+        return connection.execute(
+            "SELECT schema_name, table_name, constraint_type, constraint_text "
+            "FROM duckdb_constraints() WHERE schema_name IN ('main', 'ppoc_meta') "
+            "ORDER BY schema_name, table_name, constraint_type, constraint_text"
+        ).fetchall()
+
+
 def test_two_destination_cli_smoke(tmp_path: Path) -> None:
     """Catches CLI output that changes typed logical artifacts across fresh destinations."""
     fixture = write_tiny_snapshot(tmp_path / "input")
@@ -215,15 +248,40 @@ def test_two_destination_cli_smoke(tmp_path: Path) -> None:
         "export_parquet.py": (tmp_path / "parquet-a", tmp_path / "parquet-b"),
         "build_duckdb.py": (tmp_path / "duckdb-a", tmp_path / "duckdb-b"),
     }
+    package = load_package_contract(fixture.descriptor)
     for script, (first, second) in destinations.items():
         results = [_run_cli(script, fixture, output, data_root=fixture.data_root) for output in (first, second)]
         assert all(result.returncode == 0 for result in results), [result.stderr for result in results]
         manifests = [json.loads((output / "manifest.json").read_text(encoding="utf-8")) for output in (first, second)]
+        for output, manifest in zip((first, second), manifests, strict=True):
+            if script == "export_parquet.py":
+                verify_parquet_bundle(output, package)
+            else:
+                verify_duckdb_bundle(output, package)
+            assert all(
+                item["size"] == (output / item["basename"]).stat().st_size
+                and item["sha256"] == sha256_file(output / item["basename"])
+                for item in manifest["outputs"]
+            )
         assert manifests[0]["status"] == manifests[1]["status"] == "PASS"
         assert manifests[0]["validation"] == manifests[1]["validation"]
         assert manifests[0]["sources"] == manifests[1]["sources"]
+        validations = [_validation_shape(output, script, package) for output in (first, second)]
+        assert validations[0] == validations[1]
+        assert all(record.status == "PASS" for record in validations[0])
+        relationship_records = tuple(
+            record
+            for record in validations[0]
+            if record.rule in {
+                "foreign key count",
+                "logical null count",
+                "logical orphan count",
+            }
+        )
+        assert relationship_records
         if script == "export_parquet.py":
             assert _parquet_shape(first) == _parquet_shape(second)
         else:
             assert _duckdb_shape(first) == _duckdb_shape(second)
+            assert _duckdb_constraint_shape(first) == _duckdb_constraint_shape(second)
         assert all(item["sha256"] == sha256_file(fixture.data_root / item["basename"]) for item in manifests[0]["sources"])
