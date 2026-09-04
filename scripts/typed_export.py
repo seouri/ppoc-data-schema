@@ -1237,6 +1237,13 @@ CREATE TABLE ppoc_meta.descriptor (descriptor_sha256 VARCHAR NOT NULL, descripto
 CREATE TABLE ppoc_meta.validations (ordinal INTEGER NOT NULL, resource_name VARCHAR NOT NULL, field_name VARCHAR, rule VARCHAR NOT NULL, expected_json VARCHAR NOT NULL, observed_json VARCHAR NOT NULL, status VARCHAR NOT NULL CHECK (status = 'PASS'));
 """
 
+_DUCKDB_META_SCHEMAS = {
+    "build": (("manifest_version", "INTEGER", "NO"), ("package_name", "VARCHAR", "NO"), ("package_version", "VARCHAR", "NO"), ("snapshot", "VARCHAR", "NO"), ("created_at_utc", "VARCHAR", "NO"), ("descriptor_sha256", "VARCHAR", "NO"), ("python_version", "VARCHAR", "NO"), ("duckdb_version", "VARCHAR", "NO"), ("pyarrow_version", "VARCHAR", "NO"), ("exporter_git_revision", "VARCHAR", "YES"), ("exporter_git_dirty", "BOOLEAN", "YES"), ("exporter_module_sha256", "VARCHAR", "NO")),
+    "resources": (("ordinal", "INTEGER", "NO"), ("resource_name", "VARCHAR", "NO"), ("source_basename", "VARCHAR", "NO"), ("source_size", "BIGINT", "NO"), ("source_sha256", "VARCHAR", "NO"), ("row_count", "BIGINT", "NO"), ("table_name", "VARCHAR", "NO"), ("field_count", "BIGINT", "NO")),
+    "descriptor": (("descriptor_sha256", "VARCHAR", "NO"), ("descriptor_json", "VARCHAR", "NO")),
+    "validations": (("ordinal", "INTEGER", "NO"), ("resource_name", "VARCHAR", "NO"), ("field_name", "VARCHAR", "YES"), ("rule", "VARCHAR", "NO"), ("expected_json", "VARCHAR", "NO"), ("observed_json", "VARCHAR", "NO"), ("status", "VARCHAR", "NO")),
+}
+
 
 def _canonical_json(value: object) -> str:
     def thaw(item: object) -> object:
@@ -1253,12 +1260,52 @@ def _duckdb_output_fingerprint(path: Path, package: PackageContract) -> OutputFi
     return OutputFingerprint(path.name, path.stat().st_size, sha256_file(path), tables=tuple((resource.name, resource.row_count, len(resource.fields)) for resource in package.resources))
 
 
+def _table_constraints(connection: duckdb.DuckDBPyConnection, schema: str, table: str) -> tuple[tuple[str, str], ...]:
+    return tuple(connection.execute("SELECT constraint_type, constraint_text FROM duckdb_constraints() WHERE schema_name = ? AND table_name = ? ORDER BY constraint_type, constraint_text", (schema, table)).fetchall())
+
+
+def _reference_resource_table_ddl(resource: ResourceContract) -> str:
+    columns: list[str] = []
+    for field in resource.fields:
+        column = quote_identifier(field.name)
+        clauses = [column, field.duckdb_type]
+        if field.required:
+            clauses.append("NOT NULL")
+        checks: list[str] = []
+        if field.enum is not None:
+            checks.append(f"{column} IN ({', '.join(quote_literal(value) for value in field.enum)})")
+        if field.minimum is not None:
+            checks.append(f"{column} >= {quote_literal(field.minimum)}")
+        if field.maximum is not None:
+            checks.append(f"{column} <= {quote_literal(field.maximum)}")
+        if checks:
+            clauses.append("CHECK (" + " AND ".join(checks) + ")")
+        columns.append(" ".join(clauses))
+    return f"CREATE TABLE main.{quote_identifier(resource.name)} (" + ", ".join(columns) + ")"
+
+
+def _reference_resource_constraints(resource: ResourceContract) -> tuple[tuple[str, str], ...]:
+    connection = duckdb.connect()
+    try:
+        connection.execute(_reference_resource_table_ddl(resource))
+        return _table_constraints(connection, "main", resource.name)
+    finally:
+        connection.close()
+
+
+def _validation_rows(records: tuple[ValidationRecord, ...]) -> list[tuple[int, str, str | None, str, str, str, str]]:
+    return [
+        (ordinal, record.resource, record.field, record.rule, _canonical_json(record.expected), _canonical_json(record.observed), record.status)
+        for ordinal, record in enumerate(records, start=1)
+    ]
+
+
 def _populate_duckdb_metadata(connection: duckdb.DuckDBPyConnection, package: PackageContract, provenance: BuildProvenance, source_hashes: tuple[SourceFingerprint, ...], records: tuple[ValidationRecord, ...]) -> None:
     connection.execute(_DUCKDB_META_DDL)
     connection.execute("INSERT INTO ppoc_meta.build VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (1, package.name, package.version, package.snapshot, provenance.created_at_utc, package.descriptor_sha256, provenance.python_version, provenance.duckdb_version, provenance.pyarrow_version, provenance.exporter_git_revision, provenance.exporter_git_dirty, provenance.exporter_module_sha256))
     connection.executemany("INSERT INTO ppoc_meta.resources VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [(ordinal, source.resource_name, source.basename, source.size, source.sha256, source.row_count, source.resource_name, source.field_count) for ordinal, source in enumerate(source_hashes, start=1)])
     connection.execute("INSERT INTO ppoc_meta.descriptor VALUES (?, ?)", (package.descriptor_sha256, _canonical_json(package.descriptor)))
-    connection.executemany("INSERT INTO ppoc_meta.validations VALUES (?, ?, ?, ?, ?, ?, ?)", [(ordinal, record.resource, record.field, record.rule, _canonical_json(record.expected), _canonical_json(record.observed), record.status) for ordinal, record in enumerate(records, start=1)])
+    connection.executemany("INSERT INTO ppoc_meta.validations VALUES (?, ?, ?, ?, ?, ?, ?)", _validation_rows(records))
 
 
 def _verify_duckdb_database(path: Path, package: PackageContract, manifest: dict[str, Any] | None = None) -> None:
@@ -1272,10 +1319,16 @@ def _verify_duckdb_database(path: Path, package: PackageContract, manifest: dict
         for resource in package.resources:
             columns = connection.execute(f"DESCRIBE main.{quote_identifier(resource.name)}").fetchall()
             expected_columns = [(field.name, field.duckdb_type, "NO" if field.required else "YES") for field in resource.fields]
-            if [(column[0], column[1], column[2]) for column in columns] != expected_columns or connection.execute(f"SELECT count(*) FROM main.{quote_identifier(resource.name)}").fetchone() != (resource.row_count,):
+            if [(column[0], column[1], column[2]) for column in columns] != expected_columns or _table_constraints(connection, "main", resource.name) != _reference_resource_constraints(resource) or connection.execute(f"SELECT count(*) FROM main.{quote_identifier(resource.name)}").fetchone() != (resource.row_count,):
                 raise ValueError
-        constraints = connection.execute("SELECT constraint_type FROM duckdb_constraints() WHERE schema_name = 'main'").fetchall()
-        if any(kind in {'PRIMARY KEY', 'FOREIGN KEY'} for (kind,) in constraints) or connection.execute("SELECT count(*) FROM duckdb_indexes()").fetchone() != (0,) or connection.execute("SELECT count(*) FROM duckdb_views() WHERE schema_name IN ('main', 'ppoc_meta') AND NOT internal").fetchone() != (0,) or connection.execute("SELECT count(*) FROM duckdb_sequences() WHERE schema_name IN ('main', 'ppoc_meta')").fetchone() != (0,) or connection.execute("SELECT count(*) FROM duckdb_functions() WHERE schema_name IN ('main', 'ppoc_meta') AND function_type = 'macro' AND NOT internal").fetchone() != (0,):
+        for table, expected_columns in _DUCKDB_META_SCHEMAS.items():
+            columns = connection.execute(f"DESCRIBE ppoc_meta.{quote_identifier(table)}").fetchall()
+            if [(column[0], column[1], column[2]) for column in columns] != list(expected_columns):
+                raise ValueError
+        if _table_constraints(connection, "ppoc_meta", "validations") != (("CHECK", "CHECK((status = 'PASS'))"), ("NOT NULL", "NOT NULL"), ("NOT NULL", "NOT NULL"), ("NOT NULL", "NOT NULL"), ("NOT NULL", "NOT NULL"), ("NOT NULL", "NOT NULL"), ("NOT NULL", "NOT NULL")):
+            raise ValueError
+        constraints = connection.execute("SELECT constraint_type FROM duckdb_constraints() WHERE schema_name IN ('main', 'ppoc_meta')").fetchall()
+        if any(kind in {'PRIMARY KEY', 'FOREIGN KEY'} for (kind,) in constraints) or connection.execute("SELECT count(*) FROM duckdb_indexes() WHERE schema_name IN ('main', 'ppoc_meta')").fetchone() != (0,) or connection.execute("SELECT count(*) FROM duckdb_views() WHERE schema_name IN ('main', 'ppoc_meta') AND NOT internal").fetchone() != (0,) or connection.execute("SELECT count(*) FROM duckdb_sequences() WHERE schema_name IN ('main', 'ppoc_meta')").fetchone() != (0,) or connection.execute("SELECT count(*) FROM duckdb_functions() WHERE schema_name IN ('main', 'ppoc_meta') AND function_type = 'macro' AND NOT internal").fetchone() != (0,):
             raise ValueError
         build = connection.execute("SELECT * FROM ppoc_meta.build").fetchall()
         if len(build) != 1 or build[0][0:4] != (1, package.name, package.version, package.snapshot) or build[0][5] != package.descriptor_sha256:
@@ -1286,8 +1339,9 @@ def _verify_duckdb_database(path: Path, package: PackageContract, manifest: dict
         resources = connection.execute("SELECT ordinal, resource_name, row_count, table_name, field_count FROM ppoc_meta.resources ORDER BY ordinal").fetchall()
         if resources != [(index, item.name, item.row_count, item.name, len(item.fields)) for index, item in enumerate(package.resources, start=1)]:
             raise ValueError
-        validations = connection.execute("SELECT expected_json, observed_json, status FROM ppoc_meta.validations ORDER BY ordinal").fetchall()
-        if not validations or any(status != 'PASS' or _canonical_json(json.loads(expected)) != expected or _canonical_json(json.loads(observed)) != observed for expected, observed, status in validations):
+        fresh_records = validate_artifact(connection, package, lambda resource: f"main.{quote_identifier(resource.name)}")
+        validations = connection.execute("SELECT ordinal, resource_name, field_name, rule, expected_json, observed_json, status FROM ppoc_meta.validations ORDER BY ordinal").fetchall()
+        if validations != _validation_rows(fresh_records):
             raise ValueError
         if manifest is not None:
             output = _duckdb_output_fingerprint(path, package)
@@ -1298,7 +1352,7 @@ def _verify_duckdb_database(path: Path, package: PackageContract, manifest: dict
                 for index, item in enumerate(manifest["sources"], start=1)
             ]
             source_metadata = connection.execute("SELECT * FROM ppoc_meta.resources ORDER BY ordinal").fetchall()
-            if manifest["outputs"] != [expected_output] or build[0] != (1, package.name, package.version, package.snapshot, expected_build["createdAtUtc"], package.descriptor_sha256, expected_build["pythonVersion"], expected_build["duckdbVersion"], expected_build["pyarrowVersion"], expected_build["exporterGitRevision"], expected_build["exporterGitDirty"], expected_build["exporterModuleSha256"]) or source_metadata != expected_sources:
+            if manifest["outputs"] != [expected_output] or manifest["validation"] != {"status": "PASS", "checkCount": len(fresh_records), "failedChecks": 0} or build[0] != (1, package.name, package.version, package.snapshot, expected_build["createdAtUtc"], package.descriptor_sha256, expected_build["pythonVersion"], expected_build["duckdbVersion"], expected_build["pyarrowVersion"], expected_build["exporterGitRevision"], expected_build["exporterGitDirty"], expected_build["exporterModuleSha256"]) or source_metadata != expected_sources:
                 raise ValueError
     except Exception as exc:
         raise ValidationError("DuckDB artifact validation failed") from exc

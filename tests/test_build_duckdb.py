@@ -14,8 +14,11 @@ from scripts.typed_export import (
     OutputCollisionError,
     export_duckdb_bundle,
     load_package_contract,
+    resource_table_ddl,
     sha256_file,
+    validate_artifact,
     verify_duckdb_bundle,
+    write_manifest,
 )
 from tests.analytical_export_fixtures import (
     replace_csv_cell,
@@ -28,6 +31,21 @@ RESOURCE_NAMES = (
     "labs", "medications", "problem_list", "referrals",
 )
 META_NAMES = ("build", "resources", "descriptor", "validations")
+META_SCHEMAS = {
+    "build": [("manifest_version", "INTEGER", "NO"), ("package_name", "VARCHAR", "NO"), ("package_version", "VARCHAR", "NO"), ("snapshot", "VARCHAR", "NO"), ("created_at_utc", "VARCHAR", "NO"), ("descriptor_sha256", "VARCHAR", "NO"), ("python_version", "VARCHAR", "NO"), ("duckdb_version", "VARCHAR", "NO"), ("pyarrow_version", "VARCHAR", "NO"), ("exporter_git_revision", "VARCHAR", "YES"), ("exporter_git_dirty", "BOOLEAN", "YES"), ("exporter_module_sha256", "VARCHAR", "NO")],
+    "resources": [("ordinal", "INTEGER", "NO"), ("resource_name", "VARCHAR", "NO"), ("source_basename", "VARCHAR", "NO"), ("source_size", "BIGINT", "NO"), ("source_sha256", "VARCHAR", "NO"), ("row_count", "BIGINT", "NO"), ("table_name", "VARCHAR", "NO"), ("field_count", "BIGINT", "NO")],
+    "descriptor": [("descriptor_sha256", "VARCHAR", "NO"), ("descriptor_json", "VARCHAR", "NO")],
+    "validations": [("ordinal", "INTEGER", "NO"), ("resource_name", "VARCHAR", "NO"), ("field_name", "VARCHAR", "YES"), ("rule", "VARCHAR", "NO"), ("expected_json", "VARCHAR", "NO"), ("observed_json", "VARCHAR", "NO"), ("status", "VARCHAR", "NO")],
+}
+
+
+def _rehash_database_bundle(bundle: Path) -> None:
+    manifest_path = bundle / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    database = bundle / "ppoc.duckdb"
+    manifest["outputs"][0]["size"] = database.stat().st_size
+    manifest["outputs"][0]["sha256"] = sha256_file(database)
+    write_manifest(manifest_path, manifest)
 
 
 def test_export_duckdb_bundle_materializes_resources_metadata_and_constraints(tmp_path: Path) -> None:
@@ -72,6 +90,16 @@ def test_export_duckdb_bundle_materializes_resources_metadata_and_constraints(tm
         assert connection.execute("SELECT count(*) FROM ppoc_meta.resources").fetchone() == (8,)
         assert connection.execute("SELECT count(*) FROM ppoc_meta.descriptor").fetchone() == (1,)
         assert connection.execute("SELECT count(*) FROM ppoc_meta.validations").fetchone()[0] > 0
+        for table, expected_columns in META_SCHEMAS.items():
+            actual_columns = connection.execute(f'DESCRIBE ppoc_meta."{table}"').fetchall()
+            assert [(column[0], column[1], column[2]) for column in actual_columns] == expected_columns
+        assert connection.execute(
+            "SELECT constraint_type, constraint_text FROM duckdb_constraints() "
+            "WHERE schema_name = 'ppoc_meta' AND table_name = 'validations' ORDER BY constraint_type, constraint_text"
+        ).fetchall() == [
+            ("CHECK", "CHECK((status = 'PASS'))"),
+            *( ("NOT NULL", "NOT NULL"), ) * 6,
+        ]
     finally:
         connection.close()
 
@@ -96,6 +124,28 @@ def test_export_duckdb_bundle_preserves_nulls_latin_1_metadata_and_manifest_bind
     assert db_output["sha256"] == sha256_file(output / "ppoc.duckdb")
     assert db_output["tables"] == [[name, 2 if name in {"patients", "patients_augmented", "visits", "visits_augmented"} else 1, len(next(resource.fields for resource in load_package_contract(fixture.descriptor).resources if resource.name == name))] for name in RESOURCE_NAMES]
     verify_duckdb_bundle(output, load_package_contract(fixture.descriptor))
+
+
+def test_export_duckdb_bundle_validation_metadata_equals_fresh_read_only_validation(tmp_path: Path) -> None:
+    """Catches validation metadata that omits or changes a fresh aggregate validation record."""
+    fixture = write_tiny_snapshot(tmp_path / "input")
+    package = load_package_contract(fixture.descriptor)
+    output = export_duckdb_bundle(ExportConfig(fixture.descriptor, fixture.data_root, tmp_path / "duckdb"))
+    connection = duckdb.connect(str(output / "ppoc.duckdb"), read_only=True)
+    try:
+        records = validate_artifact(connection, package, lambda resource: f'main."{resource.name}"')
+        expected = [
+            (ordinal, record.resource, record.field, record.rule,
+             json.dumps(record.expected, sort_keys=True, separators=(",", ":"), ensure_ascii=False),
+             json.dumps(record.observed, sort_keys=True, separators=(",", ":"), ensure_ascii=False), record.status)
+            for ordinal, record in enumerate(records, start=1)
+        ]
+        assert connection.execute(
+            "SELECT ordinal, resource_name, field_name, rule, expected_json, observed_json, status "
+            "FROM ppoc_meta.validations ORDER BY ordinal"
+        ).fetchall() == expected
+    finally:
+        connection.close()
 
 
 def test_export_duckdb_bundle_is_logically_stable_across_fresh_outputs(tmp_path: Path) -> None:
@@ -172,3 +222,38 @@ def test_export_duckdb_bundle_restores_verified_bundle_after_final_verification_
         export_duckdb_bundle(ExportConfig(fixture.descriptor, fixture.data_root, output, replace=True))
     assert (output / "manifest.json").read_bytes() == original_manifest
     original_verify(output, load_package_contract(fixture.descriptor))
+
+
+def test_verify_duckdb_bundle_rejects_rehashed_resource_check_mismatch(tmp_path: Path) -> None:
+    """Catches a rehashed database whose resource CHECK no longer matches its contract."""
+    fixture = write_tiny_snapshot(tmp_path / "input")
+    package = load_package_contract(fixture.descriptor)
+    output = export_duckdb_bundle(ExportConfig(fixture.descriptor, fixture.data_root, tmp_path / "duckdb"))
+    connection = duckdb.connect(str(output / "ppoc.duckdb"))
+    try:
+        visits = next(resource for resource in package.resources if resource.name == "visits")
+        altered_ddl = resource_table_ddl(visits).replace('"bmi_percentile" <= 100', '"bmi_percentile" <= 101')
+        connection.execute('ALTER TABLE main."visits" RENAME TO "visits_original"')
+        connection.execute(altered_ddl)
+        connection.execute('INSERT INTO main."visits" SELECT * FROM main."visits_original"')
+        connection.execute('DROP TABLE main."visits_original"')
+    finally:
+        connection.close()
+    _rehash_database_bundle(output)
+    with pytest.raises(LifecycleError):
+        verify_duckdb_bundle(output, package)
+
+
+def test_verify_duckdb_bundle_rejects_rehashed_incomplete_validation_metadata(tmp_path: Path) -> None:
+    """Catches a rehashed bundle whose validation provenance has a missing record."""
+    fixture = write_tiny_snapshot(tmp_path / "input")
+    package = load_package_contract(fixture.descriptor)
+    output = export_duckdb_bundle(ExportConfig(fixture.descriptor, fixture.data_root, tmp_path / "duckdb"))
+    connection = duckdb.connect(str(output / "ppoc.duckdb"))
+    try:
+        connection.execute("DELETE FROM ppoc_meta.validations WHERE ordinal = 1")
+    finally:
+        connection.close()
+    _rehash_database_bundle(output)
+    with pytest.raises(LifecycleError):
+        verify_duckdb_bundle(output, package)
