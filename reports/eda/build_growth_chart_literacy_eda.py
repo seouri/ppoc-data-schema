@@ -442,6 +442,48 @@ def main() -> None:
     )
     p_flag_overlap["pct"] = 100.0 * p_flag_overlap["patients"] / float(val(p_n, "n_rows"))
 
+    utilization_structure = sql_one(
+        con,
+        """WITH arms AS (
+                 SELECT CASE WHEN growth_dx_flag = 1 THEN 1
+                             WHEN healthy_flag = 1 THEN 0 END AS is_case,
+                        visits_count, visits_count_pre_dx
+                 FROM p
+                 WHERE growth_dx_flag = 1 OR healthy_flag = 1
+             ),
+             ranked AS (
+                 SELECT *,
+                        rank() OVER (ORDER BY visits_count_pre_dx)
+                          + (count(*) OVER (PARTITION BY visits_count_pre_dx) - 1) / 2.0 AS r_predx,
+                        rank() OVER (ORDER BY visits_count)
+                          + (count(*) OVER (PARTITION BY visits_count) - 1) / 2.0 AS r_lifetime
+                 FROM arms
+             ),
+             supply AS (
+                 SELECT visits_count_pre_dx AS visit_count,
+                        sum(is_case) AS cases,
+                        sum(1 - is_case) AS controls
+                 FROM arms
+                 GROUP BY 1
+             )
+             SELECT sum(is_case) AS case_n,
+                    sum(1 - is_case) AS control_n,
+                    avg(visits_count) FILTER (WHERE is_case = 1) AS case_lifetime_mean,
+                    avg(visits_count) FILTER (WHERE is_case = 0) AS control_lifetime_mean,
+                    avg(visits_count_pre_dx) FILTER (WHERE is_case = 1) AS case_predx_mean,
+                    avg(visits_count_pre_dx) FILTER (WHERE is_case = 0) AS control_predx_mean,
+                    (avg(CASE WHEN is_case = 1 THEN r_predx END) - (sum(is_case) + 1) / 2.0)
+                      / (count(*) - sum(is_case)) AS predx_auroc,
+                    (avg(CASE WHEN is_case = 1 THEN r_lifetime END) - (sum(is_case) + 1) / 2.0)
+                      / (count(*) - sum(is_case)) AS lifetime_auroc,
+                    (SELECT sum(CASE WHEN controls = 0 THEN cases ELSE 0 END) FROM supply)
+                      AS cases_without_exact_control,
+                    100.0 * (SELECT sum(CASE WHEN controls = 0 THEN cases ELSE 0 END) FROM supply)
+                      / sum(is_case) AS pct_cases_without_exact_control,
+                    (SELECT sum(least(cases, controls)) FROM supply) AS max_exact_pairs
+             FROM ranked""",
+    )
+
     visit_age = sql_df(
         con,
         f"""SELECT {age_band_expr()} AS age_band,
@@ -886,6 +928,8 @@ def main() -> None:
         "",
         f"The patient-level `growth_dx_flag` is present in **{fmt_int(growth_age_summary['growth_flag_patients'])} patients**; its median recorded age is **{fmt_year(growth_age_summary['median_dx_age_years'], 3)} years**, with **{fmt_pct(percent(growth_age_summary['dx_in_first_month'], growth_age_summary['growth_flag_with_age']))}** of age-observed flagged patients assigned a code in the first month. This supports the source project’s decision to treat diagnosis-code flags as descriptive rather than as a direct label of multi-year trajectory interpretation.",
         "",
+        f"The candidate diagnosis/healthy-arm split also shows why a utilization covariate needs a common index date: flagged patients average **{fmt_float(utilization_structure['case_predx_mean'], 2)}** visits before diagnosis versus **{fmt_float(utilization_structure['control_predx_mean'], 2)}** for the healthy arm, even though their lifetime means are **{fmt_float(utilization_structure['case_lifetime_mean'], 2)}** versus **{fmt_float(utilization_structure['control_lifetime_mean'], 2)}**. The corresponding AUROCs are **{fmt_float(utilization_structure['predx_auroc'], 3)}** for the pre-diagnosis count and **{fmt_float(utilization_structure['lifetime_auroc'], 4)}** for lifetime count; **{fmt_pct(utilization_structure['pct_cases_without_exact_control'], 1)}** of flagged patients have no exact healthy-arm count match. This is a design diagnostic for the discarded flag-based arm, not a registered referral endpoint.",
+        "",
         f"Referrals provide a useful action/care-pathway inventory—**{fmt_int(referral_overall['referrals'])} records from {fmt_int(referral_overall['patients'])} patients**—but this report does not estimate a referral/utilization prediction endpoint. That analysis is intentionally deferred in the GrowthChartLiteracy design; here referrals are described as recorded actions with positive-unlabeled and incomplete visit-linkage limitations.",
         "",
         "### Clinical reading of the summary",
@@ -1116,6 +1160,23 @@ def main() -> None:
         "- Explicit utilization controls: visit count, encounter type, observation span, measurement density, and source-system provenance are visible care-process variables that can be profiled and balanced without treating them as physiology.",
         "- A secondary recorded-action layer: specialty referral records can describe an observed care pathway, provided the index date, look-forward, missing linkage, and positive-unlabeled status are fixed before modeling.",
         "",
+        "### How the real data changed the experiment design",
+        "",
+        "The real-data profile did not simply supply candidate subjects. It identified which parts of a record can represent physiology, which parts encode observation and care process, and which variables cannot serve as ground truth. The resulting design consequences are:",
+        "",
+        "| Data characteristic observed in the real snapshot | Evidence from this snapshot | Experiment-design consequence |",
+        "| --- | --- | --- |",
+        f"| **Longitudinal, irregular, repeated trajectories** | Median {fmt_int(patient_observation['median_visits'])} visits per patient; median age-2-or-later height gap {fmt_year(float(height_gaps['median_gap_days']) / 365.25, 2)} years; height present on {fmt_pct(percent(visit_age['height_present'].sum(), v_n['n_rows']))} of visits; lag-1 height-z autocorrelation {fmt_float(autocorrelation['lag1_autocorrelation'], 3)}. | E5a changes schedule density while preserving deviation-carrying visits, matched noise, and measurement availability; uncertainty is estimated at the patient or trajectory level rather than treating visits as independent. |",
+        f"| **Observation and care process are informative** | Visit counts, encounter types, source-system provenance, measurement density, and observation span vary across the panel; only {fmt_pct(percent(referral_linkage['visit_id_resolves'], referral_linkage['referrals']))} of referral rows have a visit ID resolving to an augmented visit. | Utilization is treated as a possible shortcut. E2 describes the available care-process signal, E5 manipulates schedule while holding physiology fixed, and E7 crosses the two factors; the referral layer requires a matched index date and look-forward. |",
+        f"| **Candidate labels are not trajectory truth** | `growth_dx_flag` covers {fmt_int(growth_age_summary['growth_flag_patients'])} patients, has median age {fmt_year(growth_age_summary['median_dx_age_years'], 3)} years, and reaches {fmt_pct(percent(growth_age_summary['dx_in_first_month'], growth_age_summary['growth_flag_with_age']))} in the first month; the pre-diagnosis utilization field has AUROC {fmt_float(utilization_structure['predx_auroc'], 3)} versus {fmt_float(utilization_structure['lifetime_auroc'], 4)} for lifetime count. | Diagnosis and `healthy_flag` are not used as the primary reference standard. Layer C uses referral as a secondary positive-unlabeled action outcome, while the counterfactual core uses constructed truth or within-subject response changes. |",
+        f"| **Age and sex define the reference frame** | Calendar dates are absent and age is the only clock; {fmt_pct(percent(height_patient_age2['with_3_heights'], height_patient_age2['patients']))} retain at least three heights at age 2 years or later, while BMI is structurally available only from age 2 in the augmented pipeline. | The primary trajectory frame is age 2 years and above, sex-specific reference curves are retained, and E9 tests whether the same crossing has different meaning in mid-childhood and the peripubertal window. |",
+        "| **Raw and derived representations coexist** | The augmented visit layer contains raw measurements alongside z-scores, percentiles, BMI, velocities, and clinical flags; the underlying clinical object is a plotted trajectory, while the planned model input is serialized text. | E3 compares raw, derived, and combined features across table, sentence, and digit-string formats, selects the format in a held-out split, and treats downstream findings as conditional on text serialization. |",
+        f"| **Anthropometric quality is heterogeneous** | Head-circumference z-scores reach {fmt_float(channel_summary.loc[channel_summary['channel'] == 'head_circ_z_score', 'maximum'].iloc[0], 2)} and weight-for-length z-scores reach {fmt_float(channel_summary.loc[channel_summary['channel'] == 'weight_for_length_z_score', 'minimum'].iloc[0], 2)}; {fmt_int(data_quality['hc_cm_outside_25_65'])} head-circumference values fall outside 25–65 cm. | Plausibility bounds are applied before serialization, head-circumference z-score is excluded until repaired or validated, and distributed flags are checked rather than assumed to be ground truth. |",
+        "",
+        "The cohort is large enough that the planned real-patient samples are not supply-constrained. The binding constraints are comparable observation windows, trustworthy labels, and clinician time, which is why the core relies on constructed or counterfactual stimuli and the clinician panel validates roughly 110 curves rather than adjudicating thousands of real records.",
+        "",
+        "Taken together, these characteristics make the study a layered, within-subject counterfactual test of physiology versus utilization shortcuts, with conventional referral-label accuracy analyses kept secondary.",
+        "",
         "### What the data do not support without additional governance or validation",
         "",
         "- A claim that an ICD-10-derived growth flag is a clinician-adjudicated trajectory label. Its timing and composition are strongly affected by neonatal and billing capture.",
@@ -1148,7 +1209,8 @@ def main() -> None:
         "",
         "## Source framing",
         "",
-        "- `/Users/joon/src/tries/growth-chart-literacy/growth-chart-literacy.md`, §Cohort and Data and §Preliminary Analysis",
+        "- `/Users/joon/src/tries/growth-chart-literacy/growth-chart-literacy.md`, §0.3–§0.6, §Cohort and Data, §Preliminary Analysis, and E3–E7/E9",
+        "- `/Users/joon/src/tries/growth-chart-literacy/decisions/2026-08-30-restructure.md`, which records the move from an EHR-label gate to a counterfactual core and secondary referral-action layer",
         "- `/Users/joon/src/tries/growth-chart-literacy/docs/data/data_description.md` and the resource-specific descriptions under `docs/data/`",
         "- `/Users/joon/src/tries/growth-chart-literacy/review-2026-08-30-queries.sql` and `scripts/anthropometric_profile.sql`, used as prior analysis context and re-checked against the supplied real-data directory",
         "",

@@ -1,6 +1,6 @@
 # Real-data exploratory analysis for GrowthChartLiteracy
 
-**Analysis date:** 2026-09-03
+**Analysis date:** 2026-09-04
 **Source root:** `/Users/joon/w/p3-data/all`
 **Scope:** aggregate-only descriptive analysis of the real, de-identified PPOC snapshot; no patient-level identifiers or row-level records are included in this report.
 
@@ -13,6 +13,8 @@ For the GrowthChartLiteracy question, the strongest usable signal is the repeate
 The distributed anthropometric layer also contains clinically important quality hazards. In particular, the head-circumference channel extends beyond the review range of 25–65 cm in **15,025 visits**, and head-circumference z-scores beyond ±5 occur in **16,663 visits**. These are data-quality findings, not clinical diagnoses. Weight-for-length, weight-for-stature, BMI, and head-circumference z-scores should be screened before they are used to construct stimuli or outcomes.
 
 The patient-level `growth_dx_flag` is present in **35,907 patients**; its median recorded age is **0.027 years**, with **70.1%** of age-observed flagged patients assigned a code in the first month. This supports the source project’s decision to treat diagnosis-code flags as descriptive rather than as a direct label of multi-year trajectory interpretation.
+
+The candidate diagnosis/healthy-arm split also shows why a utilization covariate needs a common index date: flagged patients average **4.57** visits before diagnosis versus **14.02** for the healthy arm, even though their lifetime means are **25.32** versus **14.02**. The corresponding AUROCs are **0.131** for the pre-diagnosis count and **0.7447** for lifetime count; **45.8%** of flagged patients have no exact healthy-arm count match. This is a design diagnostic for the discarded flag-based arm, not a registered referral endpoint.
 
 Referrals provide a useful action/care-pathway inventory—**349,827 records from 138,071 patients**—but this report does not estimate a referral/utilization prediction endpoint. That analysis is intentionally deferred in the GrowthChartLiteracy design; here referrals are described as recorded actions with positive-unlabeled and incomplete visit-linkage limitations.
 
@@ -491,6 +493,23 @@ These resources provide case-mix and care-process context but are not substitute
 - Explicit utilization controls: visit count, encounter type, observation span, measurement density, and source-system provenance are visible care-process variables that can be profiled and balanced without treating them as physiology.
 - A secondary recorded-action layer: specialty referral records can describe an observed care pathway, provided the index date, look-forward, missing linkage, and positive-unlabeled status are fixed before modeling.
 
+### How the real data changed the experiment design
+
+The real-data profile did not simply supply candidate subjects. It identified which parts of a record can represent physiology, which parts encode observation and care process, and which variables cannot serve as ground truth. The resulting design consequences are:
+
+| Data characteristic observed in the real snapshot | Evidence from this snapshot | Experiment-design consequence |
+| --- | --- | --- |
+| **Longitudinal, irregular, repeated trajectories** | Median 23 visits per patient; median age-2-or-later height gap 1.00 years; height present on 53.8% of visits; lag-1 height-z autocorrelation 0.924. | E5a changes schedule density while preserving deviation-carrying visits, matched noise, and measurement availability; uncertainty is estimated at the patient or trajectory level rather than treating visits as independent. |
+| **Observation and care process are informative** | Visit counts, encounter types, source-system provenance, measurement density, and observation span vary across the panel; only 64.7% of referral rows have a visit ID resolving to an augmented visit. | Utilization is treated as a possible shortcut. E2 describes the available care-process signal, E5 manipulates schedule while holding physiology fixed, and E7 crosses the two factors; the referral layer requires a matched index date and look-forward. |
+| **Candidate labels are not trajectory truth** | `growth_dx_flag` covers 35,907 patients, has median age 0.027 years, and reaches 70.1% in the first month; the pre-diagnosis utilization field has AUROC 0.131 versus 0.7447 for lifetime count. | Diagnosis and `healthy_flag` are not used as the primary reference standard. Layer C uses referral as a secondary positive-unlabeled action outcome, while the counterfactual core uses constructed truth or within-subject response changes. |
+| **Age and sex define the reference frame** | Calendar dates are absent and age is the only clock; 75.1% retain at least three heights at age 2 years or later, while BMI is structurally available only from age 2 in the augmented pipeline. | The primary trajectory frame is age 2 years and above, sex-specific reference curves are retained, and E9 tests whether the same crossing has different meaning in mid-childhood and the peripubertal window. |
+| **Raw and derived representations coexist** | The augmented visit layer contains raw measurements alongside z-scores, percentiles, BMI, velocities, and clinical flags; the underlying clinical object is a plotted trajectory, while the planned model input is serialized text. | E3 compares raw, derived, and combined features across table, sentence, and digit-string formats, selects the format in a held-out split, and treats downstream findings as conditional on text serialization. |
+| **Anthropometric quality is heterogeneous** | Head-circumference z-scores reach 306,212.60 and weight-for-length z-scores reach -145.60; 15,025 head-circumference values fall outside 25–65 cm. | Plausibility bounds are applied before serialization, head-circumference z-score is excluded until repaired or validated, and distributed flags are checked rather than assumed to be ground truth. |
+
+The cohort is large enough that the planned real-patient samples are not supply-constrained. The binding constraints are comparable observation windows, trustworthy labels, and clinician time, which is why the core relies on constructed or counterfactual stimuli and the clinician panel validates roughly 110 curves rather than adjudicating thousands of real records.
+
+Taken together, these characteristics make the study a layered, within-subject counterfactual test of physiology versus utilization shortcuts, with conventional referral-label accuracy analyses kept secondary.
+
 ### What the data do not support without additional governance or validation
 
 - A claim that an ICD-10-derived growth flag is a clinician-adjudicated trajectory label. Its timing and composition are strongly affected by neonatal and billing capture.
@@ -523,7 +542,8 @@ The report is descriptive and exploratory. It does not constitute a registered e
 
 ## Source framing
 
-- `/Users/joon/src/tries/growth-chart-literacy/growth-chart-literacy.md`, §Cohort and Data and §Preliminary Analysis
+- `/Users/joon/src/tries/growth-chart-literacy/growth-chart-literacy.md`, §0.3–§0.6, §Cohort and Data, §Preliminary Analysis, and E3–E7/E9
+- `/Users/joon/src/tries/growth-chart-literacy/decisions/2026-08-30-restructure.md`, which records the move from an EHR-label gate to a counterfactual core and secondary referral-action layer
 - `/Users/joon/src/tries/growth-chart-literacy/docs/data/data_description.md` and the resource-specific descriptions under `docs/data/`
 - `/Users/joon/src/tries/growth-chart-literacy/review-2026-08-30-queries.sql` and `scripts/anthropometric_profile.sql`, used as prior analysis context and re-checked against the supplied real-data directory
 
