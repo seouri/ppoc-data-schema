@@ -13,10 +13,11 @@ import subprocess
 import sys
 import tempfile
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from hashlib import sha256
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from types import MappingProxyType
 from typing import Any
 
@@ -37,6 +38,7 @@ EXPECTED_RESOURCE_NAMES = (
 TYPE_MAP = {"string": "VARCHAR", "integer": "BIGINT", "number": "DOUBLE"}
 SUPPORTED_CONSTRAINTS = frozenset({"required", "enum", "minimum", "maximum"})
 ENCODING_MAP = {"utf-8": "utf-8", "iso-8859-1": "latin-1"}
+_TRANSCODE_CHUNK_SIZE = 1024 * 1024
 _TRANSCODED_SOURCES: list[Path] = []
 
 
@@ -436,10 +438,20 @@ class BundleRun:
                 raise UnsafePathError("output path is unsafe")
             if not replace:
                 raise OutputCollisionError("output already exists; rerun with --replace")
+            verify_bundle_manifest(
+                target,
+                artifact_type,
+                _BUNDLE_INVENTORIES[artifact_type],
+            )
         token = secrets.token_hex(8)
         staging = parent / f".{target.name}.{artifact_type}.partial-{token}"
-        staging.mkdir(mode=0o700)
-        os.chmod(staging, 0o700)
+        try:
+            staging.mkdir(mode=0o700)
+            os.chmod(staging, 0o700)
+        except OSError:
+            if staging.is_dir() and not staging.is_symlink():
+                shutil.rmtree(staging)
+            raise LifecycleError("bundle staging failed") from None
         return cls(target, artifact_type, replace, staging)
 
     def discard_staging(self) -> None:
@@ -538,8 +550,11 @@ def load_package_contract(path: Path) -> PackageContract:
         raise DescriptorError("descriptor is not a regular descriptor file")
     try:
         descriptor_bytes = descriptor_path.read_bytes()
-        descriptor = json.loads(descriptor_bytes.decode("utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        descriptor = json.loads(
+            descriptor_bytes.decode("utf-8"),
+            object_pairs_hook=_no_duplicate_json_keys,
+        )
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
         raise DescriptorError("descriptor is not valid UTF-8 JSON") from exc
     if not isinstance(descriptor, dict):
         raise DescriptorError("descriptor object is invalid")
@@ -590,10 +605,17 @@ def _resources(descriptor: dict[str, Any]) -> tuple[ResourceContract, ...]:
 
 def _resource(resource: dict[str, Any], resource_names: set[str]) -> ResourceContract:
     path = _scalar_string(resource, "path", "resource path")
-    path_parts = PurePosixPath(path).parts
-    if ".." in path_parts or PurePosixPath(path).is_absolute():
+    posix_path = PurePosixPath(path)
+    windows_path = PureWindowsPath(path)
+    path_parts = posix_path.parts
+    if (
+        ".." in path_parts
+        or ".." in windows_path.parts
+        or posix_path.is_absolute()
+        or bool(windows_path.anchor)
+    ):
         raise DescriptorError("unsafe resource path")
-    if len(path_parts) > 1:
+    if len(path_parts) > 1 or len(windows_path.parts) > 1:
         raise DescriptorError("multi-component resource path")
     if (
         not path
@@ -613,7 +635,7 @@ def _resource(resource: dict[str, Any], resource_names: set[str]) -> ResourceCon
     if dialect.get("header") is not True or dialect.get("delimiter") != "," or dialect.get("quoteChar") != '"' or dialect.get("doubleQuote") is not True:
         raise DescriptorError("unsupported dialect")
     schema = _object(resource, "schema", "resource schema")
-    missing_values = schema.get("missingValues", [""])
+    missing_values = schema.get("missingValues")
     if missing_values != [""]:
         raise DescriptorError("unsupported missingValues")
     row_count = _nonnegative_int(resource.get("x-rowCount"), "x-rowCount")
@@ -827,18 +849,14 @@ def fingerprint_sources(states: tuple[SourceState, ...] | list[SourceState]) -> 
         with state.path.open("rb") as handle:
             while block := handle.read(1024 * 1024):
                 digest.update(block)
-        with state.path.open("r", encoding=ENCODING_MAP[state.resource.encoding], newline="") as handle:
-            rows = csv.reader(handle, delimiter=state.resource.delimiter, quotechar=state.resource.quote_char)
-            field_count = len(next(rows))
-            row_count = sum(1 for _ in rows)
         fingerprints.append(
             SourceFingerprint(
                 state.resource.name,
                 state.path.name,
                 state.size,
                 digest.hexdigest(),
-                row_count,
-                field_count,
+                state.resource.row_count,
+                len(state.resource.fields),
             )
         )
     return tuple(fingerprints)
@@ -892,18 +910,9 @@ def typed_csv_query(
     duckdb_encoding = ENCODING_MAP[resource.encoding]
     if resource.encoding == "iso-8859-1":
         # DuckDB's latin-1 codec rejects C1 bytes that are valid ISO-8859-1.
-        # Decode strictly here, then let DuckDB read the UTF-8 projection; the
+        # Stream a bounded, literal transcode into private staging; the
         # descriptor source remains untouched.
-        decoded = csv_path.read_bytes().decode("iso-8859-1")
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            newline="",
-            delete=False,
-            dir=temporary_directory,
-        ) as temporary:
-            temporary.write(decoded)
-        csv_path = Path(temporary.name)
+        csv_path = _transcode_iso_8859_1(csv_path, temporary_directory)
         _TRANSCODED_SOURCES.append(csv_path)
         duckdb_encoding = "utf-8"
     columns = "{" + ", ".join(
@@ -925,6 +934,30 @@ def typed_csv_query(
             expression = f"NULLIF({quote_identifier(field.name)}, '')"
         projections.append(f"{expression} AS {quote_identifier(field.name)}")
     return f"SELECT {', '.join(projections)} FROM {read_csv}"
+
+
+def _transcode_iso_8859_1(source: Path, directory: Path | None) -> Path:
+    temporary_path: Path | None = None
+    try:
+        with source.open("rb") as source_handle, tempfile.NamedTemporaryFile(
+            mode="wb",
+            delete=False,
+            dir=directory,
+        ) as temporary:
+            temporary_path = Path(temporary.name)
+            while block := source_handle.read(_TRANSCODE_CHUNK_SIZE):
+                temporary.write(block.decode("iso-8859-1").encode("utf-8"))
+            temporary.flush()
+            os.fsync(temporary.fileno())
+        temporary_path.chmod(0o600)
+        return temporary_path
+    except Exception:
+        if temporary_path is not None:
+            try:
+                temporary_path.unlink()
+            except FileNotFoundError:
+                pass
+        raise
 
 
 def _validation_record(
@@ -1172,13 +1205,15 @@ def verify_parquet_bundle(path: Path, package: PackageContract) -> None:
 
 def export_parquet_bundle(config: ExportConfig) -> Path:
     """Export one verified, typed, unpartitioned Zstandard Parquet bundle."""
-    package = load_package_contract(config.descriptor)
-    sources = preflight_sources(package, config.data_root)
-    output = ensure_safe_output(ROOT, package, sources, config.output)
-    source_hashes = fingerprint_sources(sources)
-    run = BundleRun.start(output, "parquet-bundle", config.replace)
+    package: PackageContract | None = None
+    run: BundleRun | None = None
     connection: duckdb.DuckDBPyConnection | None = None
     try:
+        package = load_package_contract(config.descriptor)
+        sources = preflight_sources(package, config.data_root)
+        output = ensure_safe_output(ROOT, package, sources, config.output)
+        source_hashes = fingerprint_sources(sources)
+        run = BundleRun.start(output, "parquet-bundle", config.replace)
         connection = duckdb.connect()
         spill = run.staging / ".duckdb-tmp"
         spill.mkdir(mode=0o700)
@@ -1191,13 +1226,11 @@ def export_parquet_bundle(config: ExportConfig) -> Path:
                 source.path,
                 temporary_directory=run.staging,
             )
-            try:
-                connection.execute(
-                    f"COPY ({query}) TO {quote_literal(str(target))} "
-                    "(FORMAT PARQUET, COMPRESSION ZSTD)"
-                )
-            finally:
-                _remove_transcoded_sources()
+            connection.execute(
+                f"COPY ({query}) TO {quote_literal(str(target))} "
+                "(FORMAT PARQUET, COMPRESSION ZSTD)"
+            )
+            _remove_transcoded_sources()
             target.chmod(0o600)
         records = validate_artifact(
             connection,
@@ -1212,14 +1245,26 @@ def export_parquet_bundle(config: ExportConfig) -> Path:
         _finish_parquet_manifest(run.staging, package, source_hashes, records)
         return run.promote(lambda bundle: verify_parquet_bundle(bundle, package))
     except Exception as error:  # noqa: BLE001 - public export boundary must redact dependencies.
-        try:
-            run.discard_staging()
-        except (LifecycleError, OSError):
-            raise ExportError("parquet export failed") from None
-        raise _redacted_duckdb_error(error, package, "parquet export failed") from None
+        if connection is not None:
+            try:
+                connection.close()
+            except Exception:  # noqa: BLE001 - cleanup failure must stay redacted.
+                raise LifecycleError("parquet export cleanup failed") from None
+            connection = None
+            try:
+                _remove_transcoded_sources()
+            except OSError:
+                raise LifecycleError("parquet export cleanup failed") from None
+        if run is not None:
+            try:
+                run.discard_staging()
+            except (LifecycleError, OSError):
+                raise LifecycleError("parquet export cleanup failed") from None
+        raise _redacted_export_error(error, package, "parquet export failed") from None
     finally:
         if connection is not None:
-            connection.close()
+            with suppress(Exception):
+                connection.close()
 
 
 def _redacted_duckdb_error(error: Exception, package: PackageContract, fallback: str) -> ExportError:
@@ -1234,6 +1279,18 @@ def _redacted_duckdb_error(error: Exception, package: PackageContract, fallback:
     for token in tokens:
         if token in message:
             return ExportError(token)
+    return ExportError(fallback)
+
+
+def _redacted_export_error(
+    error: Exception,
+    package: PackageContract | None,
+    fallback: str,
+) -> ExportError:
+    if isinstance(error, ExportError):
+        return error
+    if package is not None:
+        return _redacted_duckdb_error(error, package, fallback)
     return ExportError(fallback)
 
 
@@ -1347,9 +1404,14 @@ def _verify_duckdb_database(path: Path, package: PackageContract, manifest: dict
     connection: duckdb.DuckDBPyConnection | None = None
     try:
         connection = duckdb.connect(str(path), read_only=True)
-        tables = set(connection.execute("SELECT table_schema, table_name FROM information_schema.tables WHERE table_schema IN ('main', 'ppoc_meta')").fetchall())
+        tables = set(connection.execute(
+            "SELECT schema_name, table_name FROM duckdb_tables() WHERE NOT internal"
+        ).fetchall())
         expected_tables = {*(('main', resource.name) for resource in package.resources), *(('ppoc_meta', name) for name in ('build', 'resources', 'descriptor', 'validations'))}
-        if tables != expected_tables:
+        user_schemas = set(connection.execute(
+            "SELECT schema_name FROM duckdb_schemas() WHERE NOT internal"
+        ).fetchall())
+        if tables != expected_tables or user_schemas != {("ppoc_meta",)}:
             raise ValueError
         for resource in package.resources:
             columns = connection.execute(f"DESCRIBE main.{quote_identifier(resource.name)}").fetchall()
@@ -1361,8 +1423,8 @@ def _verify_duckdb_database(path: Path, package: PackageContract, manifest: dict
             constraints = tuple(item for item in _table_constraints(connection, "ppoc_meta", table) if item[0] != "NOT NULL")
             if [(column[0], column[1], column[2]) for column in columns] != list(expected_columns) or constraints != _DUCKDB_META_NON_NULL_CONSTRAINTS[table]:
                 raise ValueError
-        constraints = connection.execute("SELECT constraint_type FROM duckdb_constraints() WHERE schema_name IN ('main', 'ppoc_meta')").fetchall()
-        if any(kind in {'PRIMARY KEY', 'FOREIGN KEY'} for (kind,) in constraints) or connection.execute("SELECT count(*) FROM duckdb_indexes() WHERE schema_name IN ('main', 'ppoc_meta')").fetchone() != (0,) or connection.execute("SELECT count(*) FROM duckdb_views() WHERE schema_name IN ('main', 'ppoc_meta') AND NOT internal").fetchone() != (0,) or connection.execute("SELECT count(*) FROM duckdb_sequences() WHERE schema_name IN ('main', 'ppoc_meta')").fetchone() != (0,) or connection.execute("SELECT count(*) FROM duckdb_functions() WHERE schema_name IN ('main', 'ppoc_meta') AND function_type = 'macro' AND NOT internal").fetchone() != (0,):
+        constraints = connection.execute("SELECT constraint_type FROM duckdb_constraints()").fetchall()
+        if any(kind in {'PRIMARY KEY', 'FOREIGN KEY'} for (kind,) in constraints) or connection.execute("SELECT count(*) FROM duckdb_indexes()").fetchone() != (0,) or connection.execute("SELECT count(*) FROM duckdb_views() WHERE NOT internal").fetchone() != (0,) or connection.execute("SELECT count(*) FROM duckdb_sequences()").fetchone() != (0,) or connection.execute("SELECT count(*) FROM duckdb_functions() WHERE function_type = 'macro' AND NOT internal").fetchone() != (0,):
             raise ValueError
         build = connection.execute("SELECT * FROM ppoc_meta.build").fetchall()
         if len(build) != 1 or build[0][0:4] != (1, package.name, package.version, package.snapshot) or build[0][5] != package.descriptor_sha256:
@@ -1409,14 +1471,16 @@ def verify_duckdb_bundle(path: Path, package: PackageContract) -> None:
 
 def export_duckdb_bundle(config: ExportConfig) -> Path:
     """Export a verified, materialized typed DuckDB analytical bundle."""
-    package = load_package_contract(config.descriptor)
-    sources = preflight_sources(package, config.data_root)
-    output = ensure_safe_output(ROOT, package, sources, config.output)
-    source_hashes = fingerprint_sources(sources)
-    provenance = build_provenance()
-    run = BundleRun.start(output, "duckdb-bundle", config.replace)
+    package: PackageContract | None = None
+    run: BundleRun | None = None
     connection: duckdb.DuckDBPyConnection | None = None
     try:
+        package = load_package_contract(config.descriptor)
+        sources = preflight_sources(package, config.data_root)
+        output = ensure_safe_output(ROOT, package, sources, config.output)
+        source_hashes = fingerprint_sources(sources)
+        provenance = build_provenance()
+        run = BundleRun.start(output, "duckdb-bundle", config.replace)
         database = run.staging / "ppoc.duckdb"
         connection = duckdb.connect(str(database))
         for source in sources:
@@ -1426,12 +1490,10 @@ def export_duckdb_bundle(config: ExportConfig) -> Path:
                 source.path,
                 temporary_directory=run.staging,
             )
-            try:
-                connection.execute(
-                    f"INSERT INTO main.{quote_identifier(source.resource.name)} {query}"
-                )
-            finally:
-                _remove_transcoded_sources()
+            connection.execute(
+                f"INSERT INTO main.{quote_identifier(source.resource.name)} {query}"
+            )
+            _remove_transcoded_sources()
         records = validate_artifact(connection, package, lambda resource: f"main.{quote_identifier(resource.name)}")
         verify_sources_unchanged(sources)
         _populate_duckdb_metadata(connection, package, provenance, source_hashes, records)
@@ -1443,14 +1505,26 @@ def export_duckdb_bundle(config: ExportConfig) -> Path:
         write_manifest(run.staging / "manifest.json", build_manifest("duckdb-bundle", package, provenance, source_hashes, (_duckdb_output_fingerprint(database, package),), records))
         return run.promote(lambda bundle: verify_duckdb_bundle(bundle, package))
     except Exception as error:  # noqa: BLE001 - public export boundary must redact dependencies.
-        try:
-            run.discard_staging()
-        except (LifecycleError, OSError):
-            raise ExportError("duckdb export failed") from None
-        raise _redacted_duckdb_error(error, package, "duckdb export failed") from None
+        if connection is not None:
+            try:
+                connection.close()
+            except Exception:  # noqa: BLE001 - cleanup failure must stay redacted.
+                raise LifecycleError("duckdb export cleanup failed") from None
+            connection = None
+            try:
+                _remove_transcoded_sources()
+            except OSError:
+                raise LifecycleError("duckdb export cleanup failed") from None
+        if run is not None:
+            try:
+                run.discard_staging()
+            except (LifecycleError, OSError):
+                raise LifecycleError("duckdb export cleanup failed") from None
+        raise _redacted_export_error(error, package, "duckdb export failed") from None
     finally:
         if connection is not None:
-            connection.close()
+            with suppress(Exception):
+                connection.close()
 
 
 def parse_args(artifact_type: str, argv: Sequence[str] | None = None) -> ExportConfig:

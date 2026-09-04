@@ -86,6 +86,61 @@ def test_labs_uses_literal_iso_8859_1_decoding(tmp_path: Path) -> None:
     assert value == "caf\u00e9\u0081"
 
 
+def test_final_review_labs_transcode_is_chunked_and_staged_privately(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Catches whole-file labs decoding or transcoding outside private staging."""
+    import scripts.typed_export as exporter
+
+    fixture = write_tiny_snapshot(tmp_path / "input")
+    replace_labs_cell_bytes(fixture, "result_value", b"caf\xe9\x81")
+    package = load_package_contract(fixture.descriptor)
+    source = preflight_sources(package, fixture.data_root)[4]
+    staging = tmp_path / "private-staging"
+    staging.mkdir(mode=0o700)
+    original_open = Path.open
+    read_sizes: list[int] = []
+
+    class BoundedReader:
+        def __init__(self, handle) -> None:
+            self.handle = handle
+
+        def __enter__(self):
+            self.handle.__enter__()
+            return self
+
+        def __exit__(self, *args: object) -> object:
+            return self.handle.__exit__(*args)
+
+        def read(self, size: int = -1) -> bytes:
+            read_sizes.append(size)
+            assert 0 < size <= 1024 * 1024
+            return self.handle.read(size)
+
+    def bounded_open(path: Path, mode: str = "r", *args, **kwargs):
+        handle = original_open(path, mode, *args, **kwargs)
+        if path == source.path and mode == "rb":
+            return BoundedReader(handle)
+        return handle
+
+    monkeypatch.setattr(Path, "open", bounded_open)
+    try:
+        query = typed_csv_query(
+            package.resources[4], source.path, temporary_directory=staging
+        )
+        transcoded = list(staging.iterdir())
+        assert len(transcoded) == 1
+        assert stat.S_IMODE(transcoded[0].stat().st_mode) == 0o600
+        value = duckdb.connect().execute(
+            f'SELECT "result_value" FROM ({query}) AS typed_labs'
+        ).fetchone()[0]
+        assert value == "caf\u00e9\u0081"
+        assert read_sizes
+    finally:
+        exporter._remove_transcoded_sources()
+    assert list(staging.iterdir()) == []
+
+
 def test_preflight_collects_all_eight_sources_before_hashing(tmp_path: Path) -> None:
     fixture = write_tiny_snapshot(tmp_path)
     package = load_package_contract(fixture.descriptor)
@@ -247,6 +302,30 @@ def test_fingerprint_captures_basename_hash_shape_and_stat_state(tmp_path: Path)
     )
 
 
+def test_final_review_fingerprint_reuses_exact_preflight_counts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Catches a second full CSV parse after exact preflight already counted rows."""
+    import scripts.typed_export as exporter
+
+    fixture = write_tiny_snapshot(tmp_path)
+    package = load_package_contract(fixture.descriptor)
+    states = preflight_sources(package, fixture.data_root)
+
+    def reject_duplicate_parse(*args: object, **kwargs: object) -> object:
+        raise AssertionError("fingerprinting reparsed CSV text")
+
+    monkeypatch.setattr(exporter.csv, "reader", reject_duplicate_parse)
+    fingerprints = fingerprint_sources(states)
+
+    assert [item.row_count for item in fingerprints] == [
+        state.resource.row_count for state in states
+    ]
+    assert [item.field_count for item in fingerprints] == [
+        len(state.resource.fields) for state in states
+    ]
+
+
 def test_verify_sources_unchanged_detects_mutation(tmp_path: Path) -> None:
     fixture = write_tiny_snapshot(tmp_path)
     package = load_package_contract(fixture.descriptor)
@@ -312,6 +391,7 @@ def test_export_config_is_immutable(tmp_path: Path) -> None:
         (lambda d: d["resources"][0].update(encoding="utf-16"), "unsupported encoding"),
         (lambda d: d["resources"][0]["dialect"].update(doubleQuote=False), "unsupported dialect"),
         (lambda d: d["resources"][0].pop("x-rowCount"), "x-rowCount"),
+        (lambda d: d["resources"][0]["schema"].pop("missingValues"), "missingValues"),
         (lambda d: d["resources"][0]["schema"].update(missingValues=["NA"]), "missingValues"),
         (lambda d: d["resources"][0]["schema"].update(primaryKey=["patient_id"]), "scalar primary key"),
         (lambda d: d["resources"][4]["x-logicalForeignKeys"][0].update(orphanRows=-1), "logical relationship count"),
@@ -327,6 +407,48 @@ def test_load_package_contract_rejects_malformed_contract(tmp_path: Path, mutati
 
     with pytest.raises(DescriptorError, match=message):
         load_package_contract(fixture.descriptor)
+
+
+@pytest.mark.parametrize(
+    "unsafe_path",
+    [
+        "/private/patients.csv",
+        "C:\\private\\patients.csv",
+        "\\\\server\\share\\patients.csv",
+        "..\\patients.csv",
+    ],
+)
+def test_final_review_descriptor_rejects_cross_platform_unsafe_resource_paths(
+    tmp_path: Path, unsafe_path: str
+) -> None:
+    """Catches POSIX or Windows absolute/traversal resource paths on any host."""
+    fixture = write_tiny_snapshot(tmp_path)
+    descriptor = json.loads(fixture.descriptor.read_text(encoding="utf-8"))
+    descriptor["resources"][0]["path"] = unsafe_path
+    fixture.descriptor.write_text(json.dumps(descriptor), encoding="utf-8")
+
+    with pytest.raises(DescriptorError, match="unsafe resource path") as caught:
+        load_package_contract(fixture.descriptor)
+
+    assert unsafe_path not in str(caught.value)
+
+
+def test_final_review_descriptor_rejects_duplicate_json_object_keys(
+    tmp_path: Path,
+) -> None:
+    """Catches ambiguous descriptors whose duplicate JSON keys would otherwise win."""
+    fixture = write_tiny_snapshot(tmp_path)
+    payload = fixture.descriptor.read_text(encoding="utf-8").replace(
+        '"name": "ppoc-pediatric-ehr"',
+        '"name": "SECRET-DUPLICATE",\n  "name": "ppoc-pediatric-ehr"',
+        1,
+    )
+    fixture.descriptor.write_text(payload, encoding="utf-8")
+
+    with pytest.raises(DescriptorError) as caught:
+        load_package_contract(fixture.descriptor)
+
+    assert "SECRET-DUPLICATE" not in str(caught.value)
 
 
 def test_load_package_contract_rejects_unknown_relationship_field(tmp_path: Path) -> None:
@@ -615,6 +737,140 @@ def test_bundle_start_permissions_collision_and_stale_recovery(tmp_path: Path) -
     (tmp_path / ".new.parquet-bundle.partial-deadbeefdeadbeef").mkdir()
     with pytest.raises(LifecycleError, match="new"):
         BundleRun.start(tmp_path / "new", "parquet-bundle", False)
+
+
+def test_final_review_bundle_start_prevalidates_replace_target_before_staging(
+    tmp_path: Path,
+) -> None:
+    """Catches restricted staging created before an invalid replace target is rejected."""
+    output = tmp_path / "published"
+    output.mkdir(mode=0o700)
+    unexpected = output / "unexpected"
+    unexpected.write_text("not an exporter bundle", encoding="utf-8")
+    os.chmod(unexpected, 0o600)
+
+    with pytest.raises(LifecycleError):
+        BundleRun.start(output, "parquet-bundle", True)
+
+    assert not list(tmp_path.glob(".published.parquet-bundle.partial-*"))
+
+
+@pytest.mark.parametrize(
+    ("export_name", "fallback"),
+    (("parquet", "parquet export failed"), ("duckdb", "duckdb export failed")),
+)
+@pytest.mark.parametrize("failure_point", ["fingerprint", "staging"])
+def test_final_review_export_setup_failures_are_redacted_for_library_callers(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    export_name: str,
+    fallback: str,
+    failure_point: str,
+) -> None:
+    """Catches raw fingerprinting or staging exceptions escaping the library boundary."""
+    import scripts.typed_export as exporter
+
+    fixture = write_tiny_snapshot(tmp_path / "input")
+    output = tmp_path / export_name
+    secret = "SECRET-SETUP-PATH-OR-VALUE"
+    if failure_point == "fingerprint":
+        monkeypatch.setattr(
+            exporter,
+            "fingerprint_sources",
+            lambda states: (_ for _ in ()).throw(OSError(secret)),
+        )
+    else:
+        original_mkdir = Path.mkdir
+
+        def fail_staging(path: Path, *args: object, **kwargs: object) -> None:
+            if ".partial-" in path.name:
+                raise OSError(secret)
+            original_mkdir(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "mkdir", fail_staging)
+    export_bundle = (
+        exporter.export_parquet_bundle
+        if export_name == "parquet"
+        else exporter.export_duckdb_bundle
+    )
+
+    with pytest.raises(ExportError) as caught:
+        export_bundle(ExportConfig(fixture.descriptor, fixture.data_root, output))
+
+    assert str(caught.value) in {fallback, "bundle staging failed"}
+    assert secret not in "".join(traceback.format_exception(caught.value))
+    assert not output.exists()
+
+
+@pytest.mark.parametrize("export_name", ["parquet", "duckdb"])
+def test_final_review_export_closes_duckdb_before_discarding_staging(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    export_name: str,
+) -> None:
+    """Catches failure cleanup that removes database/spill files before DuckDB closes."""
+    import scripts.typed_export as exporter
+
+    fixture = write_tiny_snapshot(tmp_path / "input")
+    real_connect = exporter.duckdb.connect
+    connections: list[duckdb.DuckDBPyConnection] = []
+
+    def tracking_connect(*args: object, **kwargs: object) -> duckdb.DuckDBPyConnection:
+        connection = real_connect(*args, **kwargs)
+        connections.append(connection)
+        return connection
+
+    monkeypatch.setattr(exporter.duckdb, "connect", tracking_connect)
+    execution_started = False
+
+    def invalid_query(*args: object, **kwargs: object) -> str:
+        nonlocal execution_started
+        execution_started = True
+        return "SELECT * FROM missing_private_source"
+
+    monkeypatch.setattr(exporter, "typed_csv_query", invalid_query)
+    original_remove_transcodes = exporter._remove_transcoded_sources
+    observed_transcode_cleanup_after_close = False
+
+    def assert_closed_then_remove_transcodes() -> None:
+        nonlocal observed_transcode_cleanup_after_close
+        assert execution_started
+        assert connections
+        with pytest.raises(duckdb.ConnectionException):
+            connections[-1].execute("SELECT 1")
+        observed_transcode_cleanup_after_close = True
+        original_remove_transcodes()
+
+    monkeypatch.setattr(
+        exporter,
+        "_remove_transcoded_sources",
+        assert_closed_then_remove_transcodes,
+    )
+    original_discard = exporter.BundleRun.discard_staging
+    observed_closed = False
+
+    def assert_closed_then_discard(run: BundleRun) -> None:
+        nonlocal observed_closed
+        assert connections
+        with pytest.raises(duckdb.ConnectionException):
+            connections[-1].execute("SELECT 1")
+        observed_closed = True
+        original_discard(run)
+
+    monkeypatch.setattr(exporter.BundleRun, "discard_staging", assert_closed_then_discard)
+    export_bundle = (
+        exporter.export_parquet_bundle
+        if export_name == "parquet"
+        else exporter.export_duckdb_bundle
+    )
+
+    with pytest.raises(ExportError):
+        export_bundle(
+            ExportConfig(fixture.descriptor, fixture.data_root, tmp_path / export_name)
+        )
+
+    assert observed_closed
+    assert observed_transcode_cleanup_after_close
 
 
 def test_bundle_replacement_restores_verified_old_bundle_after_post_backup_failure(tmp_path: Path) -> None:

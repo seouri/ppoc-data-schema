@@ -275,3 +275,37 @@ def test_verify_duckdb_bundle_rejects_rehashed_extra_build_constraint(tmp_path: 
     _rehash_database_bundle(output)
     with pytest.raises(LifecycleError):
         verify_duckdb_bundle(output, package)
+
+
+@pytest.mark.parametrize(
+    "object_ddl",
+    [
+        "CREATE TABLE shadow.extra_table (value INTEGER)",
+        "CREATE VIEW shadow.extra_view AS SELECT 1 AS value",
+        "CREATE SEQUENCE shadow.extra_sequence",
+        "CREATE MACRO shadow.extra_macro(value) AS value + 1",
+        (
+            "CREATE TABLE shadow.indexed_table (value INTEGER); "
+            "CREATE INDEX extra_index ON shadow.indexed_table(value)"
+        ),
+    ],
+)
+def test_final_review_verify_duckdb_rejects_user_objects_in_any_schema(
+    tmp_path: Path, object_ddl: str
+) -> None:
+    """Catches forbidden user objects hidden outside main and ppoc_meta."""
+    fixture = write_tiny_snapshot(tmp_path / "input")
+    package = load_package_contract(fixture.descriptor)
+    output = export_duckdb_bundle(
+        ExportConfig(fixture.descriptor, fixture.data_root, tmp_path / "duckdb")
+    )
+    connection = duckdb.connect(str(output / "ppoc.duckdb"))
+    try:
+        connection.execute("CREATE SCHEMA shadow")
+        connection.execute(object_ddl)
+    finally:
+        connection.close()
+    _rehash_database_bundle(output)
+
+    with pytest.raises(LifecycleError):
+        verify_duckdb_bundle(output, package)
