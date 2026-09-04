@@ -89,9 +89,7 @@ The Python usage example includes schema-driven pandas loading, declared CSV enc
 
 ## Analytical exports
 
-CSV plus `datapackage.json` remains the canonical package. Parquet and DuckDB outputs are derived restricted-data artifacts subject to the same IRB, Data Use Agreement, training, and information-security controls; the scripts refuse to write them inside this repository.
-
-With an approved secure source and output location, create a typed Parquet bundle or a materialized typed DuckDB bundle with explicit paths:
+CSV plus `datapackage.json` is the canonical package. These commands create verified typed Parquet and materialized DuckDB bundles from an approved source directory; keep the derived restricted-data outputs outside this checkout and under the same controls as the CSVs.
 
 ```sh
 uv run python scripts/export_parquet.py \
@@ -103,7 +101,7 @@ uv run python scripts/build_duckdb.py \
   --output /secure/ppoc-duckdb
 ```
 
-Both commands default to this repository's `datapackage.json`; pass `--descriptor` only to select another approved descriptor. `PPOC_DATA_ROOT` is a fallback for `--data-root`, not a replacement for an explicitly supplied `--data-root`. Outputs are non-overwriting by default; use `--replace` only to replace a verified prior bundle. See the [operator and consumer guide](schema/README.md) for inventories, validation and provenance records, recovery behavior, and read-only consumption examples. Do not use these commands against real data unless the source and destination are approved under the applicable controls.
+Both commands use this repository's `datapackage.json` by default, validate all eight resources, and refuse unsafe or existing destinations. Use `--descriptor` to select another approved descriptor and `--replace` only for a verified prior bundle. See the [operator and consumer guide](schema/README.md) for inventories, validation, provenance, recovery, and read-only consumption examples.
 
 ## Synthetic generator
 
