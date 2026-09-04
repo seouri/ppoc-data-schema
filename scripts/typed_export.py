@@ -6,6 +6,7 @@ import json
 import math
 import os
 import secrets
+import shutil
 import stat
 import subprocess
 import sys
@@ -1050,6 +1051,146 @@ def validate_artifact(
         records.extend(validate_foreign_keys(connection, resource, relations))
         records.extend(validate_logical_foreign_keys(connection, resource, relations))
     return tuple(records)
+
+
+def _arrow_schema(resource: ResourceContract) -> Any:
+    import pyarrow as pa
+
+    types = {"string": pa.string(), "integer": pa.int64(), "number": pa.float64()}
+    return pa.schema([pa.field(field.name, types[field.frictionless_type]) for field in resource.fields])
+
+
+def _verify_parquet_with_pyarrow(bundle: Path, package: PackageContract) -> None:
+    """Independently check typed Parquet metadata without exposing clinical values."""
+    import pyarrow.parquet as pq
+
+    root = Path(bundle)
+    for resource in package.resources:
+        try:
+            parquet = pq.ParquetFile(root / f"{resource.name}.parquet")
+            metadata = parquet.metadata
+            if metadata is None or parquet.schema_arrow != _arrow_schema(resource):
+                raise ValueError
+            if metadata.num_rows != resource.row_count:
+                raise ValueError
+            for row_group_index in range(metadata.num_row_groups):
+                row_group = metadata.row_group(row_group_index)
+                for column_index in range(row_group.num_columns):
+                    if row_group.column(column_index).compression != "ZSTD":
+                        raise ValueError
+        except Exception as exc:
+            raise ValidationError("Parquet artifact validation failed") from exc
+
+
+def _parquet_output_fingerprint(path: Path, resource: ResourceContract) -> OutputFingerprint:
+    return OutputFingerprint(
+        path.name,
+        path.stat().st_size,
+        sha256_file(path),
+        resource.row_count,
+        len(resource.fields),
+        tuple((field.name, str(_arrow_schema(resource).field(index).type)) for index, field in enumerate(resource.fields)),
+    )
+
+
+def _finish_parquet_manifest(
+    staging: Path,
+    package: PackageContract,
+    source_hashes: tuple[SourceFingerprint, ...],
+    records: tuple[ValidationRecord, ...],
+) -> None:
+    descriptor = staging / "source-datapackage.json"
+    descriptor.write_bytes(package.descriptor_bytes)
+    descriptor.chmod(0o600)
+    outputs = [
+        _parquet_output_fingerprint(staging / f"{resource.name}.parquet", resource)
+        for resource in package.resources
+    ]
+    outputs.append(OutputFingerprint(descriptor.name, descriptor.stat().st_size, sha256_file(descriptor)))
+    write_manifest(
+        staging / "manifest.json",
+        build_manifest("parquet-bundle", package, build_provenance(), source_hashes, tuple(outputs), records),
+    )
+
+
+def verify_parquet_bundle(path: Path, package: PackageContract) -> None:
+    """Verify exact inventory, integrity binding, and Parquet metadata of a promoted bundle."""
+    root = Path(path)
+    manifest = verify_bundle_manifest(root, "parquet-bundle", _BUNDLE_INVENTORIES["parquet-bundle"])
+    descriptor = manifest["descriptor"]
+    if (
+        manifest["package"] != {"name": package.name, "version": package.version, "snapshot": package.snapshot}
+        or descriptor != {"basename": package.descriptor_path.name, "size": len(package.descriptor_bytes), "sha256": package.descriptor_sha256}
+    ):
+        raise LifecycleError("existing bundle is not a verified bundle")
+    try:
+        copied_descriptor = root / "source-datapackage.json"
+        if copied_descriptor.read_bytes() != package.descriptor_bytes:
+            raise OSError
+        _verify_parquet_with_pyarrow(root, package)
+        expected_outputs = {
+            f"{resource.name}.parquet": _parquet_output_fingerprint(root / f"{resource.name}.parquet", resource)
+            for resource in package.resources
+        }
+        expected_outputs["source-datapackage.json"] = OutputFingerprint(
+            "source-datapackage.json", len(package.descriptor_bytes), package.descriptor_sha256
+        )
+        for output in manifest["outputs"]:
+            expected = expected_outputs.get(output["basename"])
+            if expected is None or output != {
+                "basename": expected.basename, "size": expected.size, "sha256": expected.sha256,
+                "rowCount": expected.row_count, "fieldCount": expected.field_count,
+                "columns": [list(column) for column in expected.columns],
+                "tables": [list(table) for table in expected.tables],
+            }:
+                raise OSError
+    except (OSError, ValidationError) as exc:
+        raise LifecycleError("existing bundle is not a verified bundle") from exc
+
+
+def export_parquet_bundle(config: ExportConfig) -> Path:
+    """Export one verified, typed, unpartitioned Zstandard Parquet bundle."""
+    package = load_package_contract(config.descriptor)
+    sources = preflight_sources(package, config.data_root)
+    output = ensure_safe_output(ROOT, package, sources, config.output)
+    source_hashes = fingerprint_sources(sources)
+    run = BundleRun.start(output, "parquet-bundle", config.replace)
+    connection: duckdb.DuckDBPyConnection | None = None
+    try:
+        connection = duckdb.connect()
+        spill = run.staging / ".duckdb-tmp"
+        spill.mkdir(mode=0o700)
+        spill.chmod(0o700)
+        connection.execute(f"SET temp_directory={quote_literal(str(spill))}")
+        for source in sources:
+            target = run.staging / f"{source.resource.name}.parquet"
+            query = typed_csv_query(source.resource, source.path)
+            connection.execute(
+                f"COPY ({query}) TO {quote_literal(str(target))} "
+                "(FORMAT PARQUET, COMPRESSION ZSTD)"
+            )
+            target.chmod(0o600)
+        records = validate_artifact(
+            connection,
+            package,
+            lambda resource: f"read_parquet({quote_literal(str(run.staging / (resource.name + '.parquet')))})",
+        )
+        _verify_parquet_with_pyarrow(run.staging, package)
+        verify_sources_unchanged(sources)
+        connection.close()
+        connection = None
+        shutil.rmtree(spill)
+        _finish_parquet_manifest(run.staging, package, source_hashes, records)
+        return run.promote(lambda bundle: verify_parquet_bundle(bundle, package))
+    except Exception as error:  # noqa: BLE001 - public export boundary must redact dependencies.
+        try:
+            run.discard_staging()
+        except (LifecycleError, OSError):
+            raise ExportError("parquet export failed") from None
+        raise _redacted_duckdb_error(error, package, "parquet export failed") from None
+    finally:
+        if connection is not None:
+            connection.close()
 
 
 def _redacted_duckdb_error(error: Exception, package: PackageContract, fallback: str) -> ExportError:
