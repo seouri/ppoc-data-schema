@@ -1208,6 +1208,153 @@ def _redacted_duckdb_error(error: Exception, package: PackageContract, fallback:
     return ExportError(fallback)
 
 
+def resource_table_ddl(resource: ResourceContract) -> str:
+    """Build the constrained physical table definition for one descriptor resource."""
+    columns: list[str] = []
+    for field in resource.fields:
+        column = quote_identifier(field.name)
+        clauses = [column, field.duckdb_type]
+        if field.required:
+            clauses.append("NOT NULL")
+        checks: list[str] = []
+        if field.enum is not None:
+            checks.append(f"{column} IN ({', '.join(quote_literal(value) for value in field.enum)})")
+        if field.minimum is not None:
+            checks.append(f"{column} >= {quote_literal(field.minimum)}")
+        if field.maximum is not None:
+            checks.append(f"{column} <= {quote_literal(field.maximum)}")
+        if checks:
+            clauses.append("CHECK (" + " AND ".join(checks) + ")")
+        columns.append(" ".join(clauses))
+    return f"CREATE TABLE main.{quote_identifier(resource.name)} (" + ", ".join(columns) + ")"
+
+
+_DUCKDB_META_DDL = """
+CREATE SCHEMA ppoc_meta;
+CREATE TABLE ppoc_meta.build (manifest_version INTEGER NOT NULL, package_name VARCHAR NOT NULL, package_version VARCHAR NOT NULL, snapshot VARCHAR NOT NULL, created_at_utc VARCHAR NOT NULL, descriptor_sha256 VARCHAR NOT NULL, python_version VARCHAR NOT NULL, duckdb_version VARCHAR NOT NULL, pyarrow_version VARCHAR NOT NULL, exporter_git_revision VARCHAR, exporter_git_dirty BOOLEAN, exporter_module_sha256 VARCHAR NOT NULL);
+CREATE TABLE ppoc_meta.resources (ordinal INTEGER NOT NULL, resource_name VARCHAR NOT NULL, source_basename VARCHAR NOT NULL, source_size BIGINT NOT NULL, source_sha256 VARCHAR NOT NULL, row_count BIGINT NOT NULL, table_name VARCHAR NOT NULL, field_count BIGINT NOT NULL);
+CREATE TABLE ppoc_meta.descriptor (descriptor_sha256 VARCHAR NOT NULL, descriptor_json VARCHAR NOT NULL);
+CREATE TABLE ppoc_meta.validations (ordinal INTEGER NOT NULL, resource_name VARCHAR NOT NULL, field_name VARCHAR, rule VARCHAR NOT NULL, expected_json VARCHAR NOT NULL, observed_json VARCHAR NOT NULL, status VARCHAR NOT NULL CHECK (status = 'PASS'));
+"""
+
+
+def _canonical_json(value: object) -> str:
+    def thaw(item: object) -> object:
+        if isinstance(item, Mapping):
+            return {key: thaw(value) for key, value in item.items()}
+        if isinstance(item, tuple):
+            return [thaw(value) for value in item]
+        return item
+
+    return json.dumps(thaw(value), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _duckdb_output_fingerprint(path: Path, package: PackageContract) -> OutputFingerprint:
+    return OutputFingerprint(path.name, path.stat().st_size, sha256_file(path), tables=tuple((resource.name, resource.row_count, len(resource.fields)) for resource in package.resources))
+
+
+def _populate_duckdb_metadata(connection: duckdb.DuckDBPyConnection, package: PackageContract, provenance: BuildProvenance, source_hashes: tuple[SourceFingerprint, ...], records: tuple[ValidationRecord, ...]) -> None:
+    connection.execute(_DUCKDB_META_DDL)
+    connection.execute("INSERT INTO ppoc_meta.build VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (1, package.name, package.version, package.snapshot, provenance.created_at_utc, package.descriptor_sha256, provenance.python_version, provenance.duckdb_version, provenance.pyarrow_version, provenance.exporter_git_revision, provenance.exporter_git_dirty, provenance.exporter_module_sha256))
+    connection.executemany("INSERT INTO ppoc_meta.resources VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [(ordinal, source.resource_name, source.basename, source.size, source.sha256, source.row_count, source.resource_name, source.field_count) for ordinal, source in enumerate(source_hashes, start=1)])
+    connection.execute("INSERT INTO ppoc_meta.descriptor VALUES (?, ?)", (package.descriptor_sha256, _canonical_json(package.descriptor)))
+    connection.executemany("INSERT INTO ppoc_meta.validations VALUES (?, ?, ?, ?, ?, ?, ?)", [(ordinal, record.resource, record.field, record.rule, _canonical_json(record.expected), _canonical_json(record.observed), record.status) for ordinal, record in enumerate(records, start=1)])
+
+
+def _verify_duckdb_database(path: Path, package: PackageContract, manifest: dict[str, Any] | None = None) -> None:
+    connection: duckdb.DuckDBPyConnection | None = None
+    try:
+        connection = duckdb.connect(str(path), read_only=True)
+        tables = set(connection.execute("SELECT table_schema, table_name FROM information_schema.tables WHERE table_schema IN ('main', 'ppoc_meta')").fetchall())
+        expected_tables = {*(('main', resource.name) for resource in package.resources), *(('ppoc_meta', name) for name in ('build', 'resources', 'descriptor', 'validations'))}
+        if tables != expected_tables:
+            raise ValueError
+        for resource in package.resources:
+            columns = connection.execute(f"DESCRIBE main.{quote_identifier(resource.name)}").fetchall()
+            expected_columns = [(field.name, field.duckdb_type, "NO" if field.required else "YES") for field in resource.fields]
+            if [(column[0], column[1], column[2]) for column in columns] != expected_columns or connection.execute(f"SELECT count(*) FROM main.{quote_identifier(resource.name)}").fetchone() != (resource.row_count,):
+                raise ValueError
+        constraints = connection.execute("SELECT constraint_type FROM duckdb_constraints() WHERE schema_name = 'main'").fetchall()
+        if any(kind in {'PRIMARY KEY', 'FOREIGN KEY'} for (kind,) in constraints) or connection.execute("SELECT count(*) FROM duckdb_indexes()").fetchone() != (0,) or connection.execute("SELECT count(*) FROM duckdb_views() WHERE schema_name IN ('main', 'ppoc_meta') AND NOT internal").fetchone() != (0,) or connection.execute("SELECT count(*) FROM duckdb_sequences() WHERE schema_name IN ('main', 'ppoc_meta')").fetchone() != (0,) or connection.execute("SELECT count(*) FROM duckdb_functions() WHERE schema_name IN ('main', 'ppoc_meta') AND function_type = 'macro' AND NOT internal").fetchone() != (0,):
+            raise ValueError
+        build = connection.execute("SELECT * FROM ppoc_meta.build").fetchall()
+        if len(build) != 1 or build[0][0:4] != (1, package.name, package.version, package.snapshot) or build[0][5] != package.descriptor_sha256:
+            raise ValueError
+        descriptor = connection.execute("SELECT descriptor_sha256, descriptor_json FROM ppoc_meta.descriptor").fetchall()
+        if descriptor != [(package.descriptor_sha256, _canonical_json(package.descriptor))]:
+            raise ValueError
+        resources = connection.execute("SELECT ordinal, resource_name, row_count, table_name, field_count FROM ppoc_meta.resources ORDER BY ordinal").fetchall()
+        if resources != [(index, item.name, item.row_count, item.name, len(item.fields)) for index, item in enumerate(package.resources, start=1)]:
+            raise ValueError
+        validations = connection.execute("SELECT expected_json, observed_json, status FROM ppoc_meta.validations ORDER BY ordinal").fetchall()
+        if not validations or any(status != 'PASS' or _canonical_json(json.loads(expected)) != expected or _canonical_json(json.loads(observed)) != observed for expected, observed, status in validations):
+            raise ValueError
+        if manifest is not None:
+            output = _duckdb_output_fingerprint(path, package)
+            expected_output = {"basename": output.basename, "size": output.size, "sha256": output.sha256, "rowCount": None, "fieldCount": None, "columns": [], "tables": [list(item) for item in output.tables]}
+            expected_build = manifest["build"]
+            expected_sources = [
+                (index, item["resource"], item["basename"], item["size"], item["sha256"], item["rowCount"], item["resource"], item["fieldCount"])
+                for index, item in enumerate(manifest["sources"], start=1)
+            ]
+            source_metadata = connection.execute("SELECT * FROM ppoc_meta.resources ORDER BY ordinal").fetchall()
+            if manifest["outputs"] != [expected_output] or build[0] != (1, package.name, package.version, package.snapshot, expected_build["createdAtUtc"], package.descriptor_sha256, expected_build["pythonVersion"], expected_build["duckdbVersion"], expected_build["pyarrowVersion"], expected_build["exporterGitRevision"], expected_build["exporterGitDirty"], expected_build["exporterModuleSha256"]) or source_metadata != expected_sources:
+                raise ValueError
+    except Exception as exc:
+        raise ValidationError("DuckDB artifact validation failed") from exc
+    finally:
+        if connection is not None:
+            connection.close()
+
+
+def verify_duckdb_bundle(path: Path, package: PackageContract) -> None:
+    """Verify inventory, manifest binding, and read-only physical DuckDB contents."""
+    root = Path(path)
+    try:
+        manifest = verify_bundle_manifest(root, "duckdb-bundle", _BUNDLE_INVENTORIES["duckdb-bundle"])
+        if manifest["package"] != {"name": package.name, "version": package.version, "snapshot": package.snapshot} or manifest["descriptor"] != {"basename": package.descriptor_path.name, "size": len(package.descriptor_bytes), "sha256": package.descriptor_sha256}:
+            raise ValueError
+        _verify_duckdb_database(root / "ppoc.duckdb", package, manifest)
+    except (LifecycleError, ValidationError, OSError, ValueError) as exc:
+        raise LifecycleError("existing bundle is not a verified bundle") from exc
+
+
+def export_duckdb_bundle(config: ExportConfig) -> Path:
+    """Export a verified, materialized typed DuckDB analytical bundle."""
+    package = load_package_contract(config.descriptor)
+    sources = preflight_sources(package, config.data_root)
+    output = ensure_safe_output(ROOT, package, sources, config.output)
+    source_hashes = fingerprint_sources(sources)
+    provenance = build_provenance()
+    run = BundleRun.start(output, "duckdb-bundle", config.replace)
+    connection: duckdb.DuckDBPyConnection | None = None
+    try:
+        database = run.staging / "ppoc.duckdb"
+        connection = duckdb.connect(str(database))
+        for source in sources:
+            connection.execute(resource_table_ddl(source.resource))
+            connection.execute(f"INSERT INTO main.{quote_identifier(source.resource.name)} {typed_csv_query(source.resource, source.path)}")
+        records = validate_artifact(connection, package, lambda resource: f"main.{quote_identifier(resource.name)}")
+        verify_sources_unchanged(sources)
+        _populate_duckdb_metadata(connection, package, provenance, source_hashes, records)
+        connection.execute("CHECKPOINT")
+        connection.close()
+        connection = None
+        database.chmod(0o600)
+        _verify_duckdb_database(database, package)
+        write_manifest(run.staging / "manifest.json", build_manifest("duckdb-bundle", package, provenance, source_hashes, (_duckdb_output_fingerprint(database, package),), records))
+        return run.promote(lambda bundle: verify_duckdb_bundle(bundle, package))
+    except Exception as error:  # noqa: BLE001 - public export boundary must redact dependencies.
+        try:
+            run.discard_staging()
+        except (LifecycleError, OSError):
+            raise ExportError("duckdb export failed") from None
+        raise _redacted_duckdb_error(error, package, "duckdb export failed") from None
+    finally:
+        if connection is not None:
+            connection.close()
+
+
 @atexit.register
 def _remove_transcoded_sources() -> None:
     for path in _TRANSCODED_SOURCES:
