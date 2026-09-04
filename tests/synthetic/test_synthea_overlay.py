@@ -70,7 +70,7 @@ def test_overlay_is_self_contained_and_has_a_stable_digest() -> None:
         for path in files
     )
     assert hashlib.sha256(payload).hexdigest() == (
-        "074efc0db22d19a71c872012756d0a7dd86e1336f267357694e3222de56ef85e"
+        "0b7ba5505213a7b7f7cdc05c233f5256ce893dca1f48a7183c948e95f8cb27b0"
     )
 
 
