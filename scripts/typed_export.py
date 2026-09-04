@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import atexit
+import csv
 import json
 import math
 import stat
+import tempfile
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path, PurePosixPath
@@ -24,6 +27,7 @@ EXPECTED_RESOURCE_NAMES = (
 TYPE_MAP = {"string": "VARCHAR", "integer": "BIGINT", "number": "DOUBLE"}
 SUPPORTED_CONSTRAINTS = frozenset({"required", "enum", "minimum", "maximum"})
 ENCODING_MAP = {"utf-8": "utf-8", "iso-8859-1": "latin-1"}
+_TRANSCODED_SOURCES: list[Path] = []
 
 
 class ExportError(RuntimeError):
@@ -88,6 +92,26 @@ class PackageContract:
     descriptor_sha256: str
     descriptor: dict[str, Any]
     resources: tuple[ResourceContract, ...]
+
+
+@dataclass(frozen=True)
+class SourceState:
+    resource: ResourceContract
+    path: Path
+    device: int
+    inode: int
+    size: int
+    mtime_ns: int
+
+
+@dataclass(frozen=True)
+class SourceFingerprint:
+    resource_name: str
+    basename: str
+    size: int
+    sha256: str
+    row_count: int
+    field_count: int
 
 
 def load_package_contract(path: Path) -> PackageContract:
@@ -319,3 +343,179 @@ def _freeze(value: Any) -> Any:
     if isinstance(value, list):
         return tuple(_freeze(item) for item in value)
     return value
+
+
+def quote_identifier(value: str) -> str:
+    return '"' + value.replace('"', '""') + '"'
+
+
+def quote_literal(value: str | int | float | bool) -> str:  # noqa: PYI041
+    if isinstance(value, bool):
+        return "TRUE" if value else "FALSE"
+    if isinstance(value, (int, float)):
+        return repr(value)
+    return "'" + value.replace("'", "''") + "'"
+
+
+def _source_path(data_root: Path, resource: ResourceContract) -> Path:
+    return data_root / resource.csv_path
+
+
+def _source_stat(path: Path) -> Any:
+    metadata = path.lstat()
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+        raise OSError("source is not a regular file")
+    return metadata
+
+
+def _source_failure(resource: ResourceContract, data_root: Path) -> str:
+    path = _source_path(data_root, resource)
+    try:
+        metadata = _source_stat(path)
+        with path.open("r", encoding=ENCODING_MAP[resource.encoding], newline="") as handle:
+            header = next(csv.reader(handle, delimiter=resource.delimiter, quotechar=resource.quote_char))
+        expected = [field.name for field in resource.fields]
+        if header != expected:
+            return resource.name
+        if metadata.st_size < 0:
+            return resource.name
+    except (OSError, StopIteration, UnicodeError, csv.Error, ValueError):
+        return resource.name
+    return ""
+
+
+def preflight_sources(package: PackageContract, data_root: Path) -> tuple[SourceState, ...]:
+    root = Path(data_root).resolve()
+    failures = [failure for resource in package.resources if (failure := _source_failure(resource, root))]
+    if failures:
+        raise ExportError("source preflight failed for resources: " + ", ".join(failures))
+    states = []
+    for resource in package.resources:
+        path = _source_path(root, resource)
+        metadata = _source_stat(path)
+        states.append(
+            SourceState(resource, path, metadata.st_dev, metadata.st_ino, metadata.st_size, metadata.st_mtime_ns)
+        )
+    return tuple(states)
+
+
+def fingerprint_sources(states: tuple[SourceState, ...] | list[SourceState]) -> tuple[SourceFingerprint, ...]:
+    fingerprints = []
+    for state in states:
+        digest = sha256()
+        with state.path.open("rb") as handle:
+            while block := handle.read(1024 * 1024):
+                digest.update(block)
+        with state.path.open("r", encoding=ENCODING_MAP[state.resource.encoding], newline="") as handle:
+            rows = csv.reader(handle, delimiter=state.resource.delimiter, quotechar=state.resource.quote_char)
+            field_count = len(next(rows))
+            row_count = sum(1 for _ in rows)
+        fingerprints.append(
+            SourceFingerprint(
+                state.resource.name,
+                state.path.name,
+                state.size,
+                digest.hexdigest(),
+                row_count,
+                field_count,
+            )
+        )
+    return tuple(fingerprints)
+
+
+def verify_sources_unchanged(states: tuple[SourceState, ...] | list[SourceState]) -> None:
+    changed = []
+    for state in states:
+        try:
+            metadata = _source_stat(state.path)
+        except OSError:
+            changed.append(state.resource.name)
+            continue
+        current = (metadata.st_dev, metadata.st_ino, metadata.st_size, metadata.st_mtime_ns)
+        captured = (state.device, state.inode, state.size, state.mtime_ns)
+        if current != captured:
+            changed.append(state.resource.name)
+    if changed:
+        raise ExportError("source changed during export for resources: " + ", ".join(changed))
+
+
+def _integer_expression(resource: str, field: str) -> str:
+    raw = quote_identifier(field)
+    error = quote_literal(f"{resource}.{field} failed integer conversion")
+    return (
+        f"CASE WHEN {raw} IS NULL OR {raw} = '' THEN NULL "
+        f"WHEN NOT regexp_full_match({raw}, '^[+-]?[0-9]+$') "
+        f"OR try_cast({raw} AS BIGINT) IS NULL THEN error({error}) "
+        f"ELSE cast({raw} AS BIGINT) END"
+    )
+
+
+def _number_expression(resource: str, field: str) -> str:
+    raw = quote_identifier(field)
+    error = quote_literal(f"{resource}.{field} failed number conversion")
+    return (
+        f"CASE WHEN {raw} IS NULL OR {raw} = '' THEN NULL "
+        f"WHEN try_cast({raw} AS DOUBLE) IS NULL "
+        f"OR NOT isfinite(try_cast({raw} AS DOUBLE)) THEN error({error}) "
+        f"ELSE cast({raw} AS DOUBLE) END"
+    )
+
+
+def typed_csv_query(resource: ResourceContract, source_path: Path) -> str:
+    csv_path = Path(source_path)
+    duckdb_encoding = ENCODING_MAP[resource.encoding]
+    if resource.encoding == "iso-8859-1":
+        # DuckDB's latin-1 codec rejects C1 bytes that are valid ISO-8859-1.
+        # Decode strictly here, then let DuckDB read the UTF-8 projection; the
+        # descriptor source remains untouched.
+        decoded = csv_path.read_bytes().decode("iso-8859-1")
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", newline="", delete=False
+        ) as temporary:
+            temporary.write(decoded)
+        csv_path = Path(temporary.name)
+        _TRANSCODED_SOURCES.append(csv_path)
+        duckdb_encoding = "utf-8"
+    columns = "{" + ", ".join(
+        f"{quote_literal(field.name)}: {quote_literal('VARCHAR')}" for field in resource.fields
+    ) + "}"
+    read_csv = (
+        f"read_csv({quote_literal(str(csv_path))}, header=true, all_varchar=true, "
+        f"columns={columns}, delim={quote_literal(resource.delimiter)}, "
+        f"quote={quote_literal(resource.quote_char)}, escape={quote_literal(resource.quote_char)}, "
+        f"encoding={quote_literal(duckdb_encoding)})"
+    )
+    projections = []
+    for field in resource.fields:
+        if field.frictionless_type == "integer":
+            expression = _integer_expression(resource.name, field.name)
+        elif field.frictionless_type == "number":
+            expression = _number_expression(resource.name, field.name)
+        else:
+            expression = f"NULLIF({quote_identifier(field.name)}, '')"
+        projections.append(f"{expression} AS {quote_identifier(field.name)}")
+    return f"SELECT {', '.join(projections)} FROM {read_csv}"
+
+
+def _redacted_duckdb_error(error: Exception, package: PackageContract, fallback: str) -> ExportError:
+    message = str(error)
+    tokens = {
+        f"{resource.name}.{field.name} failed {kind} conversion"
+        for resource in package.resources
+        for field in resource.fields
+        for kind in ("integer", "number")
+        if field.frictionless_type in {"integer", "number"}
+    }
+    for token in tokens:
+        if token in message:
+            return ExportError(token)
+    return ExportError(fallback)
+
+
+@atexit.register
+def _remove_transcoded_sources() -> None:
+    for path in _TRANSCODED_SOURCES:
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass

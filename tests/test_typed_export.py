@@ -1,21 +1,198 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import math
 import os
 from dataclasses import FrozenInstanceError
 from pathlib import Path
 
+import duckdb
 import pytest
 
 from scripts.typed_export import (
     EXPECTED_RESOURCE_NAMES,
     DescriptorError,
     ExportConfig,
+    ExportError,
+    SourceFingerprint,
+    fingerprint_sources,
     load_package_contract,
+    preflight_sources,
+    quote_identifier,
+    quote_literal,
+    typed_csv_query,
+    verify_sources_unchanged,
 )
-from tests.analytical_export_fixtures import write_tiny_snapshot
+from tests.analytical_export_fixtures import (
+    replace_csv_cell,
+    replace_labs_cell_bytes,
+    write_tiny_snapshot,
+)
+
+
+def test_typed_csv_query_maps_values_without_inference(tmp_path: Path) -> None:
+    fixture = write_tiny_snapshot(tmp_path)
+    package = load_package_contract(fixture.descriptor)
+    states = preflight_sources(package, fixture.data_root)
+    visits = next(resource for resource in package.resources if resource.name == "visits")
+    source = next(state for state in states if state.resource.name == "visits")
+
+    rows = duckdb.connect().execute(typed_csv_query(visits, source.path)).fetchall()
+
+    assert rows[0][0:3] == ("SYN-P001", "SYN-V001", 100)
+
+
+@pytest.mark.parametrize("bad_value", ["1.0", "1e3", "9223372036854775808"])
+def test_integer_conversion_fails_without_echoing_value(tmp_path: Path, bad_value: str) -> None:
+    fixture = write_tiny_snapshot(tmp_path)
+    replace_csv_cell(fixture, "visits", "age_in_days", bad_value)
+    package = load_package_contract(fixture.descriptor)
+    source = preflight_sources(package, fixture.data_root)[2]
+
+    with pytest.raises(Exception) as caught:
+        duckdb.connect().execute(typed_csv_query(package.resources[2], source.path)).fetchall()
+
+    assert "visits.age_in_days failed integer conversion" in str(caught.value)
+    assert bad_value not in str(caught.value)
+
+
+def test_labs_uses_literal_iso_8859_1_decoding(tmp_path: Path) -> None:
+    fixture = write_tiny_snapshot(tmp_path)
+    replace_labs_cell_bytes(fixture, "result_value", b"caf\xe9\x81")
+    package = load_package_contract(fixture.descriptor)
+    source = preflight_sources(package, fixture.data_root)[4]
+    query = typed_csv_query(package.resources[4], source.path)
+
+    value = duckdb.connect().execute(
+        f'SELECT "result_value" FROM ({query}) AS typed_labs'
+    ).fetchone()[0]
+
+    assert value == "caf\u00e9\u0081"
+
+
+def test_preflight_collects_all_eight_sources_before_hashing(tmp_path: Path) -> None:
+    fixture = write_tiny_snapshot(tmp_path)
+    package = load_package_contract(fixture.descriptor)
+
+    states = preflight_sources(package, fixture.data_root)
+
+    assert [state.resource.name for state in states] == list(EXPECTED_RESOURCE_NAMES)
+    assert all(state.path.parent == fixture.data_root.resolve() for state in states)
+
+
+def test_preflight_rejects_header_order_mismatch_without_echoing_header(tmp_path: Path) -> None:
+    fixture = write_tiny_snapshot(tmp_path)
+    path = fixture.data_root / "patients.csv"
+    lines = path.read_bytes().splitlines(keepends=True)
+    lines[0] = b"SECRET-PATIENT-HEADER\n"
+    path.write_bytes(b"".join(lines))
+    package = load_package_contract(fixture.descriptor)
+
+    with pytest.raises(ExportError, match="patients") as error:
+        preflight_sources(package, fixture.data_root)
+
+    assert "SECRET-PATIENT-HEADER" not in str(error.value)
+
+
+@pytest.mark.parametrize("kind", ["missing", "symlink", "fifo"])
+def test_preflight_rejects_missing_symlinked_and_nonregular_sources(tmp_path: Path, kind: str) -> None:
+    fixture = write_tiny_snapshot(tmp_path)
+    path = fixture.data_root / "patients.csv"
+    if kind == "missing":
+        path.unlink()
+    elif kind == "symlink":
+        target = tmp_path / "elsewhere.csv"
+        target.write_bytes(path.read_bytes())
+        path.unlink()
+        path.symlink_to(target)
+    else:
+        path.unlink()
+        os.mkfifo(path)
+    package = load_package_contract(fixture.descriptor)
+
+    with pytest.raises(ExportError, match="patients"):
+        preflight_sources(package, fixture.data_root)
+
+
+def test_preflight_rejects_invalid_utf8_without_echoing_source_content(tmp_path: Path) -> None:
+    fixture = write_tiny_snapshot(tmp_path)
+    path = fixture.data_root / "patients.csv"
+    path.write_bytes(path.read_bytes().replace(b"SYN-P001", b"SECRET-\xff"))
+    package = load_package_contract(fixture.descriptor)
+
+    with pytest.raises(ExportError, match="patients") as error:
+        preflight_sources(package, fixture.data_root)
+
+    assert "SECRET" not in str(error.value)
+
+
+def test_typed_csv_query_maps_empty_strings_to_null_and_preserves_strings(tmp_path: Path) -> None:
+    fixture = write_tiny_snapshot(tmp_path)
+    replace_csv_cell(fixture, "visits", "enc_diag_1", "")
+    package = load_package_contract(fixture.descriptor)
+    source = preflight_sources(package, fixture.data_root)[2]
+
+    rows = duckdb.connect().execute(typed_csv_query(package.resources[2], source.path)).fetchall()
+
+    assert rows[0][3] == "Office Visit"
+    assert rows[0][10] is None
+
+
+@pytest.mark.parametrize("bad_value", ["NaN", "Inf", "1e309"])
+def test_number_conversion_requires_finite_double(tmp_path: Path, bad_value: str) -> None:
+    fixture = write_tiny_snapshot(tmp_path)
+    replace_csv_cell(fixture, "visits", "weight_oz", bad_value)
+    package = load_package_contract(fixture.descriptor)
+    source = preflight_sources(package, fixture.data_root)[2]
+
+    with pytest.raises(Exception) as caught:
+        duckdb.connect().execute(typed_csv_query(package.resources[2], source.path)).fetchall()
+
+    assert "visits.weight_oz failed number conversion" in str(caught.value)
+    assert bad_value not in str(caught.value)
+
+
+def test_sql_quoting_escapes_identifiers_and_literals() -> None:
+    assert quote_identifier('a"b') == '"a""b"'
+    assert quote_literal("a'b") == "'a''b'"
+    assert quote_literal(True) == "TRUE"
+    assert quote_literal(3.5) == "3.5"
+
+
+def test_fingerprint_captures_basename_hash_shape_and_stat_state(tmp_path: Path) -> None:
+    fixture = write_tiny_snapshot(tmp_path)
+    package = load_package_contract(fixture.descriptor)
+    states = preflight_sources(package, fixture.data_root)
+
+    fingerprints = fingerprint_sources(states)
+    first = fingerprints[0]
+    first_state = states[0]
+
+    assert isinstance(first, SourceFingerprint)
+    assert first.basename == "patients.csv"
+    assert first.size == first_state.size
+    assert first.sha256 == hashlib.sha256(first_state.path.read_bytes()).hexdigest()
+    assert first.row_count == 2
+    assert first.field_count == len(first_state.resource.fields)
+    assert (first_state.device, first_state.inode, first_state.size, first_state.mtime_ns) == (
+        first_state.path.stat().st_dev,
+        first_state.path.stat().st_ino,
+        first_state.path.stat().st_size,
+        first_state.path.stat().st_mtime_ns,
+    )
+
+
+def test_verify_sources_unchanged_detects_mutation(tmp_path: Path) -> None:
+    fixture = write_tiny_snapshot(tmp_path)
+    package = load_package_contract(fixture.descriptor)
+    states = preflight_sources(package, fixture.data_root)
+    path = fixture.data_root / "patients.csv"
+    path.write_bytes(path.read_bytes() + b"\n")
+
+    with pytest.raises(ExportError, match="patients"):
+        verify_sources_unchanged(states)
 
 
 def test_load_package_contract_preserves_order_and_types(tmp_path: Path) -> None:
