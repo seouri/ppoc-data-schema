@@ -112,15 +112,16 @@ Both commands use this repository's `datapackage.json` by default, validate all 
 
 | Output | Use |
 | --- | --- |
-| [`ppoc-eda.pdf`](reports/ppoc-eda/ppoc-eda.pdf) | 49 pages; GitHub renders it in the browser |
+| [`ppoc-eda.pdf`](reports/ppoc-eda/ppoc-eda.pdf) | 52 pages; GitHub renders it in the browser |
 | [`index.html`](reports/ppoc-eda/index.html) | self-contained — inline figures, sticky contents, find-in-page |
 | [`ppoc-eda.md`](reports/ppoc-eda/ppoc-eda.md) | text mirror, for grep and pull-request review |
 | [`findings.json`](reports/ppoc-eda/findings.json) | every number the report states, keyed by finding |
 
-36 findings across 9 parts, with 19 figures and 51 tables, all measured from the typed DuckDB bundle for snapshot `2026-08-24`. Three parts are worth reading before designing anything:
+37 findings across 9 parts, with 19 figures and 54 tables, all measured from the typed DuckDB bundle for snapshot `2026-08-24`. Four parts are worth reading before designing anything:
 
 - **1.4, how this cohort was built.** The 250,588 patients are what remains after four exclusions applied upstream, including the removal of every patient carrying a diagnosis, medication, or lab that occurred fewer than 11 times — 61% of ICD-10 codes, 56% of medications, and 72% of lab procedures left with their patients. **Rare-condition, rare-exposure, and mortality questions are foreclosed by construction, not merely sparse.**
 - **2.1, checklist coverage.** All 44 items of the general checklist mapped to covered, partial, or not applicable, with a reason. Nine checks cannot be run against this extract at all and four more only partly; knowing which ones saves a day looking for fields that do not exist.
+- **3.9, counting diagnosis codes.** ICD-10 is a hierarchy and matching a code exactly counts one node of it rather than the condition. 1,204 of the 1,327 categories in this extract never appear as a bare code, so an exact-match query for them returns zero.
 - **7.1, the artifact catalogue.** One row per known recording or derivation artifact, with its scale in this snapshot and whether it can be repaired.
 
 Rebuild it from an approved bundle:

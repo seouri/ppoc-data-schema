@@ -10,6 +10,7 @@ from __future__ import annotations
 from ..context import Context
 from ..findings import Column as C
 from ..findings import Figure, Finding, Para, Table, probe
+from .icd import patient_codes
 
 ENC_DIAG = ", ".join(f"enc_diag_{i}" for i in range(1, 34))
 ICD_CSV = "data/icd10cm-tabular-2026.csv"
@@ -63,6 +64,21 @@ def diagnoses(ctx: Context) -> list[Finding]:
         FROM f LEFT JOIN l ON replace(f.code, '.', '') = l.code
         ORDER BY f.entries DESC""")
 
+    pc = patient_codes(ctx)
+    cats, silent = ctx.one(f"""
+        SELECT count(DISTINCT substr(code, 1, 3)),
+               (SELECT count(*) FROM (
+                   SELECT substr(code, 1, 3) AS c FROM {pc} GROUP BY 1
+                   HAVING sum(CASE WHEN code = substr(code, 1, 3) THEN 1 ELSE 0 END) = 0))
+        FROM {pc}""")
+    rollup = [{"category": c, "descr": d, "patients": n} for c, d, n in ctx.q(f"""
+        WITH f AS (SELECT substr(code, 1, 3) AS cat,
+                          count(DISTINCT patient_id) AS n
+                   FROM {pc} GROUP BY 1 ORDER BY n DESC LIMIT 15),
+        l AS ({ICD_LOOKUP})
+        SELECT f.cat, coalesce(l.descr, '[not in the ICD-10 lookup]'), f.n
+        FROM f LEFT JOIN l ON f.cat = l.code ORDER BY f.n DESC""")]
+
     pl_rows, pl_pts, pl_resolved = ctx.one(
         "SELECT count(*), count(DISTINCT patient_id), "
         "count(resolved_date_age_in_days) FROM problem_list")
@@ -74,7 +90,8 @@ def diagnoses(ctx: Context) -> list[Finding]:
                 "with_any_share": 100.0 * with_any / ctx.scalar(
                     "SELECT count(*) FROM visits"),
                 "pl_rows": pl_rows, "pl_pts": pl_pts,
-                "pl_resolved_share": 100.0 * pl_resolved / pl_rows},
+                "pl_resolved_share": 100.0 * pl_resolved / pl_rows,
+                "cats": cats, "silent": silent},
     )
     f.blocks = [
         Para("Diagnoses arrive two ways: up to 33 coded slots per encounter, and a "
@@ -102,6 +119,16 @@ def diagnoses(ctx: Context) -> list[Finding]:
                C("pts", "patients", ",", align="right")],
               [{"code": c, "descr": d, "entries": e, "pts": p}
                for c, d, e, p in top_pl]),
+        Para("**Both tables above count literal codes**, which is the right unit "
+             "for describing what gets typed but the wrong one for counting a "
+             "condition. Rolling the same data up to the three-character category "
+             "changes which diagnoses appear at all — see 3.9, and note that "
+             "{silent:,} of the {cats:,} categories in this extract never appear as "
+             "a bare code, so an exact-match query for them returns zero.",
+             role="warning"),
+        Table("t-dx-rollup", "The same diagnoses rolled up to their ICD-10 category",
+              [C("category", "category"), C("descr", "description"),
+               C("patients", "patients", ",", align="right")], rollup),
         Para("**Implications for analysis.** Encounter diagnoses and problem-list "
              "entries answer different questions and should not be pooled without "
              "saying why: the first is what was coded at a contact, the second is "

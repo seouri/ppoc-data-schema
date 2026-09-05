@@ -11,6 +11,7 @@ from __future__ import annotations
 from ..context import Context
 from ..findings import Column as C
 from ..findings import Figure, Finding, Para, Table, probe
+from .icd import patient_codes
 
 ICD_CSV = "data/icd10cm-tabular-2026.csv"
 ICD_LOOKUP = f"""
@@ -112,23 +113,50 @@ def flags(ctx: Context) -> list[Finding]:
 
 @probe("growth.codes", "5.7")
 def codes(ctx: Context) -> list[Finding]:
+    pc = patient_codes(ctx)
     dx_cols = [c for c in ctx.columns("patients_augmented")
                if c.startswith("dx_age_years_")]
 
     def to_icd(col: str) -> str:
         return col.replace("dx_age_years_", "").upper().replace("_", ".")
 
-    union = " UNION ALL ".join(
-        f"SELECT '{to_icd(c)}' AS code, count({c}) AS pts, "
-        f"quantile_cont({c}, 0.5) AS med FROM patients_augmented"
-        for c in dx_cols)
-    rows = ctx.q(f"""
-        WITH f AS ({union}), l AS ({ICD_LOOKUP})
-        SELECT f.code, coalesce(l.descr, '[not in the ICD-10 lookup]'), f.pts, f.med
-        FROM f LEFT JOIN l ON replace(f.code, '.', '') = l.code
-        WHERE f.pts > 0 ORDER BY f.pts DESC""")
-    shown = [{"code": c, "descr": d, "patients": p, "median_age": m}
-             for c, d, p, m in rows if ctx.suppress(p) is not None]
+    tracked = [(c, to_icd(c)) for c in dx_cols]
+    values = ", ".join(f"('{icd}')" for _, icd in tracked)
+    # Literal and subtree patient counts for every tracked code, in one pass.
+    counted = dict(ctx.q(f"""
+        WITH t(code) AS (VALUES {values})
+        SELECT t.code,
+               list_value(count(DISTINCT CASE WHEN pc.code = t.code
+                                              THEN pc.patient_id END),
+                          count(DISTINCT pc.patient_id))
+        FROM t LEFT JOIN {pc} pc ON starts_with(pc.code, t.code)
+        GROUP BY t.code"""))
+    derived = {icd: ctx.scalar(f"SELECT count({col}) FROM patients_augmented")
+               for col, icd in tracked}
+
+    rows = []
+    for _, icd in tracked:
+        exact, tree = counted.get(icd, [0, 0])
+        rows.append({"code": icd, "derived": derived[icd], "exact": exact,
+                     "tree": tree, "extra": tree - exact})
+    lookup = dict(ctx.q(f"""
+        WITH t(code) AS (VALUES {values}), l AS ({ICD_LOOKUP})
+        SELECT t.code, coalesce(l.descr, '[not in the ICD-10 lookup]')
+        FROM t LEFT JOIN l ON replace(t.code, '.', '') = l.code"""))
+    for r in rows:
+        r["descr"] = lookup.get(r["code"], "[not in the ICD-10 lookup]")
+    rows.sort(key=lambda r: -r["tree"])
+    shown = [r for r in rows if ctx.suppress(r["tree"]) is not None]
+
+    zero_exact = [r for r in rows if r["tree"] > 0 and r["exact"] == 0]
+    has_desc = [r for r in rows if r["tree"] > r["exact"]]
+    no_desc = [r for r in rows if r["tree"] == r["exact"]]
+    hierarchical = sum(1 for r in rows if r["derived"] == r["tree"])
+    # A flat derivation would show here: the literal count matching the derived
+    # column on some code whose subtree count differs. None does.
+    flat_evidence = sum(1 for r in rows
+                        if r["tree"] > r["exact"] and r["derived"] == r["exact"])
+    short = [r for r in rows if r["derived"] not in (r["exact"], r["tree"])]
 
     ref_total = ctx.scalar("SELECT count(*) FROM referrals")
     fam_rows = []
@@ -140,8 +168,7 @@ def codes(ctx: Context) -> list[Finding]:
             f"FROM referrals WHERE lower(requested_specialty) LIKE '{pattern}'")
         matched += n
         fam_rows.append({"family": label, "referrals": n, "patients": pts,
-                         "median_age": med,
-                         "share": 100.0 * n / ref_total})
+                         "median_age": med, "share": 100.0 * n / ref_total})
     fam_rows.append({"family": "all other specialties",
                      "referrals": ref_total - matched, "patients": None,
                      "median_age": None,
@@ -153,8 +180,10 @@ def codes(ctx: Context) -> list[Finding]:
         values={"n_codes": len(dx_cols), "n_shown": len(shown),
                 "ref_total": ref_total, "matched": matched,
                 "matched_share": 100.0 * matched / ref_total,
-                "top_code": shown[0]["code"] if shown else "n/a",
-                "top_pts": shown[0]["patients"] if shown else 0},
+                "zero_exact": len(zero_exact), "has_desc": len(has_desc),
+                "no_desc": len(no_desc), "hierarchical": hierarchical,
+                "flat_evidence": flat_evidence, "short": len(short),
+                "short_codes": ", ".join(f"`{r['code']}`" for r in short)},
     )
     f.blocks = [
         Para("This extract was assembled around growth. Cohort entry required a "
@@ -163,15 +192,36 @@ def codes(ctx: Context) -> list[Finding]:
              "diagnosis codes was first recorded. That panel is a design choice made "
              "upstream, and knowing which codes are in it is the difference between "
              "using the derived columns and guessing at them."),
+        Para("Because ICD-10 is a hierarchy (3.9), each code is counted here twice: "
+             "as a literal string, and as a subtree including every descendant. The "
+             "gap between the two columns is what a flat query would miss."),
         Table("t-growth-codes", "The tracked growth-relevant diagnosis codes",
               [C("code", "ICD-10"), C("descr", "description"),
-               C("patients", "patients", ",", align="right"),
-               C("median_age", "median age at first record", ".2f", " y",
-                 align="right")], shown,
+               C("derived", "derived column", ",", align="right"),
+               C("exact", "patients, literal code", ",", align="right"),
+               C("tree", "patients, code and descendants", ",", align="right"),
+               C("extra", "missed by a flat count", ",", align="right")], shown,
               note="Codes carried by fewer patients than the suppression threshold "
                    "are omitted. Counts are recorded frequencies inside a cohort "
                    "that excluded every patient with a code seen fewer than 11 "
-                   "times, so this panel cannot be read as prevalence."),
+                   "times (1.4), so this panel cannot be read as prevalence."),
+        Para("**The upstream derivation is hierarchical, and the two count columns "
+             "verify it.** {has_desc} of the {n_codes} tracked codes have "
+             "descendants in this extract; the other {no_desc} have none, so both "
+             "readings coincide and they cannot distinguish the two rules. Of the "
+             "{has_desc} that can, **{flat_evidence} match the literal count** — in "
+             "every case the derived column follows the subtree. The evidence is "
+             "starkest because **all {zero_exact} of those codes never appear as a "
+             "literal string at all**: an exact-match query returns zero patients "
+             "for `E10`, `P07`, `K50` and the rest, while the derived column "
+             "correctly reports hundreds or thousands."),
+        Para("{short} codes ({short_codes}) sit slightly below their subtree count. "
+             "The shortfall is explained rather than unexplained: those patients "
+             "carry the code only on a problem-list entry with no noted date, so no "
+             "age could be determined. The derived column therefore means *the "
+             "patient carries the code or one of its descendants **and** an age for "
+             "it can be established* — not simply that the patient carries it.",
+             role="method"),
         Para("The referral resource shows the same orientation from the action side. "
              "Grouping requested specialties into the families a growth question "
              "would reach for accounts for {matched:,} of {ref_total:,} referrals "
@@ -182,12 +232,13 @@ def codes(ctx: Context) -> list[Finding]:
                C("share", "share of all referrals", ".2f", "%", align="right"),
                C("patients", "patients", ",", align="right"),
                C("median_age", "median age", ".2f", " y", align="right")], fam_rows),
-        Para("**Implications for analysis.** These two tables describe what the "
-             "upstream pipeline chose to track, not what is clinically relevant to "
-             "growth in general: a code absent from the panel may still be present "
-             "in the encounter and problem-list resources of 5.1, and a specialty "
-             "family here is a string match on a free-text field rather than a "
-             "clinical taxonomy. Use the panel to understand the derived columns; go "
-             "to the raw diagnosis resources for anything else.", role="implication"),
+        Para("**Implications for analysis.** Use the derived columns when you want "
+             "an age at first record and are content with the panel upstream chose; "
+             "go to the raw diagnosis resources for anything else, and match by "
+             "prefix when you do. These tables describe what the pipeline tracks, "
+             "not what is clinically relevant to growth in general: a code absent "
+             "from the panel may still be present in 5.1, and a specialty family "
+             "here is a string match on a free-text field rather than a clinical "
+             "taxonomy.", role="implication"),
     ]
     return [f]

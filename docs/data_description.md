@@ -16,6 +16,7 @@ This dataset contains de-identified electronic health record (EHR) data for 250,
 **Important Notes for LLMs:**
 - All temporal data is de-identified; use `age_in_days` for chronological analysis (convert to years: divide by 365.25).
 - Missing data is common in anthropometric and result fields; handle NaNs appropriately.
+- **ICD-10 is a hierarchy; do not match codes exactly.** `E10` is type 1 diabetes and `E10.9` is type 1 diabetes without complications. Matching a code exactly counts one node of the tree, not the condition. In this extract 1,204 of the 1,327 three-character categories **never appear as a bare code**, so an exact-match query for them returns zero while the condition is present. Match on a prefix (`code LIKE 'E10%'`) or roll up to the level you mean, and say which level that is.
 - **Not every null means missing.** A null `result_flag` means a *normal* result; a null `resolved_date_age_in_days` means a problem that is *currently active*. Treating either as missing discards the signal.
 - **This is a selected cohort, not a primary-care population.** Every patient met a growth-measurement requirement and carries no rare diagnosis, medication, or lab. Do not read any frequency here as a population rate.
 - ICD-10 codes follow standard medical conventions; validate formats.
@@ -142,6 +143,7 @@ When using this dataset in prompts:
 - **Augmented Insights:** "Use Z-scores from visits_augmented.csv for standardized growth comparisons."
 
 ## Important Considerations
+- **Diagnosis counting:** ICD-10 is hierarchical. Count a code together with its descendants, not as a literal string; see the exploratory analysis at section 3.9 for the size of the effect and section 5.7 for a worked verification against the derived columns.
 - **Selection:** The cohort is heavily selected (see *Cohort Construction*). Rare conditions, deceased patients, and two practices are absent by construction; frequencies are not prevalences.
 - **Data Quality:** Outliers in measurements; non-response in demographics; BIV-filtered values in augmented files. Null does not always mean missing — see the notes on `result_flag` and `resolved_date_age_in_days`.
 - **Privacy:** De-identified; avoid re-identification.

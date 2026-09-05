@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Guard the split between the data report and the project overlay.
+"""Guard the split between the data report and the files that cite it.
 
 Two passes.
 
@@ -8,8 +8,8 @@ report once did. That list was verified against the project report's own text
 while it still contained the measurements; the comparison now runs against the
 list, so deleting a probe is caught as a regression.
 
-Quoted-figure consistency: the overlay and the README are maintained by hand and
-defer to the data report, so every figure they quote must still appear there.
+Quoted-figure consistency: the overlay, the README and the dataset description
+are maintained by hand and defer to the data report, so every figure they quote must still appear there.
 This is what stops them drifting apart. The README's checklist counts were wrong
 on their first writing, which is why they are checked rather than trusted.
 
@@ -29,6 +29,7 @@ import sys
 REPO = pathlib.Path(__file__).resolve().parent.parent
 OVERLAY = REPO / "reports" / "growth-chart-literacy-real-data-eda.md"
 README = REPO / "README.md"
+DATA_DESC = REPO / "docs" / "data_description.md"
 NEW_MD = REPO / "reports" / "ppoc-eda" / "ppoc-eda.md"
 
 EXCLUDED = ("Retained in the project overlay, not the data report: "
@@ -108,6 +109,9 @@ QUOTED_FIGURES = [
     ("56%", "1.4", "of medications removed with their patients"),
     ("72%", "1.4", "of lab procedures removed with their patients"),
     ("44", "2.1", "checklist items"),
+    ("1,204", "3.9", "categories that never appear as a bare code"),
+    ("1,327", "3.9", "three-character categories after rollup"),
+    # data_description.md quotes the same hierarchy figures
 ]
 
 
@@ -123,7 +127,8 @@ def main() -> int:
         print("the neutral report has not been built", file=sys.stderr)
         return 2
     hay = haystack()
-    quoting = OVERLAY.read_text(encoding="utf-8") + README.read_text(encoding="utf-8")
+    quoting = "".join(f.read_text(encoding="utf-8")
+                      for f in (OVERLAY, README, DATA_DESC))
 
     covered, excluded, missing = [], [], []
     for section, name, pattern in TOPICS:

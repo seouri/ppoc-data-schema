@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-05T19:18:15Z",
+  "generated_at": "2026-09-05T20:20:11Z",
   "parts": [
     {
       "findings": [
@@ -1794,6 +1794,114 @@
             "h_median": 3.175,
             "h_multi": 2958,
             "h_share": 31.845841785
+          }
+        },
+        {
+          "artifact": {
+            "kind": "capture",
+            "name": "Diagnosis codes counted flat rather than as a hierarchy",
+            "recoverable": "Yes — match on a prefix, or roll up before counting",
+            "scale": "1,204 of 1,327 categories never appear as a bare three-character code"
+          },
+          "id": "icd.hierarchy",
+          "part": "3.9",
+          "tables": [
+            {
+              "caption": "The most common diagnoses, counted flat and rolled up",
+              "columns": [
+                "rank",
+                "literal",
+                "literal_n",
+                "category",
+                "category_n"
+              ],
+              "id": "t-icd-rollup",
+              "rows": [
+                {
+                  "category": "Z00",
+                  "category_n": 250354,
+                  "literal": "Z00.129",
+                  "literal_n": 247963,
+                  "rank": 1
+                },
+                {
+                  "category": "Z23",
+                  "category_n": 244617,
+                  "literal": "Z23",
+                  "literal_n": 244617,
+                  "rank": 2
+                },
+                {
+                  "category": "Z13",
+                  "category_n": 188758,
+                  "literal": "Z13.0",
+                  "literal_n": 135783,
+                  "rank": 3
+                },
+                {
+                  "category": "J06",
+                  "category_n": 134368,
+                  "literal": "J06.9",
+                  "literal_n": 134337,
+                  "rank": 4
+                },
+                {
+                  "category": "H66",
+                  "category_n": 132693,
+                  "literal": "Z13.88",
+                  "literal_n": 128880,
+                  "rank": 5
+                },
+                {
+                  "category": "J02",
+                  "category_n": 131194,
+                  "literal": "R50.9",
+                  "literal_n": 116527,
+                  "rank": 6
+                }
+              ]
+            },
+            {
+              "caption": "The children a flat count misses",
+              "columns": [
+                "code",
+                "n"
+              ],
+              "id": "t-icd-example",
+              "rows": [
+                {
+                  "code": "H66.001",
+                  "n": 49713
+                },
+                {
+                  "code": "H66.002",
+                  "n": 44040
+                },
+                {
+                  "code": "H66.003",
+                  "n": 35569
+                },
+                {
+                  "code": "H66.90",
+                  "n": 34331
+                },
+                {
+                  "code": "H66.91",
+                  "n": 26536
+                }
+              ]
+            }
+          ],
+          "title": "Counting diagnosis codes: ICD-10 is a hierarchy",
+          "values": {
+            "cats": 1327,
+            "distinct": 8965,
+            "ex_cat": "H66",
+            "ex_flat": 0,
+            "ex_tree": 132693,
+            "silent": 1204,
+            "silent_share": 90.7309721176,
+            "three_char": 123
           }
         }
       ],
@@ -3986,15 +4094,103 @@
                   "pts": 12915
                 }
               ]
+            },
+            {
+              "caption": "The same diagnoses rolled up to their ICD-10 category",
+              "columns": [
+                "category",
+                "descr",
+                "patients"
+              ],
+              "id": "t-dx-rollup",
+              "rows": [
+                {
+                  "category": "Z00",
+                  "descr": "Encounter for general examination without complaint, suspected or reported diagnosis",
+                  "patients": 250354
+                },
+                {
+                  "category": "Z23",
+                  "descr": "Encounter for immunization",
+                  "patients": 244617
+                },
+                {
+                  "category": "Z13",
+                  "descr": "Encounter for screening for other diseases and disorders",
+                  "patients": 188758
+                },
+                {
+                  "category": "J06",
+                  "descr": "Acute upper respiratory infections of multiple and unspecified sites",
+                  "patients": 134368
+                },
+                {
+                  "category": "H66",
+                  "descr": "Suppurative and unspecified otitis media",
+                  "patients": 132693
+                },
+                {
+                  "category": "J02",
+                  "descr": "Acute pharyngitis",
+                  "patients": 131194
+                },
+                {
+                  "category": "R50",
+                  "descr": "Fever of other and unknown origin",
+                  "patients": 119263
+                },
+                {
+                  "category": "R05",
+                  "descr": "Cough",
+                  "patients": 115563
+                },
+                {
+                  "category": "Z71",
+                  "descr": "Persons encountering health services for other counseling and medical advice, not elsewhere classified",
+                  "patients": 99130
+                },
+                {
+                  "category": "Z20",
+                  "descr": "Contact with and (suspected) exposure to communicable diseases",
+                  "patients": 78217
+                },
+                {
+                  "category": "R63",
+                  "descr": "Symptoms and signs concerning food and fluid intake",
+                  "patients": 76097
+                },
+                {
+                  "category": "B34",
+                  "descr": "Viral infection of unspecified site",
+                  "patients": 74947
+                },
+                {
+                  "category": "H10",
+                  "descr": "Conjunctivitis",
+                  "patients": 74858
+                },
+                {
+                  "category": "Z68",
+                  "descr": "Body mass index [BMI]",
+                  "patients": 64527
+                },
+                {
+                  "category": "R21",
+                  "descr": "Rash and other nonspecific skin eruption",
+                  "patients": 63738
+                }
+              ]
             }
           ],
           "title": "Diagnoses",
           "values": {
+            "cats": 1327,
             "enc_pat": 250563,
             "enc_total": 14714503,
             "pl_pts": 238823,
             "pl_resolved_share": 44.3328318468,
             "pl_rows": 1709584,
+            "silent": 1204,
             "with_any": 6154801,
             "with_any_share": 94.769829669
           }
@@ -4673,178 +4869,236 @@
               "columns": [
                 "code",
                 "descr",
-                "patients",
-                "median_age"
+                "derived",
+                "exact",
+                "tree",
+                "extra"
               ],
               "id": "t-growth-codes",
               "rows": [
                 {
                   "code": "P92.6",
+                  "derived": 14428,
                   "descr": "Failure to thrive in newborn",
-                  "median_age": 0.025,
-                  "patients": 14428
+                  "exact": 14428,
+                  "extra": 0,
+                  "tree": 14428
                 },
                 {
                   "code": "P07",
+                  "derived": 11014,
                   "descr": "Disorders of newborn related to short gestation and low birth weight, not elsewhere classified",
-                  "median_age": 0.03,
-                  "patients": 11014
+                  "exact": 0,
+                  "extra": 11029,
+                  "tree": 11029
                 },
                 {
                   "code": "P05",
+                  "derived": 4069,
                   "descr": "Disorders of newborn related to slow fetal growth and fetal malnutrition",
-                  "median_age": 0.011,
-                  "patients": 4069
+                  "exact": 0,
+                  "extra": 4074,
+                  "tree": 4074
                 },
                 {
                   "code": "E30.1",
+                  "derived": 3405,
                   "descr": "Precocious puberty",
-                  "median_age": 7.871,
-                  "patients": 3405
+                  "exact": 3406,
+                  "extra": 0,
+                  "tree": 3406
                 },
                 {
                   "code": "P70",
+                  "derived": 3353,
                   "descr": "Transitory disorders of carbohydrate metabolism specific to newborn",
-                  "median_age": 0.003,
-                  "patients": 3353
+                  "exact": 0,
+                  "extra": 3354,
+                  "tree": 3354
                 },
                 {
                   "code": "K90.0",
+                  "derived": 898,
                   "descr": "Celiac disease",
-                  "median_age": 7.199,
-                  "patients": 898
+                  "exact": 898,
+                  "extra": 0,
+                  "tree": 898
                 },
                 {
                   "code": "E10",
+                  "derived": 491,
                   "descr": "Type 1 diabetes mellitus",
-                  "median_age": 7.858,
-                  "patients": 491
+                  "exact": 0,
+                  "extra": 491,
+                  "tree": 491
                 },
                 {
                   "code": "E34.3",
+                  "derived": 447,
                   "descr": "Short stature due to endocrine disorder",
-                  "median_age": 10.387,
-                  "patients": 447
+                  "exact": 0,
+                  "extra": 447,
+                  "tree": 447
                 },
                 {
                   "code": "E30.0",
+                  "derived": 419,
                   "descr": "Delayed puberty",
-                  "median_age": 13.637,
-                  "patients": 419
+                  "exact": 419,
+                  "extra": 0,
+                  "tree": 419
                 },
                 {
                   "code": "E03.9",
+                  "derived": 309,
                   "descr": "Hypothyroidism, unspecified",
-                  "median_age": 6.004,
-                  "patients": 309
+                  "exact": 309,
+                  "extra": 0,
+                  "tree": 309
                 },
                 {
                   "code": "Q90",
+                  "derived": 205,
                   "descr": "Down syndrome",
-                  "median_age": 0.049,
-                  "patients": 205
+                  "exact": 0,
+                  "extra": 205,
+                  "tree": 205
                 },
                 {
                   "code": "E23.0",
+                  "derived": 150,
                   "descr": "Hypopituitarism",
-                  "median_age": 9.0265,
-                  "patients": 150
+                  "exact": 150,
+                  "extra": 0,
+                  "tree": 150
                 },
                 {
                   "code": "K50",
+                  "derived": 113,
                   "descr": "Crohn's disease [regional enteritis]",
-                  "median_age": 11.064,
-                  "patients": 113
+                  "exact": 0,
+                  "extra": 113,
+                  "tree": 113
                 },
                 {
                   "code": "E34.4",
+                  "derived": 83,
                   "descr": "Constitutional tall stature",
-                  "median_age": 4.047,
-                  "patients": 83
+                  "exact": 83,
+                  "extra": 0,
+                  "tree": 83
                 },
                 {
                   "code": "N18",
+                  "derived": 70,
                   "descr": "Chronic kidney disease (CKD)",
-                  "median_age": 4.5355,
-                  "patients": 70
+                  "exact": 0,
+                  "extra": 70,
+                  "tree": 70
                 },
                 {
                   "code": "K51",
+                  "derived": 62,
                   "descr": "Ulcerative colitis",
-                  "median_age": 11.9505,
-                  "patients": 62
+                  "exact": 0,
+                  "extra": 62,
+                  "tree": 62
                 },
                 {
                   "code": "Q87.1",
+                  "derived": 58,
                   "descr": "Congenital malformation syndromes predominantly associated with short stature",
-                  "median_age": 3.261,
-                  "patients": 58
+                  "exact": 0,
+                  "extra": 58,
+                  "tree": 58
                 },
                 {
                   "code": "P04.3",
+                  "derived": 53,
                   "descr": "Newborn affected by maternal use of alcohol",
-                  "median_age": 0.498,
-                  "patients": 53
+                  "exact": 53,
+                  "extra": 0,
+                  "tree": 53
                 },
                 {
                   "code": "Q87.3",
+                  "derived": 46,
                   "descr": "Congenital malformation syndromes involving early overgrowth",
-                  "median_age": 1.763,
-                  "patients": 46
+                  "exact": 46,
+                  "extra": 0,
+                  "tree": 46
                 },
                 {
                   "code": "Q98.4",
+                  "derived": 42,
                   "descr": "Klinefelter syndrome, unspecified",
-                  "median_age": 0.0205,
-                  "patients": 42
+                  "exact": 42,
+                  "extra": 0,
+                  "tree": 42
                 },
                 {
                   "code": "Q96",
+                  "derived": 36,
                   "descr": "Turner's syndrome",
-                  "median_age": 0.145,
-                  "patients": 36
+                  "exact": 0,
+                  "extra": 36,
+                  "tree": 36
                 },
                 {
                   "code": "Q87.2",
+                  "derived": 32,
                   "descr": "Congenital malformation syndromes predominantly involving limbs",
-                  "median_age": 1.7985,
-                  "patients": 32
+                  "exact": 32,
+                  "extra": 0,
+                  "tree": 32
                 },
                 {
                   "code": "E23.6",
+                  "derived": 31,
                   "descr": "Other disorders of pituitary gland",
-                  "median_age": 8.285,
-                  "patients": 31
+                  "exact": 31,
+                  "extra": 0,
+                  "tree": 31
                 },
                 {
                   "code": "Q98.0",
+                  "derived": 26,
                   "descr": "Klinefelter syndrome karyotype 47, XXY",
-                  "median_age": 0.018,
-                  "patients": 26
-                },
-                {
-                  "code": "Q98.5",
-                  "descr": "Karyotype 47, XYY",
-                  "median_age": 0.014,
-                  "patients": 17
+                  "exact": 26,
+                  "extra": 0,
+                  "tree": 26
                 },
                 {
                   "code": "Q87.4",
+                  "derived": 17,
                   "descr": "Marfan syndrome",
-                  "median_age": 5.624,
-                  "patients": 17
+                  "exact": 0,
+                  "extra": 17,
+                  "tree": 17
+                },
+                {
+                  "code": "Q98.5",
+                  "derived": 17,
+                  "descr": "Karyotype 47, XYY",
+                  "exact": 17,
+                  "extra": 0,
+                  "tree": 17
                 },
                 {
                   "code": "Q77",
+                  "derived": 15,
                   "descr": "Osteochondrodysplasia with defects of growth of tubular bones and spine",
-                  "median_age": 5.131,
-                  "patients": 15
+                  "exact": 0,
+                  "extra": 15,
+                  "tree": 15
                 },
                 {
                   "code": "Q78.0",
+                  "derived": 10,
                   "descr": "Osteogenesis imperfecta",
-                  "median_age": 1.6335,
-                  "patients": 10
+                  "exact": 10,
+                  "extra": 0,
+                  "tree": 10
                 }
               ]
             },
@@ -4906,13 +5160,18 @@
           ],
           "title": "The extract's growth orientation: tracked codes and referral pathways",
           "values": {
+            "flat_evidence": 0,
+            "has_desc": 14,
+            "hierarchical": 29,
             "matched": 36182,
             "matched_share": 10.3428265971,
             "n_codes": 33,
             "n_shown": 28,
+            "no_desc": 19,
             "ref_total": 349827,
-            "top_code": "P92.6",
-            "top_pts": 14428
+            "short": 4,
+            "short_codes": "`P07`, `P05`, `E30.1`, `P70`",
+            "zero_exact": 14
           }
         }
       ],
@@ -6608,6 +6867,13 @@
                   "where": "3.8"
                 },
                 {
+                  "artifact": "Diagnosis codes counted flat rather than as a hierarchy",
+                  "class": "capture",
+                  "recoverable": "Yes — match on a prefix, or roll up before counting",
+                  "scale": "1,204 of 1,327 categories never appear as a bare three-character code",
+                  "where": "3.9"
+                },
+                {
                   "artifact": "Terminal-digit heaping on the imperial recording grid",
                   "class": "capture",
                   "recoverable": "No — it is the precision the measurement actually has",
@@ -6656,7 +6922,7 @@
           "values": {
             "kindlist": "capture, derivation, linkage, selection",
             "kinds": 4,
-            "n": 14
+            "n": 15
           }
         }
       ],

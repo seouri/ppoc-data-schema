@@ -437,6 +437,39 @@ The height spread is the notable one. A median disagreement of 3.17 cm between t
 
 **Implications for analysis.** These days need a tie rule chosen before the analysis, not left to whatever order the query returns. Taking the minimum, the maximum, the mean, or the first row are all defensible and they give different answers; what is not defensible is not knowing which one you took. Deduplicate the patient-day before any window function, since 4.8 shows the derivation layer's own ambiguity on exactly these rows.
 
+### 3.9 Counting diagnosis codes: ICD-10 is a hierarchy
+
+ICD-10 is a tree, not a list. `E10` is type 1 diabetes and `E10.9` is type 1 diabetes without complications; a chart may carry either, and which one it carries is a coding decision rather than a clinical one. **A query that matches a code exactly therefore counts one node of the tree, not the concept.** This is the single most common way to undercount a diagnosis in this extract, and it fails silently — the query returns a number, just the wrong one.
+
+The extract carries 8,965 distinct codes across its two diagnosis resources, of which only 123 are bare three-character categories. Rolling every code up to its category gives 1,327 categories, and **1,204 of those (90.7%) never appear as a bare code at all**. For those, an exact-match query returns zero while the condition is present.
+
+The effect is large enough to reorder a frequency table. Below, the six most common literal codes beside the six most common categories after rollup.
+
+**The most common diagnoses, counted flat and rolled up**
+
+| rank | literal code | patients | category | patients |
+| --- | --- | --- | --- | --- |
+| 1 | Z00.129 | 247,963 | Z00 | 250,354 |
+| 2 | Z23 | 244,617 | Z23 | 244,617 |
+| 3 | Z13.0 | 135,783 | Z13 | 188,758 |
+| 4 | J06.9 | 134,337 | J06 | 134,368 |
+| 5 | Z13.88 | 128,880 | H66 | 132,693 |
+| 6 | R50.9 | 116,527 | J02 | 131,194 |
+
+`H66` is the clearest case. Counted literally it has 0 patients, because clinicians code the laterality-specific children instead. Counted as a subtree it has 132,693 — enough to place it among the most common conditions in the extract, where a flat count makes it invisible.
+
+**The children a flat count misses**
+
+| code | patients |
+| --- | --- |
+| H66.001 | 49,713 |
+| H66.002 | 44,040 |
+| H66.003 | 35,569 |
+| H66.90 | 34,331 |
+| H66.91 | 26,536 |
+
+**Implications for analysis.** Match on a prefix (`code LIKE 'E10%'`) or roll up to the level you actually mean before counting, and say which level that is. Two cautions on prefixes: a code is a string, so compare against the code with its decimal point as stored, and a prefix of a prefix will over-match — `E1` is not a category. Where a frequency table is the deliverable rather than an input, report the rolled-up count and the literal one side by side, since the gap between them is itself a description of local coding practice.
+
 ## 4. Anthropometrics
 
 The richest and most artifact-prone measurements in the extract.
@@ -796,6 +829,28 @@ The problem list holds 1,709,584 entries for 238,823 patients, of which 44.3% ca
 | F90.2 | Attention-deficit hyperactivity disorder, combined type | 12,918 | 12,918 |
 | IMO0002 | [not in the ICD-10 lookup] | 12,915 | 12,915 |
 
+**Both tables above count literal codes**, which is the right unit for describing what gets typed but the wrong one for counting a condition. Rolling the same data up to the three-character category changes which diagnoses appear at all — see 3.9, and note that 1,204 of the 1,327 categories in this extract never appear as a bare code, so an exact-match query for them returns zero.
+
+**The same diagnoses rolled up to their ICD-10 category**
+
+| category | description | patients |
+| --- | --- | --- |
+| Z00 | Encounter for general examination without complaint, suspected or reported diagnosis | 250,354 |
+| Z23 | Encounter for immunization | 244,617 |
+| Z13 | Encounter for screening for other diseases and disorders | 188,758 |
+| J06 | Acute upper respiratory infections of multiple and unspecified sites | 134,368 |
+| H66 | Suppurative and unspecified otitis media | 132,693 |
+| J02 | Acute pharyngitis | 131,194 |
+| R50 | Fever of other and unknown origin | 119,263 |
+| R05 | Cough | 115,563 |
+| Z71 | Persons encountering health services for other counseling and medical advice, not elsewhere classified | 99,130 |
+| Z20 | Contact with and (suspected) exposure to communicable diseases | 78,217 |
+| R63 | Symptoms and signs concerning food and fluid intake | 76,097 |
+| B34 | Viral infection of unspecified site | 74,947 |
+| H10 | Conjunctivitis | 74,858 |
+| Z68 | Body mass index [BMI] | 64,527 |
+| R21 | Rash and other nonspecific skin eruption | 63,738 |
+
 **Implications for analysis.** Encounter diagnoses and problem-list entries answer different questions and should not be pooled without saying why: the first is what was coded at a contact, the second is what the chart asserts about the child, including resolved history. Neither is an adjudicated clinical truth, and a code's absence is not evidence a condition was absent.
 
 ### 5.2 Laboratory results
@@ -976,40 +1031,46 @@ The augmented patient layer carries seven boolean flags and a block of per-patie
 
 This extract was assembled around growth. Cohort entry required a growth-measurement history (1.4), and the augmentation layer records, for each patient, the age at which any of 33 specific diagnosis codes was first recorded. That panel is a design choice made upstream, and knowing which codes are in it is the difference between using the derived columns and guessing at them.
 
+Because ICD-10 is a hierarchy (3.9), each code is counted here twice: as a literal string, and as a subtree including every descendant. The gap between the two columns is what a flat query would miss.
+
 **The tracked growth-relevant diagnosis codes**
 
-| ICD-10 | description | patients | median age at first record |
-| --- | --- | --- | --- |
-| P92.6 | Failure to thrive in newborn | 14,428 | 0.03 y |
-| P07 | Disorders of newborn related to short gestation and low birth weight, not elsewhere classified | 11,014 | 0.03 y |
-| P05 | Disorders of newborn related to slow fetal growth and fetal malnutrition | 4,069 | 0.01 y |
-| E30.1 | Precocious puberty | 3,405 | 7.87 y |
-| P70 | Transitory disorders of carbohydrate metabolism specific to newborn | 3,353 | 0.00 y |
-| K90.0 | Celiac disease | 898 | 7.20 y |
-| E10 | Type 1 diabetes mellitus | 491 | 7.86 y |
-| E34.3 | Short stature due to endocrine disorder | 447 | 10.39 y |
-| E30.0 | Delayed puberty | 419 | 13.64 y |
-| E03.9 | Hypothyroidism, unspecified | 309 | 6.00 y |
-| Q90 | Down syndrome | 205 | 0.05 y |
-| E23.0 | Hypopituitarism | 150 | 9.03 y |
-| K50 | Crohn's disease [regional enteritis] | 113 | 11.06 y |
-| E34.4 | Constitutional tall stature | 83 | 4.05 y |
-| N18 | Chronic kidney disease (CKD) | 70 | 4.54 y |
-| K51 | Ulcerative colitis | 62 | 11.95 y |
-| Q87.1 | Congenital malformation syndromes predominantly associated with short stature | 58 | 3.26 y |
-| P04.3 | Newborn affected by maternal use of alcohol | 53 | 0.50 y |
-| Q87.3 | Congenital malformation syndromes involving early overgrowth | 46 | 1.76 y |
-| Q98.4 | Klinefelter syndrome, unspecified | 42 | 0.02 y |
-| Q96 | Turner's syndrome | 36 | 0.14 y |
-| Q87.2 | Congenital malformation syndromes predominantly involving limbs | 32 | 1.80 y |
-| E23.6 | Other disorders of pituitary gland | 31 | 8.29 y |
-| Q98.0 | Klinefelter syndrome karyotype 47, XXY | 26 | 0.02 y |
-| Q98.5 | Karyotype 47, XYY | 17 | 0.01 y |
-| Q87.4 | Marfan syndrome | 17 | 5.62 y |
-| Q77 | Osteochondrodysplasia with defects of growth of tubular bones and spine | 15 | 5.13 y |
-| Q78.0 | Osteogenesis imperfecta | 10 | 1.63 y |
+| ICD-10 | description | derived column | patients, literal code | patients, code and descendants | missed by a flat count |
+| --- | --- | --- | --- | --- | --- |
+| P92.6 | Failure to thrive in newborn | 14,428 | 14,428 | 14,428 | 0 |
+| P07 | Disorders of newborn related to short gestation and low birth weight, not elsewhere classified | 11,014 | 0 | 11,029 | 11,029 |
+| P05 | Disorders of newborn related to slow fetal growth and fetal malnutrition | 4,069 | 0 | 4,074 | 4,074 |
+| E30.1 | Precocious puberty | 3,405 | 3,406 | 3,406 | 0 |
+| P70 | Transitory disorders of carbohydrate metabolism specific to newborn | 3,353 | 0 | 3,354 | 3,354 |
+| K90.0 | Celiac disease | 898 | 898 | 898 | 0 |
+| E10 | Type 1 diabetes mellitus | 491 | 0 | 491 | 491 |
+| E34.3 | Short stature due to endocrine disorder | 447 | 0 | 447 | 447 |
+| E30.0 | Delayed puberty | 419 | 419 | 419 | 0 |
+| E03.9 | Hypothyroidism, unspecified | 309 | 309 | 309 | 0 |
+| Q90 | Down syndrome | 205 | 0 | 205 | 205 |
+| E23.0 | Hypopituitarism | 150 | 150 | 150 | 0 |
+| K50 | Crohn's disease [regional enteritis] | 113 | 0 | 113 | 113 |
+| E34.4 | Constitutional tall stature | 83 | 83 | 83 | 0 |
+| N18 | Chronic kidney disease (CKD) | 70 | 0 | 70 | 70 |
+| K51 | Ulcerative colitis | 62 | 0 | 62 | 62 |
+| Q87.1 | Congenital malformation syndromes predominantly associated with short stature | 58 | 0 | 58 | 58 |
+| P04.3 | Newborn affected by maternal use of alcohol | 53 | 53 | 53 | 0 |
+| Q87.3 | Congenital malformation syndromes involving early overgrowth | 46 | 46 | 46 | 0 |
+| Q98.4 | Klinefelter syndrome, unspecified | 42 | 42 | 42 | 0 |
+| Q96 | Turner's syndrome | 36 | 0 | 36 | 36 |
+| Q87.2 | Congenital malformation syndromes predominantly involving limbs | 32 | 32 | 32 | 0 |
+| E23.6 | Other disorders of pituitary gland | 31 | 31 | 31 | 0 |
+| Q98.0 | Klinefelter syndrome karyotype 47, XXY | 26 | 26 | 26 | 0 |
+| Q87.4 | Marfan syndrome | 17 | 0 | 17 | 17 |
+| Q98.5 | Karyotype 47, XYY | 17 | 17 | 17 | 0 |
+| Q77 | Osteochondrodysplasia with defects of growth of tubular bones and spine | 15 | 0 | 15 | 15 |
+| Q78.0 | Osteogenesis imperfecta | 10 | 10 | 10 | 0 |
 
-Codes carried by fewer patients than the suppression threshold are omitted. Counts are recorded frequencies inside a cohort that excluded every patient with a code seen fewer than 11 times, so this panel cannot be read as prevalence.
+Codes carried by fewer patients than the suppression threshold are omitted. Counts are recorded frequencies inside a cohort that excluded every patient with a code seen fewer than 11 times (1.4), so this panel cannot be read as prevalence.
+
+**The upstream derivation is hierarchical, and the two count columns verify it.** 14 of the 33 tracked codes have descendants in this extract; the other 19 have none, so both readings coincide and they cannot distinguish the two rules. Of the 14 that can, **0 match the literal count** — in every case the derived column follows the subtree. The evidence is starkest because **all 14 of those codes never appear as a literal string at all**: an exact-match query returns zero patients for `E10`, `P07`, `K50` and the rest, while the derived column correctly reports hundreds or thousands.
+
+4 codes (`P07`, `P05`, `E30.1`, `P70`) sit slightly below their subtree count. The shortfall is explained rather than unexplained: those patients carry the code only on a problem-list entry with no noted date, so no age could be determined. The derived column therefore means *the patient carries the code or one of its descendants **and** an age for it can be established* — not simply that the patient carries it.
 
 The referral resource shows the same orientation from the action side. Grouping requested specialties into the families a growth question would reach for accounts for 36,182 of 349,827 referrals (10.3%).
 
@@ -1024,7 +1085,7 @@ The referral resource shows the same orientation from the action side. Grouping 
 | Genetics | 2,426 | 0.69% | 2,116 | 3.20 y |
 | all other specialties | 313,645 | 89.66% | — | — |
 
-**Implications for analysis.** These two tables describe what the upstream pipeline chose to track, not what is clinically relevant to growth in general: a code absent from the panel may still be present in the encounter and problem-list resources of 5.1, and a specialty family here is a string match on a free-text field rather than a clinical taxonomy. Use the panel to understand the derived columns; go to the raw diagnosis resources for anything else.
+**Implications for analysis.** Use the derived columns when you want an age at first record and are content with the panel upstream chose; go to the raw diagnosis resources for anything else, and match by prefix when you do. These tables describe what the pipeline tracks, not what is clinically relevant to growth in general: a code absent from the panel may still be present in 5.1, and a specialty family here is a string match on a free-text field rather than a clinical taxonomy.
 
 ## 6. Field index
 
@@ -1221,7 +1282,7 @@ One row per known artifact, with its scale and whether it can be repaired.
 
 ### 7.1 Every artifact this report measured
 
-One row per artifact, gathered from the findings that measured them. The class says who produced the artifact, which decides whether it can be repaired: a derivation artifact can be recomputed without touching the clinical record, a capture artifact cannot, a selection artifact is outside the extract entirely. 14 artifacts across 4 classes (capture, derivation, linkage, selection).
+One row per artifact, gathered from the findings that measured them. The class says who produced the artifact, which decides whether it can be repaired: a derivation artifact can be recomputed without touching the clinical record, a capture artifact cannot, a selection artifact is outside the extract entirely. 15 artifacts across 4 classes (capture, derivation, linkage, selection).
 
 **Artifact catalogue**
 
@@ -1235,6 +1296,7 @@ One row per artifact, gathered from the findings that measured them. The class s
 | Laboratory results are semi-structured text | capture | 487,168 comparator-prefixed values; only 44.2% of rows parse as a number | Yes — parse comparators explicitly rather than casting | 3.6 |
 | Anthropometrics recorded on encounters with no physical contact | capture | weight present on 99% of 22,053 telephone encounters | Partly — restrict by encounter type before counting measurement occasions | 3.7 |
 | Two measurements of one channel on one patient-day that disagree | capture | 942 patient-days for height, median spread 3.17 cm | Partly — define an explicit tie rule before ordering by age | 3.8 |
+| Diagnosis codes counted flat rather than as a hierarchy | capture | 1,204 of 1,327 categories never appear as a bare three-character code | Yes — match on a prefix, or roll up before counting | 3.9 |
 | Terminal-digit heaping on the imperial recording grid | capture | 80.0% of heights fall on a quarter inch | No — it is the precision the measurement actually has | 4.2 |
 | Wrong-unit and decimal-place entry in the typed measurement fields | capture | 1,371 whole-foot heights, 143 centimetre values in the inch field, and a weight decimal artifact enriched 17-fold | Yes — bound and repair the raw imperial columns before converting | 4.4 |
 | Apparent height loss from the recording grid on a flat trajectory | capture | 0.66% of pairs over a year apart, falling to 0.083% at ages 2 to 10 | Not a defect — do not filter it as an outlier | 4.5 |
