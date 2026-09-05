@@ -30,6 +30,7 @@ TMP = Path("/private/tmp/growth-chart-literacy-eda")
 # script's output over the live report would therefore destroy content it cannot
 # reproduce, so main() refuses to do that and offers --out instead.
 ARTIFACT_MARKER = "<!-- BEGIN ehr-artifact-profile -->"
+OVERLAY_MARKER = "<!-- project-overlay -->"
 
 
 def choose(*names: str) -> Path:
@@ -230,20 +231,19 @@ def resolve_target(out: str | None) -> Path:
     """Pick the output path, refusing to overwrite a report this script would damage."""
     if out is not None:
         return Path(out).expanduser().resolve()
-    if REPORT.is_file() and ARTIFACT_MARKER in REPORT.read_text(encoding="utf-8"):
-        raise SystemExit(
-            f"Refusing to overwrite {REPORT}.\n"
-            f"That file contains {ARTIFACT_MARKER}, so it carries section 6, which is\n"
-            "generated from the DuckDB bundle by build_ehr_artifact_profile.py, plus\n"
-            "hand-written extensions this script cannot reproduce: the bundle provenance\n"
-            "line in the header, the section-6 paragraphs of the executive summary, the\n"
-            "calibration scope note in section 4, four rows of the design table and\n"
-            "guardrails 5 and 8-12 in section 10, and the section-6 methods paragraph in\n"
-            "section 11. This script also numbers its own sections 6-10 where the report\n"
-            "numbers them 7-11.\n\n"
-            "Render somewhere harmless and compare instead:\n"
-            "  build_growth_chart_literacy_eda.py --out /tmp/eda-rebuild.md"
-        )
+    if REPORT.is_file():
+        text = REPORT.read_text(encoding="utf-8")
+        if OVERLAY_MARKER in text or ARTIFACT_MARKER in text:
+            raise SystemExit(
+                f"Refusing to overwrite {REPORT}.\n\n"
+                "This script is superseded. The measurement analysis it used to\n"
+                "produce now lives in reports/ppoc-eda/, generated from the DuckDB\n"
+                "bundle by reports/build_ppoc_eda.py, and the target file has been\n"
+                "reduced to a hand-written project overlay that cites it. Nothing\n"
+                "this script emits belongs in that file any more.\n\n"
+                "To render its old output somewhere harmless and compare:\n"
+                "  build_growth_chart_literacy_eda.py --out /tmp/eda-rebuild.md"
+            )
     return REPORT
 
 

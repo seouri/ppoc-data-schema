@@ -1979,8 +1979,13 @@ def main() -> int:
     text = report_path.read_text()
     if BEGIN_MARKER not in text or END_MARKER not in text:
         raise SystemExit(
-            f"Markers not found in {report_path}. Add {BEGIN_MARKER} and "
-            f"{END_MARKER} around the artifact section first."
+            f"No artifact-profile markers in {report_path}.\n\n"
+            "This script is superseded. Its section 6 now lives in "
+            "reports/ppoc-eda/,\n"
+            "generated from the same bundle by reports/build_ppoc_eda.py, which "
+            "carries\nevery artifact this profiler measured plus the ones it did "
+            "not. The target\nfile is now a project overlay that cites it.\n\n"
+            "Use --stdout to inspect this script's output without writing it."
         )
     head, rest = text.split(BEGIN_MARKER, 1)
     _, tail = rest.split(END_MARKER, 1)

@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
-"""Check that the project-neutral EDA report covers the project-specific one.
+"""Guard the split between the data report and the project overlay.
 
-Two passes. The first asks whether each analysis in
-`growth-chart-literacy-real-data-eda.md` has a counterpart in
-`ppoc-eda/`; the second re-checks a sample of ported figures against the values
-the older report states, so "present" cannot mean "present but different".
+Two passes.
 
-Coverage is judged against the new report's prose and tables with the field
-index excluded, because that index names all 254 columns and would make a bare
-field-name match meaningless.
+Completeness: the data report must still carry every analysis the project
+report once did. That list was verified against the project report's own text
+while it still contained the measurements; the comparison now runs against the
+list, so deleting a probe is caught as a regression.
+
+Overlay consistency: the overlay is maintained by hand and states that the data
+report is authoritative, so every figure it quotes must still appear there. This
+is what stops the two drifting apart.
+
+Coverage is judged against the data report's prose and tables with the field
+index excluded, because that index names all 254 columns and would score a topic
+as covered when nothing analyses it.
 
     uv run python reports/audit_coverage.py
 """
@@ -23,7 +29,8 @@ REPO = pathlib.Path(__file__).resolve().parent.parent
 OLD = REPO / "reports" / "growth-chart-literacy-real-data-eda.md"
 NEW_MD = REPO / "reports" / "ppoc-eda" / "ppoc-eda.md"
 
-EXCLUDED = "Deliberately excluded: project-specific by definition"
+EXCLUDED = ("Retained in the project overlay, not the data report: "
+            "project-specific by definition")
 
 # (old section, analysis, regex proving a counterpart exists in the new report)
 TOPICS: list[tuple[str, str, str | None]] = [
@@ -75,18 +82,24 @@ TOPICS: list[tuple[str, str, str | None]] = [
     ("§11", "methods and reproducibility", r"Methods, determinism"),
 ]
 
-# Figures the new report ported. Each must appear in the OLD report too, so a
-# silent change of value shows up as a mismatch rather than as coverage.
-PORTED = [
-    ("250,588", "cohort size"),
-    ("13,467", "head circumferences recoverable by one division"),
-    ("1,764", "head-circ z defective on a plausible measurement"),
-    ("15,025", "head circumferences outside the review range"),
-    ("1,371", "heights recorded in whole feet"),
-    ("6,494,473", "visits"),
-    ("17,230,681", "lab result components"),
-    ("942", "patient-days with disagreeing heights"),
-    ("1,087", "nephrology-family referrals"),
+# Figures the overlay quotes, with the section it cites. Each must still appear
+# in the data report; if one does not, the overlay has drifted from its source.
+OVERLAY_FIGURES = [
+    ("0.925", "4.10", "lag-1 height-z autocorrelation"),
+    ("0.821", "4.10", "intraclass correlation"),
+    ("1.2", "4.10", "independent observations per child in the limit"),
+    ("35,907", "5.6", "patients carrying growth_dx_flag"),
+    ("0.027", "5.6", "median age at growth diagnosis"),
+    ("15,025", "4.7", "head circumferences outside the review range"),
+    ("13,467", "4.7", "of those recoverable by one division"),
+    ("1,764", "4.7", "head-circ z defective on a plausible measurement"),
+    ("15,800", "4.6", "height visits expected above the +3 bound"),
+    ("80.0", "4.2", "percent of heights on a quarter-inch grid"),
+    ("0.663", "4.5", "long-interval decrease rate, all ages 2+"),
+    ("0.083", "4.5", "the same rate restricted to ages 2-10"),
+    ("99.99", "4.8", "velocity reproduction under the interval rule"),
+    ("43.7", "4.8", "velocity reproduction under a naive lag"),
+    ("335", "4.8", "longest minimum interval in the velocity rule"),
 ]
 
 
@@ -101,7 +114,7 @@ def main() -> int:
     if not NEW_MD.is_file():
         print("the neutral report has not been built", file=sys.stderr)
         return 2
-    hay, old = haystack(), OLD.read_text(encoding="utf-8")
+    hay, overlay = haystack(), OLD.read_text(encoding="utf-8")
 
     covered, excluded, missing = [], [], []
     for section, name, pattern in TOPICS:
@@ -112,30 +125,39 @@ def main() -> int:
         else:
             missing.append((section, name, pattern))
 
-    print(f"COVERAGE  {len(covered)} covered, {len(excluded)} excluded by design, "
+    print(f"COVERAGE  {len(covered)} in the data report, "
+          f"{len(excluded)} kept in the overlay, "
           f"{len(missing)} missing, of {len(TOPICS)} analyses\n")
     for section, name in excluded:
-        print(f"  EXCLUDED  {section:6s} {name}\n            -> {EXCLUDED}")
+        print(f"  OVERLAY   {section:6s} {name}\n            -> {EXCLUDED}")
     if missing:
         print()
         for section, name, pattern in missing:
             print(f"  MISSING   {section:6s} {name}  (looked for /{pattern}/)")
 
-    print("\nPORTED FIGURES  (must match the older report exactly)")
+    print("\nOVERLAY CONSISTENCY  (every figure the overlay quotes must still "
+          "be in the data report)")
     bad = 0
-    for value, label in PORTED:
-        in_new, in_old = value in hay, value in old
-        ok = in_new and in_old
+    for value, section, label in OVERLAY_FIGURES:
+        quoted = value in overlay
+        backed = value in hay
+        ok = (not quoted) or backed
         bad += not ok
-        state = "ok" if ok else ("NOT IN NEW" if in_old else "NOT IN OLD")
-        print(f"  {state:11s} {value:>12s}  {label}")
+        if not quoted:
+            state = "not quoted"
+        elif backed:
+            state = "ok"
+        else:
+            state = "UNBACKED"
+        print(f"  {state:11s} {value:>10s}  {section:5s} {label}")
 
     print()
     if missing or bad:
-        print(f"RESULT  {len(missing)} analyses missing, {bad} figures unmatched")
+        print(f"RESULT  {len(missing)} analyses missing, "
+              f"{bad} overlay figures unbacked")
         return 1
-    print("RESULT  every analysis is covered or excluded by design; "
-          "every sampled figure matches")
+    print("RESULT  every analysis is in the data report or the overlay; "
+          "every figure the overlay quotes is backed by the data report")
     return 0
 
 
