@@ -8,20 +8,28 @@ patient_id, visit_id, referral_id, or other row-level identifier.
 
 from __future__ import annotations
 
+import argparse
 import math
 import os
-import re
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import duckdb
 import pandas as pd
 
-
 ROOT = Path(os.environ.get("PPOC_DATA_ROOT", "/Users/joon/w/p3-data/all")).expanduser().resolve()
 REPORT = Path(__file__).resolve().parent.parent / "growth-chart-literacy-real-data-eda.md"
 TMP = Path("/private/tmp/growth-chart-literacy-eda")
+
+# This script renders sections 1-5 and 7-11 as they stood when it was last the
+# report's sole generator. The report has since diverged: section 6 is generated
+# from the DuckDB bundle by build_ehr_artifact_profile.py between the markers
+# below, and several other regions have been extended by hand. Writing this
+# script's output over the live report would therefore destroy content it cannot
+# reproduce, so main() refuses to do that and offers --out instead.
+ARTIFACT_MARKER = "<!-- BEGIN ehr-artifact-profile -->"
 
 
 def choose(*names: str) -> Path:
@@ -145,7 +153,7 @@ def val(row: dict[str, Any], key: str, default: Any = "NA") -> Any:
 def fmt_int(value: Any) -> str:
     if value is None or (isinstance(value, float) and math.isnan(value)):
         return "NA"
-    return f"{int(round(float(value))):,}"
+    return f"{round(float(value)):,}"
 
 
 def fmt_float(value: Any, digits: int = 2) -> str:
@@ -218,7 +226,35 @@ def file_metadata(path: Path, rows: Any, grain: str) -> dict[str, Any]:
     }
 
 
+def resolve_target(out: str | None) -> Path:
+    """Pick the output path, refusing to overwrite a report this script would damage."""
+    if out is not None:
+        return Path(out).expanduser().resolve()
+    if REPORT.is_file() and ARTIFACT_MARKER in REPORT.read_text(encoding="utf-8"):
+        raise SystemExit(
+            f"Refusing to overwrite {REPORT}.\n"
+            f"That file contains {ARTIFACT_MARKER}, so it carries section 6, which is\n"
+            "generated from the DuckDB bundle by build_ehr_artifact_profile.py, plus\n"
+            "hand-written extensions this script cannot reproduce: the bundle provenance\n"
+            "line in the header, the section-6 paragraphs of the executive summary, the\n"
+            "calibration scope note in section 4, four rows of the design table and\n"
+            "guardrails 5 and 8-12 in section 10, and the section-6 methods paragraph in\n"
+            "section 11. This script also numbers its own sections 6-10 where the report\n"
+            "numbers them 7-11.\n\n"
+            "Render somewhere harmless and compare instead:\n"
+            "  build_growth_chart_literacy_eda.py --out /tmp/eda-rebuild.md"
+        )
+    return REPORT
+
+
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--out",
+        help="write the rendered report here instead of the repository report; "
+             "required once the live report carries the section-6 block",
+    )
+    target = resolve_target(parser.parse_args().out)
     TMP.mkdir(parents=True, exist_ok=True)
     con = duckdb.connect(database=":memory:")
     con.execute("PRAGMA threads=4")
@@ -349,11 +385,10 @@ def main() -> None:
         """,
     )
     pl_total = pl_grouped[pl_grouped["is_total"] == 1].iloc[0].to_dict()
-    pl_top = pl_grouped[pl_grouped["is_total"] == 0].sort_values("n_rows", ascending=False).head(15)
 
     patient_sex = sql_df(
         con,
-        f"""SELECT COALESCE(NULLIF(trim(CAST(sex AS VARCHAR)), ''), '[blank]') AS category,
+        """SELECT COALESCE(NULLIF(trim(CAST(sex AS VARCHAR)), ''), '[blank]') AS category,
                   count(*) AS patients
            FROM p GROUP BY 1 ORDER BY patients DESC""",
     )
@@ -581,7 +616,7 @@ def main() -> None:
     )
     bmi_consistency = sql_one(
         con,
-        f"""WITH q AS (
+        """WITH q AS (
              SELECT abs(bmi - weight_kg / pow(height_cm / 100.0, 2)) AS abs_diff
              FROM v
              WHERE age_in_days >= 2 * 365.25
@@ -804,7 +839,7 @@ def main() -> None:
     )
     referral_specialties = sql_df(
         con,
-        f"""SELECT COALESCE(NULLIF(trim(CAST(requested_specialty AS VARCHAR)), ''), '[blank]') AS specialty,
+        """SELECT COALESCE(NULLIF(trim(CAST(requested_specialty AS VARCHAR)), ''), '[blank]') AS specialty,
                   count(*) AS referrals, count(DISTINCT patient_id) AS patients,
                   median(referral_date_age_in_days) / 365.25 AS median_age_years
            FROM r GROUP BY 1 ORDER BY referrals DESC LIMIT 20""",
@@ -818,13 +853,13 @@ def main() -> None:
     )
     referral_visits = sql_df(
         con,
-        f"""SELECT COALESCE(CAST(referral_number_of_visits AS VARCHAR), '[missing]') AS recorded_visits,
+        """SELECT COALESCE(CAST(referral_number_of_visits AS VARCHAR), '[missing]') AS recorded_visits,
                   count(*) AS referrals
            FROM r GROUP BY 1 ORDER BY CASE WHEN recorded_visits = '[missing]' THEN 999 ELSE try_cast(recorded_visits AS INTEGER) END""",
     )
     referral_focus = sql_df(
         con,
-        f"""SELECT CASE
+        """SELECT CASE
                     WHEN lower(CAST(requested_specialty AS VARCHAR)) LIKE '%endocrin%' THEN 'Endocrinology family'
                     WHEN lower(CAST(requested_specialty AS VARCHAR)) LIKE '%gastroenter%' THEN 'Gastroenterology family'
                     WHEN lower(CAST(requested_specialty AS VARCHAR)) LIKE '%nutrition%'
@@ -885,36 +920,13 @@ def main() -> None:
         ]
     )
 
-    fmt_count_cols = {
-        col: fmt_int
-        for col in [
-            "patients", "visits", "referrals", "rows", "entries", "n", "n_rows", "n_patients",
-            "n_referrals", "n_orders", "n_components", "height_present", "weight_present",
-            "bmi_present", "head_circ_present", "any_diagnosis", "one_or_more", "no_diagnosis",
-            "height_n", "bmi_n", "with_height", "with_3_heights", "with_5_heights", "height_pairs",
-            "gaps_gt_2_years", "multiple_race", "race1_blank_with_later_value", "growth_flag_patients",
-            "growth_flag_with_age", "dx_in_first_month", "dx_in_first_year", "negative_dx_age",
-            "specialty_missing", "visit_id_missing", "visit_count_missing", "unique_referral_ids",
-            "patient_id_resolves", "visit_id_resolves", "referred_patients", "n_problem_entries",
-        ]
-    }
-    fmt_pct_cols = {
-        col: fmt_pct
-        for col in [
-            "pct", "pct_visits", "height_present_pct", "weight_present_pct", "bmi_present_pct",
-            "head_circ_present_pct", "any_diagnosis_pct", "loinc_pct", "result_pct", "flag_pct",
-            "pct_growth_flag", "pct_referrals", "height_z_lt_minus2_pct", "height_z_gt_plus2_pct",
-            "bmi_lt5_pct", "bmi_ge95_pct",
-        ]
-    }
-
     # Build the report as a plain Markdown artifact. All clinical language is
     # framed as data description or research implication, never as patient care.
     report: list[str] = []
     report += [
         "# Real-data exploratory analysis for GrowthChartLiteracy",
         "",
-        f"**Analysis date:** {datetime.now().strftime('%Y-%m-%d')}",
+        f"**Analysis date:** {datetime.now().astimezone().strftime('%Y-%m-%d')}",
         f"**Source root:** `{ROOT}`",
         "**Scope:** aggregate-only descriptive analysis of the real, de-identified PPOC snapshot; no patient-level identifiers or row-level records are included in this report.",
         "",
@@ -1225,9 +1237,9 @@ def main() -> None:
         "",
     ]
 
-    REPORT.write_text("\n".join(report), encoding="utf-8")
-    print(f"wrote {REPORT}")
-    print(f"patients={p_n['n_rows']} visits={v_n['n_rows']} referrals={r_n['n_rows']} report_bytes={REPORT.stat().st_size}")
+    target.write_text("\n".join(report), encoding="utf-8")
+    print(f"wrote {target}")
+    print(f"patients={p_n['n_rows']} visits={v_n['n_rows']} referrals={r_n['n_rows']} report_bytes={target.stat().st_size}")
 
 
 if __name__ == "__main__":
