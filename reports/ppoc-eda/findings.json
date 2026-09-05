@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-05T21:59:35Z",
+  "generated_at": "2026-09-05T22:48:19Z",
   "parts": [
     {
       "findings": [
@@ -324,7 +324,7 @@
                 {
                   "differs": 3658277,
                   "field": "BMI / bmi",
-                  "share": 56.3290816668
+                  "share": 56.329082
                 }
               ]
             }
@@ -436,19 +436,19 @@
               "rows": [
                 {
                   "rare": 18604,
-                  "share": 61.0107237727,
+                  "share": 61.010724,
                   "total": 30493,
                   "vocabulary": "ICD-10 diagnosis codes"
                 },
                 {
                   "rare": 1391,
-                  "share": 55.5733120256,
+                  "share": 55.573312,
                   "total": 2503,
                   "vocabulary": "Simple generic medications"
                 },
                 {
                   "rare": 9621,
-                  "share": 71.7877928667,
+                  "share": 71.787793,
                   "total": 13402,
                   "vocabulary": "Lab procedures"
                 }
@@ -458,12 +458,12 @@
           "title": "How this cohort was built",
           "values": {
             "cohort_as_of": "31 Dec 2024",
-            "dx_share": 61.0107237727,
+            "dx_share": 61.010724,
             "extract_date": "03 Feb 2025",
             "final": 250588,
-            "lab_share": 71.7877928667,
+            "lab_share": 71.787793,
             "measured_final": 250588,
-            "med_share": 55.5733120256,
+            "med_share": 55.573312,
             "registry": 437996
           }
         },
@@ -966,9 +966,9 @@
           "values": {
             "vday": 6488911,
             "vdup_days": 5478,
-            "vdup_share": 0.0844209452095,
+            "vdup_share": 0.084420945,
             "vdup_visits": 11040,
-            "vvisit_share": 0.169990698244
+            "vvisit_share": 0.1699907
           }
         },
         {
@@ -994,12 +994,12 @@
               "id": "t-links",
               "rows": [
                 {
-                  "missing": 0.00467189892263,
+                  "missing": 0.0046718989,
                   "orphan_patients": 0,
                   "resource": "labs",
                   "rows": 17230681,
                   "unresolved": 5201657,
-                  "unresolved_share": 30.1897529617
+                  "unresolved_share": 30.189753
                 },
                 {
                   "missing": 0.0,
@@ -1007,22 +1007,22 @@
                   "resource": "medications",
                   "rows": 3823049,
                   "unresolved": 1592437,
-                  "unresolved_share": 41.6535859206
+                  "unresolved_share": 41.653586
                 },
                 {
-                  "missing": 7.09779405249,
+                  "missing": 7.0977941,
                   "orphan_patients": 0,
                   "resource": "referrals",
                   "rows": 349827,
                   "unresolved": 98623,
-                  "unresolved_share": 30.3458185768
+                  "unresolved_share": 30.345819
                 }
               ]
             }
           ],
           "title": "Referential integrity and cross-resource linkage",
           "values": {
-            "worst": 41.6535859206
+            "worst": 41.653586
           }
         },
         {
@@ -1048,19 +1048,19 @@
                 {
                   "check": "Lab result age earlier than lab order age",
                   "checked": 14947495,
-                  "share": 3.9006870382,
+                  "share": 3.900687,
                   "violations": 583055
                 },
                 {
                   "check": "Medication start age earlier than order age",
                   "checked": 3539983,
-                  "share": 9.29685255551,
+                  "share": 9.2968526,
                   "violations": 329107
                 },
                 {
                   "check": "Medication end age earlier than start age",
                   "checked": 3179759,
-                  "share": 0.399684378596,
+                  "share": 0.39968438,
                   "violations": 12709
                 },
                 {
@@ -1072,13 +1072,13 @@
                 {
                   "check": "Problem noted before birth",
                   "checked": 1702300,
-                  "share": 0.0381836339071,
+                  "share": 0.038183634,
                   "violations": 650
                 },
                 {
                   "check": "Lab ordered before birth",
                   "checked": 17230681,
-                  "share": 0.000272769253868,
+                  "share": 0.00027276925,
                   "violations": 47
                 },
                 {
@@ -1222,7 +1222,7 @@
                 {
                   "distinct": 1,
                   "field": "dx_age_years_e24",
-                  "missing": 99.9996009386,
+                  "missing": 99.999601,
                   "present": 1,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -1231,7 +1231,7 @@
                 {
                   "distinct": 1,
                   "field": "dx_age_years_e72_11",
-                  "missing": 99.9996009386,
+                  "missing": 99.999601,
                   "present": 1,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -1240,7 +1240,7 @@
                 {
                   "distinct": 1,
                   "field": "dx_age_years_n25_0",
-                  "missing": 99.9996009386,
+                  "missing": 99.999601,
                   "present": 1,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -1249,7 +1249,7 @@
                 {
                   "distinct": 2,
                   "field": "dx_age_years_q78_1",
-                  "missing": 99.9992018772,
+                  "missing": 99.999202,
                   "present": 2,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -1258,7 +1258,7 @@
                 {
                   "distinct": 3,
                   "field": "dx_age_years_e22_0",
-                  "missing": 99.9988028158,
+                  "missing": 99.998803,
                   "present": 3,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -1267,7 +1267,7 @@
                 {
                   "distinct": 10,
                   "field": "dx_age_years_q78_0",
-                  "missing": 99.9960093859,
+                  "missing": 99.996009,
                   "present": 10,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -1276,7 +1276,7 @@
                 {
                   "distinct": 14,
                   "field": "dx_age_years_q77",
-                  "missing": 99.9940140789,
+                  "missing": 99.994014,
                   "present": 15,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -1285,7 +1285,7 @@
                 {
                   "distinct": 17,
                   "field": "dx_age_years_q87_4",
-                  "missing": 99.9932159561,
+                  "missing": 99.993216,
                   "present": 17,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -1294,7 +1294,7 @@
                 {
                   "distinct": 13,
                   "field": "dx_age_years_q98_5",
-                  "missing": 99.9932159561,
+                  "missing": 99.993216,
                   "present": 17,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -1303,7 +1303,7 @@
                 {
                   "distinct": 17,
                   "field": "dx_age_years_q98_0",
-                  "missing": 99.9896244034,
+                  "missing": 99.989624,
                   "present": 26,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -1312,7 +1312,7 @@
                 {
                   "distinct": 31,
                   "field": "dx_age_years_e23_6",
-                  "missing": 99.9876290964,
+                  "missing": 99.987629,
                   "present": 31,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -1321,7 +1321,7 @@
                 {
                   "distinct": 31,
                   "field": "dx_age_years_q87_2",
-                  "missing": 99.987230035,
+                  "missing": 99.98723,
                   "present": 32,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -1330,7 +1330,7 @@
                 {
                   "distinct": 27,
                   "field": "dx_age_years_q96",
-                  "missing": 99.9856337893,
+                  "missing": 99.985634,
                   "present": 36,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -1339,7 +1339,7 @@
                 {
                   "distinct": 29,
                   "field": "dx_age_years_q98_4",
-                  "missing": 99.9832394209,
+                  "missing": 99.983239,
                   "present": 42,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -1348,7 +1348,7 @@
                 {
                   "distinct": 45,
                   "field": "dx_age_years_q87_3",
-                  "missing": 99.9816431753,
+                  "missing": 99.981643,
                   "present": 46,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -1357,7 +1357,7 @@
                 {
                   "distinct": 41,
                   "field": "dx_age_years_p04_3",
-                  "missing": 99.9788497454,
+                  "missing": 99.97885,
                   "present": 53,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -1371,7 +1371,7 @@
             "n_cols": 176,
             "n_empty": 0,
             "worst_field": "dx_age_years_e24",
-            "worst_share": 99.9996009386
+            "worst_share": 99.999601
           }
         },
         {
@@ -1628,9 +1628,9 @@
           "values": {
             "flag_none": 5881,
             "flag_null": 15550985,
-            "flag_share": 90.2517143693,
+            "flag_share": 90.251714,
             "pl_null": 951677,
-            "pl_share": 55.6671681532,
+            "pl_share": 55.667168,
             "pl_total": 1709584
           }
         },
@@ -1714,19 +1714,19 @@
             "censored": 487168,
             "dup_disagree": 23679,
             "dup_pairs": 33879,
-            "dup_share": 69.8928539803,
+            "dup_share": 69.892854,
             "empty": 2494261,
-            "empty_share": 14.4756959983,
+            "empty_share": 14.475696,
             "enc_bad": 145992,
-            "enc_bad_share": 0.992163989501,
+            "enc_bad_share": 0.99216399,
             "enc_distinct": 8029,
             "enc_filled": 14714503,
-            "loinc_share": 7.83545351458,
+            "loinc_share": 7.8354535,
             "loinc_total": 17230681,
             "parsed": 7621449,
-            "parsed_share": 44.2318501515,
+            "parsed_share": 44.23185,
             "pl_bad": 39860,
-            "pl_bad_share": 2.3315613623,
+            "pl_bad_share": 2.3315614,
             "pl_distinct": 4739,
             "pl_filled": 1709584
           }
@@ -1753,238 +1753,238 @@
               "id": "t-capture",
               "rows": [
                 {
-                  "diag": 95.8408834523,
+                  "diag": 95.840883,
                   "encounter": "Office Visit",
-                  "height": 52.4238712065,
+                  "height": 52.423871,
                   "visits": 4725643,
-                  "weight": 99.932834537
+                  "weight": 99.932835
                 },
                 {
-                  "diag": 94.4392204015,
+                  "diag": 94.43922,
                   "encounter": "Well Visit (Conv.)",
-                  "height": 98.7475142976,
+                  "height": 98.747514,
                   "visits": 778452,
-                  "weight": 99.9355130438
+                  "weight": 99.935513
                 },
                 {
-                  "diag": 95.402510538,
+                  "diag": 95.402511,
                   "encounter": "Sick",
-                  "height": 16.9207440391,
+                  "height": 16.920744,
                   "visits": 580991,
-                  "weight": 99.8913924656
+                  "weight": 99.891392
                 },
                 {
-                  "diag": 93.0745913175,
+                  "diag": 93.074591,
                   "encounter": "Follow-Up",
-                  "height": 24.8662985818,
+                  "height": 24.866299,
                   "visits": 92370,
-                  "weight": 99.7542492151
+                  "weight": 99.754249
                 },
                 {
-                  "diag": 96.8674305651,
+                  "diag": 96.867431,
                   "encounter": "Walk-In",
-                  "height": 8.69614327489,
+                  "height": 8.6961433,
                   "visits": 79679,
-                  "weight": 99.9447784234
+                  "weight": 99.944778
                 },
                 {
-                  "diag": 99.6476587854,
+                  "diag": 99.647659,
                   "encounter": "Consult",
-                  "height": 53.7320352341,
+                  "height": 53.732035,
                   "visits": 32355,
-                  "weight": 99.8825529285
+                  "weight": 99.882553
                 },
                 {
-                  "diag": 17.2712219202,
+                  "diag": 17.271222,
                   "encounter": "Conversion Encounter",
-                  "height": 66.9291092573,
+                  "height": 66.929109,
                   "visits": 32007,
-                  "weight": 99.8968975537
+                  "weight": 99.896898
                 },
                 {
-                  "diag": 99.1265814655,
+                  "diag": 99.126581,
                   "encounter": "Newborn",
-                  "height": 87.4831417378,
+                  "height": 87.483142,
                   "visits": 31142,
-                  "weight": 99.942200244
+                  "weight": 99.9422
                 },
                 {
-                  "diag": 99.789539325,
+                  "diag": 99.789539,
                   "encounter": "Telemedicine",
-                  "height": 44.832021202,
+                  "height": 44.832021,
                   "visits": 25658,
-                  "weight": 97.3575493024
+                  "weight": 97.357549
                 },
                 {
-                  "diag": 34.7979866685,
+                  "diag": 34.797987,
                   "encounter": "Telephone",
-                  "height": 50.1383031787,
+                  "height": 50.138303,
                   "visits": 22053,
-                  "weight": 99.2699405977
+                  "weight": 99.269941
                 },
                 {
-                  "diag": 96.4099416999,
+                  "diag": 96.409942,
                   "encounter": "Weight Check",
-                  "height": 37.6618594661,
+                  "height": 37.661859,
                   "visits": 16295,
-                  "weight": 99.9140840749
+                  "weight": 99.914084
                 },
                 {
-                  "diag": 83.3517951391,
+                  "diag": 83.351795,
                   "encounter": "Clinical Support",
-                  "height": 15.397146022,
+                  "height": 15.397146,
                   "visits": 15347,
-                  "weight": 99.2832475402
+                  "weight": 99.283248
                 },
                 {
-                  "diag": 8.567940795,
+                  "diag": 8.5679408,
                   "encounter": "Documentation",
-                  "height": 84.4357976654,
+                  "height": 84.435798,
                   "visits": 13107,
-                  "weight": 98.3443961242
+                  "weight": 98.344396
                 },
                 {
-                  "diag": 93.4092067267,
+                  "diag": 93.409207,
                   "encounter": "Immunization",
-                  "height": 30.7032444369,
+                  "height": 30.703244,
                   "visits": 11774,
-                  "weight": 97.5624256837
+                  "weight": 97.562426
                 },
                 {
-                  "diag": 98.1069237511,
+                  "diag": 98.106924,
                   "encounter": "New Patient",
-                  "height": 79.7633654689,
+                  "height": 79.763365,
                   "visits": 11410,
-                  "weight": 99.921121823
+                  "weight": 99.921122
                 },
                 {
-                  "diag": 99.5375508694,
+                  "diag": 99.537551,
                   "encounter": "Nutrition",
-                  "height": 73.7698853126,
+                  "height": 73.769885,
                   "visits": 5406,
-                  "weight": 99.7965223825
+                  "weight": 99.796522
                 },
                 {
-                  "diag": 93.2566168009,
+                  "diag": 93.256617,
                   "encounter": "Medication Management",
-                  "height": 75.9263521289,
+                  "height": 75.926352,
                   "visits": 4345,
-                  "weight": 99.9079401611
+                  "weight": 99.90794
                 },
                 {
-                  "diag": 69.1494981511,
+                  "diag": 69.149498,
                   "encounter": "Nurse Only",
-                  "height": 36.1595351294,
+                  "height": 36.159535,
                   "visits": 3786,
-                  "weight": 96.883254094
+                  "weight": 96.883254
                 },
                 {
-                  "diag": 9.01416122004,
+                  "diag": 9.0141612,
                   "encounter": "Abstract",
-                  "height": 83.1154684096,
+                  "height": 83.115468,
                   "visits": 3672,
-                  "weight": 99.4008714597
+                  "weight": 99.400871
                 },
                 {
-                  "diag": 99.4296577947,
+                  "diag": 99.429658,
                   "encounter": "Flu",
-                  "height": 13.6882129278,
+                  "height": 13.688213,
                   "visits": 2104,
-                  "weight": 96.4353612167
+                  "weight": 96.435361
                 },
                 {
-                  "diag": 99.710982659,
+                  "diag": 99.710983,
                   "encounter": "Lactation Consult",
-                  "height": 11.6329479769,
+                  "height": 11.632948,
                   "visits": 1384,
                   "weight": 100.0
                 },
                 {
-                  "diag": 78.6824574389,
+                  "diag": 78.682457,
                   "encounter": "Lab",
-                  "height": 37.3056994819,
+                  "height": 37.305699,
                   "visits": 1351,
-                  "weight": 97.0392301999
+                  "weight": 97.03923
                 },
                 {
-                  "diag": 49.7382198953,
+                  "diag": 49.73822,
                   "encounter": "Lactation Encounter",
-                  "height": 1.8698578908,
+                  "height": 1.8698579,
                   "visits": 1337,
-                  "weight": 99.7756170531
+                  "weight": 99.775617
                 },
                 {
-                  "diag": 96.017699115,
+                  "diag": 96.017699,
                   "encounter": "Procedure visit",
-                  "height": 56.3421828909,
+                  "height": 56.342183,
                   "visits": 678,
-                  "weight": 97.7876106195
+                  "weight": 97.787611
                 },
                 {
-                  "diag": 96.347826087,
+                  "diag": 96.347826,
                   "encounter": "Pre-op/Pre-procedure Orders",
-                  "height": 84.347826087,
+                  "height": 84.347826,
                   "visits": 575,
                   "weight": 100.0
                 },
                 {
-                  "diag": 30.4504504505,
+                  "diag": 30.45045,
                   "encounter": "Erroneous Encounter",
-                  "height": 45.9459459459,
+                  "height": 45.945946,
                   "visits": 555,
-                  "weight": 99.8198198198
+                  "weight": 99.81982
                 },
                 {
-                  "diag": 51.6483516484,
+                  "diag": 51.648352,
                   "encounter": "Orders Only",
-                  "height": 78.3882783883,
+                  "height": 78.388278,
                   "visits": 273,
-                  "weight": 99.6336996337
+                  "weight": 99.6337
                 },
                 {
-                  "diag": 2.36966824645,
+                  "diag": 2.3696682,
                   "encounter": "External Contact",
-                  "height": 99.5260663507,
+                  "height": 99.526066,
                   "visits": 211,
                   "weight": 100.0
                 },
                 {
-                  "diag": 18.1818181818,
+                  "diag": 18.181818,
                   "encounter": "Patient Message",
-                  "height": 30.6220095694,
+                  "height": 30.62201,
                   "visits": 209,
-                  "weight": 95.6937799043
+                  "weight": 95.69378
                 },
                 {
-                  "diag": 94.4055944056,
+                  "diag": 94.405594,
                   "encounter": "Evaluation",
-                  "height": 74.1258741259,
+                  "height": 74.125874,
                   "visits": 143,
-                  "weight": 99.3006993007
+                  "weight": 99.300699
                 },
                 {
-                  "diag": 90.4761904762,
+                  "diag": 90.47619,
                   "encounter": "Lab Requisition",
-                  "height": 14.2857142857,
+                  "height": 14.285714,
                   "visits": 63,
-                  "weight": 96.8253968254
+                  "weight": 96.825397
                 },
                 {
                   "diag": 0.0,
                   "encounter": "Scanned Document",
-                  "height": 95.652173913,
+                  "height": 95.652174,
                   "visits": 23,
                   "weight": 100.0
                 },
                 {
                   "diag": 0.0,
                   "encounter": "Letter (Out)",
-                  "height": 94.4444444444,
+                  "height": 94.444444,
                   "visits": 18,
                   "weight": 100.0
                 },
                 {
-                  "diag": 66.6666666667,
+                  "diag": 66.666667,
                   "encounter": "Refill",
                   "height": 0.0,
                   "visits": 12,
@@ -1993,7 +1993,7 @@
                 {
                   "diag": 0.0,
                   "encounter": "History",
-                  "height": 45.4545454545,
+                  "height": 45.454545,
                   "visits": 11,
                   "weight": 100.0
                 },
@@ -2080,14 +2080,14 @@
               "id": "t-source",
               "rows": [
                 {
-                  "diag": 99.6667843412,
-                  "height": 51.4022504347,
+                  "diag": 99.666784,
+                  "height": 51.40225,
                   "source": "Epic",
                   "visits": 4149865
                 },
                 {
-                  "diag": 86.1024102963,
-                  "height": 58.7095582716,
+                  "diag": 86.10241,
+                  "height": 58.709558,
                   "source": "converted from a legacy system",
                   "visits": 2344608
                 }
@@ -2096,12 +2096,12 @@
           ],
           "title": "Capture: measurement presence is not measurement occurrence",
           "values": {
-            "conv_diag": 86.1024102963,
+            "conv_diag": 86.10241,
             "enc_distinct": 45,
             "n_types": 45,
             "suppressed": 9,
             "tele_visits": 22053,
-            "tele_weight": 99.2699405977
+            "tele_weight": 99.269941
           }
         },
         {
@@ -2134,7 +2134,7 @@
                   "median": 3.175,
                   "multi": 2958,
                   "p95": 12.1619,
-                  "share": 31.845841785,
+                  "share": 31.845842,
                   "unit": "cm"
                 },
                 {
@@ -2144,7 +2144,7 @@
                   "median": 0.118,
                   "multi": 5319,
                   "p95": 3.64355,
-                  "share": 49.7837939462,
+                  "share": 49.783794,
                   "unit": "kg"
                 },
                 {
@@ -2154,7 +2154,7 @@
                   "median": 0.51,
                   "multi": 1475,
                   "p95": 27.798,
-                  "share": 56.7457627119,
+                  "share": 56.745763,
                   "unit": "cm"
                 }
               ]
@@ -2166,7 +2166,7 @@
             "h_max": 34.925,
             "h_median": 3.175,
             "h_multi": 2958,
-            "h_share": 31.845841785
+            "h_share": 31.845842
           }
         },
         {
@@ -2273,7 +2273,7 @@
             "ex_flat": 0,
             "ex_tree": 132693,
             "silent": 1204,
-            "silent_share": 90.7309721176,
+            "silent_share": 90.730972,
             "three_char": 123
           }
         }
@@ -2369,46 +2369,46 @@
                 {
                   "k": 1,
                   "patients": 250267,
-                  "share": 99.8719012882
+                  "share": 99.871901
                 },
                 {
                   "k": 3,
                   "patients": 245449,
-                  "share": 97.9492234265
+                  "share": 97.949223
                 },
                 {
                   "k": 5,
                   "patients": 235651,
-                  "share": 94.0392197551
+                  "share": 94.03922
                 },
                 {
                   "k": 10,
                   "patients": 182037,
-                  "share": 72.6439414497
+                  "share": 72.643941
                 },
                 {
                   "k": 15,
                   "patients": 104838,
-                  "share": 41.8367998468
+                  "share": 41.8368
                 },
                 {
                   "k": 20,
                   "patients": 43501,
-                  "share": 17.3595702907
+                  "share": 17.35957
                 },
                 {
                   "k": 25,
                   "patients": 16040,
-                  "share": 6.40094497741
+                  "share": 6.400945
                 }
               ]
             }
           ],
           "title": "Trajectory supply: how many heights each child has",
           "values": {
-            "share_1": 99.8719012882,
-            "share_10": 72.6439414497,
-            "share_5": 94.0392197551,
+            "share_1": 99.871901,
+            "share_10": 72.643941,
+            "share_5": 94.03922,
             "total": 250588,
             "with_1": 250267,
             "with_10": 182037,
@@ -2469,14 +2469,14 @@
           "values": {
             "grid_cm": 0.635,
             "h_bad": 0,
-            "h_half": 54.8610638206,
+            "h_half": 54.861064,
             "h_pairs": 3491662,
-            "h_quarter": 80.0112148478,
+            "h_quarter": 80.011215,
             "h_total": 3509633,
-            "h_whole": 31.0307943879,
+            "h_whole": 31.030794,
             "w_bad": 0,
-            "w_lb": 24.5678810264,
-            "w_oz": 54.4387601287,
+            "w_lb": 24.567881,
+            "w_oz": 54.43876,
             "w_pairs": 6483007,
             "w_total": 6488028
           }
@@ -2902,13 +2902,13 @@
                 },
                 {
                   "channel": "BMI",
-                  "max": 219.505599976,
-                  "median": 16.7030467987,
-                  "min": 8.11789989471,
+                  "max": 219.5056,
+                  "median": 16.703047,
+                  "min": 8.1178999,
                   "n": 1955339,
                   "outside": 44,
-                  "p1": 13.2931184769,
-                  "p99": 32.4195533752,
+                  "p1": 13.293118,
+                  "p99": 32.419553,
                   "unit": "kg/m^2"
                 },
                 {
@@ -2955,25 +2955,25 @@
                   {
                     "name": "observed",
                     "values": [
-                      9.21671369072,
-                      1.2226252855,
-                      0.403063280935,
-                      0.147789869676,
-                      0.537417707913,
-                      5.46822517802,
-                      54.0642214161
+                      9.2167137,
+                      1.2226253,
+                      0.40306328,
+                      0.14778987,
+                      0.53741771,
+                      5.4682252,
+                      54.064221
                     ]
                   },
                   {
                     "name": "null",
                     "values": [
-                      1.34488781405,
-                      0.667069729948,
-                      0.99556630391,
-                      2.79591562542,
-                      0.693940615343,
-                      1.14402794572,
-                      50.154507591
+                      1.3448878,
+                      0.66706973,
+                      0.9955663,
+                      2.7959156,
+                      0.69394062,
+                      1.1440279,
+                      50.154508
                     ]
                   }
                 ],
@@ -3000,52 +3000,52 @@
               "rows": [
                 {
                   "mechanism": "height recorded in whole feet",
-                  "null": 1.34488781405,
+                  "null": 1.3448878,
                   "obs": 686,
-                  "ratio": 6.85314685315,
-                  "share": 9.21671369072
+                  "ratio": 6.8531469,
+                  "share": 9.2167137
                 },
                 {
                   "mechanism": "centimetre value in the inch field",
-                  "null": 0.667069729948,
+                  "null": 0.66706973,
                   "obs": 91,
-                  "ratio": 1.83282980866,
-                  "share": 1.2226252855
+                  "ratio": 1.8328298,
+                  "share": 1.2226253
                 },
                 {
                   "mechanism": "inch value where a centimetre is expected",
-                  "null": 0.99556630391,
+                  "null": 0.9955663,
                   "obs": 30,
-                  "ratio": 0.404858299595,
-                  "share": 0.403063280935
+                  "ratio": 0.4048583,
+                  "share": 0.40306328
                 },
                 {
                   "mechanism": "decimal point misplaced",
-                  "null": 2.79591562542,
+                  "null": 2.7959156,
                   "obs": 11,
-                  "ratio": 0.0528592023066,
-                  "share": 0.147789869676
+                  "ratio": 0.052859202,
+                  "share": 0.14778987
                 },
                 {
                   "mechanism": "adjacent digit transposition",
-                  "null": 0.693940615343,
+                  "null": 0.69394062,
                   "obs": 40,
-                  "ratio": 0.774443368829,
-                  "share": 0.537417707913
+                  "ratio": 0.77444337,
+                  "share": 0.53741771
                 },
                 {
                   "mechanism": "one digit omitted",
-                  "null": 1.14402794572,
+                  "null": 1.1440279,
                   "obs": 407,
-                  "ratio": 4.77980035232,
-                  "share": 5.46822517802
+                  "ratio": 4.7798004,
+                  "share": 5.4682252
                 },
                 {
                   "mechanism": "one digit wrong (calibration class)",
-                  "null": 50.154507591,
+                  "null": 50.154508,
                   "obs": 4024,
-                  "ratio": 1.0779533887,
-                  "share": 54.0642214161
+                  "ratio": 1.0779534,
+                  "share": 54.064221
                 }
               ]
             },
@@ -3062,59 +3062,59 @@
               "rows": [
                 {
                   "mechanism": "pound value in the ounce field",
-                  "null": 0.26145900581,
+                  "null": 0.26145901,
                   "obs": 39,
-                  "ratio": 2.40740740741,
-                  "share": 0.629438347321
+                  "ratio": 2.4074074,
+                  "share": 0.62943835
                 },
                 {
                   "mechanism": "ounce value where a pound is expected",
-                  "null": 0.0863460296966,
+                  "null": 0.08634603,
                   "obs": 25,
-                  "ratio": 4.67289719626,
-                  "share": 0.403486120077
+                  "ratio": 4.6728972,
+                  "share": 0.40348612
                 },
                 {
                   "mechanism": "kilogram value in the ounce field",
-                  "null": 0.0855390574564,
+                  "null": 0.085539057,
                   "obs": 13,
-                  "ratio": 2.45283018868,
-                  "share": 0.20981278244
+                  "ratio": 2.4528302,
+                  "share": 0.20981278
                 },
                 {
                   "mechanism": "gram value in the ounce field",
-                  "null": 0.0766623628147,
+                  "null": 0.076662363,
                   "obs": 2,
-                  "ratio": 0.421052631579,
-                  "share": 0.0322788896062
+                  "ratio": 0.42105263,
+                  "share": 0.03227889
                 },
                 {
                   "mechanism": "decimal point misplaced",
-                  "null": 1.13056810846,
+                  "null": 1.1305681,
                   "obs": 1208,
-                  "ratio": 17.2448251249,
-                  "share": 19.4964493221
+                  "ratio": 17.244825,
+                  "share": 19.496449
                 },
                 {
                   "mechanism": "adjacent digit transposition",
-                  "null": 6.65429309232,
+                  "null": 6.6542931,
                   "obs": 77,
-                  "ratio": 0.18675721562,
-                  "share": 1.24273724984
+                  "ratio": 0.18675722,
+                  "share": 1.2427372
                 },
                 {
                   "mechanism": "one digit omitted",
-                  "null": 8.63056810846,
+                  "null": 8.6305681,
                   "obs": 927,
-                  "ratio": 1.73352033661,
-                  "share": 14.9612653325
+                  "ratio": 1.7335203,
+                  "share": 14.961265
                 },
                 {
                   "mechanism": "one digit wrong (calibration class)",
-                  "null": 25.3881536475,
+                  "null": 25.388154,
                   "obs": 795,
-                  "ratio": 0.505387622771,
-                  "share": 12.8308586185
+                  "ratio": 0.50538762,
+                  "share": 12.830859
                 }
               ]
             },
@@ -3149,13 +3149,13 @@
           "title": "Transcription-error signatures in the typed fields",
           "values": {
             "cm_age": 3.138,
-            "cm_grid": 34.965034965,
+            "cm_grid": 34.965035,
             "cm_live": 143,
             "cm_n": 143,
             "feet_age": 5.21,
             "feet_live": 1371,
             "feet_n": 1371,
-            "grid_base": 80.0112148478,
+            "grid_base": 80.011215,
             "h_cal": 3989,
             "h_multi": 6619,
             "h_multi_hit": 0,
@@ -3163,8 +3163,8 @@
             "h_named": 939,
             "h_none": 2515,
             "h_omit": 407,
-            "h_omit_share": 5.46822517802,
-            "h_sens": 69.7039562909,
+            "h_omit_share": 5.4682252,
+            "h_sens": 69.703956,
             "h_sens_n": 200000,
             "hdev": 3.0,
             "reps": 20,
@@ -3172,10 +3172,10 @@
             "w_n": 6196,
             "w_named": 1987,
             "w_none": 3467,
-            "w_sens": 31.6251616557,
+            "w_sens": 31.625162,
             "w_sens_n": 200000,
             "w_shift": 1208,
-            "w_shift_ratio": 17.2448251249,
+            "w_shift_ratio": 17.244825,
             "wdev": 50.0
           }
         },
@@ -3277,46 +3277,46 @@
               "id": "t-gap",
               "rows": [
                 {
-                  "decrease": 21.3146950092,
+                  "decrease": 21.314695,
                   "gap": "up to 7 days",
                   "median": 0.686,
                   "pairs": 25968,
-                  "zero": 47.862754159
+                  "zero": 47.862754
                 },
                 {
-                  "decrease": 19.0316023811,
+                  "decrease": 19.031602,
                   "gap": "8 to 30 days",
                   "median": 0.635,
                   "pairs": 82652,
-                  "zero": 32.0028553453
+                  "zero": 32.002855
                 },
                 {
-                  "decrease": 10.5066238176,
+                  "decrease": 10.506624,
                   "gap": "31 to 90 days",
                   "median": 0.635,
                   "pairs": 170521,
-                  "zero": 16.3792142903
+                  "zero": 16.379214
                 },
                 {
-                  "decrease": 4.21587790576,
+                  "decrease": 4.2158779,
                   "gap": "91 to 180 days",
                   "median": 0.813,
                   "pairs": 205153,
-                  "zero": 5.14737781071
+                  "zero": 5.1473778
                 },
                 {
-                  "decrease": 1.44413547392,
+                  "decrease": 1.4441355,
                   "gap": "181 to 365 days",
                   "median": 0.7875,
                   "pairs": 368248,
-                  "zero": 1.57339618952
+                  "zero": 1.5733962
                 },
                 {
-                  "decrease": 0.662980828944,
+                  "decrease": 0.66298083,
                   "gap": "over 365 days",
                   "median": 0.635,
                   "pairs": 893691,
-                  "zero": 0.635566431798
+                  "zero": 0.63556643
                 }
               ]
             },
@@ -3333,80 +3333,80 @@
               "rows": [
                 {
                   "band": "18-24",
-                  "mean_change": 5.50998871006,
+                  "mean_change": 5.5099887,
                   "median": 1.27,
                   "pairs": 63685,
-                  "rate": 0.526026536861
+                  "rate": 0.52602654
                 },
                 {
                   "band": "24-30",
-                  "mean_change": 5.20386502858,
+                  "mean_change": 5.203865,
                   "median": 0.991,
                   "pairs": 52826,
-                  "rate": 1.20584560633
+                  "rate": 1.2058456
                 },
                 {
                   "band": "30-36",
-                  "mean_change": 3.75337309012,
+                  "mean_change": 3.7533731,
                   "median": 1.245,
                   "pairs": 19242,
-                  "rate": 3.64826941066
+                  "rate": 3.6482694
                 },
                 {
                   "band": "36-42",
-                  "mean_change": 6.18764937213,
+                  "mean_change": 6.1876494,
                   "median": 1.626,
                   "pairs": 32650,
-                  "rate": 0.43797856049
+                  "rate": 0.43797856
                 },
                 {
                   "band": "48-60",
-                  "mean_change": 5.68170586028,
+                  "mean_change": 5.6817059,
                   "median": 1.905,
                   "pairs": 37302,
-                  "rate": 0.369953353708
+                  "rate": 0.36995335
                 },
                 {
                   "band": "60-84",
-                  "mean_change": 5.1443989858,
+                  "mean_change": 5.144399,
                   "median": 1.9175,
                   "pairs": 64090,
-                  "rate": 0.333905445467
+                  "rate": 0.33390545
                 },
                 {
                   "band": "84-120",
-                  "mean_change": 4.69566418616,
+                  "mean_change": 4.6956642,
                   "median": 1.6,
                   "pairs": 76194,
-                  "rate": 0.363545686012
+                  "rate": 0.36354569
                 },
                 {
                   "band": "120-144",
-                  "mean_change": 4.86524665668,
+                  "mean_change": 4.8652467,
                   "median": 1.245,
                   "pairs": 37388,
-                  "rate": 0.468064619664
+                  "rate": 0.46806462
                 },
                 {
                   "band": "144-168",
-                  "mean_change": 4.03785166327,
+                  "mean_change": 4.0378517,
                   "median": 0.635,
                   "pairs": 26514,
-                  "rate": 2.77589198159
+                  "rate": 2.775892
                 },
                 {
                   "band": "168-192",
-                  "mean_change": 1.78601783992,
+                  "mean_change": 1.7860178,
                   "median": 0.635,
                   "pairs": 14518,
-                  "rate": 11.3927538228
+                  "rate": 11.392754
                 },
                 {
                   "band": "192-216",
-                  "mean_change": 0.541614185503,
+                  "mean_change": 0.54161419,
                   "median": 0.635,
                   "pairs": 2566,
-                  "rate": 23.6944660951
+                  "rate": 23.694466
                 }
               ]
             },
@@ -3425,30 +3425,30 @@
               "rows": [
                 {
                   "band": "144-168",
-                  "mean_F": 2.52986405351,
-                  "mean_M": 5.45771873169,
+                  "mean_F": 2.5298641,
+                  "mean_M": 5.4577187,
                   "n_F": 12858,
                   "n_M": 13656,
-                  "rate_F": 5.2885363198,
-                  "rate_M": 0.410076157001
+                  "rate_F": 5.2885363,
+                  "rate_M": 0.41007616
                 },
                 {
                   "band": "168-192",
-                  "mean_F": 0.698350498106,
-                  "mean_M": 2.83483466378,
+                  "mean_F": 0.6983505,
+                  "mean_M": 2.8348347,
                   "n_F": 7127,
                   "n_M": 7391,
-                  "rate_F": 18.5912726252,
-                  "rate_M": 4.45135976187
+                  "rate_F": 18.591273,
+                  "rate_M": 4.4513598
                 },
                 {
                   "band": "192-216",
-                  "mean_F": 0.22440564636,
-                  "mean_M": 0.891583606557,
+                  "mean_F": 0.22440565,
+                  "mean_M": 0.89158361,
                   "n_F": 1346,
                   "n_M": 1220,
-                  "rate_F": 28.8261515602,
-                  "rate_M": 18.0327868852
+                  "rate_F": 28.826152,
+                  "rate_M": 18.032787
                 }
               ]
             }
@@ -3457,16 +3457,16 @@
           "values": {
             "all_dec": 5925,
             "all_n": 893691,
-            "all_share": 0.662980828944,
-            "back_share": 61.0269360269,
+            "all_share": 0.66298083,
+            "back_share": 61.026936,
             "grid_cm": 0.635,
             "gro_dec": 565,
             "gro_n": 681114,
-            "gro_share": 0.0829523398433,
+            "gro_share": 0.08295234,
             "p_back": 725,
             "p_persist": 463,
             "p_tot": 1188,
-            "persist_share": 38.9730639731
+            "persist_share": 38.973064
           }
         },
         {
@@ -3616,8 +3616,8 @@
                 {
                   "beyond": 16663,
                   "channel": "head circ z",
-                  "max": 306212.5991,
-                  "min": -17485.9115,
+                  "max": 306212.6,
+                  "min": -17485.911,
                   "n": 1635640
                 },
                 {
@@ -3653,7 +3653,7 @@
                   "at100": 0,
                   "channel": "height",
                   "n": 3491616,
-                  "share0": 0.0802207344679,
+                  "share0": 0.080220734,
                   "share100": 0.0
                 },
                 {
@@ -3661,32 +3661,32 @@
                   "at100": 5221,
                   "channel": "weight",
                   "n": 6482932,
-                  "share0": 0.05528362784,
-                  "share100": 0.0805345482569
+                  "share0": 0.055283628,
+                  "share100": 0.080534548
                 },
                 {
                   "at0": 1599,
                   "at100": 1590,
                   "channel": "BMI",
                   "n": 1955337,
-                  "share0": 0.0817761848725,
-                  "share100": 0.0813159061584
+                  "share0": 0.081776185,
+                  "share100": 0.081315906
                 },
                 {
                   "at0": 6151,
                   "at100": 1203,
                   "channel": "weight-for-length",
                   "n": 2027317,
-                  "share0": 0.303405930104,
-                  "share100": 0.0593395112851
+                  "share0": 0.30340593,
+                  "share100": 0.059339511
                 },
                 {
                   "at0": 1509,
                   "at100": 856,
                   "channel": "weight-for-stature",
                   "n": 1371347,
-                  "share0": 0.110037794956,
-                  "share100": 0.0624203793788
+                  "share0": 0.11003779,
+                  "share100": 0.062420379
                 }
               ]
             }
@@ -3696,11 +3696,11 @@
             "expected": 15800,
             "lower25": 21248,
             "lower3": 9637,
-            "lower_share": 45.3548569277,
+            "lower_share": 45.354857,
             "max_hz": 3.0,
             "upper25": 34732,
             "upper3": 21,
-            "upper_share": 0.0604629736266
+            "upper_share": 0.060462974
           }
         },
         {
@@ -3797,16 +3797,16 @@
             "dbl_med": 43.5,
             "dbl_n": 13472,
             "dbl_ok": 13467,
-            "dbl_share": 99.9628859857,
+            "dbl_share": 99.962886,
             "hi": 65.0,
             "lo": 25.0,
             "out_range": 15025,
-            "recover_share": 89.6306156406,
+            "recover_share": 89.630616,
             "trip_n": 436,
             "trip_ok": 356,
             "z_all": 16663,
             "z_implaus": 14899,
-            "z_implaus_share": 89.4136710076,
+            "z_implaus_share": 89.413671,
             "z_plaus": 1764
           }
         },
@@ -3893,14 +3893,14 @@
             "age_match": 2786770,
             "age_share": 100.0,
             "lag1": 1218842,
-            "lag1_share": 43.7367274658,
+            "lag1_share": 43.736727,
             "n": 2786770,
             "off": 338,
-            "off_share": 0.0121287368531,
+            "off_share": 0.012128737,
             "round_only": 372482,
-            "vel_share": 99.6841863519,
+            "vel_share": 99.684186,
             "within": 2786432,
-            "within_share": 99.9878712631
+            "within_share": 99.987871
           }
         },
         {
@@ -3965,121 +3965,121 @@
                 {
                   "band": "0-2",
                   "bmi_z": null,
-                  "height_cm": 66.3476346281,
-                  "height_z": 0.362575076124,
-                  "height_z_sd": 1.00182444998,
+                  "height_cm": 66.347635,
+                  "height_z": 0.36257508,
+                  "height_z_sd": 1.0018244,
                   "patients": 95419,
                   "sex": "F",
                   "visits": 1294946,
-                  "weight_z": -0.144053260761
+                  "weight_z": -0.14405326
                 },
                 {
                   "band": "0-2",
                   "bmi_z": null,
-                  "height_cm": 67.9600505118,
-                  "height_z": 0.341356350454,
-                  "height_z_sd": 0.991784368648,
+                  "height_cm": 67.960051,
+                  "height_z": 0.34135635,
+                  "height_z_sd": 0.99178437,
                   "patients": 99226,
                   "sex": "M",
                   "visits": 1397984,
-                  "weight_z": -0.167217835011
+                  "weight_z": -0.16721784
                 },
                 {
                   "band": "2-5",
-                  "bmi_z": 0.149913759555,
-                  "height_cm": 96.0331770295,
-                  "height_z": 0.3538396758,
-                  "height_z_sd": 0.97379108942,
+                  "bmi_z": 0.14991376,
+                  "height_cm": 96.033177,
+                  "height_z": 0.35383968,
+                  "height_z_sd": 0.97379109,
                   "patients": 92851,
                   "sex": "F",
                   "visits": 677359,
-                  "weight_z": 0.284784823105
+                  "weight_z": 0.28478482
                 },
                 {
                   "band": "2-5",
-                  "bmi_z": 0.147652829695,
-                  "height_cm": 97.2579443399,
-                  "height_z": 0.338386127135,
-                  "height_z_sd": 0.994806736521,
+                  "bmi_z": 0.14765283,
+                  "height_cm": 97.257944,
+                  "height_z": 0.33838613,
+                  "height_z_sd": 0.99480674,
                   "patients": 96604,
                   "sex": "M",
                   "visits": 716626,
-                  "weight_z": 0.369128159475
+                  "weight_z": 0.36912816
                 },
                 {
                   "band": "5-10",
-                  "bmi_z": 0.418003212596,
-                  "height_cm": 122.499994405,
-                  "height_z": 0.119409650239,
-                  "height_z_sd": 0.980503003565,
+                  "bmi_z": 0.41800321,
+                  "height_cm": 122.49999,
+                  "height_z": 0.11940965,
+                  "height_z_sd": 0.980503,
                   "patients": 82246,
                   "sex": "F",
                   "visits": 745589,
-                  "weight_z": 0.362218286492
+                  "weight_z": 0.36221829
                 },
                 {
                   "band": "5-10",
-                  "bmi_z": 0.428375351099,
-                  "height_cm": 123.634703733,
-                  "height_z": 0.208271129787,
-                  "height_z_sd": 0.988819889688,
+                  "bmi_z": 0.42837535,
+                  "height_cm": 123.6347,
+                  "height_z": 0.20827113,
+                  "height_z_sd": 0.98881989,
                   "patients": 85364,
                   "sex": "M",
                   "visits": 784028,
-                  "weight_z": 0.450707333126
+                  "weight_z": 0.45070733
                 },
                 {
                   "band": "10-15",
-                  "bmi_z": 0.450907521556,
-                  "height_cm": 151.876601614,
-                  "height_z": 0.218173865579,
-                  "height_z_sd": 0.99287637789,
+                  "bmi_z": 0.45090752,
+                  "height_cm": 151.8766,
+                  "height_z": 0.21817387,
+                  "height_z_sd": 0.99287638,
                   "patients": 50775,
                   "sex": "F",
                   "visits": 366624,
-                  "weight_z": 0.489279070053
+                  "weight_z": 0.48927907
                 },
                 {
                   "band": "10-15",
-                  "bmi_z": 0.475233924034,
-                  "height_cm": 152.660038502,
-                  "height_z": 0.311575018118,
-                  "height_z_sd": 1.01233831527,
+                  "bmi_z": 0.47523392,
+                  "height_cm": 152.66004,
+                  "height_z": 0.31157502,
+                  "height_z_sd": 1.0123383,
                   "patients": 52556,
                   "sex": "M",
                   "visits": 375601,
-                  "weight_z": 0.574730050832
+                  "weight_z": 0.57473005
                 },
                 {
                   "band": "15-18",
-                  "bmi_z": 0.452939121156,
-                  "height_cm": 162.462547604,
-                  "height_z": -0.000374823523372,
-                  "height_z_sd": 0.991066928371,
+                  "bmi_z": 0.45293912,
+                  "height_cm": 162.46255,
+                  "height_z": -0.00037482352,
+                  "height_z_sd": 0.99106693,
                   "patients": 17530,
                   "sex": "F",
                   "visits": 72447,
-                  "weight_z": 0.45157686695
+                  "weight_z": 0.45157687
                 },
                 {
                   "band": "15-18",
-                  "bmi_z": 0.476486444884,
-                  "height_cm": 173.915952078,
-                  "height_z": 0.146814964283,
-                  "height_z_sd": 0.950298762345,
+                  "bmi_z": 0.47648644,
+                  "height_cm": 173.91595,
+                  "height_z": 0.14681496,
+                  "height_z_sd": 0.95029876,
                   "patients": 18049,
                   "sex": "M",
                   "visits": 63194,
-                  "weight_z": 0.646114897426
+                  "weight_z": 0.6461149
                 }
               ]
             }
           ],
           "title": "Age- and sex-stratified growth profile",
           "values": {
-            "best_z": 0.362575076124,
+            "best_z": 0.36257508,
             "n_bands": 5,
-            "worst_z": -0.000374823523372
+            "worst_z": -0.00037482352
           }
         },
         {
@@ -4098,35 +4098,35 @@
                 {
                   "meaning": "how far children sit from one another",
                   "quantity": "between-child SD of patient means",
-                  "value": 0.913999250768
+                  "value": 0.91399925
                 },
                 {
                   "meaning": "how much one child's channel moves",
                   "quantity": "within-child SD about a patient's own mean",
-                  "value": 0.426186297768
+                  "value": 0.4261863
                 },
                 {
                   "meaning": "share of variance that is between children",
                   "quantity": "implied intraclass correlation",
-                  "value": 0.821406576794
+                  "value": 0.82140658
                 },
                 {
                   "meaning": "correlation of successive values, 1,744,631 pairs",
                   "quantity": "lag-1 autocorrelation",
-                  "value": 0.924904374056
+                  "value": 0.92490437
                 }
               ]
             }
           ],
           "title": "Within-child dependence in the height channel",
           "values": {
-            "between": 0.913999250768,
-            "eff": 1.21742390218,
-            "icc": 0.821406576794,
+            "between": 0.91399925,
+            "eff": 1.2174239,
+            "icc": 0.82140658,
             "n_pat": 199727,
             "pairs": 1744631,
-            "rho": 0.924904374056,
-            "within": 0.426186297768
+            "rho": 0.92490437,
+            "within": 0.4261863
           }
         },
         {
@@ -4174,25 +4174,25 @@
                 {
                   "category": "underweight",
                   "patients": 33608,
-                  "share": 4.27558011739,
+                  "share": 4.2755801,
                   "visits": 83602
                 },
                 {
                   "category": "normal",
                   "patients": 193723,
-                  "share": 68.4494795526,
+                  "share": 68.44948,
                   "visits": 1338418
                 },
                 {
                   "category": "overweight",
                   "patients": 84669,
-                  "share": 14.3313403265,
+                  "share": 14.33134,
                   "visits": 280226
                 },
                 {
                   "category": "obese",
                   "patients": 49998,
-                  "share": 12.9436000035,
+                  "share": 12.9436,
                   "visits": 253091
                 }
               ]
@@ -4200,13 +4200,13 @@
           ],
           "title": "BMI: recomputation and recorded categories",
           "values": {
-            "med": 9.72365683083e-07,
+            "med": 9.7236568e-07,
             "n": 1955339,
-            "obese_share": 12.9436000035,
+            "obese_share": 12.9436,
             "off": 0,
             "off_share": 0.0,
-            "over_share": 14.3313403265,
-            "p95": 3.00341227408e-06,
+            "over_share": 14.33134,
+            "p95": 3.0034123e-06,
             "total": 1955337
           }
         }
@@ -4731,11 +4731,11 @@
             "enc_pat": 250563,
             "enc_total": 14714503,
             "pl_pts": 238823,
-            "pl_resolved_share": 44.3328318468,
+            "pl_resolved_share": 44.332832,
             "pl_rows": 1709584,
             "silent": 1204,
             "with_any": 6154801,
-            "with_any_share": 94.769829669
+            "with_any_share": 94.76983
           }
         },
         {
@@ -4882,11 +4882,11 @@
           "title": "Laboratory results",
           "values": {
             "no_result": 2494261,
-            "no_result_share": 14.4756959983,
+            "no_result_share": 14.475696,
             "orders": 6578838,
             "orphan_order": 2283186,
-            "orphan_share": 34.705004136,
-            "per_order": 2.61910705204,
+            "orphan_share": 34.705004,
+            "per_order": 2.6191071,
             "pts": 247271,
             "rows": 17230681
           }
@@ -4907,17 +4907,17 @@
               "id": "t-med-type",
               "rows": [
                 {
-                  "end_pct": 91.5934289408,
+                  "end_pct": 91.593429,
                   "n": 3250374,
                   "pts": 229099,
-                  "start_pct": 98.6693531267,
+                  "start_pct": 98.669353,
                   "type": "Internal"
                 },
                 {
-                  "end_pct": 69.0758283494,
+                  "end_pct": 69.075828,
                   "n": 572675,
                   "pts": 158974,
-                  "start_pct": 58.1237176409,
+                  "start_pct": 58.123718,
                   "type": "External"
                 }
               ]
@@ -5112,151 +5112,151 @@
               "id": "t-ref-top",
               "rows": [
                 {
-                  "med_age": 3.99178644764,
+                  "med_age": 3.9917864,
                   "n": 35723,
                   "pts": 29567,
                   "specialty": "Otolaryngology"
                 },
                 {
-                  "med_age": 4.58042436687,
+                  "med_age": 4.5804244,
                   "n": 24298,
                   "pts": 20605,
                   "specialty": "Ophthalmology"
                 },
                 {
-                  "med_age": 9.96851471595,
+                  "med_age": 9.9685147,
                   "n": 22887,
                   "pts": 19521,
                   "specialty": "Orthopedic Surgery"
                 },
                 {
-                  "med_age": 5.02943189596,
+                  "med_age": 5.0294319,
                   "n": 21761,
                   "pts": 18258,
                   "specialty": "Allergy"
                 },
                 {
-                  "med_age": 9.28952772074,
+                  "med_age": 9.2895277,
                   "n": 21748,
                   "pts": 16442,
                   "specialty": "Behavioral Health"
                 },
                 {
-                  "med_age": 7.5947980835,
+                  "med_age": 7.5947981,
                   "n": 20652,
                   "pts": 17851,
                   "specialty": "Dermatology"
                 },
                 {
-                  "med_age": 2.23682409309,
+                  "med_age": 2.2368241,
                   "n": 15972,
                   "pts": 13616,
                   "specialty": "Audiology"
                 },
                 {
-                  "med_age": 5.56741957563,
+                  "med_age": 5.5674196,
                   "n": 14344,
                   "pts": 12467,
                   "specialty": "Gastroenterology"
                 },
                 {
-                  "med_age": 6.8295687885,
+                  "med_age": 6.8295688,
                   "n": 13610,
                   "pts": 12134,
                   "specialty": "Cardiology"
                 },
                 {
-                  "med_age": 6.92402464066,
+                  "med_age": 6.9240246,
                   "n": 11275,
                   "pts": 9744,
                   "specialty": "Neurology"
                 },
                 {
-                  "med_age": 9.39082819986,
+                  "med_age": 9.3908282,
                   "n": 11035,
                   "pts": 8910,
                   "specialty": "Nutrition"
                 },
                 {
-                  "med_age": 4.0219028063,
+                  "med_age": 4.0219028,
                   "n": 10697,
                   "pts": 9140,
                   "specialty": "Urology"
                 },
                 {
-                  "med_age": 3.84394250513,
+                  "med_age": 3.8439425,
                   "n": 9879,
                   "pts": 7634,
                   "specialty": "Speech Pathology"
                 },
                 {
-                  "med_age": 11.2525667351,
+                  "med_age": 11.252567,
                   "n": 9861,
                   "pts": 8249,
                   "specialty": "Physical Therapy"
                 },
                 {
-                  "med_age": 1.40999315537,
+                  "med_age": 1.4099932,
                   "n": 9302,
                   "pts": 8511,
                   "specialty": "Early Intervention"
                 },
                 {
-                  "med_age": 3.90691307324,
+                  "med_age": 3.9069131,
                   "n": 8532,
                   "pts": 6794,
                   "specialty": "Developmental Medicine"
                 },
                 {
-                  "med_age": 9.36618754278,
+                  "med_age": 9.3661875,
                   "n": 6641,
                   "pts": 5583,
                   "specialty": "Endocrinology"
                 },
                 {
-                  "med_age": 5.14442162902,
+                  "med_age": 5.1444216,
                   "n": 6573,
                   "pts": 5002,
                   "specialty": "Occupational Therapy"
                 },
                 {
-                  "med_age": 3.77960301164,
+                  "med_age": 3.779603,
                   "n": 4206,
                   "pts": 3889,
                   "specialty": "General Surgery"
                 },
                 {
-                  "med_age": 9.02532511978,
+                  "med_age": 9.0253251,
                   "n": 4134,
                   "pts": 3537,
                   "specialty": "Psychology"
                 },
                 {
-                  "med_age": 4.80219028063,
+                  "med_age": 4.8021903,
                   "n": 3926,
                   "pts": 3539,
                   "specialty": "Pulmonary Disease"
                 },
                 {
-                  "med_age": 0.517453798768,
+                  "med_age": 0.5174538,
                   "n": 3454,
                   "pts": 3269,
                   "specialty": "Plastic Surgery"
                 },
                 {
-                  "med_age": 10.5900068446,
+                  "med_age": 10.590007,
                   "n": 2885,
                   "pts": 2458,
                   "specialty": "Psychiatry"
                 },
                 {
-                  "med_age": 11.4825462012,
+                  "med_age": 11.482546,
                   "n": 2863,
                   "pts": 2608,
                   "specialty": "Podiatry"
                 },
                 {
-                  "med_age": 0.402464065708,
+                  "med_age": 0.40246407,
                   "n": 2415,
                   "pts": 2302,
                   "specialty": "Neurosurgery"
@@ -5269,9 +5269,9 @@
             "pts": 138071,
             "rows": 349827,
             "spec_missing": 27452,
-            "spec_share": 7.84730738336,
+            "spec_share": 7.8473074,
             "visits_missing": 26601,
-            "visits_share": 7.60404428475
+            "visits_share": 7.6040443
           }
         },
         {
@@ -5290,17 +5290,17 @@
                 {
                   "category": "M",
                   "patients": 127699,
-                  "share": 50.9597426852
+                  "share": 50.959743
                 },
                 {
                   "category": "F",
                   "patients": 122883,
-                  "share": 49.0378629464
+                  "share": 49.037863
                 },
                 {
                   "category": "U",
                   "patients": 6,
-                  "share": 0.00239436844542
+                  "share": 0.0023943684
                 }
               ]
             },
@@ -5316,37 +5316,37 @@
                 {
                   "category": "Not Hispanic or Latino",
                   "patients": 170594,
-                  "share": 68.0774817629
+                  "share": 68.077482
                 },
                 {
                   "category": "Hispanic or Latino",
                   "patients": 28549,
-                  "share": 11.3928041247
+                  "share": 11.392804
                 },
                 {
                   "category": "Choose not to Answer",
                   "patients": 24566,
-                  "share": 9.80334253835
+                  "share": 9.8033425
                 },
                 {
                   "category": "Unknown",
                   "patients": 20834,
-                  "share": 8.3140453653
+                  "share": 8.3140454
                 },
                 {
                   "category": "[blank]",
                   "patients": 5464,
-                  "share": 2.18047153096
+                  "share": 2.1804715
                 },
                 {
                   "category": "Unable to collect",
                   "patients": 450,
-                  "share": 0.179577633406
+                  "share": 0.17957763
                 },
                 {
                   "category": "Patient does not know",
                   "patients": 131,
-                  "share": 0.0522770443916
+                  "share": 0.052277044
                 }
               ]
             },
@@ -5362,81 +5362,81 @@
                 {
                   "category": "White",
                   "patients": 155375,
-                  "share": 62.0041662011
+                  "share": 62.004166
                 },
                 {
                   "category": "Unknown",
                   "patients": 23085,
-                  "share": 9.21233259374
+                  "share": 9.2123326
                 },
                 {
                   "category": "Choose not to answer",
                   "patients": 17534,
-                  "share": 6.99714272032
+                  "share": 6.9971427
                 },
                 {
                   "category": "Another Race",
                   "patients": 15950,
-                  "share": 6.36502945073
+                  "share": 6.3650295
                 },
                 {
                   "category": "Asian",
                   "patients": 15661,
-                  "share": 6.24970070394
+                  "share": 6.2497007
                 },
                 {
                   "category": "Black or African American",
                   "patients": 12162,
-                  "share": 4.85338483886
+                  "share": 4.8533848
                 },
                 {
                   "category": "[blank]",
                   "patients": 8818,
-                  "share": 3.51892349195
+                  "share": 3.5189235
                 },
                 {
                   "category": "American Indian or Alaska Native",
                   "patients": 625,
-                  "share": 0.249413379731
+                  "share": 0.24941338
                 },
                 {
                   "category": "Middle Eastern or Northern African",
                   "patients": 512,
-                  "share": 0.204319440676
+                  "share": 0.20431944
                 },
                 {
                   "category": "Unable to collect",
                   "patients": 492,
-                  "share": 0.196338212524
+                  "share": 0.19633821
                 },
                 {
                   "category": "Native Hawaiian or Other Pacific Islander",
                   "patients": 248,
-                  "share": 0.0989672290772
+                  "share": 0.098967229
                 },
                 {
                   "category": "Patient does not know",
                   "patients": 126,
-                  "share": 0.0502817373537
+                  "share": 0.050281737
                 }
               ]
             }
           ],
           "title": "Recorded identity and patient-level observation",
           "values": {
-            "last": 8.27104722793,
+            "last": 8.2710472,
             "multi": 13191,
-            "multi_share": 5.26401902725,
-            "s25": 3.31006160164,
-            "s50": 7.01711156742,
-            "s75": 10.8692676249,
+            "multi_share": 5.264019,
+            "s25": 3.3100616,
+            "s50": 7.0171116,
+            "s75": 10.869268,
             "total": 250588,
             "v25": 15.0,
             "v50": 23.0,
             "v75": 34.0,
             "v95": 56.0,
             "vmax": 244,
-            "vmean": 25.916935368
+            "vmean": 25.916935
           }
         },
         {
@@ -5491,43 +5491,43 @@
                   "flag": "healthy_flag",
                   "meaning": "carries none of the tracked conditions",
                   "patients": 24471,
-                  "share": 9.76543170463
+                  "share": 9.7654317
                 },
                 {
                   "flag": "chronic_dx_flag",
                   "meaning": "any chronic diagnosis",
                   "patients": 203935,
-                  "share": 81.3825881527
+                  "share": 81.382588
                 },
                 {
                   "flag": "growth_dx_flag",
                   "meaning": "any of the tracked growth-relevant diagnoses",
                   "patients": 35907,
-                  "share": 14.3290979616
+                  "share": 14.329098
                 },
                 {
                   "flag": "ever_stunting_flag",
                   "meaning": "height z below the stunting threshold at any visit",
                   "patients": 17889,
-                  "share": 7.13880952001
+                  "share": 7.1388095
                 },
                 {
                   "flag": "ever_wasting_flag",
                   "meaning": "weight-for-length or -stature below the wasting threshold",
                   "patients": 66704,
-                  "share": 26.6189921305
+                  "share": 26.618992
                 },
                 {
                   "flag": "ever_underweight_flag",
                   "meaning": "BMI below the underweight threshold at any visit",
                   "patients": 33608,
-                  "share": 13.4116557856
+                  "share": 13.411656
                 },
                 {
                   "flag": "ever_obesity_flag",
                   "meaning": "BMI at or above the obesity threshold at any visit",
                   "patients": 49998,
-                  "share": 19.9522722557
+                  "share": 19.952272
                 }
               ]
             },
@@ -5543,21 +5543,21 @@
               "rows": [
                 {
                   "ch": "height",
-                  "mean": 0.298015054881,
+                  "mean": 0.29801505,
                   "n": 248172,
-                  "sd": 0.514720462824
+                  "sd": 0.51472046
                 },
                 {
                   "ch": "weight",
-                  "mean": 0.127462758068,
+                  "mean": 0.12746276,
                   "n": 249595,
-                  "sd": 0.537069369579
+                  "sd": 0.53706937
                 },
                 {
                   "ch": "BMI",
-                  "mean": 0.292688785285,
+                  "mean": 0.29268879,
                   "n": 199693,
-                  "sd": 0.530873831331
+                  "sd": 0.53087383
                 }
               ]
             }
@@ -5565,7 +5565,7 @@
           "title": "Patient-level derived flags and summaries",
           "values": {
             "dx_first_month": 25208,
-            "dx_first_share": 70.2368347729,
+            "dx_first_share": 70.236835,
             "dx_median": 0.027,
             "dx_negative": 35,
             "dx_observed": 35890,
@@ -5828,45 +5828,45 @@
               "rows": [
                 {
                   "family": "Endocrinology",
-                  "median_age": 9.4045174538,
+                  "median_age": 9.4045175,
                   "patients": 5790,
                   "referrals": 6916,
-                  "share": 1.97697719158
+                  "share": 1.9769772
                 },
                 {
                   "family": "Gastroenterology",
-                  "median_age": 5.57700205339,
+                  "median_age": 5.5770021,
                   "patients": 12764,
                   "referrals": 14715,
-                  "share": 4.20636486035
+                  "share": 4.2063649
                 },
                 {
                   "family": "Nutrition and dietetics",
-                  "median_age": 9.39082819986,
+                  "median_age": 9.3908282,
                   "patients": 8912,
                   "referrals": 11038,
-                  "share": 3.15527389252
+                  "share": 3.1552739
                 },
                 {
                   "family": "Nephrology",
-                  "median_age": 6.03148528405,
+                  "median_age": 6.0314853,
                   "patients": 937,
                   "referrals": 1087,
-                  "share": 0.310725015508
+                  "share": 0.31072502
                 },
                 {
                   "family": "Genetics",
-                  "median_age": 3.19780971937,
+                  "median_age": 3.1978097,
                   "patients": 2116,
                   "referrals": 2426,
-                  "share": 0.693485637186
+                  "share": 0.69348564
                 },
                 {
                   "family": "all other specialties",
                   "median_age": null,
                   "patients": null,
                   "referrals": 313645,
-                  "share": 89.6571734029
+                  "share": 89.657173
                 }
               ]
             }
@@ -5877,7 +5877,7 @@
             "has_desc": 14,
             "hierarchical": 29,
             "matched": 36182,
-            "matched_share": 10.3428265971,
+            "matched_share": 10.342827,
             "n_codes": 33,
             "n_shown": 28,
             "no_desc": 19,
@@ -5930,7 +5930,7 @@
                 {
                   "distinct": 6,
                   "field": "ethnicity",
-                  "missing": 2.18047153096,
+                  "missing": 2.1804715,
                   "present": 245124,
                   "resource": "patients",
                   "rows": 250588,
@@ -5939,7 +5939,7 @@
                 {
                   "distinct": 11,
                   "field": "race_1..8",
-                  "missing": 3.51892349195,
+                  "missing": 3.5189235,
                   "present": 241770,
                   "resource": "patients",
                   "rows": 250588,
@@ -5966,7 +5966,7 @@
                 {
                   "distinct": 2,
                   "field": "ethnicity",
-                  "missing": 20.5297141124,
+                  "missing": 20.529714,
                   "present": 199143,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -5975,7 +5975,7 @@
                 {
                   "distinct": 7,
                   "field": "race_1..8",
-                  "missing": 19.9750187559,
+                  "missing": 19.975019,
                   "present": 200533,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6092,7 +6092,7 @@
                 {
                   "distinct": 3758,
                   "field": "dx_age_years",
-                  "missing": 85.6776860823,
+                  "missing": 85.677686,
                   "present": 35890,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6101,7 +6101,7 @@
                 {
                   "distinct": 283,
                   "field": "dx_age_years_e03_9",
-                  "missing": 99.8766900251,
+                  "missing": 99.87669,
                   "present": 309,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6110,7 +6110,7 @@
                 {
                   "distinct": 468,
                   "field": "dx_age_years_e10",
-                  "missing": 99.8040608489,
+                  "missing": 99.804061,
                   "present": 491,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6119,7 +6119,7 @@
                 {
                   "distinct": 3,
                   "field": "dx_age_years_e22_0",
-                  "missing": 99.9988028158,
+                  "missing": 99.998803,
                   "present": 3,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6128,7 +6128,7 @@
                 {
                   "distinct": 148,
                   "field": "dx_age_years_e23_0",
-                  "missing": 99.9401407889,
+                  "missing": 99.940141,
                   "present": 150,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6137,7 +6137,7 @@
                 {
                   "distinct": 31,
                   "field": "dx_age_years_e23_6",
-                  "missing": 99.9876290964,
+                  "missing": 99.987629,
                   "present": 31,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6146,7 +6146,7 @@
                 {
                   "distinct": 1,
                   "field": "dx_age_years_e24",
-                  "missing": 99.9996009386,
+                  "missing": 99.999601,
                   "present": 1,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6155,7 +6155,7 @@
                 {
                   "distinct": 365,
                   "field": "dx_age_years_e30_0",
-                  "missing": 99.8327932702,
+                  "missing": 99.832793,
                   "present": 419,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6164,7 +6164,7 @@
                 {
                   "distinct": 1969,
                   "field": "dx_age_years_e30_1",
-                  "missing": 98.6411959072,
+                  "missing": 98.641196,
                   "present": 3405,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6173,7 +6173,7 @@
                 {
                   "distinct": 418,
                   "field": "dx_age_years_e34_3",
-                  "missing": 99.8216195508,
+                  "missing": 99.82162,
                   "present": 447,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6182,7 +6182,7 @@
                 {
                   "distinct": 82,
                   "field": "dx_age_years_e34_4",
-                  "missing": 99.9668779032,
+                  "missing": 99.966878,
                   "present": 83,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6191,7 +6191,7 @@
                 {
                   "distinct": 1,
                   "field": "dx_age_years_e72_11",
-                  "missing": 99.9996009386,
+                  "missing": 99.999601,
                   "present": 1,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6200,7 +6200,7 @@
                 {
                   "distinct": 113,
                   "field": "dx_age_years_k50",
-                  "missing": 99.9549060609,
+                  "missing": 99.954906,
                   "present": 113,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6209,7 +6209,7 @@
                 {
                   "distinct": 60,
                   "field": "dx_age_years_k51",
-                  "missing": 99.9752581927,
+                  "missing": 99.975258,
                   "present": 62,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6218,7 +6218,7 @@
                 {
                   "distinct": 799,
                   "field": "dx_age_years_k90_0",
-                  "missing": 99.641642856,
+                  "missing": 99.641643,
                   "present": 898,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6227,7 +6227,7 @@
                 {
                   "distinct": 69,
                   "field": "dx_age_years_n18",
-                  "missing": 99.9720657015,
+                  "missing": 99.972066,
                   "present": 70,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6236,7 +6236,7 @@
                 {
                   "distinct": 1,
                   "field": "dx_age_years_n25_0",
-                  "missing": 99.9996009386,
+                  "missing": 99.999601,
                   "present": 1,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6245,7 +6245,7 @@
                 {
                   "distinct": 41,
                   "field": "dx_age_years_p04_3",
-                  "missing": 99.9788497454,
+                  "missing": 99.97885,
                   "present": 53,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6254,7 +6254,7 @@
                 {
                   "distinct": 384,
                   "field": "dx_age_years_p05",
-                  "missing": 98.3762191326,
+                  "missing": 98.376219,
                   "present": 4069,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6263,7 +6263,7 @@
                 {
                   "distinct": 973,
                   "field": "dx_age_years_p07",
-                  "missing": 95.604737657,
+                  "missing": 95.604738,
                   "present": 11014,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6272,7 +6272,7 @@
                 {
                   "distinct": 96,
                   "field": "dx_age_years_p70",
-                  "missing": 98.6619471004,
+                  "missing": 98.661947,
                   "present": 3353,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6281,7 +6281,7 @@
                 {
                   "distinct": 222,
                   "field": "dx_age_years_p92_6",
-                  "missing": 94.2423420116,
+                  "missing": 94.242342,
                   "present": 14428,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6290,7 +6290,7 @@
                 {
                   "distinct": 14,
                   "field": "dx_age_years_q77",
-                  "missing": 99.9940140789,
+                  "missing": 99.994014,
                   "present": 15,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6299,7 +6299,7 @@
                 {
                   "distinct": 10,
                   "field": "dx_age_years_q78_0",
-                  "missing": 99.9960093859,
+                  "missing": 99.996009,
                   "present": 10,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6308,7 +6308,7 @@
                 {
                   "distinct": 2,
                   "field": "dx_age_years_q78_1",
-                  "missing": 99.9992018772,
+                  "missing": 99.999202,
                   "present": 2,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6317,7 +6317,7 @@
                 {
                   "distinct": 57,
                   "field": "dx_age_years_q87_1",
-                  "missing": 99.9768544384,
+                  "missing": 99.976854,
                   "present": 58,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6326,7 +6326,7 @@
                 {
                   "distinct": 31,
                   "field": "dx_age_years_q87_2",
-                  "missing": 99.987230035,
+                  "missing": 99.98723,
                   "present": 32,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6335,7 +6335,7 @@
                 {
                   "distinct": 45,
                   "field": "dx_age_years_q87_3",
-                  "missing": 99.9816431753,
+                  "missing": 99.981643,
                   "present": 46,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6344,7 +6344,7 @@
                 {
                   "distinct": 17,
                   "field": "dx_age_years_q87_4",
-                  "missing": 99.9932159561,
+                  "missing": 99.993216,
                   "present": 17,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6353,7 +6353,7 @@
                 {
                   "distinct": 109,
                   "field": "dx_age_years_q90",
-                  "missing": 99.9181924114,
+                  "missing": 99.918192,
                   "present": 205,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6362,7 +6362,7 @@
                 {
                   "distinct": 27,
                   "field": "dx_age_years_q96",
-                  "missing": 99.9856337893,
+                  "missing": 99.985634,
                   "present": 36,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6371,7 +6371,7 @@
                 {
                   "distinct": 17,
                   "field": "dx_age_years_q98_0",
-                  "missing": 99.9896244034,
+                  "missing": 99.989624,
                   "present": 26,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6380,7 +6380,7 @@
                 {
                   "distinct": 29,
                   "field": "dx_age_years_q98_4",
-                  "missing": 99.9832394209,
+                  "missing": 99.983239,
                   "present": 42,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6389,7 +6389,7 @@
                 {
                   "distinct": 13,
                   "field": "dx_age_years_q98_5",
-                  "missing": 99.9932159561,
+                  "missing": 99.993216,
                   "present": 17,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6407,7 +6407,7 @@
                 {
                   "distinct": 45164,
                   "field": "mean_weight_z_score",
-                  "missing": 0.00438967548326,
+                  "missing": 0.0043896755,
                   "present": 250577,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6416,7 +6416,7 @@
                 {
                   "distinct": 15604,
                   "field": "std_weight_z_score",
-                  "missing": 0.396267977716,
+                  "missing": 0.39626798,
                   "present": 249595,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6425,7 +6425,7 @@
                 {
                   "distinct": 47190,
                   "field": "min_weight_z_score",
-                  "missing": 0.00438967548326,
+                  "missing": 0.0043896755,
                   "present": 250577,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6434,7 +6434,7 @@
                 {
                   "distinct": 47420,
                   "field": "max_weight_z_score",
-                  "missing": 0.00438967548326,
+                  "missing": 0.0043896755,
                   "present": 250577,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6452,7 +6452,7 @@
                 {
                   "distinct": 41024,
                   "field": "mean_height_z_score",
-                  "missing": 0.130493080275,
+                  "missing": 0.13049308,
                   "present": 250261,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6461,7 +6461,7 @@
                 {
                   "distinct": 14332,
                   "field": "std_height_z_score",
-                  "missing": 0.964132360688,
+                  "missing": 0.96413236,
                   "present": 248172,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6470,7 +6470,7 @@
                 {
                   "distinct": 42098,
                   "field": "min_height_z_score",
-                  "missing": 0.130493080275,
+                  "missing": 0.13049308,
                   "present": 250261,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6479,7 +6479,7 @@
                 {
                   "distinct": 38259,
                   "field": "max_height_z_score",
-                  "missing": 0.130493080275,
+                  "missing": 0.13049308,
                   "present": 250261,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6497,7 +6497,7 @@
                 {
                   "distinct": 46476,
                   "field": "mean_bmi_z_score",
-                  "missing": 14.9787699331,
+                  "missing": 14.97877,
                   "present": 213053,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6506,7 +6506,7 @@
                 {
                   "distinct": 15234,
                   "field": "std_bmi_z_score",
-                  "missing": 20.3102303382,
+                  "missing": 20.31023,
                   "present": 199693,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6515,7 +6515,7 @@
                 {
                   "distinct": 50618,
                   "field": "min_bmi_z_score",
-                  "missing": 14.9787699331,
+                  "missing": 14.97877,
                   "present": 213053,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6524,7 +6524,7 @@
                 {
                   "distinct": 47254,
                   "field": "max_bmi_z_score",
-                  "missing": 14.9787699331,
+                  "missing": 14.97877,
                   "present": 213053,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6542,7 +6542,7 @@
                 {
                   "distinct": 46033,
                   "field": "mean_head_circ_z_score",
-                  "missing": 19.9546666241,
+                  "missing": 19.954667,
                   "present": 200584,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6551,7 +6551,7 @@
                 {
                   "distinct": 23188,
                   "field": "std_head_circ_z_score",
-                  "missing": 24.9513145083,
+                  "missing": 24.951315,
                   "present": 188063,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6560,7 +6560,7 @@
                 {
                   "distinct": 31399,
                   "field": "min_head_circ_z_score",
-                  "missing": 19.9546666241,
+                  "missing": 19.954667,
                   "present": 200584,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6569,7 +6569,7 @@
                 {
                   "distinct": 36528,
                   "field": "max_head_circ_z_score",
-                  "missing": 19.9546666241,
+                  "missing": 19.954667,
                   "present": 200584,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6587,7 +6587,7 @@
                 {
                   "distinct": 42565,
                   "field": "mean_weight_for_length_z_score",
-                  "missing": 12.0273117627,
+                  "missing": 12.027312,
                   "present": 220449,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6596,7 +6596,7 @@
                 {
                   "distinct": 18775,
                   "field": "std_weight_for_length_z_score",
-                  "missing": 16.9984197168,
+                  "missing": 16.99842,
                   "present": 207992,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6605,7 +6605,7 @@
                 {
                   "distinct": 42518,
                   "field": "min_weight_for_length_z_score",
-                  "missing": 12.0273117627,
+                  "missing": 12.027312,
                   "present": 220449,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6614,7 +6614,7 @@
                 {
                   "distinct": 38600,
                   "field": "max_weight_for_length_z_score",
-                  "missing": 12.0273117627,
+                  "missing": 12.027312,
                   "present": 220449,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6632,7 +6632,7 @@
                 {
                   "distinct": 45654,
                   "field": "mean_weight_for_stature_z_score",
-                  "missing": 14.1403419158,
+                  "missing": 14.140342,
                   "present": 215154,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6641,7 +6641,7 @@
                 {
                   "distinct": 15593,
                   "field": "std_weight_for_stature_z_score",
-                  "missing": 18.9131163503,
+                  "missing": 18.913116,
                   "present": 203194,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6650,7 +6650,7 @@
                 {
                   "distinct": 39544,
                   "field": "min_weight_for_stature_z_score",
-                  "missing": 14.1403419158,
+                  "missing": 14.140342,
                   "present": 215154,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6659,7 +6659,7 @@
                 {
                   "distinct": 38957,
                   "field": "max_weight_for_stature_z_score",
-                  "missing": 14.1403419158,
+                  "missing": 14.140342,
                   "present": 215154,
                   "resource": "patients_augmented",
                   "rows": 250588,
@@ -6713,7 +6713,7 @@
                 {
                   "distinct": 24694,
                   "field": "weight_oz",
-                  "missing": 0.0992382291835,
+                  "missing": 0.099238229,
                   "present": 6488028,
                   "resource": "visits",
                   "rows": 6494473,
@@ -6722,7 +6722,7 @@
                 {
                   "distinct": 4836,
                   "field": "height_in",
-                  "missing": 45.959695267,
+                  "missing": 45.959695,
                   "present": 3509633,
                   "resource": "visits",
                   "rows": 6494473,
@@ -6731,7 +6731,7 @@
                 {
                   "distinct": 2394,
                   "field": "head_circ_cm",
-                  "missing": 74.8141227163,
+                  "missing": 74.814123,
                   "present": 1635690,
                   "resource": "visits",
                   "rows": 6494473,
@@ -6740,7 +6740,7 @@
                 {
                   "distinct": 8216,
                   "field": "BMI",
-                  "missing": 43.6705179928,
+                  "missing": 43.670518,
                   "present": 3658303,
                   "resource": "visits",
                   "rows": 6494473,
@@ -6749,7 +6749,7 @@
                 {
                   "distinct": 10001,
                   "field": "bmi_percentile",
-                  "missing": 54.4045375198,
+                  "missing": 54.404538,
                   "present": 2961185,
                   "resource": "visits",
                   "rows": 6494473,
@@ -6758,7 +6758,7 @@
                 {
                   "distinct": 6892,
                   "field": "enc_diag_1..33",
-                  "missing": 5.23017033099,
+                  "missing": 5.2301703,
                   "present": 6154801,
                   "resource": "visits",
                   "rows": 6494473,
@@ -6794,7 +6794,7 @@
                 {
                   "distinct": 2,
                   "field": "ethnicity",
-                  "missing": 16.8336368478,
+                  "missing": 16.833637,
                   "present": 5401217,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -6803,7 +6803,7 @@
                 {
                   "distinct": 7,
                   "field": "race_1..8",
-                  "missing": 16.4933320995,
+                  "missing": 16.493332,
                   "present": 5423318,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -6839,7 +6839,7 @@
                 {
                   "distinct": 24694,
                   "field": "weight_oz",
-                  "missing": 0.0992382291835,
+                  "missing": 0.099238229,
                   "present": 6488028,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -6848,7 +6848,7 @@
                 {
                   "distinct": 20665,
                   "field": "weight_kg",
-                  "missing": 0.176550121927,
+                  "missing": 0.17655012,
                   "present": 6483007,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -6857,7 +6857,7 @@
                 {
                   "distinct": 2,
                   "field": "weight_outlier_flag",
-                  "missing": 0.0992382291835,
+                  "missing": 0.099238229,
                   "present": 6488028,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -6866,7 +6866,7 @@
                 {
                   "distinct": 5530,
                   "field": "delta_weight_kg",
-                  "missing": 11.4010944383,
+                  "missing": 11.401094,
                   "present": 5754032,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -6875,7 +6875,7 @@
                 {
                   "distinct": 3424,
                   "field": "delta_age_in_days_weight",
-                  "missing": 11.4010944383,
+                  "missing": 11.401094,
                   "present": 5754032,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -6884,7 +6884,7 @@
                 {
                   "distinct": 6449,
                   "field": "weight_velocity",
-                  "missing": 11.4010944383,
+                  "missing": 11.401094,
                   "present": 5754032,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -6893,7 +6893,7 @@
                 {
                   "distinct": 81802,
                   "field": "weight_z_score",
-                  "missing": 0.17770495004,
+                  "missing": 0.17770495,
                   "present": 6482932,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -6902,7 +6902,7 @@
                 {
                   "distinct": 10001,
                   "field": "weight_percentile",
-                  "missing": 0.17770495004,
+                  "missing": 0.17770495,
                   "present": 6482932,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -6911,7 +6911,7 @@
                 {
                   "distinct": 70036,
                   "field": "weight_for_length_z_score",
-                  "missing": 68.7839644572,
+                  "missing": 68.783964,
                   "present": 2027317,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -6920,7 +6920,7 @@
                 {
                   "distinct": 10001,
                   "field": "weight_for_length_percentile",
-                  "missing": 68.7839644572,
+                  "missing": 68.783964,
                   "present": 2027317,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -6929,7 +6929,7 @@
                 {
                   "distinct": 62664,
                   "field": "weight_for_stature_z_score",
-                  "missing": 78.8843990883,
+                  "missing": 78.884399,
                   "present": 1371347,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -6938,7 +6938,7 @@
                 {
                   "distinct": 10001,
                   "field": "weight_for_stature_percentile",
-                  "missing": 78.8843990883,
+                  "missing": 78.884399,
                   "present": 1371347,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -6956,7 +6956,7 @@
                 {
                   "distinct": 4836,
                   "field": "height_in",
-                  "missing": 45.959695267,
+                  "missing": 45.959695,
                   "present": 3509633,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -6965,7 +6965,7 @@
                 {
                   "distinct": 4568,
                   "field": "height_cm",
-                  "missing": 46.2364074806,
+                  "missing": 46.236407,
                   "present": 3491662,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -6974,7 +6974,7 @@
                 {
                   "distinct": 2,
                   "field": "height_outlier_flag",
-                  "missing": 45.959695267,
+                  "missing": 45.959695,
                   "present": 3509633,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -6983,7 +6983,7 @@
                 {
                   "distinct": 2683,
                   "field": "delta_height_cm",
-                  "missing": 57.0901287911,
+                  "missing": 57.090129,
                   "present": 2786770,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -6992,7 +6992,7 @@
                 {
                   "distinct": 3135,
                   "field": "delta_age_in_days_height",
-                  "missing": 57.0901287911,
+                  "missing": 57.090129,
                   "present": 2786770,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -7001,7 +7001,7 @@
                 {
                   "distinct": 6653,
                   "field": "height_velocity",
-                  "missing": 57.0901287911,
+                  "missing": 57.090129,
                   "present": 2786770,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -7010,7 +7010,7 @@
                 {
                   "distinct": 78625,
                   "field": "height_velocity_z_score",
-                  "missing": 82.6423329499,
+                  "missing": 82.642333,
                   "present": 1127289,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -7019,7 +7019,7 @@
                 {
                   "distinct": 90660,
                   "field": "height_velocity_z_score_ep",
-                  "missing": 84.9548839452,
+                  "missing": 84.954884,
                   "present": 977101,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -7028,7 +7028,7 @@
                 {
                   "distinct": 78394,
                   "field": "height_velocity_z_score_ap",
-                  "missing": 85.2035877276,
+                  "missing": 85.203588,
                   "present": 960949,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -7037,7 +7037,7 @@
                 {
                   "distinct": 91509,
                   "field": "height_velocity_z_score_lp",
-                  "missing": 85.2016630141,
+                  "missing": 85.201663,
                   "present": 961074,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -7046,7 +7046,7 @@
                 {
                   "distinct": 10001,
                   "field": "height_velocity_percentile",
-                  "missing": 82.6423329499,
+                  "missing": 82.642333,
                   "present": 1127289,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -7055,7 +7055,7 @@
                 {
                   "distinct": 10001,
                   "field": "height_velocity_percentile_ep",
-                  "missing": 84.9548839452,
+                  "missing": 84.954884,
                   "present": 977101,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -7064,7 +7064,7 @@
                 {
                   "distinct": 10001,
                   "field": "height_velocity_percentile_ap",
-                  "missing": 85.2035877276,
+                  "missing": 85.203588,
                   "present": 960949,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -7073,7 +7073,7 @@
                 {
                   "distinct": 10001,
                   "field": "height_velocity_percentile_lp",
-                  "missing": 85.2016630141,
+                  "missing": 85.201663,
                   "present": 961074,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -7082,7 +7082,7 @@
                 {
                   "distinct": 62757,
                   "field": "height_z_score",
-                  "missing": 46.2371157752,
+                  "missing": 46.237116,
                   "present": 3491616,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -7091,7 +7091,7 @@
                 {
                   "distinct": 9988,
                   "field": "height_percentile",
-                  "missing": 46.2371157752,
+                  "missing": 46.237116,
                   "present": 3491616,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -7109,7 +7109,7 @@
                 {
                   "distinct": 2394,
                   "field": "head_circ_cm",
-                  "missing": 74.8141227163,
+                  "missing": 74.814123,
                   "present": 1635690,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -7118,7 +7118,7 @@
                 {
                   "distinct": 66115,
                   "field": "head_circ_z_score",
-                  "missing": 74.8148926018,
+                  "missing": 74.814893,
                   "present": 1635640,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -7127,7 +7127,7 @@
                 {
                   "distinct": 10001,
                   "field": "head_circ_percentile",
-                  "missing": 74.8148926018,
+                  "missing": 74.814893,
                   "present": 1635640,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -7136,7 +7136,7 @@
                 {
                   "distinct": 380344,
                   "field": "bmi",
-                  "missing": 69.8922606961,
+                  "missing": 69.892261,
                   "present": 1955339,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -7145,7 +7145,7 @@
                 {
                   "distinct": 71202,
                   "field": "bmi_z_score",
-                  "missing": 69.8922914915,
+                  "missing": 69.892291,
                   "present": 1955337,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -7154,7 +7154,7 @@
                 {
                   "distinct": 10001,
                   "field": "bmi_percentile",
-                  "missing": 69.8922914915,
+                  "missing": 69.892291,
                   "present": 1955337,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -7163,7 +7163,7 @@
                 {
                   "distinct": 4,
                   "field": "bmi_category",
-                  "missing": 69.8922914915,
+                  "missing": 69.892291,
                   "present": 1955337,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -7208,7 +7208,7 @@
                 {
                   "distinct": 6892,
                   "field": "enc_diag_1..33",
-                  "missing": 5.23017033099,
+                  "missing": 5.2301703,
                   "present": 6154801,
                   "resource": "visits_augmented",
                   "rows": 6494473,
@@ -7226,7 +7226,7 @@
                 {
                   "distinct": 2859084,
                   "field": "visit_id",
-                  "missing": 0.00467189892263,
+                  "missing": 0.0046718989,
                   "present": 17229876,
                   "resource": "labs",
                   "rows": 17230681,
@@ -7244,7 +7244,7 @@
                 {
                   "distinct": 149,
                   "field": "result_line_num",
-                  "missing": 13.2507008864,
+                  "missing": 13.250701,
                   "present": 14947495,
                   "resource": "labs",
                   "rows": 17230681,
@@ -7280,7 +7280,7 @@
                 {
                   "distinct": 6613,
                   "field": "lab_result_date_age_in_days",
-                  "missing": 13.2507008864,
+                  "missing": 13.250701,
                   "present": 14947495,
                   "resource": "labs",
                   "rows": 17230681,
@@ -7289,7 +7289,7 @@
                 {
                   "distinct": 12902,
                   "field": "result_component_name",
-                  "missing": 13.2507008864,
+                  "missing": 13.250701,
                   "present": 14947495,
                   "resource": "labs",
                   "rows": 17230681,
@@ -7298,7 +7298,7 @@
                 {
                   "distinct": 2194,
                   "field": "result_loinc_code",
-                  "missing": 92.1645464854,
+                  "missing": 92.164546,
                   "present": 1350102,
                   "resource": "labs",
                   "rows": 17230681,
@@ -7307,7 +7307,7 @@
                 {
                   "distinct": 104312,
                   "field": "result_value",
-                  "missing": 14.4756959983,
+                  "missing": 14.475696,
                   "present": 14736420,
                   "resource": "labs",
                   "rows": 17230681,
@@ -7316,7 +7316,7 @@
                 {
                   "distinct": 35,
                   "field": "result_flag",
-                  "missing": 90.2517143693,
+                  "missing": 90.251714,
                   "present": 1679696,
                   "resource": "labs",
                   "rows": 17230681,
@@ -7361,7 +7361,7 @@
                 {
                   "distinct": 6644,
                   "field": "med_start_date_age_in_days",
-                  "missing": 7.404194924,
+                  "missing": 7.4041949,
                   "present": 3539983,
                   "resource": "medications",
                   "rows": 3823049,
@@ -7370,7 +7370,7 @@
                 {
                   "distinct": 6939,
                   "field": "med_end_date_age_in_days",
-                  "missing": 11.7796031388,
+                  "missing": 11.779603,
                   "present": 3372709,
                   "resource": "medications",
                   "rows": 3823049,
@@ -7415,7 +7415,7 @@
                 {
                   "distinct": 6930,
                   "field": "noted_date_age_in_days",
-                  "missing": 0.426068564048,
+                  "missing": 0.42606856,
                   "present": 1702300,
                   "resource": "problem_list",
                   "rows": 1709584,
@@ -7424,7 +7424,7 @@
                 {
                   "distinct": 6565,
                   "field": "resolved_date_age_in_days",
-                  "missing": 55.6671681532,
+                  "missing": 55.667168,
                   "present": 757907,
                   "resource": "problem_list",
                   "rows": 1709584,
@@ -7451,7 +7451,7 @@
                 {
                   "distinct": 298615,
                   "field": "visit_id",
-                  "missing": 7.09779405249,
+                  "missing": 7.0977941,
                   "present": 324997,
                   "resource": "referrals",
                   "rows": 349827,
@@ -7478,7 +7478,7 @@
                 {
                   "distinct": 119,
                   "field": "requested_specialty",
-                  "missing": 7.84730738336,
+                  "missing": 7.8473074,
                   "present": 322375,
                   "resource": "referrals",
                   "rows": 349827,
@@ -7487,7 +7487,7 @@
                 {
                   "distinct": 6,
                   "field": "referral_number_of_visits",
-                  "missing": 7.60404428475,
+                  "missing": 7.6040443,
                   "present": 323226,
                   "resource": "referrals",
                   "rows": 349827,

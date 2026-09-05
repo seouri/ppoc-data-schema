@@ -722,7 +722,7 @@ The derived channels are not a neutral restatement of the measurements. Each car
 | height z | 3,491,616 | -4.9992 | 3.0000 | 0 |
 | weight z | 6,482,932 | -4.9991 | 4.9995 | 0 |
 | BMI z | 1,955,337 | -18.7803 | 6.7026 | 400 |
-| head circ z | 1,635,640 | -17,485.9115 | 306,212.5991 | 16,663 |
+| head circ z | 1,635,640 | -17,485.9110 | 306,212.6000 | 16,663 |
 | weight-for-length z | 2,027,317 | -145.6016 | 7.6285 | 1,123 |
 | weight-for-stature z | 1,371,347 | -14.3445 | 7.4762 | 246 |
 

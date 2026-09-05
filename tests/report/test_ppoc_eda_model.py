@@ -56,3 +56,32 @@ def test_chart_text_is_escaped() -> None:
                                 "series": [{"name": "a&b", "values": [1]}]})
     assert "<script>" not in svg
     assert "&lt;script&gt;" in svg
+
+
+def test_stabilize_absorbs_the_drift_that_parallel_aggregates_produce() -> None:
+    """The rounding must sit clear of DuckDB's ~1e-12 parallel-sum drift.
+
+    At 12 significant figures the drift landed on the rounding boundary and the
+    same aggregate serialized two different ways between runs, which rewrote the
+    committed HTML and PDF on every build.
+    """
+    from ppoc_eda.findings import STABILIZE_DIGITS, stabilize
+
+    samples = [97.2579443399, 0.338386127135, 99.9628859857, 17.2448251249,
+               9.72365683083e-07, 0.663, 1327.0, 0.0831234567]
+    for value in samples:
+        for direction in (1.0, -1.0):
+            drifted = value * (1.0 + direction * 1e-12)
+            assert stabilize(value) == stabilize(drifted), (
+                f"{value} and its 1e-12 perturbation stabilise differently at "
+                f"{STABILIZE_DIGITS} significant figures"
+            )
+
+
+def test_stabilize_keeps_more_precision_than_the_report_shows() -> None:
+    """Rounding must not be visible: 8 figures against 4 displayed decimals."""
+    from ppoc_eda.findings import stabilize
+
+    assert f"{stabilize(0.338386127135):.4f}" == f"{0.338386127135:.4f}"
+    assert f"{stabilize(99.9628859857):.2f}" == f"{99.9628859857:.2f}"
+    assert f"{stabilize(9.72365683083e-07):.1e}" == f"{9.72365683083e-07:.1e}"

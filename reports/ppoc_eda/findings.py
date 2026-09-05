@@ -131,15 +131,24 @@ class Finding:
         return out
 
 
-def stabilize(value: Any, digits: int = 12) -> Any:
+#: Significant figures kept when stabilising a float.
+#:
+#: DuckDB sums in parallel, so an aggregate like avg() drifts between runs on
+#: identical data at a relative magnitude of about 1e-12. Rounding has to sit
+#: well clear of that: at 12 figures the drift lands exactly on the rounding
+#: boundary and a mean of 97.2579443399 becomes 97.25794434 on some runs, which
+#: defeats the change-detection gate and churns the committed binaries. Each
+#: figure removed cuts the chance of a boundary collision roughly tenfold, and 8
+#: is still four orders finer than the most precise thing the report displays
+#: (a z-score at four decimals), so it costs nothing readers can see.
+STABILIZE_DIGITS = 8
+
+
+def stabilize(value: Any, digits: int = STABILIZE_DIGITS) -> Any:
     """Round floats so a rebuild of an unchanged snapshot compares equal.
 
-    DuckDB sums in parallel, so an aggregate like avg() can differ in its last
-    few bits between runs on identical data. Left alone that defeats the
-    change-detection gate and churns the committed binaries. Rounding to
-    `digits` significant figures removes the scheduling noise while staying far
-    finer than anything the report displays, and it is applied to the finding
-    itself so the JSON and the prose still carry exactly the same number.
+    Applied to the finding itself rather than at serialization, so the JSON and
+    the prose still carry exactly the same number.
     """
     if isinstance(value, bool) or value is None:
         return value
