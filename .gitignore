@@ -2,12 +2,10 @@
 .worktrees/
 __pycache__/
 
-# PPOC source delivery documents. This repository is public.
-# ppoc-patient-list-notes-*.xlsx carries free-text lab procedure names holding
-# clinical narrative, facility names, patient ages, and calendar dates at a
-# unique-patient count of 1 — treat as PHI-adjacent and never publish it.
-# The dictionary and the extract diagram scan clean, but they are vendor
-# delivery documents; un-ignore them deliberately if redistribution is intended.
+# PPOC source delivery document held back from this public repository.
+# The exclusion-labs sheet lists lab procedure names carrying free-text clinical
+# narrative, facility names, patient ages, and calendar dates at a unique-patient
+# count of 1. Treat as PHI-adjacent and do not publish it.
+# The data dictionary and the extract diagram were reviewed and are committed;
+# they contain only field definitions and aggregate counts.
 docs/ppoc-patient-list-notes-*.xlsx
-docs/ppoc-extract-data-dictionary-*.xlsx
-docs/ppoc-growth-charts-ai-project-data-extract-*.pdf
