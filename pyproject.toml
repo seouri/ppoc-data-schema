@@ -33,3 +33,14 @@ markers = [
 [tool.ruff]
 target-version = "py312"
 line-length = 100
+
+# scripts/augment.py and scripts/harrall_outliers.py are vendored byte-identical
+# from the data delivery and pinned by SHA-256 in
+# data/augment-runtime-manifest.json, which tests/test_augment_import.py
+# enforces: any edit to them, down to a trailing comment, fails that test and
+# breaks the runtime closure. Their style findings are real but un-actionable,
+# and the files cannot carry `noqa` comments for the same reason, so the
+# exemption is recorded here instead of being silenced in place.
+[tool.ruff.lint.per-file-ignores]
+"scripts/augment.py" = ["ALL"]
+"scripts/harrall_outliers.py" = ["ALL"]

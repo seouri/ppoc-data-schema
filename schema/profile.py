@@ -20,7 +20,6 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-
 ROOT = Path(__file__).resolve().parents[1]
 DESCRIPTOR = ROOT / "datapackage.json"
 OUTPUT = ROOT / "schema" / "stats.json"
@@ -79,7 +78,9 @@ class Source:
             )
         else:
             command = f"duckdb -json -c {shlex.quote(sql)}"
-        result = subprocess.run(["/bin/sh", "-c", command], capture_output=True, text=True)
+        result = subprocess.run(
+            ["/bin/sh", "-c", command], capture_output=True, text=True, check=False
+        )
         if result.returncode != 0:
             raise SystemExit(f"duckdb failed on {self.name}:\n{result.stderr.strip()}\n\nquery:\n{sql}")
         return json.loads(result.stdout or "[]")
@@ -240,7 +241,9 @@ def main() -> None:
         print(f"profiling {item['name']} ...", flush=True)
         resources[item["name"]] = profile_resource(item, args.data_root, visits_csv)
 
-    version = subprocess.run(["duckdb", "-version"], capture_output=True, text=True).stdout.strip()
+    version = subprocess.run(
+        ["duckdb", "-version"], capture_output=True, text=True, check=False
+    ).stdout.strip()
     payload = {
         "snapshot": args.snapshot,
         "profiledWith": version,
