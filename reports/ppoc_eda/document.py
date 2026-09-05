@@ -7,7 +7,16 @@ import pkgutil
 from dataclasses import dataclass, field
 
 from .context import Context
-from .findings import Finding, part_key, registered
+from .findings import (
+    Column,
+    Figure,
+    Finding,
+    Para,
+    Table,
+    part_key,
+    registered,
+    stabilize,
+)
 
 PARTS: list[tuple[str, str, str]] = [
     ("0", "How to use this report",
@@ -62,6 +71,39 @@ def load_probes() -> None:
         importlib.import_module(f"{probes.__name__}.{info.name}")
 
 
+def _catalogue(found: list[Finding]) -> Finding | None:
+    """Collect every artifact a probe declared into one catalogue for Part 7."""
+    rows = []
+    for f in found:
+        if not f.artifact:
+            continue
+        a = f.artifact
+        rows.append({"artifact": a.name, "class": a.kind,
+                     "scale": f.render(a.scale), "recoverable": a.recoverable,
+                     "where": f.part})
+    if not rows:
+        return None
+    kinds = sorted({r["class"] for r in rows})
+    out = Finding(
+        id="catalogue.all", part="7.1", title="Every artifact this report measured",
+        values={"n": len(rows), "kinds": len(kinds), "kindlist": ", ".join(kinds)},
+    )
+    out.blocks = [
+        Para("One row per artifact, gathered from the findings that measured them. "
+             "The class says who produced the artifact, which decides whether it can "
+             "be repaired: a derivation artifact can be recomputed without touching "
+             "the clinical record, a capture artifact cannot, a selection artifact is "
+             "outside the extract entirely. {n} artifacts across {kinds} classes "
+             "({kindlist})."),
+        Table("t-catalogue", "Artifact catalogue",
+              [Column("artifact", "artifact"), Column("class", "class"),
+               Column("scale", "scale in this snapshot"),
+               Column("recoverable", "recoverable?"),
+               Column("where", "section")], rows),
+    ]
+    return out
+
+
 def build(ctx: Context, only: str | None = None) -> Document:
     load_probes()
     found: list[Finding] = []
@@ -71,6 +113,17 @@ def build(ctx: Context, only: str | None = None) -> Document:
         found.extend(fn(ctx))
     found.sort(key=lambda f: (part_key(f.part), f.id))
 
+    for f in found:
+        f.values = stabilize(f.values)
+        for block in f.blocks:
+            if isinstance(block, Table):
+                block.rows = stabilize(block.rows)
+            elif isinstance(block, Figure):
+                block.data = stabilize(block.data)
+
+    catalogue = _catalogue(found)
+    if catalogue:
+        found.append(catalogue)
     parts = [Part(n, t, lede) for n, t, lede in PARTS]
     index = {p.number: p for p in parts}
     for f in found:

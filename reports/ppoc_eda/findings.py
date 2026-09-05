@@ -9,6 +9,7 @@ prose.
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass, field
 from typing import Any
@@ -128,6 +129,29 @@ class Finding:
                 "recoverable": self.artifact.recoverable,
             }
         return out
+
+
+def stabilize(value: Any, digits: int = 12) -> Any:
+    """Round floats so a rebuild of an unchanged snapshot compares equal.
+
+    DuckDB sums in parallel, so an aggregate like avg() can differ in its last
+    few bits between runs on identical data. Left alone that defeats the
+    change-detection gate and churns the committed binaries. Rounding to
+    `digits` significant figures removes the scheduling noise while staying far
+    finer than anything the report displays, and it is applied to the finding
+    itself so the JSON and the prose still carry exactly the same number.
+    """
+    if isinstance(value, bool) or value is None:
+        return value
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            return value
+        return float(f"%.{digits}g" % value)
+    if isinstance(value, dict):
+        return {k: stabilize(v, digits) for k, v in value.items()}
+    if isinstance(value, list):
+        return [stabilize(v, digits) for v in value]
+    return value
 
 
 # ---------------------------------------------------------------------------

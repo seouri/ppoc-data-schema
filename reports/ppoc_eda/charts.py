@@ -39,8 +39,9 @@ def nice_ticks(lo: float, hi: float, count: int = 5) -> list[float]:
     else:
         stepsize = mag * 10
     start = math.floor(lo / stepsize) * stepsize
+    end = math.ceil(hi / stepsize) * stepsize
     out, value = [], start
-    while value <= hi + stepsize * 1e-9:
+    while value <= end + stepsize * 1e-9:
         if value >= lo - stepsize * 1e-9:
             out.append(round(value, 10))
         value += stepsize
