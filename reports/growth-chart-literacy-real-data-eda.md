@@ -14,6 +14,10 @@ The distributed anthropometric layer also contains clinically important quality 
 
 Section 6 profiles these and other characteristic EHR artifacts directly, and three of its findings change how the derived layer can be used. First, the distributed **height z-score is truncated at exactly +3** while its lower tail runs to −5: only **21 visits** sit at or above +3 where roughly **15,800** would be expected, so the tall-stature tail of the height channel is effectively absent. The source project documents this filter and already plans to raise the ceiling to +5, but estimates its cost from the post-filter distribution; the measured cost is those ~15,800 visits, of which **13,563** remain identifiable in the retained raw `height_in`. Second, **13,467 of the 15,025** out-of-range head circumferences are ordinary infant measurements that were put through an inch-to-centimetre conversion a second time, which makes that channel largely recoverable rather than simply unusable, though its z transform is separately defective. Third, the distributed **`delta_*` and velocity fields are computed over an age-dependent minimum interval of 90 to 335 days**, not between adjacent visits: under that documented rule they reproduce on **99.99%** of rows, against 43.7% for a naive lag. They are usable as supplied, but a velocity here is already smoothed relative to a visit-to-visit rate and cannot be compared with one. Alongside these, height is recorded on a quarter-inch grid in **80.0%** of visits, which sets a floor on the trajectory deflection that is detectable at all.
 
+Section 6 also tests the transcription errors that a typed anthropometric field invites — a swapped pair of digits, a dropped digit, a misplaced decimal point, a value keyed in the wrong unit — against a permutation null, because each of those hypotheses has enough freedom to fit an arbitrary number and none of them means anything unscored. **Digit transposition falls below chance in both the height and the weight channel**, which removes the mechanism a reader would most expect to matter — with the scope the test can support: the anomaly gate would have caught 70% of possible height swaps and 32% of weight swaps, so the height negative is well powered and the weight negative rules out only the large ones. Three others are real: `height_in` carries **1,371** entries recorded as a whole number of feet and a **143**-visit cluster of centimetre values, both identifiable without the anchor and both already removed by the derivation layer as a side effect of its z bound; and a misplaced decimal point in `weight_oz` is enriched **17-fold** over the null, the strongest signal measured anywhere in the section. Because section 6.1 recommends re-running the augmentation from the raw `height_in`, that inherited protection has to be replaced by an explicit check rather than assumed.
+
+Apparent height loss decomposes the same way, into recording behaviour rather than error. Over intervals longer than a year the decrease rate is **0.663%**, but restricting to ages 2 to 10, where growth is unambiguously ongoing, drops it to **0.083%**. The bulk of it is the quarter-inch grid acting on adolescents whose growth has stopped — the rate reaches **28.8%** in girls aged 16 to 18 against **18.0%** in boys, in the same order as growth cessation — and a separate several-fold spike at **30 to 36 months** marks the change from recumbent length to standing height in a field that does not name the protocol. Both belong in any trajectory that claims to look like this panel; neither should be filtered as an outlier.
+
 The patient-level `growth_dx_flag` is present in **35,907 patients**; its median recorded age is **0.027 years**, with **70.1%** of age-observed flagged patients assigned a code in the first month. This supports the source project’s decision to treat diagnosis-code flags as descriptive rather than as a direct label of multi-year trajectory interpretation.
 
 The candidate diagnosis/healthy-arm split also shows why a utilization covariate needs a common index date: flagged patients average **4.57** visits before diagnosis versus **14.02** for the healthy arm, even though their lifetime means are **25.32** versus **14.02**. The corresponding AUROCs are **0.131** for the pre-diagnosis count and **0.7447** for lifetime count; **45.8%** of flagged patients have no exact healthy-arm count match. This is a design diagnostic for the discarded flag-based arm, not a registered referral endpoint.
@@ -289,7 +293,7 @@ Heaping is not uniform across childhood. Infant weights are recorded in ounces, 
 
 ### 6.3 Unit-conversion integrity and a recoverable head-circumference defect
 
-The imperial-to-metric conversions are exact. Across 3,491,662 visits with both a raw and a derived height, 0 disagree with `height_in × 2.54` by more than 0.01 cm; across 6,483,007 weight pairs, 0 disagree with `weight_oz × 0.0283495`. The height and weight channels carry no unit-conversion defect.
+The imperial-to-metric conversions are exact. Across 3,491,662 visits with both a raw and a derived height, 0 disagree with `height_in × 2.54` by more than 0.01 cm; across 6,483,007 weight pairs, 0 disagree with `weight_oz × 0.0283495`. The height and weight channels carry no unit-conversion *arithmetic* defect. That is a statement about the transformation, not about its input: section 6.5 shows that the typed imperial value is itself sometimes recorded in the wrong unit, and an exact conversion of a wrongly-united value is exactly wrong.
 
 Head circumference does. Its out-of-range values form structured clusters.
 
@@ -320,11 +324,115 @@ Across 1,745,025 successive age-2-or-later height pairs, 88,856 (5.09%) record e
 | 181 to 365 days | 367,887 | 1.58% | 1.45% | 0.19% |
 | over 365 days | 892,882 | 0.64% | 0.66% | 0.05% |
 
-At short intervals the rates are dominated by measurement noise and rounding: within a week, a child genuinely has not grown a measurable amount, and the quarter-inch grid absorbs the rest, so nearly half of repeat heights are identical and a fifth are lower. At long intervals both mechanisms should vanish, and they do not entirely — over a year apart, exactly-zero change and apparent shrinkage each still occur in well under one percent of pairs, which is the residue consistent with a value carried forward or entered in error.
+At short intervals the rates are dominated by measurement noise and rounding: within a week, a child genuinely has not grown a measurable amount, and the quarter-inch grid absorbs the rest, so nearly half of repeat heights are identical and a fifth are lower. At long intervals both mechanisms should vanish, and they do not entirely — over a year apart, exactly-zero change and apparent shrinkage each still occur in well under one percent of pairs. That residue is not one thing, and the rest of this subsection separates it. Its magnitude is the first clue: apparent losses are small at every interval.
 
-**Consequence for this project.** The short-interval rates are an empirical measurement-error estimate rather than a defect, and they are directly usable for the matched-noise requirement in the counterfactual stimulus design: any synthetic trajectory whose repeat measurements are noiseless will be unrealistically clean relative to this panel. The long-interval residue is a different matter and should be screened before serialization.
+| age gap | pairs | any decrease | median loss | 90th percentile | 99th percentile |
+| --- | --- | --- | --- | --- | --- |
+| up to 7 days | 25,968 | 21.31% | 0.69 cm | 2.54 cm | 8.96 cm |
+| 8 to 30 days | 82,652 | 19.03% | 0.64 cm | 2.11 cm | 8.25 cm |
+| 31 to 90 days | 170,521 | 10.51% | 0.64 cm | 2.54 cm | 9.14 cm |
+| 91 to 180 days | 205,153 | 4.22% | 0.81 cm | 2.54 cm | 10.63 cm |
+| 181 to 365 days | 368,248 | 1.44% | 0.79 cm | 3.05 cm | 11.43 cm |
+| over 365 days | 893,691 | 0.66% | 0.64 cm | 2.41 cm | 9.70 cm |
 
-### 6.5 Same-day duplicate encounters and same-day measurement disagreement
+The median apparent loss is well under a centimetre at every interval, including the longest. One quarter-inch grid step is 0.635 cm, so a large share of these losses is a single step on the recording grid of 6.2 rather than a recorded event. Of the 893,691 height pairs more than a year apart at age 2 or later, 5,925 (0.663%) decrease at all, 3,138 (0.351%) decrease by more than one grid step, and 475 (0.053%) by more than a full inch.
+
+Where the residue sits in childhood identifies what produces it. The table below holds the interval fixed at 181 to 365 days, long enough that a growing child should clear the grid comfortably, and varies age instead. Band sizes vary sharply because the well-visit schedule, not the calendar, decides where a pair can start: the three-year visit lands close to 36.0 months, so pairs beginning in the 36-42 band are common and pairs beginning in 42-48 are rare. The bands flanking each finding below are well populated.
+
+| age at the earlier measurement (months) | pairs | any decrease | median loss | mean change over the interval |
+| --- | --- | --- | --- | --- |
+| 18-24 | 63,685 | 0.53% | 1.27 cm | 5.51 cm |
+| 24-30 | 52,826 | 1.21% | 0.99 cm | 5.20 cm |
+| 30-36 | 19,242 | 3.65% | 1.25 cm | 3.75 cm |
+| 36-42 | 32,650 | 0.44% | 1.63 cm | 6.19 cm |
+| 42-48 | 4,512 | 0.64% | 1.27 cm | 4.90 cm |
+| 48-60 | 37,302 | 0.37% | 1.91 cm | 5.68 cm |
+| 60-84 | 64,090 | 0.33% | 1.92 cm | 5.14 cm |
+| 84-120 | 76,194 | 0.36% | 1.60 cm | 4.70 cm |
+| 120-144 | 37,388 | 0.47% | 1.25 cm | 4.87 cm |
+| 144-168 | 26,514 | 2.78% | 0.64 cm | 4.04 cm |
+| 168-192 | 14,518 | 11.39% | 0.64 cm | 1.79 cm |
+| 192-216 | 2,566 | 23.69% | 0.64 cm | 0.54 cm |
+
+The rate is not flat and it is not monotone. It has two separate excesses, and they have different signatures. The first is a narrow spike at 30 to 36 months, several times the rate in the bands on either side of it, carrying a median loss of over a centimetre. That is the age at which recumbent length gives way to standing height, and a standing height is genuinely shorter than a recumbent length for the same child. It is a measurement-protocol change recorded in a field that does not name the protocol, not an error. Section 6.6's same-day height disagreement is the same effect seen within a single day.
+
+The second excess is the adolescent rise, and it is the larger of the two. It climbs monotonically through the teens while the mean change over the same interval falls towards zero, and its median loss sits at the grid step rather than above it. Splitting it by sex confirms the mechanism.
+
+| age band (months) | female pairs | female decrease | female mean change | male pairs | male decrease | male mean change |
+| --- | --- | --- | --- | --- | --- | --- |
+| 144-168 | 12,858 | 5.29% | 2.53 cm | 13,656 | 0.41% | 5.46 cm |
+| 168-192 | 7,127 | 18.59% | 0.70 cm | 7,391 | 4.45% | 2.83 cm |
+| 192-216 | 1,346 | 28.83% | 0.22 cm | 1,220 | 18.03% | 0.89 cm |
+
+Girls reach the high apparent-loss rates roughly two years earlier than boys, in the same order as growth cessation. This is not shrinkage and it is not a recording defect: once annual growth falls below the quarter-inch grid, repeated measurement of a child who has stopped growing returns a lower value about as often as a higher one. Restricting the long-interval pairs to ages 2 to 10, where growth is unambiguously ongoing, collapses the decrease rate from 0.663% to 0.083% — 565 pairs of 681,114, of which 213 lose more than a full inch.
+
+What remains after rounding and the length-to-height transition are removed is small and divides again. Of 1,188 decreases over a centimetre across an interval longer than a year that are followed by a further measurement, 725 (61.0%) are followed by a value back at or above the earlier level, and 463 (39.0%) by a value that stays below it. The first pattern isolates the low value as the suspect one; in the second the low value is corroborated and the earlier, higher measurement is the candidate error. A screening rule that always drops the lower of a disagreeing pair gets the second group backwards.
+
+**Consequence for this project.** The short-interval rates are an empirical measurement-error estimate rather than a defect, and they are directly usable for the matched-noise requirement in the counterfactual stimulus design: any synthetic trajectory whose repeat measurements are noiseless will be unrealistically clean relative to this panel. The long-interval residue is not a defect either, for the most part: it is the recording grid acting on a trajectory that has flattened, plus a protocol change at the age of 2 to 3 years. Both belong in a stimulus that claims to look like this panel, and neither should be filtered out as an outlier. What does need screening is the much smaller set of decreases that survives an age restriction. Section 6.5 takes up the overlapping question of whether an anomalous anthropometric value has a mechanical explanation at all.
+
+### 6.5 Transcription-error signatures in the typed anthropometric fields (capture artifact)
+
+Height and weight reach this file as typed imperial values, and the metric channels are exact conversions of them (6.2, 6.3). Any transposed pair of digits, dropped digit, misplaced decimal point, or value keyed in the wrong unit is therefore an error in `height_in` or `weight_oz`, and it is detectable there. This subsection tests each of those mechanisms against a null, because the mechanisms differ enormously in how much freedom they have to fit an arbitrary number, and an untested digit search will always find hits.
+
+**Method.** A measurement is anchored by linear interpolation between the same child's previous and next measurement at the same age spacing. Both neighbours must themselves be plausible (15–80 in for height, 3–400 lb for weight) and must span no more than 4 years, so that a bad neighbour cannot manufacture an anomaly. A height is anomalous when it sits more than 3 inches (7.62 cm) from that anchor, a weight when it differs by more than 50% of it. A mechanism *reconciles* an anomaly when applying it to the recorded value lands within 1 inch of the anchor for height, or within 5% of it for weight.
+
+The anchor is only available in the interior of a trajectory. Counting one agreed value per patient-day, the grain the anchor is built on, 2,985,782 of 3,505,555 heights (85.2%) can be tested this way, and 5,970,233 of 6,479,861 weights (92.1%). The remainder are first and last measurements, single-measurement children, and rows whose neighbours are themselves out of range. Everything below is a rate within the testable interior, not within the file.
+
+**The null.** Each anomaly's anchor is replaced by the recorded value plus a deviation drawn from another anomaly in the same year-of-age band, 20 times. That preserves the distribution of deviations exactly and destroys only the arithmetic relationship between the recorded digits and the anchor, which is the thing under test. A mechanism that reconciles anomalies no more often than it reconciles these scrambled pairs has no evidence behind it, however many hits it returns.
+
+**Height.** 7,443 anomalies in the testable interior. The mechanisms are tested one at a time and are not mutually exclusive, so the rows below do not sum to the total; a whole-foot entry can also be reached by inserting a digit, for instance. The exclusive accounting comes after both tables.
+
+| mechanism | anomalies reconciled | share | share under the null | ratio |
+| --- | --- | --- | --- | --- |
+| height recorded in whole feet | 686 | 9.22% | 1.34% | 6.9x |
+| centimetre value in the inch field | 91 | 1.22% | 0.67% | 1.8x |
+| inch value where a centimetre is expected | 30 | 0.40% | 1.00% | 0.4x |
+| decimal point misplaced | 11 | 0.15% | 2.80% | 0.1x |
+| adjacent digit transposition | 40 | 0.54% | 0.69% | 0.8x |
+| one digit omitted | 407 | 5.47% | 1.14% | 4.8x |
+| one digit wrong (calibration class) | 4,024 | 54.06% | 50.15% | 1.1x |
+
+The mechanisms separate sharply. Adjacent digit transposition — the classic keying error, and the one most often assumed — reconciles fewer height anomalies than chance alone, so this snapshot carries **no evidence of digit transposition in the height channel**. Nor is there evidence of a misplaced decimal point. What the height channel does carry is a unit error, and it is directional: entering a centimetre value in the inch field is enriched over the null, while the arithmetically opposite reading is at or below it. That asymmetry is what a real one-way data-entry confusion looks like; a spurious mechanism would be symmetric.
+
+The dropped-digit row is the one that does not survive inspection, and it is worth showing why. Inserting a digit into a two-digit inch value always produces a three-digit one, which is never a plausible height, so the class can only fire on a recorded value with a single-digit integer part. It does exactly that: among the 6,619 height anomalies whose integer part has two or more digits, the class reconciles 0. Its entire 5.47% is the low-side entry family described next, reached by a different route. An enrichment ratio can be real and still be a restatement of another row.
+
+The largest single mechanism is more specific than any of these. 686 anomalies are reconciled by reading the entry as a whole number of feet, at 6.9x the null rate. The cluster is visible without any anchor at all: 1,371 visits record a `height_in` of 1 to 6 as an exact integer, with a median age of 5.2 years — a height of 3 or 4 for a child who is three or four feet tall. The two readings of the same field are 12 times apart, and the age profile picks the right one.
+
+The centimetre-in-the-inch-field cluster has an independent signature that does not depend on the anchor either. 143 visits record a `height_in` between 90 and 115. Read as inches that is 229 to 292 cm; read as centimetres it is an ordinary preschool stature, and the median age of the cluster is 3.1 years. The recording grid decides between the two readings: 35.0% of the cluster falls on the quarter-inch grid against 80.0% of all heights, so these values never passed through the inch-typing workflow that produces the grid. For contrast, the 637 heights between 75 and 80 inches have a mean age of 15.7 years and sit on the grid at the usual rate: those are tall adolescents, not errors, and they are part of the upper tail that 6.1 shows the derivation layer discards.
+
+**Weight.** 6,196 anomalies in the testable interior.
+
+| mechanism | anomalies reconciled | share | share under the null | ratio |
+| --- | --- | --- | --- | --- |
+| pound value in the ounce field | 39 | 0.63% | 0.26% | 2.4x |
+| ounce value where a pound is expected | 25 | 0.40% | 0.09% | 4.7x |
+| kilogram value in the ounce field | 13 | 0.21% | 0.09% | 2.5x |
+| gram value in the ounce field | 2 | 0.03% | 0.08% | 0.4x |
+| decimal point misplaced | 1,208 | 19.50% | 1.13% | 17.2x |
+| adjacent digit transposition | 77 | 1.24% | 6.65% | 0.2x |
+| one digit omitted | 927 | 14.96% | 8.63% | 1.7x |
+| one digit wrong (calibration class) | 795 | 12.83% | 25.39% | 0.5x |
+
+The weight channel reverses the picture in one respect and confirms it in another. Transposition is again below chance, so **neither channel shows evidence of digit swapping**. But a misplaced decimal point, which the height channel does not show at all, is the dominant weight artifact by a wide margin — the strongest enrichment in either table. An ounce value has more digits than an inch value and no natural decimal point, so a factor of ten is both easy to key and hard to notice. The three unit substitutions are small in absolute terms but all enriched, and they are the ones a mixed imperial and metric workflow would produce.
+
+The dropped-digit row needs the same discount here as in the height channel, for the same reason: a weight that is ten times too large can be reached either by shifting the decimal point or by deleting a digit, so the two rows overlap. Removing the anomalies a decimal shift already explains leaves 4,988 weights, of which the class reconciles 663 (13.29%) against a null of 9.99%. What is left of the enrichment is small enough that a dropped digit should not be carried forward as an established weight mechanism.
+
+The bottom row of each table is the reason the null is not optional. Allowing any single digit to be wrong reconciles about half of all height anomalies and an eighth of weight anomalies — and reconciles almost exactly as many randomly paired values. It carries no information at all. Reported without a null it would look like the largest finding in this section.
+
+**How strong is the transposition negative?** Only as strong as the share of transpositions the anomaly gate could have caught, because a swap that moves a value by less than the gate never becomes an anomaly in the first place. Applying every adjacent digit swap to a sample of measurements in the testable interior gives that share directly. For height, 69.7% of the 258,070 swaps available across 200,000 sampled values would displace the value by more than 3 inches; for weight, 31.6% of 404,409 swaps across 200,000 values would move it by more than 50%. The height negative is therefore well powered: about seven in ten transpositions would have been visible and none is. The weight negative is weaker, since a four-digit ounce value can absorb a swap without moving far — `1136` becomes `1163`, a 2% change — and roughly two thirds of weight transpositions would stay below the gate. Neither channel shows evidence of digit swapping *at a magnitude large enough to displace a measurement from its own trajectory*. Small transpositions are below the detection floor by construction, and would be absorbed into the measurement-noise estimate of 6.4 rather than appearing here.
+
+| channel | anomalies | a named mechanism fits | only the calibration class fits | nothing fits |
+| --- | --- | --- | --- | --- |
+| height | 7,443 | 939 (12.6%) | 3,989 (53.6%) | 2,515 (33.8%) |
+| weight | 6,196 | 1,987 (32.1%) | 742 (12.0%) | 3,467 (56.0%) |
+
+Assigning each anomaly to the most parsimonious mechanism that fits it gives the accounting above. The named-mechanism column is an upper bound, because it still contains the classes that sit at or below their null; the honest reading is that specific, well-evidenced transcription mechanisms explain a minority of anomalous anthropometric values here, and a smaller minority in the height channel than in the weight channel. Most anomalies are not mechanical transcription errors at all. Measurement of the wrong child, a value attached to the wrong encounter, and physical mismeasurement all produce an implausible number that carries no arithmetic relationship to the truth, and none of the tests in this subsection can reach them.
+
+**What the derivation layer already removes.** All 1,371 whole-foot entries and all 143 in the 90-to-115 cluster carry a null `height_cm`, `height_z_score`, and `delta_height_cm`: the z-bound documented in 6.1 removes them as a side effect of being far out of range. Anyone reading the derived channels is already protected from these values. Anyone reading `height_in` is not — and 6.1 recommends exactly that, re-running the augmentation from the retained raw heights to recover the truncated tall tail. The two repairs interact: raising the z ceiling to +5 must not also readmit the low-side entry errors that the current bound happens to catch. A unit and grid check on `height_in` belongs in that re-run, before the z filter rather than in place of it.
+
+**Consequence for this project.** Digit transposition is the mechanism a reader would expect to matter, and at the scale that displaces a height from its own trajectory it does not occur here; for weight the same test is only about a third sensitive, so the claim there is weaker and a small-magnitude swap cannot be ruled out. Unit confusion and decimal placement do matter, in different channels, and both are cheap to screen for because both produce values that are implausible on their face. For constructed stimuli the practical rule is narrower than a general outlier filter: bound `height_in` and `weight_oz` on plausibility before any conversion, and check the recording grid rather than the value alone, since the grid separates a tall adolescent from a centimetre in the wrong field where the magnitude cannot.
+
+### 6.6 Same-day duplicate encounters and same-day measurement disagreement
 
 Visit identifiers are unique, but a patient can have more than one visit row on the same age in days. This affects 5,478 patient-days (0.08% of 6,488,911) and 11,040 visits (0.17%). The rate is low, but it means `age_in_days` is not a unique key within a patient and any analysis that orders a trajectory by age alone has ties to resolve.
 
@@ -337,7 +445,7 @@ Where the same day carries two or more measurements, they often disagree. 2,958 
 
 The height spread is the notable one. A median disagreement of 3.18 cm between two heights recorded on the same day is far larger than same-day weight disagreement in relative terms, and it is the size of difference expected when recumbent length and standing height are mixed, or when one value is carried from a previous note. It describes discordant same-day pairs rather than the panel as a whole, but it is a direct estimate of how far two heights recorded for the same child on the same day can sit apart.
 
-### 6.6 Reproducing the distributed delta and velocity fields
+### 6.7 Reproducing the distributed delta and velocity fields
 
 The augmented visit layer distributes `delta_height_cm`, `delta_age_in_days_height`, and the velocity fields derived from them. These are **not** a lag over successive measurements, and reading them as one is the error this subsection exists to prevent. The source augmentation (`calculate_growth_velocities_original.py` in the `growth-ai` pipeline) applies an age-dependent minimum measurement interval, citing US pediatric guidance for velocity calculation: for each measurement it walks backwards to the most recent earlier measurement whose age gap meets that minimum, and skips every measurement in between.
 
@@ -353,11 +461,11 @@ Applying that rule reproduces the distributed fields. Across 2,786,770 visits ca
 
 Two small residuals are worth recording. 372,820 rows differ from the recomputed delta by exactly one hundredth of a centimetre, because the pipeline rounds in Python — which breaks halfway cases to even — while this check rounds half away from zero. Heights are converted from quarter-inch grid values, so exact halfway cases are common rather than rare. Only 338 rows (0.012%) differ by more than that.
 
-Those 338 rows have a specific cause, and it is a real defect rather than a rounding artifact. The pipeline writes each computed delta back through a mask keyed on patient and age in days, so when a patient has more than one visit on the same day every one of those visits receives the same value, and which earlier height was used becomes ambiguous. Section 6.5 measures that population directly: 11,040 visits share a patient-day with another visit, and 942 patient-days carry two or more heights that disagree. The effect is confined to those rows and does not touch the reproduction elsewhere.
+Those 338 rows have a specific cause, and it is a real defect rather than a rounding artifact. The pipeline writes each computed delta back through a mask keyed on patient and age in days, so when a patient has more than one visit on the same day every one of those visits receives the same value, and which earlier height was used becomes ambiguous. Section 6.6 measures that population directly: 11,040 visits share a patient-day with another visit, and 942 patient-days carry two or more heights that disagree. The effect is confined to those rows and does not touch the reproduction elsewhere.
 
 **Consequence for this project.** The velocity channels are usable as distributed, which the distributional summaries alone could not establish. What must be carried forward is the definition: a velocity in this file is computed over an interval of at least 90 to 335 days depending on age, not between adjacent visits, so it is already smoothed relative to a visit-to-visit rate and cannot be compared with one. Any recomputation, and any synthetic trajectory that carries a velocity, must use the same interval rule or the two will not be on the same scale. The rounding to two decimals should also be preserved, since it is part of what the distributed values are.
 
-### 6.7 Measurement presence does not mean measurement (capture artifact)
+### 6.8 Measurement presence does not mean measurement (capture artifact)
 
 Section 3 reported measurement completeness by age and by source system. Encounter type is the stratifier that shows the completeness figures cannot be read as measurement occurrence.
 
@@ -395,7 +503,7 @@ Only documentation encounters show a carry-forward signature, where about a quar
 
 **Consequence for this project.** A visit-level indicator that a measurement is present is not evidence that a measurement was taken at that encounter. The schedule-density manipulation in the counterfactual design assumes measurement-bearing visits are real measurement occasions; that assumption should be enforced by restricting to encounter types where physical measurement is possible, not by measurement presence alone.
 
-### 6.8 Cross-resource temporal and linkage integrity
+### 6.9 Cross-resource temporal and linkage integrity
 
 Age in days is the only clock in this snapshot, and ordering violations within a resource are visible directly. Counts below 10 are suppressed.
 
@@ -422,19 +530,19 @@ Visit linkage is incomplete in every resource that carries a visit identifier, n
 
 The medication result is the one that changes an assumption elsewhere in the package: `medications.visit_id` is declared required and is populated on every row, yet a large share of those values do not correspond to any visit in this snapshot. A required, populated foreign key that does not resolve is easy to mistake for a complete link. Section 8's referral linkage finding is therefore not specific to referrals; it is a property of the extract.
 
-### 6.9 Laboratory results are semi-structured text
+### 6.10 Laboratory results are semi-structured text
 
 `result_value` is a text field. Of 17,230,681 rows, 2,494,261 (14.5%) carry no value at all, 7,621,449 (44.2%) parse as a number, and 7,114,971 (41.3%) do not. Among the non-numeric values, 484,242 are censored results carrying a comparator prefix such as `<3.3`, and the remainder are qualitative results (`NEGATIVE`, `NOT DETECTED`, `TRACE`), specimen descriptors, and administrative non-results (`NOT REPORTED`, `SEE NOTE`). A naive numeric cast silently discards nearly half the populated values and, more seriously, treats a left-censored result as missing rather than as a bound.
 
 The declared key holds: `(lab_order_id, result_component_name, result_line_num)` has 0 duplicate groups. But 31,628 order-and-component pairs appear on more than one result line, and 23,679 of those (74.9%) carry disagreeing values — repeated or corrected results within a single order. Joining on order and component without the line number will multiply rows and pick an arbitrary value.
 
-### 6.10 Vocabulary and categorical-string hygiene
+### 6.11 Vocabulary and categorical-string hygiene
 
 Diagnosis strings are almost entirely well-formed ICD-10. Of 14,714,503 filled encounter-diagnosis slots across 8,029 distinct codes, 120,393 (0.82%) are not ICD-10-shaped; of 1,709,584 problem-list entries across 4,739 distinct codes, 13,555 (0.79%) are not. In both resources the non-conforming values are entirely `IMO0001` and `IMO0002`, proprietary Intelligent Medical Objects placeholders that Epic emits when a clinical term has no ICD-10 equivalent. `IMO0002` is the entry that appears in the problem-list table of this report as `[not in ICD-10 lookup]`: it is not a lookup failure but a code that carries no diagnostic meaning on its own. It should be excluded from code-based cohort definitions rather than treated as an unmapped diagnosis.
 
 Categorical free-text fields are cleaner than is typical for an EHR extract. Normalising case and internal whitespace collapses lab procedure names from 3,742 to 3,739 distinct values, medication generic names from 1,073 to 1,073, and requested specialties from 119 to 119. Only the lab vocabulary collapses at all, and only by 3. Cosmetic irregularities are common — 1,669,090 lab rows carry an internal double space, and tall-man lettering such as `EPINEPHrine` is preserved from the source system — but they do not fragment the vocabularies. Grouping by these fields is safe after trimming; the risk here is presentational, not analytic.
 
-### 6.11 Artifact summary
+### 6.12 Artifact summary
 
 | artifact | class | scale in this snapshot | recoverable? |
 | --- | --- | --- | --- |
@@ -443,7 +551,12 @@ Categorical free-text fields are cleaner than is typical for an EHR extract. Nor
 | Terminal-digit heaping on quarter-inch and pound grids | capture | 80.0% of heights on a quarter inch | No — inherent precision limit |
 | Head circumference double-converted inch-to-centimetre | derivation | 13,467 visits | Yes — divide by 2.54 before bounding, rather than deleting |
 | Head-circumference z defective on plausible measurements | derivation | 1,764 visits | No — recompute or exclude |
-| Zero or negative height change over long intervals | capture | 0.64% and 0.66% of pairs over a year apart | Partly — screen before use |
+| Apparent height loss from the recording grid on a flattened trajectory | capture | 0.66% of pairs over a year apart, falling to 0.083% at ages 2-10 | Not a defect — do not filter as an outlier |
+| Recumbent length recorded as standing height across the transition age | capture | several-fold excess of apparent loss at 30-36 months | No — the field does not name the protocol |
+| Height entered as a whole number of feet | capture | 1,371 visits | Yes — multiply by 12 before bounding |
+| Centimetre value entered in the inch field | capture | 143 visits in the 90-115 cluster | Yes — divide by 2.54; the recording grid identifies them |
+| Weight decimal point misplaced by a factor of ten | capture | 1,208 anomalies, the strongest enrichment measured | Partly — screen against a within-child anchor |
+| Adjacent digit transposition in height or weight | capture | below the permutation null in both channels, at a gate that would catch 70% of height swaps and 32% of weight swaps | Not detected at this magnitude — smaller swaps are below the floor |
 | Same-day duplicate encounters with disagreeing measurements | capture | 942 patient-days for height | Partly — define a tie rule |
 | Velocity computed over an age-dependent minimum interval, not between adjacent visits | derivation | 100.0% reproduced under the documented rule; 43.7% under a naive lag | Not a defect — carry the interval rule forward |
 | Same-day duplicate visits share one written-back delta | derivation | 338 rows | Partly — deduplicate the patient-day first |
@@ -768,6 +881,8 @@ Taken together, these characteristics make the study a layered, within-subject c
 7. Pre-specify the referral index and look-forward before estimating action-related performance, and report the result as record-based rather than as a diagnosis of the child.
 8. Recompute z-scores and percentiles from raw measurements against an explicitly stated reference. The pipeline's documented filter nulls height outside −5 < z < 3, so the distributed height z-score cannot be used where the tall tail matters; re-running the augmentation from the retained `height_in` recovers most of it, and budget roughly 15,800 visits rather than treating the repair as free. Treat percentile values of exactly 0 and 100 as saturated rather than continuous.
 9. State the assumed measurement precision wherever a trajectory is serialized, and do not present derived decimals the recording grid does not support. Set any detectable-deflection threshold at or above the rounding interval.
+9a. Screen the raw typed channels, not only the derived ones, and screen them before conversion. `height_in` carries 1,371 whole-foot entries and a 143-visit cluster of centimetre values, and `weight_oz` carries a decimal-point artifact enriched 17-fold over chance. The current derivation layer removes the height cases as a side effect of its z bound, so the repair recommended in guardrail 8 must add an explicit plausibility and recording-grid check on `height_in` rather than inherit that protection. Digit transposition falls below chance in both channels at a gate that would catch 70% of possible height swaps and 32% of weight swaps, so it needs no screen for height and no screen for large weight swaps; a small-magnitude weight transposition is below the detection floor and is neither ruled out nor separable from measurement noise.
+9b. Do not treat apparent height loss as an outlier signal without an age frame. Over intervals longer than a year the decrease rate is 0.663% overall but 0.083% at ages 2 to 10; the difference is the quarter-inch grid acting on adolescents whose growth has ceased, and there is a separate several-fold excess at 30 to 36 months where recumbent length gives way to standing height. Both are real recording behaviour that a realistic synthetic trajectory should reproduce, not noise to filter. Where a decrease does need adjudication, 39% of long-interval losses over a centimetre persist into the following measurement, so a rule that always discards the lower value is wrong on that share.
 10. Carry the velocity definition alongside the velocity. The distributed `delta_*` and `*_velocity` fields are faithful to the source pipeline's documented rule — the most recent earlier measurement at least 90 to 335 days back, depending on age, rounded to two decimals — and reproduce on 99.99% of rows under it. They are not adjacent-visit rates, so do not compare them with one, and use the same interval rule for any recomputed or synthetic velocity.
 11. Restrict measurement-bearing visits by encounter type before treating them as measurement occasions, and resolve same-day ties with an explicit rule since `age_in_days` is not unique within a patient.
 12. Treat visit-level linkage as incomplete in every resource, not only referrals. A populated `visit_id` in labs or medications does not imply a resolvable link, and lab and medication age fields violate their own ordering often enough that differences between them are not reliable durations.
@@ -776,18 +891,25 @@ Taken together, these characteristics make the study a layered, within-subject c
 
 The analysis used DuckDB 1.5.5 through the repository’s `uv` environment. The script materializes only selected columns needed for aggregate queries, uses age in days as the time axis, and does not export identifiers. Quantiles use DuckDB `quantile_cont`; repeated-measure summaries use patient-level grouping and age-ordered window functions. The ICD-10 lookup is normalized to one description per code before joins to prevent lookup duplication from multiplying diagnosis rows. Visit-level tables are explicitly labeled as visit-level; patient-level ever-patterns are grouped by patient.
 
-Section 6 was computed separately from the typed DuckDB bundle rather than the CSV directory, because the artifact probes need repeated windowed passes over the full visit table. The bundle is opened read-only and never copied into the repository; the section emits aggregate tables only, and counts below 10 are suppressed. Before any artifact figure was computed the generator recomputes six review counts from section 5 and the section reports whether they agree, so a bundle drawn from a different snapshot would be visible rather than silently mixed into the report. Successive-measurement statistics in section 6 use an explicit `lag()` over height-bearing visits ordered by age; the distributed `delta_*` fields are not used as inputs because section 6.6 shows they do not reproduce that lag.
+Section 6 was computed separately from the typed DuckDB bundle rather than the CSV directory, because the artifact probes need repeated windowed passes over the full visit table. The bundle is opened read-only and never copied into the repository; the section emits aggregate tables only, and counts below 10 are suppressed. Before any artifact figure was computed the generator recomputes six review counts from section 5 and the section reports whether they agree, so a bundle drawn from a different snapshot would be visible rather than silently mixed into the report. Successive-measurement statistics in section 6 use an explicit `lag()` over height-bearing visits ordered by age; the distributed `delta_*` fields are not used as inputs because section 6.7 shows they do not reproduce that lag. The transcription-error probe in section 6.5 anchors each measurement by linear interpolation between the same child's neighbouring measurements and scores every candidate mechanism against a seeded, deviation-preserving permutation null of 20 replicates, so a hypothesis is charged for the freedom it has to fit an arbitrary number; the anomaly rows are read in a fixed order so that null is reproducible run to run.
 
-The report was generated by:
+Section 6 is regenerated in place, between its `ehr-artifact-profile` markers, by:
 
 ```sh
-PPOC_DATA_ROOT=/Users/joon/w/p3-data/all uv run python reports/eda/build_growth_chart_literacy_eda.py
-
 uv run python reports/eda/build_ehr_artifact_profile.py \
   --bundle /Users/joon/src/tries/ppoc-duckdb-real/ppoc.duckdb
 ```
 
-The second command regenerates section 6 in place between its `ehr-artifact-profile` markers, so that section stays measured rather than hand-maintained.
+That command is safe to re-run at any time: it rewrites only the marked block and reproduces byte-identical output from the same bundle.
+
+Sections 1–5 and 7–11 were first rendered by `build_growth_chart_literacy_eda.py` from the CSV directory, but the report has since diverged from what that script emits. Section 6 was inserted, the sections after it were renumbered, and several regions were extended by hand: the bundle provenance line in the header, the section-6 paragraphs of the executive summary, the calibration scope note in section 4, four rows of the design table and guardrails 5 and 8–12 in section 10, and the section-6 paragraph of this section. That script therefore no longer regenerates this report, and it refuses to overwrite a file carrying the section-6 markers. To re-render its skeleton for comparison, send it elsewhere and diff:
+
+```sh
+PPOC_DATA_ROOT=/Users/joon/w/p3-data/all uv run python \
+  reports/eda/build_growth_chart_literacy_eda.py --out /tmp/eda-rebuild.md
+```
+
+Restoring it to a live generator would mean porting those regions into it, including figures only the artifact generator computes; until that is done the divergent regions are hand-maintained and are marked as such here.
 
 The report is descriptive and exploratory. It does not constitute a registered endpoint analysis, a clinical validation study, a diagnostic device evaluation, or evidence of clinical benefit. The source data remain outside the repository; only this aggregate report and its analysis script are written locally.
 
@@ -807,4 +929,4 @@ These references anchor the report’s interpretive guardrails; they do not turn
 - [CDC Child and Teen BMI Categories](https://www.cdc.gov/bmi/child-teen-calculator/bmi-categories.html): BMI categories for children and teens use sex-specific BMI-for-age percentiles; this report therefore treats BMI as age-2-or-later and descriptive.
 - [WHO Child Growth Standards](https://www.who.int/tools/child-growth-standards/standards): documentation, indicators, and implementation resources for the WHO standards.
 - Daymont C, Ross ME, Localio AR, Fiks AG, Wasserman RC, Grundmeier RW (2017). Automated identification of implausible values in growth data from pediatric electronic health records. *JAMIA* 24(6):1080–1087. The reference treatment of implausible-value screening in pediatric growth data, and the source project's framing reference for the artifact classes in section 6.
-- Agniel D, Kohane IS, Weber GM (2018). Biases in electronic health record data due to processes within the healthcare system: retrospective observational study. *BMJ* 361:k1479. The reference treatment of utilization-driven capture, which is the mechanism behind the encounter-type findings in section 6.7.
+- Agniel D, Kohane IS, Weber GM (2018). Biases in electronic health record data due to processes within the healthcare system: retrospective observational study. *BMJ* 361:k1479. The reference treatment of utilization-driven capture, which is the mechanism behind the encounter-type findings in section 6.8.

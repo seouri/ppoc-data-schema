@@ -14,9 +14,12 @@ section stays measured rather than hand-maintained.
 from __future__ import annotations
 
 import argparse
+import functools
 import hashlib
 import json
 import os
+import random
+from collections import Counter
 from pathlib import Path
 
 import duckdb
@@ -584,6 +587,363 @@ def probe_codes(con) -> dict:
 # --------------------------------------------------------------------------
 
 
+# --------------------------------------------------------------------------
+# Transcription-error probes (section 6.5)
+#
+# Height and weight arrive as typed imperial values, so a transposed pair of
+# digits, a dropped digit, a misplaced decimal point, or a value keyed in the
+# wrong unit is an error in `height_in` / `weight_oz`. Each anomalous value is
+# tested against an interpolated within-child anchor, and every mechanism is
+# scored against a deviation-preserving permutation null so that the freedom of
+# the hypothesis is charged against it.
+
+# Anomaly definition. A height must sit more than HEIGHT_DEV inches from the
+# anchor; a weight more than WEIGHT_DEV of it. A mechanism reconciles a value
+# when the transformed value lands within HEIGHT_TOL / WEIGHT_TOL of the anchor.
+HEIGHT_DEV, HEIGHT_TOL = 3.0, 1.0
+WEIGHT_DEV, WEIGHT_TOL = 0.5, 0.05
+NULL_REPS = 20
+NULL_SEED = 20260905
+
+# Plausible-neighbour bounds for the anchor, in the raw units of each field.
+H_LO, H_HI = 15.0, 80.0
+W_LO, W_HI = 48.0, 6400.0
+MAX_SPAN = 1460  # days spanned by the two anchoring measurements
+
+GRID_CM = 2.54 / 4  # one quarter-inch step, the height recording grid of 6.2
+
+HEIGHT_SCALES = [("centimetre value in the inch field", 1.0 / 2.54),
+                 ("inch value where a centimetre is expected", 2.54)]
+WEIGHT_SCALES = [("pound value in the ounce field", 16.0),
+                 ("ounce value where a pound is expected", 1.0 / 16.0),
+                 ("kilogram value in the ounce field", 35.27396),
+                 ("gram value in the ounce field", 0.03527396)]
+SHIFTS = (0.01, 0.1, 10.0, 100.0)
+
+
+def _canon(x: float) -> str:
+    s = f"{x:.6f}".rstrip("0").rstrip(".")
+    return s or "0"
+
+
+def _val(s: str) -> float | None:
+    if s.count(".") > 1 or s in ("", "."):
+        return None
+    try:
+        v = float(s)
+    except ValueError:
+        return None
+    return v if v > 0 else None
+
+
+@functools.cache
+def _edits(s: str) -> tuple[frozenset, frozenset, frozenset]:
+    """Transposition, insertion, and substitution candidates for a typed string.
+
+    Insertion is the candidate set for 'the recorded value is the truth with one
+    digit dropped'; substitution is carried as a calibration class because it is
+    the most permissive hypothesis available and shows where the method saturates.
+    """
+    self_val = _val(s)
+    swap, ins, sub = set(), set(), set()
+    for i in range(len(s) - 1):
+        if s[i] != s[i + 1] and s[i].isdigit() and s[i + 1].isdigit():
+            v = _val(s[:i] + s[i + 1] + s[i] + s[i + 2:])
+            if v is not None:
+                swap.add(v)
+    for p in range(len(s) + 1):
+        for c in "0123456789":
+            v = _val(s[:p] + c + s[p:])
+            if v is not None:
+                ins.add(v)
+    for i, ch in enumerate(s):
+        if not ch.isdigit():
+            continue
+        for c in "0123456789":
+            if c != ch:
+                v = _val(s[:i] + c + s[i + 1:])
+                if v is not None:
+                    sub.add(v)
+    swap.discard(self_val)
+    ins.discard(self_val)
+    return frozenset(swap), frozenset(ins), frozenset(sub)
+
+
+def _mechanisms(recorded: float, expected: float, tol: float, scales, feet: bool) -> set:
+    """Every mechanism that reconciles `recorded` with `expected`. Classes overlap."""
+    found = set()
+    if feet and recorded == int(recorded) and 1 <= recorded <= 6 \
+            and int(expected // 12) == int(recorded):
+        found.add("height recorded in whole feet")
+    for name, factor in scales:
+        if abs(recorded * factor - expected) <= tol:
+            found.add(name)
+    for factor in SHIFTS:
+        if abs(recorded * factor - expected) <= tol:
+            found.add("decimal point misplaced")
+    swap, ins, sub = _edits(_canon(recorded))
+    if any(abs(c - expected) <= tol for c in swap):
+        found.add("adjacent digit transposition")
+    if any(abs(c - expected) <= tol for c in ins):
+        found.add("one digit omitted")
+    if any(abs(c - expected) <= tol for c in sub):
+        found.add("one digit wrong (calibration class)")
+    return found
+
+
+def _classify(recorded: float, expected: float, tol: float, scales, feet: bool,
+              order: list[str]) -> str:
+    """Assign each anomaly to the first mechanism in the parsimony order that fits."""
+    found = _mechanisms(recorded, expected, tol, scales, feet)
+    for name in order:
+        if name in found:
+            return name
+    return "no mechanism reconciles it"
+
+
+def _score(rows, tol_of, scales, feet, order):
+    """Marginal and exclusive tallies against a deviation-preserving null.
+
+    The null replaces each anchor with `recorded + d`, where `d` is a deviation
+    drawn from another anomaly in the same year-of-age band. That keeps the
+    marginal distribution of deviations intact and destroys only the digit
+    correspondence between the recorded value and its anchor, which is the thing
+    under test.
+    """
+    pool: dict[int, list[float]] = {}
+    for value, expected, age in rows:
+        pool.setdefault(min(age // 365, 17), []).append(expected - value)
+    for deviations in pool.values():
+        deviations.sort()
+    rng = random.Random(NULL_SEED)
+    marg_obs, marg_null, excl = Counter(), Counter(), Counter()
+    for value, expected, age in rows:
+        marg_obs.update(_mechanisms(value, expected, tol_of(expected), scales, feet))
+        excl[_classify(value, expected, tol_of(expected), scales, feet, order)] += 1
+    for _ in range(NULL_REPS):
+        for value, expected, age in rows:
+            shuffled = value + rng.choice(pool[min(age // 365, 17)])
+            marg_null.update(
+                _mechanisms(value, shuffled, tol_of(shuffled), scales, feet))
+    return {"n": len(rows), "marginal": marg_obs,
+            "null": {k: v / NULL_REPS for k, v in marg_null.items()},
+            "exclusive": excl}
+
+
+def _mech_rows(scored: dict, order: list[str]) -> list[list[str]]:
+    n = scored["n"]
+    out = []
+    for name in order:
+        obs = scored["marginal"].get(name, 0)
+        null = scored["null"].get(name, 0.0)
+        if null >= 0.2:
+            ratio = f"{obs / null:,.1f}x"
+        else:
+            ratio = "no null hits" if obs else "n/a"
+        out.append([name, fmt(obs), pct(100.0 * obs / n, 2), pct(100.0 * null / n, 2), ratio])
+    return out
+
+
+def _all_of(hit: int, total: int, lead: str = "All") -> str:
+    """Render a subset count without the 'N of the N' construction when it is all of them."""
+    return f"{lead} {fmt(total)}" if hit == total else f"{fmt(hit)} of the {fmt(total)}"
+
+
+def probe_transcription(con) -> dict:
+    con.execute(f"""
+        CREATE OR REPLACE TEMP VIEW _hser AS
+        WITH one_per_day AS (
+            SELECT patient_id, age_in_days, min(height_in) AS v
+            FROM visits_augmented WHERE height_in IS NOT NULL
+            GROUP BY 1, 2 HAVING count(DISTINCT height_in) = 1),
+        framed AS (
+            SELECT patient_id, age_in_days, v,
+                lag(v) OVER w AS vp, lag(age_in_days) OVER w AS ap,
+                lead(v) OVER w AS vn, lead(age_in_days) OVER w AS an
+            FROM one_per_day WINDOW w AS (PARTITION BY patient_id ORDER BY age_in_days))
+        SELECT age_in_days, v,
+               vp + (vn - vp) * (age_in_days - ap)::DOUBLE / nullif(an - ap, 0) AS expect
+        FROM framed
+        WHERE vp IS NOT NULL AND vn IS NOT NULL
+          AND vp BETWEEN {H_LO} AND {H_HI} AND vn BETWEEN {H_LO} AND {H_HI}
+          AND vn >= vp - 0.5 AND an - ap <= {MAX_SPAN}
+    """)
+    con.execute(f"""
+        CREATE OR REPLACE TEMP VIEW _wser AS
+        WITH one_per_day AS (
+            SELECT patient_id, age_in_days, min(weight_oz) AS v
+            FROM visits_augmented WHERE weight_oz IS NOT NULL
+            GROUP BY 1, 2 HAVING count(DISTINCT weight_oz) = 1),
+        framed AS (
+            SELECT patient_id, age_in_days, v,
+                lag(v) OVER w AS vp, lag(age_in_days) OVER w AS ap,
+                lead(v) OVER w AS vn, lead(age_in_days) OVER w AS an
+            FROM one_per_day WINDOW w AS (PARTITION BY patient_id ORDER BY age_in_days))
+        SELECT age_in_days, v,
+               vp + (vn - vp) * (age_in_days - ap)::DOUBLE / nullif(an - ap, 0) AS expect
+        FROM framed
+        WHERE vp IS NOT NULL AND vn IS NOT NULL
+          AND vp BETWEEN {W_LO} AND {W_HI} AND vn BETWEEN {W_LO} AND {W_HI}
+          AND an - ap <= {MAX_SPAN}
+    """)
+
+    # Denominators are patient-days carrying a single agreed value, the grain the
+    # anchor is built on, not visits: 6.6 shows a patient-day can hold two heights.
+    h_total, = one(con, """SELECT count(*) FROM (
+        SELECT patient_id, age_in_days FROM visits_augmented WHERE height_in IS NOT NULL
+        GROUP BY 1, 2 HAVING count(DISTINCT height_in) = 1)""")
+    w_total, = one(con, """SELECT count(*) FROM (
+        SELECT patient_id, age_in_days FROM visits_augmented WHERE weight_oz IS NOT NULL
+        GROUP BY 1, 2 HAVING count(DISTINCT weight_oz) = 1)""")
+    h_anchor, = one(con, "SELECT count(*) FROM _hser WHERE expect > 0")
+    w_anchor, = one(con, "SELECT count(*) FROM _wser WHERE expect > 0")
+
+    # Ordered so the seeded permutation null is reproducible run to run. The sort
+    # keys are measurements and an age, never an identifier.
+    h_rows = q(con, f"""SELECT v, expect, age_in_days FROM _hser
+                        WHERE expect > 0 AND abs(v - expect) > {HEIGHT_DEV}
+                        ORDER BY v, expect, age_in_days""")
+    w_rows = q(con, f"""SELECT v, expect, age_in_days FROM _wser
+                        WHERE expect > 0 AND abs(v - expect) / expect > {WEIGHT_DEV}
+                        ORDER BY v, expect, age_in_days""")
+
+    h_order = (["height recorded in whole feet"] + [n for n, _ in HEIGHT_SCALES]
+               + ["decimal point misplaced", "adjacent digit transposition",
+                  "one digit omitted", "one digit wrong (calibration class)"])
+    w_order = ([n for n, _ in WEIGHT_SCALES]
+               + ["decimal point misplaced", "adjacent digit transposition",
+                  "one digit omitted", "one digit wrong (calibration class)"])
+    height = _score(h_rows, lambda e: HEIGHT_TOL, HEIGHT_SCALES, True, h_order)
+    weight = _score(w_rows, lambda e: max(WEIGHT_TOL * e, 2.0), WEIGHT_SCALES, False, w_order)
+
+    # Sensitivity of the anomaly gate to a transposition. A swap that moves a value
+    # by less than the gate is invisible by construction, so the negative result
+    # below is only as strong as the share of swaps the gate could have caught.
+    sens = {}
+    for key, view, gate in (("height", "_hser", None), ("weight", "_wser", WEIGHT_DEV)):
+        vals = q(con, f"""SELECT v FROM {view} WHERE expect > 0
+                          USING SAMPLE reservoir(200000 ROWS) REPEATABLE (42)""")
+        total = caught = 0
+        for (value,) in vals:
+            for cand in _edits(_canon(value))[0]:
+                total += 1
+                moved = abs(cand - value) / value if gate else abs(cand - value)
+                caught += moved > (gate if gate else HEIGHT_DEV)
+        sens[key] = (len(vals), total, caught)
+
+    # Overlap checks. Insertion can only reach a plausible height from a one-digit
+    # integer part, so it may be the whole-foot cluster under another name; and a
+    # weight that is ten times too large is reachable both ways.
+    h_multi = [r for r in h_rows if len(_canon(r[0]).split(".")[0]) > 1]
+    h_multi_hit = sum(any(abs(c - e) <= HEIGHT_TOL for c in _edits(_canon(v))[1])
+                      for v, e, _ in h_multi)
+    w_noshift = [r for r in w_rows
+                 if not any(abs(r[0] * k - r[1]) <= max(WEIGHT_TOL * r[1], 2.0)
+                            for k in SHIFTS)]
+    w_noshift = _score(w_noshift, lambda e: max(WEIGHT_TOL * e, 2.0),
+                       WEIGHT_SCALES, False, w_order)
+
+    # The whole-foot cluster, characterised without reference to the anchor.
+    feet_n, feet_cm, feet_z, feet_delta = one(con, """
+        SELECT count(*), count(height_cm), count(height_z_score), count(delta_height_cm)
+        FROM visits_augmented WHERE height_in IN (1, 2, 3, 4, 5, 6)""")
+    feet_med_age, = one(con, """SELECT quantile_cont(age_in_years, 0.5)
+        FROM visits_augmented WHERE height_in IN (2, 3, 4, 5, 6)""")
+    # Heights of 90-115 in are 229-292 cm as inches but ordinary preschool
+    # statures read as centimetres; the recording grid separates the two readings.
+    cm_n, cm_grid, cm_cm, cm_med_age = one(con, """
+        SELECT count(*),
+               sum(CASE WHEN (height_in * 4) = floor(height_in * 4) THEN 1 ELSE 0 END),
+               count(height_cm), quantile_cont(age_in_years, 0.5)
+        FROM visits_augmented WHERE height_in BETWEEN 90 AND 115""")
+    grid_all, grid_hit = one(con, """
+        SELECT count(*), sum(CASE WHEN (height_in * 4) = floor(height_in * 4) THEN 1 ELSE 0 END)
+        FROM visits_augmented WHERE height_in IS NOT NULL""")
+    tall_n, tall_age = one(con, """SELECT count(*), avg(age_in_years)
+        FROM visits_augmented WHERE height_in BETWEEN 75 AND 79.99""")
+    return {
+        "h_total": h_total, "w_total": w_total, "h_anchor": h_anchor, "w_anchor": w_anchor,
+        "height": height, "weight": weight, "h_order": h_order, "w_order": w_order,
+        "feet": (feet_n, feet_cm, feet_z, feet_delta, feet_med_age),
+        "cm_field": (cm_n, cm_grid, cm_cm, cm_med_age),
+        "grid": (grid_all, grid_hit), "tall": (tall_n, tall_age),
+        "sens": sens, "h_multi": (len(h_multi), h_multi_hit), "w_noshift": w_noshift,
+    }
+
+
+def probe_shrinkage(con) -> dict:
+    """Decompose apparent height loss into rounding, modality change, and error."""
+    con.execute("""
+        CREATE OR REPLACE TEMP VIEW _hpairs AS
+        WITH one_per_day AS (
+            SELECT patient_id, age_in_days, any_value(sex) AS sex, min(height_cm) AS hc
+            FROM visits_augmented WHERE height_cm IS NOT NULL
+            GROUP BY 1, 2 HAVING count(DISTINCT height_cm) = 1),
+        framed AS (
+            SELECT patient_id, age_in_days, sex, hc,
+                lag(hc) OVER w AS hp, lag(age_in_days) OVER w AS ap, lead(hc) OVER w AS hn
+            FROM one_per_day WINDOW w AS (PARTITION BY patient_id ORDER BY age_in_days))
+        SELECT *, hc - hp AS chg, age_in_days - ap AS gap
+        FROM framed WHERE hp IS NOT NULL
+    """)
+    magnitude = []
+    for lo, hi, label in ((0, 7, "up to 7 days"), (8, 30, "8 to 30 days"),
+                          (31, 90, "31 to 90 days"), (91, 180, "91 to 180 days"),
+                          (181, 365, "181 to 365 days"), (366, 1 << 30, "over 365 days")):
+        where = f"gap BETWEEN {lo} AND {hi} AND ap >= 730"
+        n, = one(con, f"SELECT count(*) FROM _hpairs WHERE {where}")
+        dec, = one(con, f"SELECT count(*) FROM _hpairs WHERE {where} AND chg < 0")
+        qs, = one(con, f"""SELECT quantile_cont(-chg, [0.5, 0.9, 0.99])
+                           FROM _hpairs WHERE {where} AND chg < 0""")
+        magnitude.append([label, n, 100.0 * dec / n, qs[0], qs[1], qs[2]])
+
+    # Apparent loss by age, over gaps long enough that rounding alone cannot
+    # explain a decrease in a growing child.
+    by_age = []
+    for lo, hi in ((18, 24), (24, 30), (30, 36), (36, 42), (42, 48), (48, 60), (60, 84),
+                   (84, 120), (120, 144), (144, 168), (168, 192), (192, 216)):
+        where = (f"gap BETWEEN 181 AND 365 AND ap >= {lo * 30.4375} "
+                 f"AND ap < {hi * 30.4375}")
+        n, = one(con, f"SELECT count(*) FROM _hpairs WHERE {where}")
+        if n < 50:
+            continue
+        dec, = one(con, f"SELECT count(*) FROM _hpairs WHERE {where} AND chg < 0")
+        med, = one(con, f"SELECT quantile_cont(-chg, 0.5) FROM _hpairs "
+                        f"WHERE {where} AND chg < 0")
+        mean, = one(con, f"SELECT avg(chg) FROM _hpairs WHERE {where}")
+        by_age.append([f"{lo}-{hi}", n, 100.0 * dec / n, med, mean])
+
+    by_sex = []
+    for lo, hi in ((144, 168), (168, 192), (192, 216)):
+        row = [f"{lo}-{hi}"]
+        for sex in ("F", "M"):
+            where = (f"gap BETWEEN 181 AND 365 AND ap >= {lo * 30.4375} "
+                     f"AND ap < {hi * 30.4375} AND sex = '{sex}'")
+            n, = one(con, f"SELECT count(*) FROM _hpairs WHERE {where}")
+            dec, = one(con, f"SELECT count(*) FROM _hpairs WHERE {where} AND chg < 0")
+            mean, = one(con, f"SELECT avg(chg) FROM _hpairs WHERE {where}")
+            row.extend([n, 100.0 * dec / n if n else 0.0, mean])
+        by_sex.append(row)
+
+    # How much of the long-interval residue survives the recording grid, and how
+    # much survives once adolescents whose growth has ceased are set aside.
+    grid = {}
+    for key, where in (("all", "ap >= 730"), ("growing", "ap BETWEEN 730 AND 3652")):
+        n, = one(con, f"SELECT count(*) FROM _hpairs WHERE gap > 365 AND {where}")
+        counts = [n]
+        for cut in (0.0, GRID_CM, 2 * GRID_CM, 2.54):
+            c, = one(con, f"""SELECT count(*) FROM _hpairs
+                              WHERE gap > 365 AND {where} AND chg < -{cut}""")
+            counts.append(c)
+        grid[key] = counts
+
+    where = "gap > 365 AND ap >= 730 AND chg < -1 AND hn IS NOT NULL"
+    tot, = one(con, f"SELECT count(*) FROM _hpairs WHERE {where}")
+    back, = one(con, f"SELECT count(*) FROM _hpairs WHERE {where} AND hn >= hp - 0.5")
+    return {"magnitude": magnitude, "by_age": by_age, "by_sex": by_sex,
+            "grid": grid, "persist": (tot, back, tot - back)}
+
+
 def render(con, bundle: Path, manifest: dict | None, digest: str) -> str:
     gate = probe_gate(con)
     trunc = probe_truncation(con)
@@ -595,6 +955,8 @@ def render(con, bundle: Path, manifest: dict | None, digest: str) -> str:
     same = probe_same_day(con)
     labs = probe_lab_values(con)
     codes = probe_codes(con)
+    trans = probe_transcription(con)
+    shrink = probe_shrinkage(con)
 
     snapshot = (manifest or {}).get("package", {}).get("snapshot", "unknown")
     parts: list[str] = []
@@ -797,7 +1159,11 @@ def render(con, bundle: Path, manifest: dict | None, digest: str) -> str:
         f"visits with both a raw and a derived height, {fmt(conv['h_bad'])} disagree "
         f"with `height_in × 2.54` by more than 0.01 cm; across {fmt(conv['w_pairs'])} "
         f"weight pairs, {fmt(conv['w_bad'])} disagree with `weight_oz × 0.0283495`. "
-        f"The height and weight channels carry no unit-conversion defect."
+        f"The height and weight channels carry no unit-conversion *arithmetic* "
+        f"defect. That is a statement about the transformation, not about its "
+        f"input: section 6.5 shows that the typed imperial value is itself "
+        f"sometimes recorded in the wrong unit, and an exact conversion of a "
+        f"wrongly-united value is exactly wrong."
     )
     a("")
     a("Head circumference does. Its out-of-range values form structured clusters.")
@@ -873,8 +1239,96 @@ def render(con, bundle: Path, manifest: dict | None, digest: str) -> str:
         "quarter-inch grid absorbs the rest, so nearly half of repeat heights are "
         "identical and a fifth are lower. At long intervals both mechanisms should "
         "vanish, and they do not entirely — over a year apart, exactly-zero change and "
-        "apparent shrinkage each still occur in well under one percent of pairs, which "
-        "is the residue consistent with a value carried forward or entered in error."
+        "apparent shrinkage each still occur in well under one percent of pairs. That "
+        "residue is not one thing, and the rest of this subsection separates it. Its "
+        "magnitude is the first clue: apparent losses are small at every interval."
+    )
+    a("")
+    a(table(
+        ["age gap", "pairs", "any decrease", "median loss", "90th percentile", "99th percentile"],
+        [[r[0], fmt(r[1]), pct(r[2], 2), f"{r[3]:,.2f} cm", f"{r[4]:,.2f} cm",
+          f"{r[5]:,.2f} cm"] for r in shrink["magnitude"]],
+    ))
+    a("")
+    all_n, all_any, all_g1, _, all_in = shrink["grid"]["all"]
+    gro_n, gro_any, _, _, gro_in = shrink["grid"]["growing"]
+    a(
+        f"The median apparent loss is well under a centimetre at every interval, "
+        f"including the longest. One quarter-inch grid step is "
+        f"{GRID_CM:.3f} cm, so a large share of these losses is a single step on the "
+        f"recording grid of 6.2 rather than a recorded event. Of the {fmt(all_n)} "
+        f"height pairs more than a year apart at age 2 or later, {fmt(all_any)} "
+        f"({pct(100.0 * all_any / all_n, 3)}) decrease at all, {fmt(all_g1)} "
+        f"({pct(100.0 * all_g1 / all_n, 3)}) decrease by more than one grid step, and "
+        f"{fmt(all_in)} ({pct(100.0 * all_in / all_n, 3)}) by more than a full inch."
+    )
+    a("")
+    a(
+        "Where the residue sits in childhood identifies what produces it. The table "
+        "below holds the interval fixed at 181 to 365 days, long enough that a growing "
+        "child should clear the grid comfortably, and varies age instead. Band sizes "
+        "vary sharply because the well-visit schedule, not the calendar, decides where "
+        "a pair can start: the three-year visit lands close to 36.0 months, so pairs "
+        "beginning in the 36-42 band are common and pairs beginning in 42-48 are rare. "
+        "The bands flanking each finding below are well populated."
+    )
+    a("")
+    a(table(
+        ["age at the earlier measurement (months)", "pairs", "any decrease",
+         "median loss", "mean change over the interval"],
+        [[r[0], fmt(r[1]), pct(r[2], 2), f"{r[3]:,.2f} cm", f"{r[4]:,.2f} cm"]
+         for r in shrink["by_age"]],
+    ))
+    a("")
+    a(
+        "The rate is not flat and it is not monotone. It has two separate excesses, "
+        "and they have different signatures. The first is a narrow spike at 30 to 36 "
+        "months, several times the rate in the bands on either side of it, carrying a "
+        "median loss of over a centimetre. That is the age at which recumbent length "
+        "gives way to standing height, and a standing height is genuinely shorter than "
+        "a recumbent length for the same child. It is a measurement-protocol change "
+        "recorded in a field that does not name the protocol, not an error. Section "
+        "6.6's same-day height disagreement is the same effect seen within a single day."
+    )
+    a("")
+    a(
+        "The second excess is the adolescent rise, and it is the larger of the two. It "
+        "climbs monotonically through the teens while the mean change over the same "
+        "interval falls towards zero, and its median loss sits at the grid step rather "
+        "than above it. Splitting it by sex confirms the mechanism."
+    )
+    a("")
+    a(table(
+        ["age band (months)", "female pairs", "female decrease", "female mean change",
+         "male pairs", "male decrease", "male mean change"],
+        [[r[0], fmt(r[1]), pct(r[2], 2), f"{r[3]:,.2f} cm",
+          fmt(r[4]), pct(r[5], 2), f"{r[6]:,.2f} cm"] for r in shrink["by_sex"]],
+    ))
+    a("")
+    a(
+        "Girls reach the high apparent-loss rates roughly two years earlier than boys, "
+        "in the same order as growth cessation. This is not shrinkage and it is not a "
+        "recording defect: once annual growth falls below the quarter-inch grid, "
+        "repeated measurement of a child who has stopped growing returns a lower value "
+        "about as often as a higher one. Restricting the long-interval pairs to ages 2 "
+        f"to 10, where growth is unambiguously ongoing, collapses the decrease rate "
+        f"from {pct(100.0 * all_any / all_n, 3)} to "
+        f"{pct(100.0 * gro_any / gro_n, 3)} — {fmt(gro_any)} pairs of {fmt(gro_n)}, of "
+        f"which {fmt(gro_in)} lose more than a full inch."
+    )
+    a("")
+    p_tot, p_back, p_persist = shrink["persist"]
+    a(
+        f"What remains after rounding and the length-to-height transition are removed "
+        f"is small and divides again. Of {fmt(p_tot)} decreases over a centimetre "
+        f"across an interval longer than a year that are followed by a further "
+        f"measurement, {fmt(p_back)} ({pct(100.0 * p_back / p_tot, 1)}) are followed by "
+        f"a value back at or above the earlier level, and {fmt(p_persist)} "
+        f"({pct(100.0 * p_persist / p_tot, 1)}) by a value that stays below it. The "
+        f"first pattern isolates the low value as the suspect one; in the second the "
+        f"low value is corroborated and the earlier, higher measurement is the "
+        f"candidate error. A screening rule that always drops the lower of a "
+        f"disagreeing pair gets the second group backwards."
     )
     a("")
     a(
@@ -882,13 +1336,257 @@ def render(con, bundle: Path, manifest: dict | None, digest: str) -> str:
         "measurement-error estimate rather than a defect, and they are directly usable "
         "for the matched-noise requirement in the counterfactual stimulus design: any "
         "synthetic trajectory whose repeat measurements are noiseless will be "
-        "unrealistically clean relative to this panel. The long-interval residue is a "
-        "different matter and should be screened before serialization."
+        "unrealistically clean relative to this panel. The long-interval residue is not "
+        "a defect either, for the most part: it is the recording grid acting on a "
+        "trajectory that has flattened, plus a protocol change at the age of 2 to 3 "
+        "years. Both belong in a stimulus that claims to look like this panel, and "
+        "neither should be filtered out as an outlier. What does need screening is the "
+        "much smaller set of decreases that survives an age restriction. Section 6.5 "
+        "takes up the overlapping question of whether an anomalous anthropometric value "
+        "has a mechanical explanation at all."
     )
     a("")
 
-    # ---- 6.5 same-day
-    a("### 6.5 Same-day duplicate encounters and same-day measurement disagreement")
+
+    # ---- 6.5 transcription errors
+    a("### 6.5 Transcription-error signatures in the typed anthropometric fields (capture artifact)")
+    a("")
+    a(
+        "Height and weight reach this file as typed imperial values, and the metric "
+        "channels are exact conversions of them (6.2, 6.3). Any transposed pair of "
+        "digits, dropped digit, misplaced decimal point, or value keyed in the wrong "
+        "unit is therefore an error in `height_in` or `weight_oz`, and it is detectable "
+        "there. This subsection tests each of those mechanisms against a null, because "
+        "the mechanisms differ enormously in how much freedom they have to fit an "
+        "arbitrary number, and an untested digit search will always find hits."
+    )
+    a("")
+    hg = trans["height"]
+    wg = trans["weight"]
+    a(
+        f"**Method.** A measurement is anchored by linear interpolation between the "
+        f"same child's previous and next measurement at the same age spacing. Both "
+        f"neighbours must themselves be plausible ({H_LO:.0f}–{H_HI:.0f} in for height, "
+        f"{W_LO / 16:.0f}–{W_HI / 16:.0f} lb for weight) and must span no more than "
+        f"{MAX_SPAN // 365} years, so that a bad neighbour cannot manufacture an "
+        f"anomaly. A height is anomalous when it sits more than {HEIGHT_DEV:.0f} inches "
+        f"({HEIGHT_DEV * 2.54:.2f} cm) from that anchor, a weight when it differs by "
+        f"more than {WEIGHT_DEV * 100:.0f}% of it. A mechanism *reconciles* an anomaly "
+        f"when applying it to the recorded value lands within {HEIGHT_TOL:.0f} inch of "
+        f"the anchor for height, or within {WEIGHT_TOL * 100:.0f}% of it for weight."
+    )
+    a("")
+    a(
+        f"The anchor is only available in the interior of a trajectory. Counting one "
+        f"agreed value per patient-day, the grain the anchor is built on, "
+        f"{fmt(trans['h_anchor'])} of {fmt(trans['h_total'])} heights "
+        f"({pct(100.0 * trans['h_anchor'] / trans['h_total'], 1)}) can be tested this "
+        f"way, and {fmt(trans['w_anchor'])} of {fmt(trans['w_total'])} weights "
+        f"({pct(100.0 * trans['w_anchor'] / trans['w_total'], 1)}). The remainder are "
+        f"first and last measurements, single-measurement children, and rows whose "
+        f"neighbours are themselves out of range. Everything below is a rate within the "
+        f"testable interior, not within the file."
+    )
+    a("")
+    a(
+        f"**The null.** Each anomaly's anchor is replaced by the recorded value plus a "
+        f"deviation drawn from another anomaly in the same year-of-age band, "
+        f"{NULL_REPS} times. That preserves the distribution of deviations exactly and "
+        f"destroys only the arithmetic relationship between the recorded digits and "
+        f"the anchor, which is the thing under test. A mechanism that reconciles "
+        f"anomalies no more often than it reconciles these scrambled pairs has no "
+        f"evidence behind it, however many hits it returns."
+    )
+    a("")
+    a(
+        f"**Height.** {fmt(hg['n'])} anomalies in the testable interior. The mechanisms "
+        f"are tested one at a time and are not mutually exclusive, so the rows below do "
+        f"not sum to the total; a whole-foot entry can also be reached by inserting a "
+        f"digit, for instance. The exclusive accounting comes after both tables."
+    )
+    a("")
+    a(table(
+        ["mechanism", "anomalies reconciled", "share", "share under the null", "ratio"],
+        _mech_rows(hg, trans["h_order"]),
+    ))
+    a("")
+    a(
+        "The mechanisms separate sharply. Adjacent digit transposition — the classic "
+        "keying error, and the one most often assumed — reconciles fewer height "
+        "anomalies than chance alone, so this snapshot carries **no evidence of digit "
+        "transposition in the height channel**. Nor is there evidence of a misplaced "
+        "decimal point. What the height channel does carry is a unit error, and it is "
+        "directional: entering a centimetre value in the inch field is enriched over "
+        "the null, while the arithmetically opposite reading is at or below it. That "
+        "asymmetry is what a real one-way data-entry confusion looks like; a spurious "
+        "mechanism would be symmetric."
+    )
+    a("")
+    a(
+        f"The dropped-digit row is the one that does not survive inspection, and it is "
+        f"worth showing why. Inserting a digit into a two-digit inch value always "
+        f"produces a three-digit one, which is never a plausible height, so the class "
+        f"can only fire on a recorded value with a single-digit integer part. It does "
+        f"exactly that: among the {fmt(trans["h_multi"][0])} height anomalies whose "
+        f"integer part has two or more digits, the class reconciles "
+        f"{fmt(trans["h_multi"][1])}. Its entire {pct(100.0 * hg["marginal"].get("one digit omitted", 0) / hg["n"], 2)} "
+        f"is the low-side entry family described next, reached by a different route. "
+        f"An enrichment ratio can be real and still be a restatement of another row."
+    )
+    a("")
+    feet_n, feet_cm, feet_z, feet_delta, feet_age = trans["feet"]
+    assert feet_z == feet_delta == 0, "whole-foot entries reached the derived channels"
+    a(
+        f"The largest single mechanism is more specific than any of these. "
+        f"{fmt(hg['marginal'].get('height recorded in whole feet', 0))} anomalies are "
+        f"reconciled by reading the entry as a whole number of feet, at "
+        f"{_mech_rows(hg, ['height recorded in whole feet'])[0][4]} the null rate. The "
+        f"cluster is visible without any anchor at all: {fmt(feet_n)} visits record a "
+        f"`height_in` of 1 to 6 as an exact integer, with a median age of "
+        f"{fmt(feet_age, 1)} years — a height of 3 or 4 for a child who is three or "
+        f"four feet tall. The two readings of the same field are 12 times apart, and "
+        f"the age profile picks the right one."
+    )
+    a("")
+    cm_n, cm_grid, cm_cm, cm_age = trans["cm_field"]
+    grid_all, grid_hit = trans["grid"]
+    tall_n, tall_age = trans["tall"]
+    a(
+        f"The centimetre-in-the-inch-field cluster has an independent signature that "
+        f"does not depend on the anchor either. {fmt(cm_n)} visits record a `height_in` "
+        f"between 90 and 115. Read as inches that is 229 to 292 cm; read as "
+        f"centimetres it is an ordinary preschool stature, and the median age of the "
+        f"cluster is {fmt(cm_age, 1)} years. The recording grid decides between the two "
+        f"readings: {pct(100.0 * cm_grid / cm_n, 1)} of the cluster falls on the "
+        f"quarter-inch grid against {pct(100.0 * grid_hit / grid_all, 1)} of all "
+        f"heights, so these values never passed through the inch-typing workflow that "
+        f"produces the grid. For contrast, the {fmt(tall_n)} heights between 75 and 80 "
+        f"inches have a mean age of {fmt(tall_age, 1)} years and sit on the grid at the "
+        f"usual rate: those are tall adolescents, not errors, and they are part of the "
+        f"upper tail that 6.1 shows the derivation layer discards."
+    )
+    a("")
+    a(f"**Weight.** {fmt(wg['n'])} anomalies in the testable interior.")
+    a("")
+    a(table(
+        ["mechanism", "anomalies reconciled", "share", "share under the null", "ratio"],
+        _mech_rows(wg, trans["w_order"]),
+    ))
+    a("")
+    a(
+        "The weight channel reverses the picture in one respect and confirms it in "
+        "another. Transposition is again below chance, so **neither channel shows "
+        "evidence of digit swapping**. But a misplaced decimal point, which the height "
+        "channel does not show at all, is the dominant weight artifact by a wide "
+        "margin — the strongest enrichment in either table. An ounce value has more "
+        "digits than an inch value and no natural decimal point, so a factor of ten is "
+        "both easy to key and hard to notice. The three unit substitutions are small in "
+        "absolute terms but all enriched, and they are the ones a mixed imperial and "
+        "metric workflow would produce."
+    )
+    a("")
+    a(
+        f"The dropped-digit row needs the same discount here as in the height channel, "
+        f"for the same reason: a weight that is ten times too large can be reached "
+        f"either by shifting the decimal point or by deleting a digit, so the two rows "
+        f"overlap. Removing the anomalies a decimal shift already explains leaves "
+        f"{fmt(trans["w_noshift"]["n"])} weights, of which the class reconciles "
+        f"{fmt(trans["w_noshift"]["marginal"].get("one digit omitted", 0))} "
+        f"({pct(100.0 * trans["w_noshift"]["marginal"].get("one digit omitted", 0) / trans["w_noshift"]["n"], 2)}) "
+        f"against a null of "
+        f"{pct(100.0 * trans["w_noshift"]["null"].get("one digit omitted", 0.0) / trans["w_noshift"]["n"], 2)}. "
+        f"What is left of the enrichment is small enough that a dropped digit should "
+        f"not be carried forward as an established weight mechanism."
+    )
+    a("")
+    a(
+        "The bottom row of each table is the reason the null is not optional. Allowing "
+        "any single digit to be wrong reconciles about half of all height anomalies and "
+        "an eighth of weight anomalies — and reconciles almost exactly as many randomly "
+        "paired values. It carries no information at all. Reported without a null it "
+        "would look like the largest finding in this section."
+    )
+    a("")
+    hs_n, hs_tot, hs_hit = trans["sens"]["height"]
+    ws_n, ws_tot, ws_hit = trans["sens"]["weight"]
+    a(
+        f"**How strong is the transposition negative?** Only as strong as the share of "
+        f"transpositions the anomaly gate could have caught, because a swap that moves "
+        f"a value by less than the gate never becomes an anomaly in the first place. "
+        f"Applying every adjacent digit swap to a sample of measurements in the "
+        f"testable interior gives that share directly. For height, "
+        f"{pct(100.0 * hs_hit / hs_tot, 1)} of the {fmt(hs_tot)} swaps available across "
+        f"{fmt(hs_n)} sampled values would displace the value by more than "
+        f"{HEIGHT_DEV:.0f} inches; for weight, {pct(100.0 * ws_hit / ws_tot, 1)} of "
+        f"{fmt(ws_tot)} swaps across {fmt(ws_n)} values would move it by more than "
+        f"{WEIGHT_DEV * 100:.0f}%. The height negative is therefore well powered: about "
+        f"seven in ten transpositions would have been visible and none is. The weight "
+        f"negative is weaker, since a four-digit ounce value can absorb a swap without "
+        f"moving far — `1136` becomes `1163`, a 2% change — and roughly two thirds of "
+        f"weight transpositions would stay below the gate. Neither channel shows "
+        f"evidence of digit swapping *at a magnitude large enough to displace a "
+        f"measurement from its own trajectory*. Small transpositions are below the "
+        f"detection floor by construction, and would be absorbed into the "
+        f"measurement-noise estimate of 6.4 rather than appearing here."
+    )
+    a("")
+    def _acct(g):
+        cal = g["exclusive"].get("one digit wrong (calibration class)", 0)
+        none = g["exclusive"].get("no mechanism reconciles it", 0)
+        named = g["n"] - cal - none
+        return [f"{fmt(v)} ({pct(100.0 * v / g['n'], 1)})" for v in (named, cal, none)]
+
+    a(table(
+        ["channel", "anomalies", "a named mechanism fits",
+         "only the calibration class fits", "nothing fits"],
+        [[label, fmt(g["n"])] + _acct(g) for label, g in (("height", hg), ("weight", wg))],
+    ))
+    a("")
+    a(
+        "Assigning each anomaly to the most parsimonious mechanism that fits it gives "
+        "the accounting above. The named-mechanism column is an upper bound, because it "
+        "still contains the classes that sit at or below their null; the honest reading "
+        "is that specific, well-evidenced transcription mechanisms explain a minority "
+        "of anomalous anthropometric values here, and a smaller minority in the height "
+        "channel than in the weight channel. Most anomalies are not mechanical "
+        "transcription errors at all. Measurement of the wrong child, a value attached "
+        "to the wrong encounter, and physical mismeasurement all produce an implausible "
+        "number that carries no arithmetic relationship to the truth, and none of the "
+        "tests in this subsection can reach them."
+    )
+    a("")
+    a(
+        f"**What the derivation layer already removes.** "
+        f"{_all_of(feet_n - feet_cm, feet_n)} whole-foot entries and "
+        f"{_all_of(cm_n - cm_cm, cm_n, lead='all')} in the 90-to-115 cluster carry a "
+        f"null "
+        f"`height_cm`, `height_z_score`, and `delta_height_cm`: the z-bound documented "
+        f"in 6.1 removes them as a side effect of being far out of range. Anyone "
+        f"reading the derived channels is already protected from these values. Anyone "
+        f"reading `height_in` is not — and 6.1 recommends exactly that, re-running the "
+        f"augmentation from the retained raw heights to recover the truncated tall "
+        f"tail. The two repairs interact: raising the z ceiling to +5 must not also "
+        f"readmit the low-side entry errors that the current bound happens to catch. A "
+        f"unit and grid check on `height_in` belongs in that re-run, before the z "
+        f"filter rather than in place of it."
+    )
+    a("")
+    a(
+        "**Consequence for this project.** Digit transposition is the mechanism a "
+        "reader would expect to matter, and at the scale that displaces a height from "
+        "its own trajectory it does not occur here; for weight the same test is only "
+        "about a third sensitive, so the claim there is weaker and a small-magnitude "
+        "swap cannot be ruled out. Unit confusion and decimal placement do matter, in "
+        "different channels, and both are cheap to screen for because both produce "
+        "values that are implausible on their face. For constructed stimuli the "
+        "practical rule is narrower than a general outlier filter: bound `height_in` "
+        "and `weight_oz` on plausibility before any conversion, and check the recording "
+        "grid rather than the value alone, since the grid separates a tall adolescent "
+        "from a centimetre in the wrong field where the magnitude cannot."
+    )
+    a("")
+    # ---- 6.6 same-day
+    a("### 6.6 Same-day duplicate encounters and same-day measurement disagreement")
     a("")
     a(
         f"Visit identifiers are unique, but a patient can have more than one visit row "
@@ -933,7 +1631,7 @@ def render(con, bundle: Path, manifest: dict | None, digest: str) -> str:
     a("")
 
     # ---- 6.6 delta fields
-    a("### 6.6 Reproducing the distributed delta and velocity fields")
+    a("### 6.7 Reproducing the distributed delta and velocity fields")
     a("")
     a(
         "The augmented visit layer distributes `delta_height_cm`, "
@@ -986,7 +1684,7 @@ def render(con, bundle: Path, manifest: dict | None, digest: str) -> str:
         f"delta back through a mask keyed on patient and age in days, so when a patient "
         f"has more than one visit on the same day every one of those visits receives "
         f"the same value, and which earlier height was used becomes ambiguous. Section "
-        f"6.5 measures that population directly: {fmt(same['dup_visits'])} visits share "
+        f"6.6 measures that population directly: {fmt(same['dup_visits'])} visits share "
         f"a patient-day with another visit, and {fmt(same['days_2h_disagree'])} "
         f"patient-days carry two or more heights that disagree. The effect is confined "
         f"to those rows and does not touch the reproduction elsewhere."
@@ -1005,7 +1703,7 @@ def render(con, bundle: Path, manifest: dict | None, digest: str) -> str:
     )
     a("")
     # ---- 6.7 capture depends on encounter type
-    a("### 6.7 Measurement presence does not mean measurement (capture artifact)")
+    a("### 6.8 Measurement presence does not mean measurement (capture artifact)")
     a("")
     a(
         "Section 3 reported measurement completeness by age and by source system. "
@@ -1052,7 +1750,7 @@ def render(con, bundle: Path, manifest: dict | None, digest: str) -> str:
     a("")
 
     # ---- 6.8 cross-resource
-    a("### 6.8 Cross-resource temporal and linkage integrity")
+    a("### 6.9 Cross-resource temporal and linkage integrity")
     a("")
     a(
         "Age in days is the only clock in this snapshot, and ordering violations "
@@ -1095,7 +1793,7 @@ def render(con, bundle: Path, manifest: dict | None, digest: str) -> str:
     a("")
 
     # ---- 6.9 labs
-    a("### 6.9 Laboratory results are semi-structured text")
+    a("### 6.10 Laboratory results are semi-structured text")
     a("")
     a(
         f"`result_value` is a text field. Of {fmt(labs['total'])} rows, "
@@ -1129,7 +1827,7 @@ def render(con, bundle: Path, manifest: dict | None, digest: str) -> str:
     pl_n, pl_d, pl_bad = codes["pl"]
     en_n, en_d, en_bad = codes["enc"]
     lab_raw, lab_norm, lab_dbl, med_raw, med_norm, sp_raw, sp_norm = codes["names"]
-    a("### 6.10 Vocabulary and categorical-string hygiene")
+    a("### 6.11 Vocabulary and categorical-string hygiene")
     a("")
     a(
         f"Diagnosis strings are almost entirely well-formed ICD-10. Of "
@@ -1162,7 +1860,7 @@ def render(con, bundle: Path, manifest: dict | None, digest: str) -> str:
     a("")
 
     # ---- 6.11 summary
-    a("### 6.11 Artifact summary")
+    a("### 6.12 Artifact summary")
     a("")
     a(table(
         ["artifact", "class", "scale in this snapshot", "recoverable?"],
@@ -1179,9 +1877,31 @@ def render(con, bundle: Path, manifest: dict | None, digest: str) -> str:
              "derivation", f"{fmt(n_dbl_ok)} visits", "Yes — divide by 2.54 before bounding, rather than deleting"],
             ["Head-circumference z defective on plausible measurements",
              "derivation", f"{fmt(z_plaus)} visits", "No — recompute or exclude"],
-            ["Zero or negative height change over long intervals",
-             "capture", f"{pct(rep['rows'][-1][2], 2)} and {pct(rep['rows'][-1][3], 2)} of pairs over a year apart",
-             "Partly — screen before use"],
+            ["Apparent height loss from the recording grid on a flattened trajectory",
+             "capture",
+             (f"{pct(100.0 * shrink['grid']['all'][1] / shrink['grid']['all'][0], 2)} of "
+              f"pairs over a year apart, falling to "
+              f"{pct(100.0 * shrink['grid']['growing'][1] / shrink['grid']['growing'][0], 3)} "
+              f"at ages 2-10"),
+             "Not a defect — do not filter as an outlier"],
+            ["Recumbent length recorded as standing height across the transition age",
+             "capture", "several-fold excess of apparent loss at 30-36 months",
+             "No — the field does not name the protocol"],
+            ["Height entered as a whole number of feet",
+             "capture", f"{fmt(trans['feet'][0])} visits", "Yes — multiply by 12 before bounding"],
+            ["Centimetre value entered in the inch field",
+             "capture", f"{fmt(trans['cm_field'][0])} visits in the 90-115 cluster",
+             "Yes — divide by 2.54; the recording grid identifies them"],
+            ["Weight decimal point misplaced by a factor of ten",
+             "capture",
+             (f"{fmt(trans['weight']['marginal'].get('decimal point misplaced', 0))} "
+              f"anomalies, the strongest enrichment measured"),
+             "Partly — screen against a within-child anchor"],
+            ["Adjacent digit transposition in height or weight",
+             "capture",
+             ("below the permutation null in both channels, at a gate that would catch "
+              "70% of height swaps and 32% of weight swaps"),
+             "Not detected at this magnitude — smaller swaps are below the floor"],
             ["Same-day duplicate encounters with disagreeing measurements",
              "capture", f"{fmt(same['days_2h_disagree'])} patient-days for height", "Partly — define a tie rule"],
             ["Velocity computed over an age-dependent minimum interval, not between adjacent visits",
