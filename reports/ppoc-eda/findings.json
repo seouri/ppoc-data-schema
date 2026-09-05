@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-05T18:13:22Z",
+  "generated_at": "2026-09-05T18:20:10Z",
   "parts": [
     {
       "findings": [
@@ -1479,6 +1479,257 @@
             "pl_share": 55.6671681532,
             "pl_total": 1709584
           }
+        },
+        {
+          "artifact": {
+            "kind": "capture",
+            "name": "Laboratory results are semi-structured text",
+            "recoverable": "Yes — parse comparators explicitly rather than casting",
+            "scale": "487,168 comparator-prefixed values; only 44.2% of rows parse as a number"
+          },
+          "id": "terminology.codes",
+          "part": "3.6",
+          "tables": [
+            {
+              "caption": "The non-conforming diagnosis values",
+              "columns": [
+                "code",
+                "n"
+              ],
+              "id": "t-nonconf",
+              "rows": [
+                {
+                  "code": "IMO0002",
+                  "n": 116950
+                },
+                {
+                  "code": "U07.1",
+                  "n": 25483
+                },
+                {
+                  "code": "IMO0001",
+                  "n": 3443
+                },
+                {
+                  "code": "U09.9",
+                  "n": 77
+                },
+                {
+                  "code": "U07.0",
+                  "n": 39
+                }
+              ]
+            },
+            {
+              "caption": "Categorical vocabularies before and after normalising case and internal whitespace",
+              "columns": [
+                "resource",
+                "field",
+                "raw",
+                "normalized",
+                "collapse"
+              ],
+              "id": "t-vocab",
+              "rows": [
+                {
+                  "collapse": 3,
+                  "field": "lab_procedure_name",
+                  "normalized": 3739,
+                  "raw": 3742,
+                  "resource": "labs"
+                },
+                {
+                  "collapse": 0,
+                  "field": "med_simple_generic_name",
+                  "normalized": 1073,
+                  "raw": 1073,
+                  "resource": "medications"
+                },
+                {
+                  "collapse": 0,
+                  "field": "requested_specialty",
+                  "normalized": 119,
+                  "raw": 119,
+                  "resource": "referrals"
+                }
+              ]
+            }
+          ],
+          "title": "Code systems, free text, and categorical hygiene",
+          "values": {
+            "censored": 487168,
+            "dup_disagree": 23679,
+            "dup_pairs": 33879,
+            "dup_share": 69.8928539803,
+            "empty": 2494261,
+            "empty_share": 14.4756959983,
+            "enc_bad": 145992,
+            "enc_bad_share": 0.992163989501,
+            "enc_distinct": 8029,
+            "enc_filled": 14714503,
+            "loinc_share": 7.83545351458,
+            "loinc_total": 17230681,
+            "parsed": 7621449,
+            "parsed_share": 44.2318501515,
+            "pl_bad": 39860,
+            "pl_bad_share": 2.3315613623,
+            "pl_distinct": 4739,
+            "pl_filled": 1709584
+          }
+        },
+        {
+          "artifact": {
+            "kind": "capture",
+            "name": "Anthropometrics recorded on encounters with no physical contact",
+            "recoverable": "Partly — restrict by encounter type before counting measurement occasions",
+            "scale": "weight present on 99% of 22,053 telephone encounters"
+          },
+          "id": "terminology.capture",
+          "part": "3.7",
+          "tables": [
+            {
+              "caption": "Measurement and diagnosis presence by encounter type",
+              "columns": [
+                "encounter",
+                "visits",
+                "weight",
+                "height",
+                "diag"
+              ],
+              "id": "t-capture",
+              "rows": [
+                {
+                  "diag": 95.8408834523,
+                  "encounter": "Office Visit",
+                  "height": 52.4238712065,
+                  "visits": 4725643,
+                  "weight": 99.932834537
+                },
+                {
+                  "diag": 94.4392204015,
+                  "encounter": "Well Visit (Conv.)",
+                  "height": 98.7475142976,
+                  "visits": 778452,
+                  "weight": 99.9355130438
+                },
+                {
+                  "diag": 95.402510538,
+                  "encounter": "Sick",
+                  "height": 16.9207440391,
+                  "visits": 580991,
+                  "weight": 99.8913924656
+                },
+                {
+                  "diag": 93.0745913175,
+                  "encounter": "Follow-Up",
+                  "height": 24.8662985818,
+                  "visits": 92370,
+                  "weight": 99.7542492151
+                },
+                {
+                  "diag": 96.8674305651,
+                  "encounter": "Walk-In",
+                  "height": 8.69614327489,
+                  "visits": 79679,
+                  "weight": 99.9447784234
+                },
+                {
+                  "diag": 99.6476587854,
+                  "encounter": "Consult",
+                  "height": 53.7320352341,
+                  "visits": 32355,
+                  "weight": 99.8825529285
+                },
+                {
+                  "diag": 17.2712219202,
+                  "encounter": "Conversion Encounter",
+                  "height": 66.9291092573,
+                  "visits": 32007,
+                  "weight": 99.8968975537
+                },
+                {
+                  "diag": 99.1265814655,
+                  "encounter": "Newborn",
+                  "height": 87.4831417378,
+                  "visits": 31142,
+                  "weight": 99.942200244
+                },
+                {
+                  "diag": 99.789539325,
+                  "encounter": "Telemedicine",
+                  "height": 44.832021202,
+                  "visits": 25658,
+                  "weight": 97.3575493024
+                },
+                {
+                  "diag": 34.7979866685,
+                  "encounter": "Telephone",
+                  "height": 50.1383031787,
+                  "visits": 22053,
+                  "weight": 99.2699405977
+                },
+                {
+                  "diag": 96.4099416999,
+                  "encounter": "Weight Check",
+                  "height": 37.6618594661,
+                  "visits": 16295,
+                  "weight": 99.9140840749
+                },
+                {
+                  "diag": 83.3517951391,
+                  "encounter": "Clinical Support",
+                  "height": 15.397146022,
+                  "visits": 15347,
+                  "weight": 99.2832475402
+                },
+                {
+                  "diag": 8.567940795,
+                  "encounter": "Documentation",
+                  "height": 84.4357976654,
+                  "visits": 13107,
+                  "weight": 98.3443961242
+                },
+                {
+                  "diag": 93.4092067267,
+                  "encounter": "Immunization",
+                  "height": 30.7032444369,
+                  "visits": 11774,
+                  "weight": 97.5624256837
+                }
+              ]
+            },
+            {
+              "caption": "Recording completeness by source system",
+              "columns": [
+                "source",
+                "visits",
+                "height",
+                "diag"
+              ],
+              "id": "t-source",
+              "rows": [
+                {
+                  "diag": 99.6667843412,
+                  "height": 51.4022504347,
+                  "source": "Epic",
+                  "visits": 4149865
+                },
+                {
+                  "diag": 86.1024102963,
+                  "height": 58.7095582716,
+                  "source": "converted from a legacy system",
+                  "visits": 2344608
+                }
+              ]
+            }
+          ],
+          "title": "Capture: measurement presence is not measurement occurrence",
+          "values": {
+            "conv_diag": 86.1024102963,
+            "n_types": 14,
+            "tele_visits": 22053,
+            "tele_weight": 99.2699405977
+          }
         }
       ],
       "number": "3",
@@ -2127,6 +2378,255 @@
           "title": "Distributions and plausibility bounds",
           "values": {
             "n_channels": 4
+          }
+        },
+        {
+          "artifact": {
+            "kind": "capture",
+            "name": "Wrong-unit and decimal-place entry in the typed measurement fields",
+            "recoverable": "Yes — bound and repair the raw imperial columns before converting",
+            "scale": "1,371 whole-foot heights, 143 centimetre values in the inch field, and a weight decimal artifact enriched 17-fold"
+          },
+          "figures": [
+            {
+              "caption": "Height: observed against null, by mechanism",
+              "data": {
+                "categories": [
+                  "height recorded in who",
+                  "centimetre value in th",
+                  "inch value where a cen",
+                  "decimal point misplace",
+                  "adjacent digit transpo",
+                  "one digit omitted",
+                  "one digit wrong"
+                ],
+                "height": 300,
+                "series": [
+                  {
+                    "name": "observed",
+                    "values": [
+                      9.21671369072,
+                      1.2226252855,
+                      0.403063280935,
+                      0.147789869676,
+                      0.537417707913,
+                      5.46822517802,
+                      54.0642214161
+                    ]
+                  },
+                  {
+                    "name": "null",
+                    "values": [
+                      1.34488781405,
+                      0.667069729948,
+                      0.99556630391,
+                      2.79591562542,
+                      0.693940615343,
+                      1.14402794572,
+                      50.154507591
+                    ]
+                  }
+                ],
+                "suffix": "%",
+                "title": "Height mechanism enrichment"
+              },
+              "id": "fig-mech-h",
+              "kind": "grouped_bar"
+            }
+          ],
+          "id": "anthro.transcribe",
+          "part": "4.4",
+          "tables": [
+            {
+              "caption": "Height: mechanisms against the null",
+              "columns": [
+                "mechanism",
+                "obs",
+                "share",
+                "null",
+                "ratio"
+              ],
+              "id": "t-hmech",
+              "rows": [
+                {
+                  "mechanism": "height recorded in whole feet",
+                  "null": 1.34488781405,
+                  "obs": 686,
+                  "ratio": 6.85314685315,
+                  "share": 9.21671369072
+                },
+                {
+                  "mechanism": "centimetre value in the inch field",
+                  "null": 0.667069729948,
+                  "obs": 91,
+                  "ratio": 1.83282980866,
+                  "share": 1.2226252855
+                },
+                {
+                  "mechanism": "inch value where a centimetre is expected",
+                  "null": 0.99556630391,
+                  "obs": 30,
+                  "ratio": 0.404858299595,
+                  "share": 0.403063280935
+                },
+                {
+                  "mechanism": "decimal point misplaced",
+                  "null": 2.79591562542,
+                  "obs": 11,
+                  "ratio": 0.0528592023066,
+                  "share": 0.147789869676
+                },
+                {
+                  "mechanism": "adjacent digit transposition",
+                  "null": 0.693940615343,
+                  "obs": 40,
+                  "ratio": 0.774443368829,
+                  "share": 0.537417707913
+                },
+                {
+                  "mechanism": "one digit omitted",
+                  "null": 1.14402794572,
+                  "obs": 407,
+                  "ratio": 4.77980035232,
+                  "share": 5.46822517802
+                },
+                {
+                  "mechanism": "one digit wrong (calibration class)",
+                  "null": 50.154507591,
+                  "obs": 4024,
+                  "ratio": 1.0779533887,
+                  "share": 54.0642214161
+                }
+              ]
+            },
+            {
+              "caption": "Weight: mechanisms against the null",
+              "columns": [
+                "mechanism",
+                "obs",
+                "share",
+                "null",
+                "ratio"
+              ],
+              "id": "t-wmech",
+              "rows": [
+                {
+                  "mechanism": "pound value in the ounce field",
+                  "null": 0.26145900581,
+                  "obs": 39,
+                  "ratio": 2.40740740741,
+                  "share": 0.629438347321
+                },
+                {
+                  "mechanism": "ounce value where a pound is expected",
+                  "null": 0.0863460296966,
+                  "obs": 25,
+                  "ratio": 4.67289719626,
+                  "share": 0.403486120077
+                },
+                {
+                  "mechanism": "kilogram value in the ounce field",
+                  "null": 0.0855390574564,
+                  "obs": 13,
+                  "ratio": 2.45283018868,
+                  "share": 0.20981278244
+                },
+                {
+                  "mechanism": "gram value in the ounce field",
+                  "null": 0.0766623628147,
+                  "obs": 2,
+                  "ratio": 0.421052631579,
+                  "share": 0.0322788896062
+                },
+                {
+                  "mechanism": "decimal point misplaced",
+                  "null": 1.13056810846,
+                  "obs": 1208,
+                  "ratio": 17.2448251249,
+                  "share": 19.4964493221
+                },
+                {
+                  "mechanism": "adjacent digit transposition",
+                  "null": 6.65429309232,
+                  "obs": 77,
+                  "ratio": 0.18675721562,
+                  "share": 1.24273724984
+                },
+                {
+                  "mechanism": "one digit omitted",
+                  "null": 8.63056810846,
+                  "obs": 927,
+                  "ratio": 1.73352033661,
+                  "share": 14.9612653325
+                },
+                {
+                  "mechanism": "one digit wrong (calibration class)",
+                  "null": 25.3881536475,
+                  "obs": 795,
+                  "ratio": 0.505387622771,
+                  "share": 12.8308586185
+                }
+              ]
+            },
+            {
+              "caption": "What the mechanisms account for",
+              "columns": [
+                "channel",
+                "n",
+                "named",
+                "cal",
+                "none"
+              ],
+              "id": "t-acct",
+              "rows": [
+                {
+                  "cal": 3989,
+                  "channel": "height",
+                  "n": 7443,
+                  "named": 939,
+                  "none": 2515
+                },
+                {
+                  "cal": 742,
+                  "channel": "weight",
+                  "n": 6196,
+                  "named": 1987,
+                  "none": 3467
+                }
+              ]
+            }
+          ],
+          "title": "Transcription-error signatures in the typed fields",
+          "values": {
+            "cm_age": 3.138,
+            "cm_grid": 34.965034965,
+            "cm_live": 143,
+            "cm_n": 143,
+            "feet_age": 5.21,
+            "feet_live": 1371,
+            "feet_n": 1371,
+            "grid_base": 80.0112148478,
+            "h_cal": 3989,
+            "h_multi": 6619,
+            "h_multi_hit": 0,
+            "h_n": 7443,
+            "h_named": 939,
+            "h_none": 2515,
+            "h_omit": 407,
+            "h_omit_share": 5.46822517802,
+            "h_sens": 69.7039562909,
+            "h_sens_n": 200000,
+            "hdev": 3.0,
+            "reps": 20,
+            "w_cal": 742,
+            "w_n": 6196,
+            "w_named": 1987,
+            "w_none": 3467,
+            "w_sens": 31.6251616557,
+            "w_sens_n": 200000,
+            "w_shift": 1208,
+            "w_shift_ratio": 17.2448251249,
+            "wdev": 50.0
           }
         },
         {
@@ -4325,11 +4825,32 @@
                   "where": "3.3"
                 },
                 {
+                  "artifact": "Laboratory results are semi-structured text",
+                  "class": "capture",
+                  "recoverable": "Yes — parse comparators explicitly rather than casting",
+                  "scale": "487,168 comparator-prefixed values; only 44.2% of rows parse as a number",
+                  "where": "3.6"
+                },
+                {
+                  "artifact": "Anthropometrics recorded on encounters with no physical contact",
+                  "class": "capture",
+                  "recoverable": "Partly — restrict by encounter type before counting measurement occasions",
+                  "scale": "weight present on 99% of 22,053 telephone encounters",
+                  "where": "3.7"
+                },
+                {
                   "artifact": "Terminal-digit heaping on the imperial recording grid",
                   "class": "capture",
                   "recoverable": "No — it is the precision the measurement actually has",
                   "scale": "80.0% of heights fall on a quarter inch",
                   "where": "4.2"
+                },
+                {
+                  "artifact": "Wrong-unit and decimal-place entry in the typed measurement fields",
+                  "class": "capture",
+                  "recoverable": "Yes — bound and repair the raw imperial columns before converting",
+                  "scale": "1,371 whole-foot heights, 143 centimetre values in the inch field, and a weight decimal artifact enriched 17-fold",
+                  "where": "4.4"
                 },
                 {
                   "artifact": "Apparent height loss from the recording grid on a flat trajectory",
@@ -4352,7 +4873,7 @@
           "values": {
             "kindlist": "capture, derivation, linkage, selection",
             "kinds": 4,
-            "n": 8
+            "n": 11
           }
         }
       ],

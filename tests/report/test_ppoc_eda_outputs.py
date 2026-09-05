@@ -13,6 +13,8 @@ from pathlib import Path
 
 import pytest
 
+from .pdf_text import extract, squashed
+
 OUT = Path(__file__).resolve().parents[2] / "reports" / "ppoc-eda"
 TEXT_OUTPUTS = ("index.html", "ppoc-eda.md")
 
@@ -32,6 +34,17 @@ LONG_DATE = re.compile(r"\b\d{1,2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|No
 
 #: An absolute path outside the repository would break the neutrality rule.
 FOREIGN_PATH = re.compile(r"/Users/[A-Za-z0-9_.-]+/(?!src/tries/ppoc-data-schema)")
+
+
+def _pdf_text() -> str:
+    """The PDF is the artifact GitHub renders, so it is audited like the rest."""
+    pdf = OUT / "ppoc-eda.pdf"
+    if not pdf.is_file():
+        pytest.skip("no PDF built (needs Chrome)")
+    text = extract(pdf)
+    if len(text) < 2000:
+        pytest.skip("PDF text could not be decoded")
+    return text
 
 
 def _outputs() -> list[Path]:
@@ -94,3 +107,53 @@ def test_every_html_figure_has_a_caption_and_label() -> None:
     )
     for svg in re.findall(r"<svg[^>]*>", html):
         assert "aria-label=" in svg, "an SVG is missing its accessible label"
+
+
+# --- the same audits, over the PDF -----------------------------------------
+
+@pytest.mark.parametrize("term", FORBIDDEN)
+def test_pdf_has_no_project_specific_language(term: str) -> None:
+    _pdf_text()
+    assert term.replace(" ", "") not in squashed(OUT / "ppoc-eda.pdf"), (
+        f"the PDF contains project-specific term {term!r}"
+    )
+
+
+def test_pdf_has_no_experiment_codes() -> None:
+    assert not EXPERIMENT_CODE.findall(_pdf_text()), "the PDF references experiment codes"
+
+
+def test_pdf_has_no_leaked_dates() -> None:
+    text = _pdf_text()
+    assert not SLASH_DATE.findall(text), "the PDF carries a slash date"
+    stray = set(LONG_DATE.findall(text)) - ALLOWED_DATES
+    assert not stray, f"the PDF carries unexpected dates {stray}"
+
+
+def test_pdf_has_no_foreign_paths_or_source_uri() -> None:
+    """Chrome can write the source file:// URL into the document; it must not."""
+    squash = squashed(OUT / "ppoc-eda.pdf")
+    assert "file://" not in squash, "the PDF records its own source URI"
+    assert not FOREIGN_PATH.findall(_pdf_text()), (
+        "the PDF contains an absolute path outside the repo"
+    )
+
+
+def test_coverage_map_cites_only_sections_that_exist() -> None:
+    """A checklist row pointing at a section nobody wrote destroys the map's value."""
+    path = OUT / "findings.json"
+    if not path.is_file():
+        pytest.skip("report has not been built")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    findings = [f for p in data["parts"] for f in p["findings"]]
+    existing = {f["part"] for f in findings}
+
+    coverage = next((f for f in findings if f["id"] == "coverage.map"), None)
+    if coverage is None:
+        pytest.skip("coverage map not built")
+    cited = set()
+    for table in coverage.get("tables", []):
+        for row in table["rows"]:
+            cited.update(re.findall(r"\b(\d+\.\d+)\b", row.get("note", "")))
+    missing = sorted(cited - existing)
+    assert not missing, f"coverage map cites sections that do not exist: {missing}"

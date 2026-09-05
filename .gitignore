@@ -9,3 +9,6 @@ __pycache__/
 # The data dictionary and the extract diagram were reviewed and are committed;
 # they contain only field definitions and aggregate counts.
 docs/ppoc-patient-list-notes-*.xlsx
+
+# Transient headless-browser profile created while printing the report PDF.
+reports/ppoc-eda/.chrome-profile/

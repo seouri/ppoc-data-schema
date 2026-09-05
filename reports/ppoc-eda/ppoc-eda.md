@@ -351,6 +351,74 @@ The data dictionary defines `result_flag` as an HL7 abnormality category in whic
 
 **Implications for analysis.** Never impute or drop on `result_flag` or `resolved_date_age_in_days` nullity. An abnormal-result rate computed as "non-null flags over non-null flags" will read as 100%; the correct denominator is all resulted rows. A problem-list resolution rate must count nulls as unresolved rather than excluding them.
 
+### 3.6 Code systems, free text, and categorical hygiene
+
+Diagnosis coding is almost entirely well-formed ICD-10. Of 14,714,503 filled encounter-diagnosis slots across 8,029 distinct codes, 145,992 (0.99%) do not match the ICD-10 shape; of 1,709,584 problem-list entries across 4,739 codes, 39,860 (2.33%).
+
+**The non-conforming diagnosis values**
+
+| value | slots |
+| --- | --- |
+| IMO0002 | 116,950 |
+| U07.1 | 25,483 |
+| IMO0001 | 3,443 |
+| U09.9 | 77 |
+| U07.0 | 39 |
+
+These are proprietary placeholders the source EHR emits when a clinical term has no ICD-10 equivalent. They carry no diagnostic meaning and should be excluded from code-based cohort definitions rather than treated as unmapped diagnoses.
+
+Laboratory results are the opposite case. `result_value` is a text column: of 17,230,681 rows, 7,621,449 (44.2%) parse as a number and 2,494,261 (14.5%) are empty. Among the rest, 487,168 are censored results carrying a comparator prefix, and the remainder are qualitative results, specimen descriptors, and administrative non-results. A LOINC code is present on only 7.8% of rows.
+
+The declared key holds, but 33,879 order-and-component pairs appear on more than one result line and 23,679 of those (69.9%) carry disagreeing values. The data dictionary records the cause: a result may fail to link back to its original order, which duplicates the record.
+
+**Categorical vocabularies before and after normalising case and internal whitespace**
+
+| resource | field | distinct values | after normalising | collapsed |
+| --- | --- | --- | --- | --- |
+| labs | lab_procedure_name | 3,742 | 3,739 | 3 |
+| medications | med_simple_generic_name | 1,073 | 1,073 | 0 |
+| referrals | requested_specialty | 119 | 119 | 0 |
+
+**Implications for analysis.** A naive numeric cast on `result_value` silently discards more than half the populated values and turns a left-censored result into a missing one rather than a bound. Join labs on order, component *and* line number, or the duplicate lines will multiply rows and pick a value arbitrarily. The categorical vocabularies barely collapse under normalisation, so grouping by them is safe after trimming.
+
+### 3.7 Capture: measurement presence is not measurement occurrence
+
+Completeness by age says how often a column is filled. Encounter type says whether filling it could have meant a measurement.
+
+**Measurement and diagnosis presence by encounter type**
+
+| encounter type | visits | weight present | height present | first diagnosis |
+| --- | --- | --- | --- | --- |
+| Office Visit | 4,725,643 | 99.9% | 52.4% | 95.8% |
+| Well Visit (Conv.) | 778,452 | 99.9% | 98.7% | 94.4% |
+| Sick | 580,991 | 99.9% | 16.9% | 95.4% |
+| Follow-Up | 92,370 | 99.8% | 24.9% | 93.1% |
+| Walk-In | 79,679 | 99.9% | 8.7% | 96.9% |
+| Consult | 32,355 | 99.9% | 53.7% | 99.6% |
+| Conversion Encounter | 32,007 | 99.9% | 66.9% | 17.3% |
+| Newborn | 31,142 | 99.9% | 87.5% | 99.1% |
+| Telemedicine | 25,658 | 97.4% | 44.8% | 99.8% |
+| Telephone | 22,053 | 99.3% | 50.1% | 34.8% |
+| Weight Check | 16,295 | 99.9% | 37.7% | 96.4% |
+| Clinical Support | 15,347 | 99.3% | 15.4% | 83.4% |
+| Documentation | 13,107 | 98.3% | 84.4% | 8.6% |
+| Immunization | 11,774 | 97.6% | 30.7% | 93.4% |
+
+Encounter types with fewer than 10,000 visits are omitted.
+
+Telephone encounters carry a weight on 99.3% of 22,053 visits. A weight cannot be measured over the telephone, so those values were produced some other way — reported by a caregiver, carried from a nearby in-person encounter, or attached to an encounter whose type label does not describe how the patient was seen. Which of those it is cannot be determined from this extract.
+
+**Recording completeness by source system**
+
+| encounter source | visits | height present | first diagnosis |
+| --- | --- | --- | --- |
+| Epic | 4,149,865 | 51.4% | 99.7% |
+| converted from a legacy system | 2,344,608 | 58.7% | 86.1% |
+
+The source-system split is the migration signal. Records converted from the practice network's previous EHR carry a first diagnosis on only 86.1% of encounters, which the data dictionary anticipates: converted encounters may be missing diagnosis information depending on the quality of the conversion.
+
+**Implications for analysis.** A visit-level indicator that a measurement is present is not evidence that a measurement was taken at that encounter. If your design counts measurement occasions — visit density, monitoring intensity, follow-up adherence — restrict to encounter types where physical measurement is possible rather than relying on presence. And any diagnosis-based rate computed across the whole extract mixes two populations with very different coding completeness.
+
 ## 4. Anthropometrics
 
 The richest and most artifact-prone measurements in the extract.
@@ -407,6 +475,64 @@ The four measurement channels, summarised on the derived metric columns. The fin
 *Figure — Distribution of head circumference (cm). Rendered in `index.html` at `#fig-dist-head_circ_cm`.*
 
 **Implications for analysis.** Head circumference is the channel whose tails are worst, and 4.4 shows why. For the others the extremes are sparse but the bulk is clinically ordinary. Bound the raw imperial columns rather than the derived metric ones when screening, since a wrong unit survives an exact conversion unchanged.
+
+### 4.4 Transcription-error signatures in the typed fields
+
+**Method.** Each measurement is anchored by linear interpolation between the same child's previous and next measurement. Both neighbours must themselves be plausible and span no more than four years, so a bad neighbour cannot manufacture an anomaly. A height is anomalous more than 3 inches from that anchor, a weight more than 50% from it. A mechanism *reconciles* an anomaly when applying it to the recorded value lands back at the anchor.
+
+**The null.** Each anomaly's anchor is replaced by the recorded value plus a deviation drawn from another anomaly in the same year-of-age band, 20 times. That preserves the distribution of deviations exactly and destroys only the arithmetic relationship between the recorded digits and the anchor, which is the thing under test. A mechanism that reconciles anomalies no more often than it reconciles these scrambled pairs has no evidence behind it, however many hits it returns.
+
+**Height.** 7,443 anomalies in the testable interior. Mechanisms are tested one at a time and are not mutually exclusive, so the rows do not sum to the total.
+
+**Height: mechanisms against the null**
+
+| mechanism | reconciled | share | null | ratio |
+| --- | --- | --- | --- | --- |
+| height recorded in whole feet | 686 | 9.22% | 1.34% | 6.9x |
+| centimetre value in the inch field | 91 | 1.22% | 0.67% | 1.8x |
+| inch value where a centimetre is expected | 30 | 0.40% | 1.00% | 0.4x |
+| decimal point misplaced | 11 | 0.15% | 2.80% | 0.1x |
+| adjacent digit transposition | 40 | 0.54% | 0.69% | 0.8x |
+| one digit omitted | 407 | 5.47% | 1.14% | 4.8x |
+| one digit wrong (calibration class) | 4,024 | 54.06% | 50.15% | 1.1x |
+
+*Figure — Height: observed against null, by mechanism. Rendered in `index.html` at `#fig-mech-h`.*
+
+Adjacent digit transposition — the classic keying error, and the one most often assumed — reconciles fewer height anomalies than chance alone. The unit error is real and it is directional: a centimetre value in the inch field is enriched, while the arithmetically opposite reading sits at or below the null. That asymmetry is what a one-way data-entry confusion looks like; a spurious mechanism would be symmetric.
+
+The dropped-digit row does not survive inspection, and it is worth showing why. Inserting a digit into a two-digit inch value always produces a three-digit one, which is never a plausible height, so the class can only fire on a value with a single-digit integer part. Among the 6,619 height anomalies whose integer part has two or more digits it reconciles 0. Its entire 5.47% is the whole-foot family reached by another route.
+
+Two clusters are visible without any anchor at all. 1,371 visits record a `height_in` of 1 to 6 as an exact integer, median age 5.2 years — a height of 3 or 4 for a child three or four feet tall. And 143 record a `height_in` between 90 and 115, which read as inches is implausible and read as centimetres is an ordinary preschool stature at a median age of 3.1 years. The recording grid decides between the two readings: 35.0% of that cluster falls on the quarter-inch grid against 80.0% of all heights, so those values never passed through the inch-typing workflow.
+
+**Weight.** 6,196 anomalies in the testable interior.
+
+**Weight: mechanisms against the null**
+
+| mechanism | reconciled | share | null | ratio |
+| --- | --- | --- | --- | --- |
+| pound value in the ounce field | 39 | 0.63% | 0.26% | 2.4x |
+| ounce value where a pound is expected | 25 | 0.40% | 0.09% | 4.7x |
+| kilogram value in the ounce field | 13 | 0.21% | 0.09% | 2.5x |
+| gram value in the ounce field | 2 | 0.03% | 0.08% | 0.4x |
+| decimal point misplaced | 1,208 | 19.50% | 1.13% | 17.2x |
+| adjacent digit transposition | 77 | 1.24% | 6.65% | 0.2x |
+| one digit omitted | 927 | 14.96% | 8.63% | 1.7x |
+| one digit wrong (calibration class) | 795 | 12.83% | 25.39% | 0.5x |
+
+Transposition is again below chance, so neither channel shows evidence of digit swapping. A misplaced decimal point, which the height channel does not show at all, is the dominant weight artifact: 1,208 anomalies at 17 times the null rate, the strongest enrichment measured anywhere in this report. An ounce value has more digits than an inch value and no natural decimal point, so a factor of ten is both easy to key and hard to notice.
+
+The calibration row is why the null is not optional. Allowing any single digit to be wrong reconciles about half of all height anomalies and reconciles almost exactly as many randomly paired values. Reported without a null it would look like the largest finding here.
+
+**How strong is the transposition negative?** Only as strong as the share of transpositions the anomaly gate could have caught. Applying every adjacent digit swap to a sample of measurements in the testable interior gives that share directly: 69.7% of height swaps would displace a value past the gate, against 31.6% of weight swaps. The height negative is well powered; the weight negative rules out only large swaps, since a four-digit ounce value can absorb a swap without moving far.
+
+**What the mechanisms account for**
+
+| channel | anomalies | a named mechanism fits | only the calibration class | nothing fits |
+| --- | --- | --- | --- | --- |
+| height | 7,443 | 939 | 3,989 | 2,515 |
+| weight | 6,196 | 1,987 | 742 | 3,467 |
+
+**Implications for analysis.** Digit transposition can be dropped from the checklist for this extract at the magnitude that displaces a measurement from its own trajectory; for weight the same test is only about a third sensitive, so a small swap is not ruled out. Unit confusion and decimal placement do matter, and both are cheap to screen because both produce values implausible on their face. Bound `height_in` and `weight_oz` before any conversion, and check the recording grid rather than the value alone — the grid separates a tall adolescent from a centimetre in the wrong field where magnitude cannot. Note also that 1,371 of the whole-foot entries and 143 of the centimetre cluster already carry a null `height_cm`: the derived layer's own bound removes them as a side effect, so anyone reading the derived channels is protected and anyone reading the raw ones is not.
 
 ### 4.5 Repeated measurements: zero growth and apparent height loss
 
@@ -689,7 +815,7 @@ One row per known artifact, with its scale and whether it can be repaired.
 
 ### 7.1 Every artifact this report measured
 
-One row per artifact, gathered from the findings that measured them. The class says who produced the artifact, which decides whether it can be repaired: a derivation artifact can be recomputed without touching the clinical record, a capture artifact cannot, a selection artifact is outside the extract entirely. 8 artifacts across 4 classes (capture, derivation, linkage, selection).
+One row per artifact, gathered from the findings that measured them. The class says who produced the artifact, which decides whether it can be repaired: a derivation artifact can be recomputed without touching the clinical record, a capture artifact cannot, a selection artifact is outside the extract entirely. 11 artifacts across 4 classes (capture, derivation, linkage, selection).
 
 **Artifact catalogue**
 
@@ -700,7 +826,10 @@ One row per artifact, gathered from the findings that measured them. The class s
 | A patient-day can carry more than one visit | capture | 5,478 patient-days holding 11,040 visits | Partly — define an explicit tie rule before ordering by age | 3.1 |
 | Populated visit_id that resolves to no visit | linkage | up to 42% of populated values in a resource | No — treat visit linkage as partial by design | 3.2 |
 | Age fields that violate their own ordering | capture | lab result before order, and medication start before order | No — do not treat differences between them as durations | 3.3 |
+| Laboratory results are semi-structured text | capture | 487,168 comparator-prefixed values; only 44.2% of rows parse as a number | Yes — parse comparators explicitly rather than casting | 3.6 |
+| Anthropometrics recorded on encounters with no physical contact | capture | weight present on 99% of 22,053 telephone encounters | Partly — restrict by encounter type before counting measurement occasions | 3.7 |
 | Terminal-digit heaping on the imperial recording grid | capture | 80.0% of heights fall on a quarter inch | No — it is the precision the measurement actually has | 4.2 |
+| Wrong-unit and decimal-place entry in the typed measurement fields | capture | 1,371 whole-foot heights, 143 centimetre values in the inch field, and a weight decimal artifact enriched 17-fold | Yes — bound and repair the raw imperial columns before converting | 4.4 |
 | Apparent height loss from the recording grid on a flat trajectory | capture | 0.66% of pairs over a year apart, falling to 0.083% at ages 2 to 10 | Not a defect — do not filter it as an outlier | 4.5 |
 | Height z-score truncated above at +3 while the lower tail runs to -5 | derivation | 21 visits at or above +3 where roughly 15,800 would be expected | Yes — recompute from the retained raw height | 4.6 |
 
