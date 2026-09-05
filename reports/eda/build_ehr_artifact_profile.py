@@ -120,13 +120,36 @@ def probe_truncation(con) -> dict:
     """)
     out.update(dict(zip(["min_wz", "max_wz", "min_bz", "max_bz"], wrow)))
 
+    out["dropped"] = one(con, """
+        select count(*) from visits_augmented
+        where height_in is not null and height_cm is null
+    """)[0]
+
+    # Whether a dropped height is extreme must be judged against same-age peers,
+    # not against an absolute stature: a tall-for-age six-year-old is nowhere near
+    # 190 cm. Compare each dropped value with the distribution of *retained*
+    # heights in its own age-month and sex cell.
     drop = one(con, """
+        with ref as (
+          select cast(age_in_days / 30.44 as int) am, sex,
+                 quantile_cont(height_cm, 0.999) p999,
+                 quantile_cont(height_cm, 0.5) med,
+                 count(*) n
+          from visits_augmented
+          where height_cm is not null and sex in ('M', 'F')
+          group by 1, 2
+        ), dropped as (
+          select cast(age_in_days / 30.44 as int) am, sex, height_in * 2.54 hcm
+          from visits_augmented
+          where height_in is not null and height_cm is null and sex in ('M', 'F')
+        )
         select count(*),
-               sum(case when height_in * 2.54 > 190 then 1 else 0 end),
-               sum(case when height_in * 2.54 < 40 then 1 else 0 end)
-        from visits_augmented where height_in is not null and height_cm is null
+               count(*) filter (where d.hcm > r.p999),
+               count(*) filter (where d.hcm < r.med)
+        from dropped d join ref r using (am, sex)
+        where r.n >= 200
     """)
-    out.update(dict(zip(["dropped", "dropped_tall", "dropped_short"], drop)))
+    out.update(dict(zip(["dropped_cmp", "dropped_tall", "dropped_short"], drop)))
 
     out["null_z_with_height"] = one(con, """
         select count(*) from visits_augmented
@@ -175,7 +198,7 @@ def probe_heaping(con) -> dict:
         from visits_augmented where weight_oz is not null
     """)
     bands = q(con, """
-        select case when age_in_days < 730 then '0-<2 years'
+        select case when age_in_days < 2 * 365.25 then '0-<2 years'
                     when age_in_days < 1826 then '2-<5 years'
                     when age_in_days < 3652 then '5-<10 years'
                     when age_in_days < 5478 then '10-<15 years'
@@ -244,7 +267,7 @@ def probe_repeats(con) -> dict:
         with s as (
           select patient_id, age_in_days, height_cm
           from visits_augmented
-          where height_cm is not null and age_in_days >= 730
+          where height_cm is not null and age_in_days >= 2 * 365.25
         ), l as (
           select *,
                  height_cm - lag(height_cm) over w as dh,
@@ -268,7 +291,7 @@ def probe_repeats(con) -> dict:
         with s as (
           select patient_id, age_in_days, height_cm
           from visits_augmented
-          where height_cm is not null and age_in_days >= 730
+          where height_cm is not null and age_in_days >= 2 * 365.25
         ), l as (
           select *,
                  height_cm - lag(height_cm) over w as dh,
@@ -536,6 +559,14 @@ def render(con, bundle: Path, manifest: dict | None, digest: str) -> str:
     )
     a("")
     a(
+        "The two artifact classes profiled here are the ones the source project "
+        "already treats as its framing references: implausible values in pediatric "
+        "growth data (Daymont et al., 2017) and utilization-driven capture in EHR "
+        "extracts (Agniel, Kohane and Weber, 2018). This section is the measured "
+        "instance of both in this snapshot, not an independent literature."
+    )
+    a("")
+    a(
         "Two distinct actors produce these artifacts and the report keeps them "
         "separate. Some are **capture artifacts** introduced where care is delivered "
         "and data are typed, such as digit rounding and repeated same-day "
@@ -596,20 +627,25 @@ def render(con, bundle: Path, manifest: dict | None, digest: str) -> str:
     )
     a("")
     a(
-        f"The obvious candidate mechanism does not survive checking. "
-        f"{fmt(trunc['dropped'])} visits carry a raw `height_in` but no derived "
-        f"`height_cm`, so the pipeline does discard some measurements — but those "
-        f"discards are short-skewed, not tall-skewed "
-        f"({fmt(trunc['dropped_short'])} imply a stature below 40 cm against "
-        f"{fmt(trunc['dropped_tall'])} above 190 cm), and even counting every tall "
-        f"discard leaves the gap roughly forty times unexplained. Nor is the mass "
-        f"being dropped at the z step: only {fmt(trunc['null_z_with_height'])} visits "
-        f"carry a derived height with no z-score. The missing observations were never "
-        f"present in the derived channel rather than removed from it, which is "
-        f"consistent with a reference lookup that terminates at +3 — the height "
-        f"percentile stops at 99.87, the value z = 3 implies — but the snapshot does "
-        f"not expose the derivation, and the mechanism is not identifiable from it. "
-        f"The truncation itself does not depend on the explanation."
+        f"The mechanism is documented rather than inferred. The source project's plan "
+        f"records that the augmentation pipeline nulls weight and its z-score at "
+        f"|z| > 5 and height outside −5 < z < 3, and states that the values above +3 "
+        f"\u201cwere set to NA and are gone from the distributed file\u201d. The snapshot "
+        f"agrees. {fmt(trunc['dropped'])} visits carry a raw `height_in` with no "
+        f"derived `height_cm`, and those discarded measurements are tall for age: of "
+        f"the {fmt(trunc['dropped_cmp'])} that fall in an age-month and sex cell with "
+        f"at least 200 retained heights, {fmt(trunc['dropped_tall'])} "
+        f"({pct(100.0 * trunc['dropped_tall'] / trunc['dropped_cmp'], 1)}) sit above "
+        f"the 99.9th percentile of the heights that were *kept* in the same cell, "
+        f"against {fmt(trunc['dropped_short'])} "
+        f"({pct(100.0 * trunc['dropped_short'] / trunc['dropped_cmp'], 1)}) below that "
+        f"cell's median. That count is the same order as the missing mass the "
+        f"asymmetry implies. Judging these values against an absolute stature rather "
+        f"than against same-age peers hides the pattern entirely, because a "
+        f"tall-for-age six-year-old is nowhere near 190 cm. Consistently, only "
+        f"{fmt(trunc['null_z_with_height'])} visits carry a derived height with no "
+        f"z-score: the pipeline nulls the measurement and its z-score together rather "
+        f"than leaving orphaned rows behind."
     )
     a("")
     a(
@@ -628,6 +664,20 @@ def render(con, bundle: Path, manifest: dict | None, digest: str) -> str:
         "not be calibrated against this channel's upper tail, and the tall-stature "
         "codes in the diagnosis table (E34.4 constitutional tall stature, Q87.3 early "
         "overgrowth) cannot be paired with a matching measured trajectory here."
+    )
+    a("")
+    a(
+        f"The source project already plans the right repair — raise the ceiling to +5 "
+        f"and re-run the augmentation from `height_in`, since the values cannot be "
+        f"recovered downstream — but it estimates the cost from the surviving "
+        f"distribution, whose 99.9th percentile is 2.91, and concludes that raising "
+        f"the ceiling \u201ccosts almost nothing in volume\u201d. That percentile is 2.91 "
+        f"*because* the tail was already removed. The measured cost of the repair is "
+        f"the roughly "
+        f"{fmt(round(trunc['ge25'] * trunc['le_m3'] / trunc['le_m25'] / 100) * 100)} "
+        f"visits the asymmetry implies, of which {fmt(trunc['dropped_tall'])} are "
+        f"still identifiable in the raw layer. The repair is worth making and is "
+        f"larger than a rounding error."
     )
     a("")
     a("The percentile channels show the same bounds from the other side.")
@@ -729,12 +779,17 @@ def render(con, bundle: Path, manifest: dict | None, digest: str) -> str:
     )
     a("")
     a(
-        "**Consequence for this project.** The previous section's guidance to exclude "
-        "head-circumference z-score is confirmed, but the diagnosis is now specific "
-        "rather than general: the raw channel is mostly recoverable by a documented "
-        "division, and the derived z channel has a second, separate defect. That "
-        "distinction matters because it means the raw head-circumference measurements "
-        "are largely usable after repair, which the earlier framing did not establish."
+        f"**Consequence for this project.** The previous section's guidance to exclude "
+        f"head-circumference z-score is confirmed, but the diagnosis is now specific "
+        f"rather than general: the raw channel is mostly recoverable by a documented "
+        f"division, and the derived z channel has a second, separate defect. This "
+        f"changes an action the source project has already specified. Its declared "
+        f"plausible range removes all {fmt(gate['hc_out_range'])} out-of-range head "
+        f"circumferences by deletion; {fmt(n_dbl_ok)} of those "
+        f"({pct(100.0 * n_dbl_ok / gate['hc_out_range'], 1)}) are ordinary infant "
+        f"measurements that a single documented division restores. Repairing before "
+        f"bounding is strictly better than bounding alone, and it recovers most of the "
+        f"only channel whose declared range removes a non-trivial share of values."
     )
     a("")
 
@@ -1031,13 +1086,13 @@ def render(con, bundle: Path, manifest: dict | None, digest: str) -> str:
             ["Height z-score truncated at +3 with the lower tail retained to −5",
              "derivation", (f"{fmt(trunc['ge3'])} visits at the bound; roughly "
                             f"{fmt(round(trunc['ge25'] * trunc['le_m3'] / trunc['le_m25'] / 100) * 100)} expected above it"),
-             "No — recompute z from raw height and a stated reference"],
+             "Yes — re-run the augmentation from the retained `height_in`"],
             ["Percentile point mass at exactly 0 and 100",
              "derivation", "up to 6,151 visits in a single channel", "No — treat as saturated"],
             ["Terminal-digit heaping on quarter-inch and pound grids",
              "capture", f"{pct(h_quarter, 1)} of heights on a quarter inch", "No — inherent precision limit"],
             ["Head circumference double-converted inch-to-centimetre",
-             "derivation", f"{fmt(n_dbl_ok)} visits", "Yes — divide by 2.54"],
+             "derivation", f"{fmt(n_dbl_ok)} visits", "Yes — divide by 2.54 before bounding, rather than deleting"],
             ["Head-circumference z defective on plausible measurements",
              "derivation", f"{fmt(z_plaus)} visits", "No — recompute or exclude"],
             ["Zero or negative height change over long intervals",
@@ -1064,10 +1119,13 @@ def render(con, bundle: Path, manifest: dict | None, digest: str) -> str:
     a(
         "The derivation artifacts are the ones that matter most for this project, "
         "because they affect exactly the fields a growth-chart model would consume and "
-        "because they are invisible in the field names. Three of them — the height-z "
-        "ceiling, the head-circumference conversion, and the unreproducible velocities "
-        "— were not detectable from the distributional summaries in section 5 alone and "
-        "required an explicit reconstruction of the derivation from the raw channel."
+        "because they are invisible in the field names. Two of them — the "
+        "head-circumference conversion and the unreproducible velocities — were not "
+        "detectable from the distributional summaries in section 5 alone and required "
+        "an explicit reconstruction of the derivation from the raw channel. The third, "
+        "the height-z ceiling, was already known to the source project; what this "
+        "section adds is the measured size of the tail it removed and the fact that "
+        "most of it is still recoverable from `height_in`."
     )
     a("")
     a(END_MARKER)
