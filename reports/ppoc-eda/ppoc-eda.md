@@ -46,6 +46,8 @@ Three independent sources state how large this extract should be: the bundle man
 | problem_list | 1,709,584 | 1,709,584 | 1,709,584 | yes |
 | referrals | 349,827 | 349,827 | 349,827 | yes |
 
+A dash in the PPOC column means the resource was not part of the delivery: `patients_augmented` and `visits_augmented` are generated locally from the delivered files, so PPOC states no count for them. See 1.3.
+
 **Distinct patients per resource, against the PPOC counts**
 
 | resource | measured | PPOC document | agrees |
@@ -60,26 +62,32 @@ The lab resource carries a second stated figure: 6,578,838 distinct lab orders b
 
 ### 1.2 Resource map, grain, and keys
 
-The extract is 8 tables carrying 254 columns between them. Grain matters more than row count here: three of the resources are keyed on something other than the patient or the visit, and one of them needs two columns to be unique.
+The package is 8 tables carrying 254 columns between them, but they do not share a provenance: 6 were delivered by PPOC and 2 are generated locally (1.3). Grain matters more than row count here: three of the resources are keyed on something other than the patient or the visit, and one of them needs two columns to be unique.
 
 **The eight resources**
 
-| resource | rows | cols | grain | primary key | links to |
-| --- | --- | --- | --- | --- | --- |
-| patients | 250,588 | 11 | one row per patient | patient_id | — |
-| patients_augmented | 250,588 | 87 | one row per patient | patient_id | patients |
-| visits | 6,494,473 | 43 | one row per patient per encounter | visit_id | patients |
-| visits_augmented | 6,494,473 | 82 | one row per patient per encounter | visit_id | visits |
-| labs | 17,230,681 | 12 | one row per resulted component of a lab order | lab_order_id + result_line_num | patients; visits (partial) |
-| medications | 3,823,049 | 8 | one row per medication order or historical record | med_record_id | patients; visits (partial) |
-| problem_list | 1,709,584 | 5 | one row per problem-list entry | problem_list_id | patients |
-| referrals | 349,827 | 6 | one row per referral order | referral_id | patients; visits (partial) |
+| resource | source | rows | cols | grain | primary key | links to |
+| --- | --- | --- | --- | --- | --- | --- |
+| patients | PPOC | 250,588 | 11 | one row per patient | patient_id | — |
+| patients_augmented | scripts/augment.py | 250,588 | 87 | one row per patient | patient_id | patients |
+| visits | PPOC | 6,494,473 | 43 | one row per patient per encounter | visit_id | patients |
+| visits_augmented | scripts/augment.py | 6,494,473 | 82 | one row per patient per encounter | visit_id | visits |
+| labs | PPOC | 17,230,681 | 12 | one row per resulted component of a lab order | lab_order_id + result_line_num | patients; visits (partial) |
+| medications | PPOC | 3,823,049 | 8 | one row per medication order or historical record | med_record_id | patients; visits (partial) |
+| problem_list | PPOC | 1,709,584 | 5 | one row per problem-list entry | problem_list_id | patients |
+| referrals | PPOC | 349,827 | 6 | one row per referral order | referral_id | patients; visits (partial) |
+
+Six resources were delivered by PPOC; the two augmented ones are generated locally from them. 1.3 explains why that distinction matters.
 
 `visit_id` on labs, medications, and referrals is a partial link by design, not a defect: an order placed outside a visit carries an identifier that resolves to no encounter in this extract. Section 3.2 measures how partial.
 
-### 1.3 The two layers, and where they disagree
+### 1.3 Two layers with different provenance
 
-Every visit and every patient appears twice: once in the raw extract as PPOC delivered it, and once in an augmented layer that adds CDC-derived z-scores, percentiles, velocities, and flags. Where a field exists in both, the two should agree. Across all 6,494,473 joined visit rows, five of the six shared fields do.
+**Only 6 of the 8 resources in this package came from PPOC.** The delivery comprised patients, visits, problem list, medications, labs, and referral orders; the data dictionary and the extract diagram committed under `docs/` describe those 6 and no others. The remaining 2 — `patients_augmented` and `visits_augmented` — are **generated locally** by `scripts/augment.py` from the delivered files, using CDC LMS reference tables, velocity rules, and outlier detection.
+
+That distinction decides who can fix what. A defect in a delivered resource is the source system's and can only be worked around; a defect in the augmented layer belongs to a script in this repository and can be corrected by re-running it. Everything this report labels a *derivation* artifact — the truncated height z-score of 4.6, the double-converted head circumference of 4.7, the interval rule behind the velocity fields of 4.8 — is a property of that local step, not of the data PPOC sent.
+
+Because the augmented layer is derived from the delivered one, the fields they share should agree exactly. Across all 6,494,473 joined visit rows, five of the six do.
 
 **Shared visit fields, raw against augmented**
 

@@ -12,6 +12,11 @@ VENDOR_ROWS = {
     "patients": 250_588, "visits": 6_494_473, "problem_list": 1_709_584,
     "labs": 17_230_681, "medications": 3_823_049, "referrals": 349_827,
 }
+#: The resources PPOC actually delivered. `patients_augmented` and
+#: `visits_augmented` are absent because they are generated locally from these
+#: by scripts/augment.py, not shipped — see 1.3.
+VENDOR_RESOURCES = tuple(VENDOR_ROWS)
+
 VENDOR_PATIENTS = {
     "visits": 250_588, "problem_list": 238_823, "labs": 247_271,
     "medications": 236_323, "referrals": 138_071,
@@ -91,7 +96,11 @@ def identity(ctx: Context) -> list[Finding]:
               [Column("resource", "resource"), Column("rows", "measured", ",", align="right"),
                Column("manifest", "bundle manifest", ",", align="right"),
                Column("vendor", "PPOC document", ",", align="right"),
-               Column("agrees", "agrees")], rows),
+               Column("agrees", "agrees")], rows,
+              note="A dash in the PPOC column means the resource was not part of "
+                   "the delivery: `patients_augmented` and `visits_augmented` are "
+                   "generated locally from the delivered files, so PPOC states no "
+                   "count for them. See 1.3."),
         Table("t-patientcounts", "Distinct patients per resource, against the PPOC counts",
               [Column("resource", "resource"),
                Column("patients", "measured", ",", align="right"),

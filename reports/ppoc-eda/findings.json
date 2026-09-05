@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-05T20:50:58Z",
+  "generated_at": "2026-09-05T21:59:35Z",
   "parts": [
     {
       "findings": [
@@ -185,6 +185,7 @@
               "caption": "The eight resources",
               "columns": [
                 "resource",
+                "source",
                 "rows",
                 "columns",
                 "grain",
@@ -199,7 +200,8 @@
                   "key": "patient_id",
                   "links": "—",
                   "resource": "patients",
-                  "rows": 250588
+                  "rows": 250588,
+                  "source": "PPOC"
                 },
                 {
                   "columns": 87,
@@ -207,7 +209,8 @@
                   "key": "patient_id",
                   "links": "patients",
                   "resource": "patients_augmented",
-                  "rows": 250588
+                  "rows": 250588,
+                  "source": "scripts/augment.py"
                 },
                 {
                   "columns": 43,
@@ -215,7 +218,8 @@
                   "key": "visit_id",
                   "links": "patients",
                   "resource": "visits",
-                  "rows": 6494473
+                  "rows": 6494473,
+                  "source": "PPOC"
                 },
                 {
                   "columns": 82,
@@ -223,7 +227,8 @@
                   "key": "visit_id",
                   "links": "visits",
                   "resource": "visits_augmented",
-                  "rows": 6494473
+                  "rows": 6494473,
+                  "source": "scripts/augment.py"
                 },
                 {
                   "columns": 12,
@@ -231,7 +236,8 @@
                   "key": "lab_order_id + result_line_num",
                   "links": "patients; visits (partial)",
                   "resource": "labs",
-                  "rows": 17230681
+                  "rows": 17230681,
+                  "source": "PPOC"
                 },
                 {
                   "columns": 8,
@@ -239,7 +245,8 @@
                   "key": "med_record_id",
                   "links": "patients; visits (partial)",
                   "resource": "medications",
-                  "rows": 3823049
+                  "rows": 3823049,
+                  "source": "PPOC"
                 },
                 {
                   "columns": 5,
@@ -247,7 +254,8 @@
                   "key": "problem_list_id",
                   "links": "patients",
                   "resource": "problem_list",
-                  "rows": 1709584
+                  "rows": 1709584,
+                  "source": "PPOC"
                 },
                 {
                   "columns": 6,
@@ -255,7 +263,8 @@
                   "key": "referral_id",
                   "links": "patients; visits (partial)",
                   "resource": "referrals",
-                  "rows": 349827
+                  "rows": 349827,
+                  "source": "PPOC"
                 }
               ]
             }
@@ -263,6 +272,8 @@
           "title": "Resource map, grain, and keys",
           "values": {
             "cols": 254,
+            "delivered": 6,
+            "generated": 2,
             "n": 8
           }
         },
@@ -318,12 +329,15 @@
               ]
             }
           ],
-          "title": "The two layers, and where they disagree",
+          "title": "Two layers with different provenance",
           "values": {
             "aug_only": 41,
             "both_differ": 536,
+            "delivered": 6,
+            "generated": 2,
             "med_age": 0.507,
             "raw_only": 1703005,
+            "resources": 8,
             "total": 6494473
           }
         },

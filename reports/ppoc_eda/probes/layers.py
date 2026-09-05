@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from ..context import COHORT_AS_OF, Context
+from ..context import COHORT_AS_OF, RESOURCES, Context
 from ..findings import Artifact, Column, Finding, Para, Table, probe
+from .snapshot import VENDOR_RESOURCES
 
 GRAIN = {
     "patients": ("one row per patient", "patient_id", "—"),
@@ -32,6 +33,7 @@ def resources(ctx: Context) -> list[Finding]:
     for name, (grain, key, links) in GRAIN.items():
         rows.append({
             "resource": name,
+            "source": "PPOC" if name in VENDOR_RESOURCES else "scripts/augment.py",
             "rows": ctx.scalar(f"SELECT count(*) FROM {name}"),
             "columns": len(ctx.columns(name)),
             "grain": grain, "key": key, "links": links,
@@ -39,17 +41,25 @@ def resources(ctx: Context) -> list[Finding]:
     f = Finding(
         id="layers.resources", part="1.2", title="Resource map, grain, and keys",
         values={"n": len(rows),
-                "cols": sum(r["columns"] for r in rows)},
+                "cols": sum(r["columns"] for r in rows),
+                "delivered": sum(1 for r in rows if r["source"] == "PPOC"),
+                "generated": sum(1 for r in rows if r["source"] != "PPOC")},
     )
     f.blocks = [
-        Para("The extract is {n} tables carrying {cols} columns between them. Grain "
-             "matters more than row count here: three of the resources are keyed on "
-             "something other than the patient or the visit, and one of them needs "
-             "two columns to be unique."),
+        Para("The package is {n} tables carrying {cols} columns between them, but "
+             "they do not share a provenance: {delivered} were delivered by PPOC and "
+             "{generated} are generated locally (1.3). Grain matters more than row "
+             "count here: three of the resources are keyed on something other than "
+             "the patient or the visit, and one of them needs two columns to be "
+             "unique."),
         Table("t-resources", "The eight resources",
-              [Column("resource", "resource"), Column("rows", "rows", ",", align="right"),
+              [Column("resource", "resource"), Column("source", "source"),
+               Column("rows", "rows", ",", align="right"),
                Column("columns", "cols", ",", align="right"), Column("grain", "grain"),
-               Column("key", "primary key"), Column("links", "links to")], rows),
+               Column("key", "primary key"), Column("links", "links to")], rows,
+              note="Six resources were delivered by PPOC; the two augmented ones "
+                   "are generated locally from them. 1.3 explains why that "
+                   "distinction matters."),
         Para("`visit_id` on labs, medications, and referrals is a partial link by "
              "design, not a defect: an order placed outside a visit carries an "
              "identifier that resolves to no encounter in this extract. Section 3.2 "
@@ -84,9 +94,12 @@ def agreement(ctx: Context) -> list[Finding]:
 
     f = Finding(
         id="layers.agreement", part="1.3",
-        title="The two layers, and where they disagree",
+        title="Two layers with different provenance",
         values={"total": total, "raw_only": raw_only, "aug_only": aug_only,
-                "both_differ": both_differ, "med_age": med_age},
+                "both_differ": both_differ, "med_age": med_age,
+                "delivered": len(VENDOR_RESOURCES),
+                "generated": len(RESOURCES) - len(VENDOR_RESOURCES),
+                "resources": len(RESOURCES)},
         artifact=Artifact(
             name="Raw and augmented BMI disagree on infants",
             kind="derivation",
@@ -96,11 +109,25 @@ def agreement(ctx: Context) -> list[Finding]:
         ),
     )
     f.blocks = [
-        Para("Every visit and every patient appears twice: once in the raw extract "
-             "as PPOC delivered it, and once in an augmented layer that adds "
-             "CDC-derived z-scores, percentiles, velocities, and flags. Where a "
-             "field exists in both, the two should agree. Across all {total:,} "
-             "joined visit rows, five of the six shared fields do."),
+        Para("**Only {delivered} of the {resources} resources in this package came "
+             "from PPOC.** The delivery comprised patients, visits, problem list, "
+             "medications, labs, and referral orders; the data dictionary and the "
+             "extract diagram committed under `docs/` describe those {delivered} and "
+             "no others. The remaining {generated} — `patients_augmented` and "
+             "`visits_augmented` — are **generated locally** by `scripts/augment.py` "
+             "from the delivered files, using CDC LMS reference tables, velocity "
+             "rules, and outlier detection.", role="warning"),
+        Para("That distinction decides who can fix what. A defect in a delivered "
+             "resource is the source system's and can only be worked around; a "
+             "defect in the augmented layer belongs to a script in this repository "
+             "and can be corrected by re-running it. Everything this report labels a "
+             "*derivation* artifact — the truncated height z-score of 4.6, the "
+             "double-converted head circumference of 4.7, the interval rule behind "
+             "the velocity fields of 4.8 — is a property of that local step, not of "
+             "the data PPOC sent."),
+        Para("Because the augmented layer is derived from the delivered one, the "
+             "fields they share should agree exactly. Across all {total:,} joined "
+             "visit rows, five of the six do."),
         Table("t-layers", "Shared visit fields, raw against augmented",
               [Column("field", "field"), Column("differs", "rows differing", ",", align="right"),
                Column("share", "share", ".2f", "%", align="right")], rows),
