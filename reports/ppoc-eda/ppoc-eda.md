@@ -445,7 +445,9 @@ The richest and most artifact-prone measurements in the extract.
 
 ### 4.2 Recording units and the measurement grid
 
-Height and weight are captured in imperial units and the metric columns are exact conversions of them. The recorded values are heaped on human-readable fractions: of 3,509,633 heights, 31.0% fall on a whole inch, 54.9% on a half inch and 80.0% on a quarter inch. Of 6,488,028 weights, 54.4% fall on a whole ounce and 24.6% on a whole pound.
+Height and weight are captured in imperial units, and the metric columns are exact conversions of them — measured, not assumed. Across 3,491,662 visits carrying both a raw and a derived height, 0 disagree with `height_in` times 2.54 by more than 0.01 cm; across 6,483,007 weight pairs, 0 disagree with `weight_oz` times 0.0283495. The arithmetic is clean, which matters because a value keyed in the wrong unit survives an exact conversion unchanged — 4.4 takes that up.
+
+The recorded values are heaped on human-readable fractions: of 3,509,633 heights, 31.0% fall on a whole inch, 54.9% on a half inch and 80.0% on a quarter inch. Of 6,488,028 weights, 54.4% fall on a whole ounce and 24.6% on a whole pound.
 
 *Figure — Share of measurements falling on the coarse grid, by age. Rendered in `index.html` at `#fig-grid`.*
 
@@ -619,6 +621,249 @@ The height z-score is bounded above at exactly 3.00 while its lower tail runs pa
 | weight-for-stature | 1,371,347 | 1,509 | 0.110% | 856 | 0.062% |
 
 **Implications for analysis.** The height channel cannot support any question about tall stature: its upper tail is absent, and a trajectory approaching the bound from below is distorted too. The percentile channels carry point masses at exactly 0 and 100 that are saturated rather than measured, so they are not continuous and should not be modelled as such. Because the four z channels do not share a support, a model consuming several of them together inherits the inconsistency silently. Recomputing from the raw measurement against a stated reference avoids all of this.
+
+### 4.7 Head circumference: a recoverable conversion defect
+
+15,025 visits carry a head circumference outside the conventional review range of 25 to 65 cm. Read as a distribution that looks like a badly behaved channel. Read as clusters, it looks like arithmetic.
+
+**Head-circumference values by band**
+
+| band | visits | median | minimum | maximum |
+| --- | --- | --- | --- | --- |
+| below 10 cm | 174 | 4.10 cm | 0.00 cm | 9.65 cm |
+| 10 to under 25 cm | 943 | 18.00 cm | 10.00 cm | 24.77 cm |
+| 25 to 65 cm (within review range) | 1,620,665 | 44.00 cm | 25.00 cm | 65.00 cm |
+| over 65 to 200 cm | 13,472 | 110.49 cm | 65.50 cm | 193.04 cm |
+| above 200 cm | 436 | 252.22 cm | 202.57 cm | 505.46 cm |
+
+*Figure — Where head-circumference values fall. Rendered in `index.html` at `#fig-hc-bands`.*
+
+The cluster between 65 and 200 cm is not noise. It holds 13,472 visits, and 13,467 of them — 99.96% — fall back inside the review range when divided by 2.54, with a median of 43.5 cm. That is an ordinary infant head circumference. These are centimetre values that were put through an inch-to-centimetre conversion a second time. A further 436 visits sit above 200 cm, of which 356 become plausible after dividing by 2.54 twice, consistent with the same conversion applied again.
+
+This one defect explains most of the damage. Of 16,663 visits with an absolute head-circumference z-score above 5, 14,899 (89.4%) sit on a measurement outside the review range, and the double-converted cluster alone accounts for 13,467 of them. The remaining 1,764 visits carry a plausible measurement and still produce an extreme z, so the z transform is independently defective and repairing the units would not fully fix the channel. That is why 4.6 shows this channel with a maximum no measurement could produce.
+
+**Implications for analysis.** A declared plausible range deletes all 15,025 out-of-range values, but 13,467 of those (89.6%) are ordinary infant measurements that one documented division restores. Repairing before bounding is strictly better than bounding alone, and it recovers most of the only measurement channel whose declared range removes a non-trivial share of values. The derived z-score is a separate matter: it stays unusable on 1,764 visits even after the units are fixed, so recompute it from the repaired measurement rather than consuming it as distributed.
+
+### 4.8 The distributed delta and velocity fields
+
+The augmented visit layer distributes `delta_height_cm`, `delta_age_in_days_height`, and the velocity fields derived from them. These are **not** a lag over successive measurements, and reading them as one is the error this subsection exists to prevent. For each measurement the pipeline walks backwards to the most recent earlier measurement whose age gap meets an age-dependent minimum, skipping every measurement in between.
+
+**The interval rule, inferred from the data**
+
+| age band | condition on current age | minimum interval |
+| --- | --- | --- |
+| birth to 12 months | up to 365 days | 90 days |
+| 1 to 2 years | up to 730 days | 180 days |
+| 2 to 12 years | up to 4380 days | 335 days |
+| 13 years and over | beyond 4380 days | 180 days |
+
+Applying that rule reproduces the distributed fields. Across 2,786,770 visits carrying a nonmissing `delta_height_cm`, the recomputed age gap matches the distributed one on 2,786,770 rows (100.00%), the recomputed delta matches within one hundredth of a centimetre on 2,786,432 rows (99.988%), and the recomputed velocity matches on 99.68% of rows. A naive lag over successive height-bearing visits matches only 1,218,842 rows (43.7%) — which is what makes these fields look unreproducible when the rule is not known.
+
+*Figure — The most common recorded measurement intervals. Rendered in `index.html` at `#fig-delta-gap`.*
+
+Two residuals are worth recording. 372,482 rows differ by exactly one hundredth of a centimetre, because the pipeline rounds half to even while this check rounds half away from zero; heights come from a quarter-inch grid, so exact halfway cases are common rather than rare. Only 338 rows (0.012%) differ by more than that, and they sit on the duplicate patient-days of 3.1, where which earlier height was used is ambiguous.
+
+**Implications for analysis.** The velocity channels are usable as distributed, which a distributional summary alone could not establish. What must travel with them is the definition: a velocity here is computed over an interval of at least 90 to 335 days depending on age, not between adjacent visits, so it is already smoothed relative to a visit-to-visit rate and cannot be compared with one. Any recomputation, and any synthetic series carrying a velocity, must use the same rule or the two are not on the same scale. The rounding to two decimals is part of what the distributed values are.
+
+## 5. Other clinical domains
+
+Diagnoses, laboratory results, medications, referrals, and demographics.
+
+### 5.1 Diagnoses
+
+Diagnoses arrive two ways: up to 33 coded slots per encounter, and a problem list that is not visit-linked. 14,714,503 encounter slots are filled across 250,563 patients, and 6,154,801 visits (94.8%) carry at least a first diagnosis.
+
+*Figure — Coded diagnoses per visit. Rendered in `index.html` at `#fig-dx-slots`.*
+
+**Most frequently recorded encounter diagnoses**
+
+| ICD-10 | description | slots | patients |
+| --- | --- | --- | --- |
+| Z00.129 | Encounter for routine child health examination without abnormal findings | 2,494,658 | 247,896 |
+| Z23 | Encounter for immunization | 1,438,556 | 244,583 |
+| J06.9 | Acute upper respiratory infection, unspecified | 363,785 | 132,869 |
+| J02.9 | Acute pharyngitis, unspecified | 323,876 | 113,944 |
+| Z13.88 | Encounter for screening for disorder due to exposure to contaminants | 295,071 | 128,827 |
+| Z13.0 | Encounter for screening for diseases of the blood and blood-forming organs and certain disorders involving the immune mechanism | 292,612 | 135,760 |
+| R50.9 | Fever, unspecified | 265,363 | 115,401 |
+| Z71.3 | Dietary counseling and surveillance | 230,303 | 81,930 |
+| Z71.82 | Exercise counseling | 209,541 | 78,003 |
+| R05.9 | Cough, unspecified | 199,083 | 91,945 |
+| Z00.121 | Encounter for routine child health examination with abnormal findings | 163,509 | 72,084 |
+| Z20.822 | Contact with and (suspected) exposure to COVID-19 | 160,041 | 65,268 |
+| J02.0 | Streptococcal pharyngitis | 129,310 | 71,029 |
+| B34.9 | Viral infection, unspecified | 125,662 | 68,886 |
+| Z00.110 | Health examination for newborn under 8 days old | 124,627 | 105,062 |
+
+Every count here is a recorded frequency within a selected cohort. Patients carrying any code that occurred fewer than 11 times were removed before delivery (1.4), so rare entries are absent by construction and nothing in this table is a population rate.
+
+The problem list holds 1,709,584 entries for 238,823 patients, of which 44.3% carry a resolved age. As 3.5 shows, the remainder are open problems rather than missing dates.
+
+**Most frequently recorded problem-list diagnoses**
+
+| ICD-10 | description | entries | patients |
+| --- | --- | --- | --- |
+| U07.1 | COVID-19 | 26,260 | 26,260 |
+| Z28.21 | Immunization not carried out because of patient refusal | 21,189 | 21,189 |
+| F41.9 | Anxiety disorder, unspecified | 20,950 | 20,950 |
+| K59.00 | Constipation, unspecified | 17,491 | 17,491 |
+| Z00.129 | Encounter for routine child health examination without abnormal findings | 17,348 | 17,348 |
+| K21.9 | Gastro-esophageal reflux disease without esophagitis | 17,184 | 17,184 |
+| Z86.16 | Personal history of COVID-19 | 16,007 | 16,007 |
+| J45.20 | Mild intermittent asthma, uncomplicated | 15,088 | 15,088 |
+| L30.9 | Dermatitis, unspecified | 14,868 | 14,868 |
+| R46.89 | Other symptoms and signs involving appearance and behavior | 14,789 | 14,789 |
+| F80.9 | Developmental disorder of speech and language, unspecified | 13,661 | 13,661 |
+| F80.1 | Expressive language disorder | 13,650 | 13,650 |
+| L20.83 | Infantile (acute) (chronic) eczema | 13,282 | 13,282 |
+| F90.2 | Attention-deficit hyperactivity disorder, combined type | 12,918 | 12,918 |
+| IMO0002 | [not in the ICD-10 lookup] | 12,915 | 12,915 |
+
+**Implications for analysis.** Encounter diagnoses and problem-list entries answer different questions and should not be pooled without saying why: the first is what was coded at a contact, the second is what the chart asserts about the child, including resolved history. Neither is an adjudicated clinical truth, and a code's absence is not evidence a condition was absent.
+
+### 5.2 Laboratory results
+
+17,230,681 resulted components across 6,578,838 lab orders for 247,271 patients — 2.6 components per order. The grain is the component, not the order, which is the single most common source of double counting in this resource.
+
+**Most frequently ordered lab procedures**
+
+| procedure | rows | patients |
+| --- | --- | --- |
+| CBC | 2,742,117 | 65,688 |
+| CBC  DIFFERENTIAL | 1,660,900 | 65,105 |
+| CE EXTERNAL LAB | 1,455,867 | 152,867 |
+| URINALYSIS | 1,326,746 | 46,480 |
+| POCT URINALYSIS DIPSTICK | 1,079,426 | 54,102 |
+| COMPREHENSIVE METABOLIC PANEL | 475,461 | 28,764 |
+| POCT COVID-19 NUCLEIC ACID (AMPLIFIED PROBE) | 432,267 | 80,837 |
+| LEAD, BLOOD | 394,009 | 93,596 |
+| COVID-19 (CORONAVIRUS 2019) PCR | 392,834 | 97,191 |
+| POCT STREP A NUCLEIC ACID (AMPLIFIED PROBE) | 314,977 | 75,754 |
+| POCT CBC WITH DIFF | 303,486 | 15,309 |
+| POCT INFLUENZA A/B NUCLEIC ACID (AMPLIFIED PROBE) | 272,419 | 48,609 |
+| POCT RAPID STREP A IMMUNOASSAY | 268,011 | 69,548 |
+| POCT COVID-19, INFLUENZA, AND RSV NUCLEIC ACID (AMPLIFIED PROBE) | 267,208 | 22,586 |
+| URINE CULTURE | 214,567 | 43,877 |
+
+Every count here is a recorded frequency within a selected cohort. Patients carrying any code that occurred fewer than 11 times were removed before delivery (1.4), so rare entries are absent by construction and nothing in this table is a population rate.
+
+2,494,261 rows (14.5%) carry no result value at all, and 2,283,186 orders (34.7%) have no resulted component on any line. Both are expected rather than broken: the extract includes externally sourced labs that arrive without results. 3.6 covers how the values that do exist are shaped.
+
+**Implications for analysis.** Count orders when you mean tests and rows when you mean components, and never mix them in a rate. An order-with-no-result is a documented ordering event, not a missing result to impute.
+
+### 5.3 Medications
+
+3,823,049 medication records for 236,323 patients. A record is an order placed by a practice clinician or a documentation of an outside or historical medication, and the two behave differently.
+
+**Record type and date completeness**
+
+| record type | records | patients | start age present | end age present |
+| --- | --- | --- | --- | --- |
+| Internal | 3,250,374 | 229,099 | 98.7% | 91.6% |
+| External | 572,675 | 158,974 | 58.1% | 69.1% |
+
+**Most frequently recorded medications**
+
+| generic name | records | patients |
+| --- | --- | --- |
+| Amoxicillin | 351,609 | 136,002 |
+| Albuterol Sulfate | 312,748 | 65,240 |
+| Methylphenidate HCl | 219,731 | 13,658 |
+| Dexmethylphenidate HCl | 124,415 | 8,083 |
+| Amphetamine-Dextroamphetamine | 106,250 | 6,889 |
+| Acetaminophen | 83,235 | 45,771 |
+| Cefdinir | 81,224 | 41,608 |
+| Sodium Fluoride | 78,612 | 31,439 |
+| Fluticasone Propionate HFA | 77,412 | 19,545 |
+| Amoxicillin-Pot Clavulanate | 76,894 | 47,580 |
+| EPINEPHrine | 76,835 | 18,903 |
+| Ibuprofen | 75,866 | 44,933 |
+| Mupirocin | 74,769 | 51,626 |
+| Hydrocortisone | 72,204 | 40,563 |
+| Cetirizine HCl | 72,065 | 34,707 |
+
+Every count here is a recorded frequency within a selected cohort. Patients carrying any code that occurred fewer than 11 times were removed before delivery (1.4), so rare entries are absent by construction and nothing in this table is a population rate.
+
+**Three documented fields were never delivered.** The data dictionary describes 3 medication classification columns — `med_therapeutic_class`, `med_pharmaceutical_class`, `med_pharmaceutical_subclass` — and none is present in the extract. Any analysis by drug class has to map `med_simple_generic_name` itself.
+
+**Implications for analysis.** A record is not an administration and not evidence the child took the drug. Externally documented records carry a documentation date in the order-date column and approximate start dates, so exposure windows built from them are unreliable; 3.3 measures how often the dates contradict each other.
+
+### 5.4 Referrals
+
+349,827 referral orders for 138,071 patients. A referral is a recorded action, not an outcome: it says a clinician placed an order, not that the child was seen.
+
+*Figure — Referrals by age at order. Rendered in `index.html` at `#fig-ref-age`.*
+
+**Most frequently requested specialties**
+
+| specialty | referrals | patients | median age |
+| --- | --- | --- | --- |
+| Otolaryngology | 35,723 | 29,567 | 3.99 y |
+| Ophthalmology | 24,298 | 20,605 | 4.58 y |
+| Orthopedic Surgery | 22,887 | 19,521 | 9.97 y |
+| Allergy | 21,761 | 18,258 | 5.03 y |
+| Behavioral Health | 21,748 | 16,442 | 9.29 y |
+| Dermatology | 20,652 | 17,851 | 7.59 y |
+| Audiology | 15,972 | 13,616 | 2.24 y |
+| Gastroenterology | 14,344 | 12,467 | 5.57 y |
+| Cardiology | 13,610 | 12,134 | 6.83 y |
+| Neurology | 11,275 | 9,744 | 6.92 y |
+| Nutrition | 11,035 | 8,910 | 9.39 y |
+| Urology | 10,697 | 9,140 | 4.02 y |
+| Speech Pathology | 9,879 | 7,634 | 3.84 y |
+| Physical Therapy | 9,861 | 8,249 | 11.25 y |
+| Early Intervention | 9,302 | 8,511 | 1.41 y |
+
+Every count here is a recorded frequency within a selected cohort. Patients carrying any code that occurred fewer than 11 times were removed before delivery (1.4), so rare entries are absent by construction and nothing in this table is a population rate.
+
+27,452 referrals (7.85%) carry no requested specialty and 26,601 (7.6%) no requested visit count. The data dictionary also warns that referrals are not always documented in the source system, so absence of a referral is not evidence none was made.
+
+**Implications for analysis.** This resource is positive-unlabelled: recorded referrals are real, but unrecorded ones are indistinguishable from referrals that never happened. Combined with the partial visit link measured in 3.2, a referral rate computed here is a documentation rate. Treat it as such and say so.
+
+### 5.5 Recorded identity and patient-level observation
+
+Identity fields are recorded categories, not attributes of the children. Non-response is shown separately from every substantive category, because blank, unknown, and declined are not clinically equivalent to a recorded value but are all missing for the purpose of a subgroup comparison.
+
+**Recorded sex**
+
+| category | patients | share |
+| --- | --- | --- |
+| M | 127,699 | 51.0% |
+| F | 122,883 | 49.0% |
+| U | 6 | 0.0% |
+
+**Recorded ethnicity**
+
+| category | patients | share |
+| --- | --- | --- |
+| Not Hispanic or Latino | 170,594 | 68.1% |
+| Hispanic or Latino | 28,549 | 11.4% |
+| Choose not to Answer | 24,566 | 9.8% |
+| Unknown | 20,834 | 8.3% |
+| [blank] | 5,464 | 2.2% |
+| Unable to collect | 450 | 0.2% |
+| Patient does not know | 131 | 0.1% |
+
+**First recorded race**
+
+| category | patients | share |
+| --- | --- | --- |
+| White | 155,375 | 62.0% |
+| Unknown | 23,085 | 9.2% |
+| Choose not to answer | 17,534 | 7.0% |
+| Another Race | 15,950 | 6.4% |
+| Asian | 15,661 | 6.2% |
+| Black or African American | 12,162 | 4.9% |
+| [blank] | 8,818 | 3.5% |
+| American Indian or Alaska Native | 625 | 0.2% |
+| Middle Eastern or Northern African | 512 | 0.2% |
+| Unable to collect | 492 | 0.2% |
+
+Race is a multi-select of up to eight slots; only the first is shown. 13,191 patients (5.3%) have a second race recorded, so this table understates multiracial identity.
+
+Observation per patient is dense, as the cohort rule in 1.4 requires. The median patient has 23 visits (quartiles 15 and 34, 95th percentile 56, maximum 244), spanning a median of 7.0 years (quartiles 3.3 and 10.9). The median patient's last recorded visit is at age 8.3 years.
+
+**Implications for analysis.** Identity non-response is large enough to change a subgroup contrast on its own, so report it as its own category rather than dropping it. And because entry to this cohort required both a measurement history and a recent visit, the visit distribution describes the selection as much as the care; it is a feasibility figure, not an estimate of pediatric utilisation.
 
 ## 6. Field index
 
@@ -815,7 +1060,7 @@ One row per known artifact, with its scale and whether it can be repaired.
 
 ### 7.1 Every artifact this report measured
 
-One row per artifact, gathered from the findings that measured them. The class says who produced the artifact, which decides whether it can be repaired: a derivation artifact can be recomputed without touching the clinical record, a capture artifact cannot, a selection artifact is outside the extract entirely. 11 artifacts across 4 classes (capture, derivation, linkage, selection).
+One row per artifact, gathered from the findings that measured them. The class says who produced the artifact, which decides whether it can be repaired: a derivation artifact can be recomputed without touching the clinical record, a capture artifact cannot, a selection artifact is outside the extract entirely. 13 artifacts across 4 classes (capture, derivation, linkage, selection).
 
 **Artifact catalogue**
 
@@ -832,6 +1077,8 @@ One row per artifact, gathered from the findings that measured them. The class s
 | Wrong-unit and decimal-place entry in the typed measurement fields | capture | 1,371 whole-foot heights, 143 centimetre values in the inch field, and a weight decimal artifact enriched 17-fold | Yes — bound and repair the raw imperial columns before converting | 4.4 |
 | Apparent height loss from the recording grid on a flat trajectory | capture | 0.66% of pairs over a year apart, falling to 0.083% at ages 2 to 10 | Not a defect — do not filter it as an outlier | 4.5 |
 | Height z-score truncated above at +3 while the lower tail runs to -5 | derivation | 21 visits at or above +3 where roughly 15,800 would be expected | Yes — recompute from the retained raw height | 4.6 |
+| Head circumference passed through an inch-to-centimetre conversion a second time | derivation | 13,467 visits, 90% of all out-of-range values | Yes — divide by 2.54 before applying a plausible range, rather than deleting | 4.7 |
+| Velocity computed over an age-dependent minimum interval, not between adjacent visits | derivation | 99.99% reproduced under the interval rule against 43.7% under a naive lag | Not a defect — carry the interval rule alongside the field | 4.8 |
 
 ## 8. Methods and limitations
 

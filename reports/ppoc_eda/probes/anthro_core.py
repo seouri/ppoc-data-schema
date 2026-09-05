@@ -97,10 +97,24 @@ def grid(ctx: Context) -> list[Finding]:
             f"SELECT 100.0 * sum(CASE WHEN weight_oz % 16 = 0 THEN 1 ELSE 0 END) "
             f"/ nullif(count(weight_oz), 0) FROM visits_augmented WHERE {w}") or 0.0, 1))
 
+    # The claim that the metric columns are exact conversions is checked, not
+    # asserted: a wrong unit survives an exact conversion unchanged, so knowing
+    # the arithmetic is clean is what makes 4.4's unit findings interpretable.
+    h_pairs, h_bad = ctx.one(
+        "SELECT count(*), sum(CASE WHEN abs(height_cm - height_in * 2.54) > 0.01 "
+        "THEN 1 ELSE 0 END) FROM visits_augmented "
+        "WHERE height_in IS NOT NULL AND height_cm IS NOT NULL")
+    w_pairs, w_bad = ctx.one(
+        "SELECT count(*), sum(CASE WHEN abs(weight_kg - weight_oz * 0.0283495) > 0.01 "
+        "THEN 1 ELSE 0 END) FROM visits_augmented "
+        "WHERE weight_oz IS NOT NULL AND weight_kg IS NOT NULL")
+
     f = Finding(
         id="anthro.grid", part="4.2",
         title="Recording units and the measurement grid",
         values={"h_total": h_total, "w_total": w_total,
+                "h_pairs": h_pairs, "h_bad": h_bad,
+                "w_pairs": w_pairs, "w_bad": w_bad,
                 "h_whole": 100.0 * h_whole / h_total,
                 "h_half": 100.0 * h_half / h_total,
                 "h_quarter": 100.0 * h_quarter / h_total,
@@ -114,8 +128,15 @@ def grid(ctx: Context) -> list[Finding]:
         ),
     )
     f.blocks = [
-        Para("Height and weight are captured in imperial units and the metric "
-             "columns are exact conversions of them. The recorded values are heaped "
+        Para("Height and weight are captured in imperial units, and the metric "
+             "columns are exact conversions of them — measured, not assumed. Across "
+             "{h_pairs:,} visits carrying both a raw and a derived height, {h_bad:,} "
+             "disagree with `height_in` times 2.54 by more than 0.01 cm; across "
+             "{w_pairs:,} weight pairs, {w_bad:,} disagree with `weight_oz` times "
+             "0.0283495. The arithmetic is clean, which matters because a value "
+             "keyed in the wrong unit survives an exact conversion unchanged — 4.4 "
+             "takes that up."),
+        Para("The recorded values are heaped "
              "on human-readable fractions: of {h_total:,} heights, {h_whole:.1f}% "
              "fall on a whole inch, {h_half:.1f}% on a half inch and "
              "{h_quarter:.1f}% on a quarter inch. Of {w_total:,} weights, "

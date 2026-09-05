@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-05T18:35:06Z",
+  "generated_at": "2026-09-05T19:05:54Z",
   "parts": [
     {
       "findings": [
@@ -1922,12 +1922,16 @@
           "title": "Recording units and the measurement grid",
           "values": {
             "grid_cm": 0.635,
+            "h_bad": 0,
             "h_half": 54.8610638206,
+            "h_pairs": 3491662,
             "h_quarter": 80.0112148478,
             "h_total": 3509633,
             "h_whole": 31.0307943879,
+            "w_bad": 0,
             "w_lb": 24.5678810264,
             "w_oz": 54.4387601287,
+            "w_pairs": 6483007,
             "w_total": 6488028
           }
         },
@@ -3152,10 +3156,1011 @@
             "upper3": 21,
             "upper_share": 0.0604629736266
           }
+        },
+        {
+          "artifact": {
+            "kind": "derivation",
+            "name": "Head circumference passed through an inch-to-centimetre conversion a second time",
+            "recoverable": "Yes — divide by 2.54 before applying a plausible range, rather than deleting",
+            "scale": "13,467 visits, 90% of all out-of-range values"
+          },
+          "figures": [
+            {
+              "caption": "Where head-circumference values fall",
+              "data": {
+                "categories": [
+                  "<10",
+                  "10-25",
+                  "25-65",
+                  "65-200",
+                  ">200"
+                ],
+                "height": 260,
+                "series": [
+                  {
+                    "name": "visits",
+                    "values": [
+                      174,
+                      943,
+                      1620665,
+                      13472,
+                      436
+                    ]
+                  }
+                ],
+                "title": "Head circumference by band"
+              },
+              "id": "fig-hc-bands",
+              "kind": "bar"
+            }
+          ],
+          "id": "anthro.headcirc",
+          "part": "4.7",
+          "tables": [
+            {
+              "caption": "Head-circumference values by band",
+              "columns": [
+                "band",
+                "visits",
+                "median",
+                "min",
+                "max"
+              ],
+              "id": "t-hc-bands",
+              "rows": [
+                {
+                  "band": "below 10 cm",
+                  "max": 9.65,
+                  "median": 4.1,
+                  "min": 0.0,
+                  "visits": 174
+                },
+                {
+                  "band": "10 to under 25 cm",
+                  "max": 24.77,
+                  "median": 18.0,
+                  "min": 10.0,
+                  "visits": 943
+                },
+                {
+                  "band": "25 to 65 cm (within review range)",
+                  "max": 65.0,
+                  "median": 44.0,
+                  "min": 25.0,
+                  "visits": 1620665
+                },
+                {
+                  "band": "over 65 to 200 cm",
+                  "max": 193.04,
+                  "median": 110.49,
+                  "min": 65.5,
+                  "visits": 13472
+                },
+                {
+                  "band": "above 200 cm",
+                  "max": 505.46,
+                  "median": 252.22,
+                  "min": 202.57,
+                  "visits": 436
+                }
+              ]
+            }
+          ],
+          "title": "Head circumference: a recoverable conversion defect",
+          "values": {
+            "dbl_med": 43.5,
+            "dbl_n": 13472,
+            "dbl_ok": 13467,
+            "dbl_share": 99.9628859857,
+            "hi": 65.0,
+            "lo": 25.0,
+            "out_range": 15025,
+            "recover_share": 89.6306156406,
+            "trip_n": 436,
+            "trip_ok": 356,
+            "z_all": 16663,
+            "z_implaus": 14899,
+            "z_implaus_share": 89.4136710076,
+            "z_plaus": 1764
+          }
+        },
+        {
+          "artifact": {
+            "kind": "derivation",
+            "name": "Velocity computed over an age-dependent minimum interval, not between adjacent visits",
+            "recoverable": "Not a defect — carry the interval rule alongside the field",
+            "scale": "99.99% reproduced under the interval rule against 43.7% under a naive lag"
+          },
+          "figures": [
+            {
+              "caption": "The most common recorded measurement intervals",
+              "data": {
+                "categories": [
+                  "371",
+                  "366",
+                  "367",
+                  "368",
+                  "369",
+                  "370",
+                  "364",
+                  "91"
+                ],
+                "height": 250,
+                "series": [
+                  {
+                    "name": "visits",
+                    "values": [
+                      127845,
+                      72932,
+                      72385,
+                      65237,
+                      60168,
+                      58988,
+                      48880,
+                      48311
+                    ]
+                  }
+                ],
+                "title": "Distributed delta interval, days"
+              },
+              "id": "fig-delta-gap",
+              "kind": "bar"
+            }
+          ],
+          "id": "anthro.velocity",
+          "part": "4.8",
+          "tables": [
+            {
+              "caption": "The interval rule, inferred from the data",
+              "columns": [
+                "band",
+                "condition",
+                "gap"
+              ],
+              "id": "t-rule",
+              "rows": [
+                {
+                  "band": "birth to 12 months",
+                  "condition": "up to 365 days",
+                  "gap": 90
+                },
+                {
+                  "band": "1 to 2 years",
+                  "condition": "up to 730 days",
+                  "gap": 180
+                },
+                {
+                  "band": "2 to 12 years",
+                  "condition": "up to 4380 days",
+                  "gap": 335
+                },
+                {
+                  "band": "13 years and over",
+                  "condition": "beyond 4380 days",
+                  "gap": 180
+                }
+              ]
+            }
+          ],
+          "title": "The distributed delta and velocity fields",
+          "values": {
+            "age_match": 2786770,
+            "age_share": 100.0,
+            "lag1": 1218842,
+            "lag1_share": 43.7367274658,
+            "n": 2786770,
+            "off": 338,
+            "off_share": 0.0121287368531,
+            "round_only": 372482,
+            "vel_share": 99.6841863519,
+            "within": 2786432,
+            "within_share": 99.9878712631
+          }
         }
       ],
       "number": "4",
       "title": "Anthropometrics"
+    },
+    {
+      "findings": [
+        {
+          "figures": [
+            {
+              "caption": "Coded diagnoses per visit",
+              "data": {
+                "categories": [
+                  "1",
+                  "2",
+                  "3",
+                  "4",
+                  "5",
+                  "6",
+                  "7",
+                  "8",
+                  "9",
+                  "10",
+                  "11",
+                  "12"
+                ],
+                "height": 240,
+                "series": [
+                  {
+                    "name": "visits",
+                    "values": [
+                      2296361,
+                      1773442,
+                      931126,
+                      504134,
+                      286607,
+                      162940,
+                      91936,
+                      51384,
+                      27698,
+                      14464,
+                      7608,
+                      4064
+                    ]
+                  }
+                ],
+                "title": "Diagnosis slots occupied per visit"
+              },
+              "id": "fig-dx-slots",
+              "kind": "bar"
+            }
+          ],
+          "id": "domains.diagnoses",
+          "part": "5.1",
+          "tables": [
+            {
+              "caption": "Most frequently recorded encounter diagnoses",
+              "columns": [
+                "code",
+                "descr",
+                "slots",
+                "pts"
+              ],
+              "id": "t-enc-dx",
+              "rows": [
+                {
+                  "code": "Z00.129",
+                  "descr": "Encounter for routine child health examination without abnormal findings",
+                  "pts": 247896,
+                  "slots": 2494658
+                },
+                {
+                  "code": "Z23",
+                  "descr": "Encounter for immunization",
+                  "pts": 244583,
+                  "slots": 1438556
+                },
+                {
+                  "code": "J06.9",
+                  "descr": "Acute upper respiratory infection, unspecified",
+                  "pts": 132869,
+                  "slots": 363785
+                },
+                {
+                  "code": "J02.9",
+                  "descr": "Acute pharyngitis, unspecified",
+                  "pts": 113944,
+                  "slots": 323876
+                },
+                {
+                  "code": "Z13.88",
+                  "descr": "Encounter for screening for disorder due to exposure to contaminants",
+                  "pts": 128827,
+                  "slots": 295071
+                },
+                {
+                  "code": "Z13.0",
+                  "descr": "Encounter for screening for diseases of the blood and blood-forming organs and certain disorders involving the immune mechanism",
+                  "pts": 135760,
+                  "slots": 292612
+                },
+                {
+                  "code": "R50.9",
+                  "descr": "Fever, unspecified",
+                  "pts": 115401,
+                  "slots": 265363
+                },
+                {
+                  "code": "Z71.3",
+                  "descr": "Dietary counseling and surveillance",
+                  "pts": 81930,
+                  "slots": 230303
+                },
+                {
+                  "code": "Z71.82",
+                  "descr": "Exercise counseling",
+                  "pts": 78003,
+                  "slots": 209541
+                },
+                {
+                  "code": "R05.9",
+                  "descr": "Cough, unspecified",
+                  "pts": 91945,
+                  "slots": 199083
+                },
+                {
+                  "code": "Z00.121",
+                  "descr": "Encounter for routine child health examination with abnormal findings",
+                  "pts": 72084,
+                  "slots": 163509
+                },
+                {
+                  "code": "Z20.822",
+                  "descr": "Contact with and (suspected) exposure to COVID-19",
+                  "pts": 65268,
+                  "slots": 160041
+                },
+                {
+                  "code": "J02.0",
+                  "descr": "Streptococcal pharyngitis",
+                  "pts": 71029,
+                  "slots": 129310
+                },
+                {
+                  "code": "B34.9",
+                  "descr": "Viral infection, unspecified",
+                  "pts": 68886,
+                  "slots": 125662
+                },
+                {
+                  "code": "Z00.110",
+                  "descr": "Health examination for newborn under 8 days old",
+                  "pts": 105062,
+                  "slots": 124627
+                }
+              ]
+            },
+            {
+              "caption": "Most frequently recorded problem-list diagnoses",
+              "columns": [
+                "code",
+                "descr",
+                "entries",
+                "pts"
+              ],
+              "id": "t-pl-dx",
+              "rows": [
+                {
+                  "code": "U07.1",
+                  "descr": "COVID-19",
+                  "entries": 26260,
+                  "pts": 26260
+                },
+                {
+                  "code": "Z28.21",
+                  "descr": "Immunization not carried out because of patient refusal",
+                  "entries": 21189,
+                  "pts": 21189
+                },
+                {
+                  "code": "F41.9",
+                  "descr": "Anxiety disorder, unspecified",
+                  "entries": 20950,
+                  "pts": 20950
+                },
+                {
+                  "code": "K59.00",
+                  "descr": "Constipation, unspecified",
+                  "entries": 17491,
+                  "pts": 17491
+                },
+                {
+                  "code": "Z00.129",
+                  "descr": "Encounter for routine child health examination without abnormal findings",
+                  "entries": 17348,
+                  "pts": 17348
+                },
+                {
+                  "code": "K21.9",
+                  "descr": "Gastro-esophageal reflux disease without esophagitis",
+                  "entries": 17184,
+                  "pts": 17184
+                },
+                {
+                  "code": "Z86.16",
+                  "descr": "Personal history of COVID-19",
+                  "entries": 16007,
+                  "pts": 16007
+                },
+                {
+                  "code": "J45.20",
+                  "descr": "Mild intermittent asthma, uncomplicated",
+                  "entries": 15088,
+                  "pts": 15088
+                },
+                {
+                  "code": "L30.9",
+                  "descr": "Dermatitis, unspecified",
+                  "entries": 14868,
+                  "pts": 14868
+                },
+                {
+                  "code": "R46.89",
+                  "descr": "Other symptoms and signs involving appearance and behavior",
+                  "entries": 14789,
+                  "pts": 14789
+                },
+                {
+                  "code": "F80.9",
+                  "descr": "Developmental disorder of speech and language, unspecified",
+                  "entries": 13661,
+                  "pts": 13661
+                },
+                {
+                  "code": "F80.1",
+                  "descr": "Expressive language disorder",
+                  "entries": 13650,
+                  "pts": 13650
+                },
+                {
+                  "code": "L20.83",
+                  "descr": "Infantile (acute) (chronic) eczema",
+                  "entries": 13282,
+                  "pts": 13282
+                },
+                {
+                  "code": "F90.2",
+                  "descr": "Attention-deficit hyperactivity disorder, combined type",
+                  "entries": 12918,
+                  "pts": 12918
+                },
+                {
+                  "code": "IMO0002",
+                  "descr": "[not in the ICD-10 lookup]",
+                  "entries": 12915,
+                  "pts": 12915
+                }
+              ]
+            }
+          ],
+          "title": "Diagnoses",
+          "values": {
+            "enc_pat": 250563,
+            "enc_total": 14714503,
+            "pl_pts": 238823,
+            "pl_resolved_share": 44.3328318468,
+            "pl_rows": 1709584,
+            "with_any": 6154801,
+            "with_any_share": 94.769829669
+          }
+        },
+        {
+          "id": "domains.labs",
+          "part": "5.2",
+          "tables": [
+            {
+              "caption": "Most frequently ordered lab procedures",
+              "columns": [
+                "name",
+                "n",
+                "pts"
+              ],
+              "id": "t-labs-top",
+              "rows": [
+                {
+                  "n": 2742117,
+                  "name": "CBC",
+                  "pts": 65688
+                },
+                {
+                  "n": 1660900,
+                  "name": "CBC  DIFFERENTIAL",
+                  "pts": 65105
+                },
+                {
+                  "n": 1455867,
+                  "name": "CE EXTERNAL LAB",
+                  "pts": 152867
+                },
+                {
+                  "n": 1326746,
+                  "name": "URINALYSIS",
+                  "pts": 46480
+                },
+                {
+                  "n": 1079426,
+                  "name": "POCT URINALYSIS DIPSTICK",
+                  "pts": 54102
+                },
+                {
+                  "n": 475461,
+                  "name": "COMPREHENSIVE METABOLIC PANEL",
+                  "pts": 28764
+                },
+                {
+                  "n": 432267,
+                  "name": "POCT COVID-19 NUCLEIC ACID (AMPLIFIED PROBE)",
+                  "pts": 80837
+                },
+                {
+                  "n": 394009,
+                  "name": "LEAD, BLOOD",
+                  "pts": 93596
+                },
+                {
+                  "n": 392834,
+                  "name": "COVID-19 (CORONAVIRUS 2019) PCR",
+                  "pts": 97191
+                },
+                {
+                  "n": 314977,
+                  "name": "POCT STREP A NUCLEIC ACID (AMPLIFIED PROBE)",
+                  "pts": 75754
+                },
+                {
+                  "n": 303486,
+                  "name": "POCT CBC WITH DIFF",
+                  "pts": 15309
+                },
+                {
+                  "n": 272419,
+                  "name": "POCT INFLUENZA A/B NUCLEIC ACID (AMPLIFIED PROBE)",
+                  "pts": 48609
+                },
+                {
+                  "n": 268011,
+                  "name": "POCT RAPID STREP A IMMUNOASSAY",
+                  "pts": 69548
+                },
+                {
+                  "n": 267208,
+                  "name": "POCT COVID-19, INFLUENZA, AND RSV NUCLEIC ACID (AMPLIFIED PROBE)",
+                  "pts": 22586
+                },
+                {
+                  "n": 214567,
+                  "name": "URINE CULTURE",
+                  "pts": 43877
+                }
+              ]
+            }
+          ],
+          "title": "Laboratory results",
+          "values": {
+            "no_result": 2494261,
+            "no_result_share": 14.4756959983,
+            "orders": 6578838,
+            "orphan_order": 2283186,
+            "orphan_share": 34.705004136,
+            "per_order": 2.61910705204,
+            "pts": 247271,
+            "rows": 17230681
+          }
+        },
+        {
+          "id": "domains.medications",
+          "part": "5.3",
+          "tables": [
+            {
+              "caption": "Record type and date completeness",
+              "columns": [
+                "type",
+                "n",
+                "pts",
+                "start_pct",
+                "end_pct"
+              ],
+              "id": "t-med-type",
+              "rows": [
+                {
+                  "end_pct": 91.5934289408,
+                  "n": 3250374,
+                  "pts": 229099,
+                  "start_pct": 98.6693531267,
+                  "type": "Internal"
+                },
+                {
+                  "end_pct": 69.0758283494,
+                  "n": 572675,
+                  "pts": 158974,
+                  "start_pct": 58.1237176409,
+                  "type": "External"
+                }
+              ]
+            },
+            {
+              "caption": "Most frequently recorded medications",
+              "columns": [
+                "name",
+                "n",
+                "pts"
+              ],
+              "id": "t-med-top",
+              "rows": [
+                {
+                  "n": 351609,
+                  "name": "Amoxicillin",
+                  "pts": 136002
+                },
+                {
+                  "n": 312748,
+                  "name": "Albuterol Sulfate",
+                  "pts": 65240
+                },
+                {
+                  "n": 219731,
+                  "name": "Methylphenidate HCl",
+                  "pts": 13658
+                },
+                {
+                  "n": 124415,
+                  "name": "Dexmethylphenidate HCl",
+                  "pts": 8083
+                },
+                {
+                  "n": 106250,
+                  "name": "Amphetamine-Dextroamphetamine",
+                  "pts": 6889
+                },
+                {
+                  "n": 83235,
+                  "name": "Acetaminophen",
+                  "pts": 45771
+                },
+                {
+                  "n": 81224,
+                  "name": "Cefdinir",
+                  "pts": 41608
+                },
+                {
+                  "n": 78612,
+                  "name": "Sodium Fluoride",
+                  "pts": 31439
+                },
+                {
+                  "n": 77412,
+                  "name": "Fluticasone Propionate HFA",
+                  "pts": 19545
+                },
+                {
+                  "n": 76894,
+                  "name": "Amoxicillin-Pot Clavulanate",
+                  "pts": 47580
+                },
+                {
+                  "n": 76835,
+                  "name": "EPINEPHrine",
+                  "pts": 18903
+                },
+                {
+                  "n": 75866,
+                  "name": "Ibuprofen",
+                  "pts": 44933
+                },
+                {
+                  "n": 74769,
+                  "name": "Mupirocin",
+                  "pts": 51626
+                },
+                {
+                  "n": 72204,
+                  "name": "Hydrocortisone",
+                  "pts": 40563
+                },
+                {
+                  "n": 72065,
+                  "name": "Cetirizine HCl",
+                  "pts": 34707
+                }
+              ]
+            }
+          ],
+          "title": "Medications",
+          "values": {
+            "absent": "`med_therapeutic_class`, `med_pharmaceutical_class`, `med_pharmaceutical_subclass`",
+            "n_absent": 3,
+            "pts": 236323,
+            "rows": 3823049
+          }
+        },
+        {
+          "figures": [
+            {
+              "caption": "Referrals by age at order",
+              "data": {
+                "categories": [
+                  "0-2",
+                  "2-5",
+                  "5-10",
+                  "10-15",
+                  "15-18"
+                ],
+                "height": 240,
+                "series": [
+                  {
+                    "name": "referrals",
+                    "values": [
+                      83884,
+                      70476,
+                      96232,
+                      79489,
+                      19746
+                    ]
+                  }
+                ],
+                "title": "Referral age distribution"
+              },
+              "id": "fig-ref-age",
+              "kind": "bar"
+            }
+          ],
+          "id": "domains.referrals",
+          "part": "5.4",
+          "tables": [
+            {
+              "caption": "Most frequently requested specialties",
+              "columns": [
+                "specialty",
+                "n",
+                "pts",
+                "med_age"
+              ],
+              "id": "t-ref-top",
+              "rows": [
+                {
+                  "med_age": 3.99178644764,
+                  "n": 35723,
+                  "pts": 29567,
+                  "specialty": "Otolaryngology"
+                },
+                {
+                  "med_age": 4.58042436687,
+                  "n": 24298,
+                  "pts": 20605,
+                  "specialty": "Ophthalmology"
+                },
+                {
+                  "med_age": 9.96851471595,
+                  "n": 22887,
+                  "pts": 19521,
+                  "specialty": "Orthopedic Surgery"
+                },
+                {
+                  "med_age": 5.02943189596,
+                  "n": 21761,
+                  "pts": 18258,
+                  "specialty": "Allergy"
+                },
+                {
+                  "med_age": 9.28952772074,
+                  "n": 21748,
+                  "pts": 16442,
+                  "specialty": "Behavioral Health"
+                },
+                {
+                  "med_age": 7.5947980835,
+                  "n": 20652,
+                  "pts": 17851,
+                  "specialty": "Dermatology"
+                },
+                {
+                  "med_age": 2.23682409309,
+                  "n": 15972,
+                  "pts": 13616,
+                  "specialty": "Audiology"
+                },
+                {
+                  "med_age": 5.56741957563,
+                  "n": 14344,
+                  "pts": 12467,
+                  "specialty": "Gastroenterology"
+                },
+                {
+                  "med_age": 6.8295687885,
+                  "n": 13610,
+                  "pts": 12134,
+                  "specialty": "Cardiology"
+                },
+                {
+                  "med_age": 6.92402464066,
+                  "n": 11275,
+                  "pts": 9744,
+                  "specialty": "Neurology"
+                },
+                {
+                  "med_age": 9.39082819986,
+                  "n": 11035,
+                  "pts": 8910,
+                  "specialty": "Nutrition"
+                },
+                {
+                  "med_age": 4.0219028063,
+                  "n": 10697,
+                  "pts": 9140,
+                  "specialty": "Urology"
+                },
+                {
+                  "med_age": 3.84394250513,
+                  "n": 9879,
+                  "pts": 7634,
+                  "specialty": "Speech Pathology"
+                },
+                {
+                  "med_age": 11.2525667351,
+                  "n": 9861,
+                  "pts": 8249,
+                  "specialty": "Physical Therapy"
+                },
+                {
+                  "med_age": 1.40999315537,
+                  "n": 9302,
+                  "pts": 8511,
+                  "specialty": "Early Intervention"
+                }
+              ]
+            }
+          ],
+          "title": "Referrals",
+          "values": {
+            "pts": 138071,
+            "rows": 349827,
+            "spec_missing": 27452,
+            "spec_share": 7.84730738336,
+            "visits_missing": 26601,
+            "visits_share": 7.60404428475
+          }
+        },
+        {
+          "id": "domains.identity",
+          "part": "5.5",
+          "tables": [
+            {
+              "caption": "Recorded sex",
+              "columns": [
+                "category",
+                "patients",
+                "share"
+              ],
+              "id": "t-sex",
+              "rows": [
+                {
+                  "category": "M",
+                  "patients": 127699,
+                  "share": 50.9597426852
+                },
+                {
+                  "category": "F",
+                  "patients": 122883,
+                  "share": 49.0378629464
+                },
+                {
+                  "category": "U",
+                  "patients": 6,
+                  "share": 0.00239436844542
+                }
+              ]
+            },
+            {
+              "caption": "Recorded ethnicity",
+              "columns": [
+                "category",
+                "patients",
+                "share"
+              ],
+              "id": "t-eth",
+              "rows": [
+                {
+                  "category": "Not Hispanic or Latino",
+                  "patients": 170594,
+                  "share": 68.0774817629
+                },
+                {
+                  "category": "Hispanic or Latino",
+                  "patients": 28549,
+                  "share": 11.3928041247
+                },
+                {
+                  "category": "Choose not to Answer",
+                  "patients": 24566,
+                  "share": 9.80334253835
+                },
+                {
+                  "category": "Unknown",
+                  "patients": 20834,
+                  "share": 8.3140453653
+                },
+                {
+                  "category": "[blank]",
+                  "patients": 5464,
+                  "share": 2.18047153096
+                },
+                {
+                  "category": "Unable to collect",
+                  "patients": 450,
+                  "share": 0.179577633406
+                },
+                {
+                  "category": "Patient does not know",
+                  "patients": 131,
+                  "share": 0.0522770443916
+                }
+              ]
+            },
+            {
+              "caption": "First recorded race",
+              "columns": [
+                "category",
+                "patients",
+                "share"
+              ],
+              "id": "t-race",
+              "rows": [
+                {
+                  "category": "White",
+                  "patients": 155375,
+                  "share": 62.0041662011
+                },
+                {
+                  "category": "Unknown",
+                  "patients": 23085,
+                  "share": 9.21233259374
+                },
+                {
+                  "category": "Choose not to answer",
+                  "patients": 17534,
+                  "share": 6.99714272032
+                },
+                {
+                  "category": "Another Race",
+                  "patients": 15950,
+                  "share": 6.36502945073
+                },
+                {
+                  "category": "Asian",
+                  "patients": 15661,
+                  "share": 6.24970070394
+                },
+                {
+                  "category": "Black or African American",
+                  "patients": 12162,
+                  "share": 4.85338483886
+                },
+                {
+                  "category": "[blank]",
+                  "patients": 8818,
+                  "share": 3.51892349195
+                },
+                {
+                  "category": "American Indian or Alaska Native",
+                  "patients": 625,
+                  "share": 0.249413379731
+                },
+                {
+                  "category": "Middle Eastern or Northern African",
+                  "patients": 512,
+                  "share": 0.204319440676
+                },
+                {
+                  "category": "Unable to collect",
+                  "patients": 492,
+                  "share": 0.196338212524
+                }
+              ]
+            }
+          ],
+          "title": "Recorded identity and patient-level observation",
+          "values": {
+            "last": 8.27104722793,
+            "multi": 13191,
+            "multi_share": 5.26401902725,
+            "s25": 3.31006160164,
+            "s50": 7.01711156742,
+            "s75": 10.8692676249,
+            "total": 250588,
+            "v25": 15.0,
+            "v50": 23.0,
+            "v75": 34.0,
+            "v95": 56.0,
+            "vmax": 244,
+            "vmean": 25.916935368
+          }
+        }
+      ],
+      "number": "5",
+      "title": "Other clinical domains"
     },
     {
       "findings": [
@@ -4865,6 +5870,20 @@
                   "recoverable": "Yes — recompute from the retained raw height",
                   "scale": "21 visits at or above +3 where roughly 15,800 would be expected",
                   "where": "4.6"
+                },
+                {
+                  "artifact": "Head circumference passed through an inch-to-centimetre conversion a second time",
+                  "class": "derivation",
+                  "recoverable": "Yes — divide by 2.54 before applying a plausible range, rather than deleting",
+                  "scale": "13,467 visits, 90% of all out-of-range values",
+                  "where": "4.7"
+                },
+                {
+                  "artifact": "Velocity computed over an age-dependent minimum interval, not between adjacent visits",
+                  "class": "derivation",
+                  "recoverable": "Not a defect — carry the interval rule alongside the field",
+                  "scale": "99.99% reproduced under the interval rule against 43.7% under a naive lag",
+                  "where": "4.8"
                 }
               ]
             }
@@ -4873,7 +5892,7 @@
           "values": {
             "kindlist": "capture, derivation, linkage, selection",
             "kinds": 4,
-            "n": 11
+            "n": 13
           }
         }
       ],
