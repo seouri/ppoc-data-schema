@@ -44,40 +44,68 @@ All eight resources in the `ppoc-pediatric-ehr` package, both the raw and the au
 
 ## 3. Output format decision
 
-**Decision: a self-contained HTML report as the primary artifact, `findings.json` as the machine-readable source of truth, and a Markdown mirror for grep and diff.** All three from a single computation pass.
+**Decision: author in HTML, derive a PDF from it, and carry `findings.json` as the source of truth.** Four artifacts, one computation pass, all committed.
 
 ### Why not Markdown alone
-Roughly ten of the findings are far clearer as pictures than as tables — the asymmetric z-score tail, the terminal-digit grid, the head-circumference conversion bands, the apparent-shrinkage curve by age and sex, the missingness matrix over 254 fields. Markdown cannot inline them without shipping a directory of PNGs, which diff badly and drift from the text.
+Roughly ten of the findings are far clearer as pictures than as tables — the asymmetric z-score tail, the terminal-digit grid, the head-circumference conversion bands, the apparent-shrinkage curve by age and sex, the cohort funnel, the missingness matrix over 254 fields. Markdown cannot inline them without shipping a directory of PNGs, which diff badly and drift from the text.
 
-### Why HTML rather than Quarto, notebook, or PDF
-| Option | Verdict |
+### Why HTML is the authored format, and PDF the published one
+GitHub renders a committed PDF in the browser. It does **not** render committed HTML — it shows the source. So the PDF is what makes this readable to someone who never clones the repo, and the HTML is what makes it pleasant for someone who does.
+
+| Option | Role |
 | --- | --- |
-| Quarto → HTML/PDF | Rejected: adds a non-Python binary to the toolchain for no capability this needs. |
+| Quarto | Rejected: adds a non-Python binary to the toolchain for no capability this needs. |
 | Jupyter notebook | Rejected: a reference document is read, not executed; notebooks diff badly and invite stale output. |
-| PDF | Rejected: no search-in-page across a long field index, no anchor links, worse to regenerate. |
-| Self-contained HTML | **Chosen**: inline SVG, sticky table of contents, anchor links per finding, browser find-in-page over the whole document, opens offline from the repo with no server and no assets. |
+| **HTML, authored** | Inline SVG, sticky table of contents, per-finding anchors, find-in-page, opens offline with no server. |
+| **PDF, derived from the HTML** | Viewable directly on GitHub, citable with stable page numbers, printable. |
+| `findings.json` | Machine-readable source of truth; the only thing that diffs cleanly. |
+| Markdown mirror | What a reviewer reads in a pull-request diff. |
 
-### The three outputs
+### The four outputs
 
-| File | Role |
-| --- | --- |
-| `reports/ppoc-eda/index.html` | Primary. Self-contained: inline SVG, inline CSS, no external requests. |
-| `reports/ppoc-eda/findings.json` | Every number the report states, keyed by stable finding id. This is what git diffs cleanly across regenerations, and what another script or an assistant can consume without parsing prose. |
-| `reports/ppoc-eda/ppoc-eda.md` | Text mirror: all prose and tables, figures replaced by captions linking to the HTML anchor. For grep, for review in a PR, and for loading into an LLM context. |
+| File | Role | Committed |
+| --- | --- | --- |
+| `reports/ppoc-eda/index.html` | Authored primary. Self-contained: inline SVG and CSS, no external requests. | yes |
+| `reports/ppoc-eda/ppoc-eda.pdf` | Derived from the HTML. The GitHub-viewable artifact. | yes |
+| `reports/ppoc-eda/findings.json` | Every number the report states, keyed by stable finding id. | yes |
+| `reports/ppoc-eda/ppoc-eda.md` | Text mirror; figures become captions linking to HTML anchors. | yes |
 
-**Anti-drift rule:** prose is a template; every number in the HTML and the Markdown is interpolated from `findings.json`. A number cannot appear in one output and not the other, and cannot be hand-edited into either.
+**Anti-drift rule:** prose is a template; every number in every output interpolates from `findings.json`. A number cannot appear in one output and not another, and cannot be hand-edited into any of them.
+
+### HTML → PDF pipeline
+
+Headless Chrome, which is present on this machine at `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`, and which renders exactly the CSS and SVG the HTML already uses — so the PDF cannot disagree with the HTML about anything.
+
+```
+chrome --headless=new --disable-gpu --no-pdf-header-footer \
+       --print-to-pdf=reports/ppoc-eda/ppoc-eda.pdf \
+       file://$PWD/reports/ppoc-eda/index.html
+```
+
+Resolution order: `$PPOC_CHROME`, then `PATH` (`google-chrome`, `chromium`), then the known macOS app paths. If none is found the HTML, JSON, and Markdown still build and the PDF step reports a clear skip — the PDF is never a build blocker.
+
+**Print stylesheet** (`@media print`), required for the PDF to be worth committing:
+- Force the light palette; a dark background is wrong on paper and enormous in ink.
+- `@page { size: A4; margin: 18mm 16mm; }` with running heads carrying part and section.
+- `break-inside: avoid` on figures, finding blocks, and table rows; `break-before: page` on each Part.
+- Expand anything that is interactive-only in HTML — a collapsed field index must be fully expanded in print.
+- Render link targets as footnoted anchors, since a PDF reader cannot follow an in-page `#id` the way a browser does.
+
+**Committed-binary discipline.** A PDF that changes on every build would bloat history. Two mitigations, in order:
+1. **Rebuild only on change.** The build compares newly computed findings against the committed `findings.json`; if they are identical, the HTML/PDF/Markdown are left untouched. An unchanged snapshot therefore produces no new blob at all. This is the primary defence and it works regardless of renderer stability.
+2. **Normalize what is still non-deterministic.** Chrome stamps `/CreationDate`, `/ModDate`, and a trailer `/ID`. Rewrite the dates to a fixed value derived from the snapshot date, then run `qpdf --deterministic-id` (available at `/opt/homebrew/bin/qpdf`).
+
+Whether Chrome's output is byte-stable beyond that — font subsetting and object numbering — is **not assumed**. Phase 1 includes a determinism spike that builds twice and diffs; mitigation 1 makes the answer non-blocking either way.
 
 ### Charts: hand-rolled SVG, no new dependency
 
-The project has five lean runtime dependencies and no plotting library. The chart vocabulary this report needs is small and repetitive — histogram/bar, grouped bar, line with optional series split, heatmap, and a percentile ribbon. That is roughly 350 lines of a `charts.py` emitting SVG directly from numpy-computed bin counts.
+The project has five lean runtime dependencies and no plotting library. The chart vocabulary needed is small and repetitive — histogram/bar, grouped bar, line with optional series split, heatmap, step, and a funnel. That is roughly 400 lines of a `charts.py` emitting SVG directly from numpy-computed bin counts.
 
-Doing it by hand also buys two things matplotlib does not: the SVG inherits CSS custom properties, so the figures follow a light/dark toggle, and the output is small and diff-stable.
+Hand-rolling also buys two things matplotlib does not: the SVG inherits CSS custom properties, so figures follow the light/dark toggle *and* the print stylesheet's forced-light rule; and the output is small and diff-stable.
 
-**Fallback if the vocabulary grows:** add `matplotlib` under a new optional `[dependency-groups] report` so the core install stays lean. Recorded here so the decision is not relitigated silently.
+**Fallback if the vocabulary grows:** add `matplotlib` under a new optional `[dependency-groups] report`. Recorded so the decision is not relitigated silently.
 
 When the charts are built, load the `dataviz` skill first — palette, axis, and legend conventions should not be improvised.
-
----
 
 ## 4. Report structure
 
@@ -92,11 +120,13 @@ Firm. Numbered parts, stable anchor ids, every finding individually linkable as 
 - 1.1 Package identity and integrity: name, version, snapshot date, bundle sha256, row counts reconciled against `manifest.json` and `datapackage.json`, schema drift against the declared descriptor.
 - 1.2 Resource map: eight tables, their grain, primary keys, and join paths. **Figure: entity/link diagram annotated with row counts and measured link-resolution rates.**
 - 1.3 **The two layers.** What the augmentation adds on top of the raw extract, and where the two disagree. This subsection is new and is the clearest example of what the current report misses — see §6.
-- 1.4 **The de-identification envelope.** Calendar dates, names, sites, providers, and time-of-day are absent; `age_in_days` is the only clock. Stated once, here, with the list of checks it forecloses, then referenced from Part 2 rather than re-argued.
+- 1.4 **How this cohort was built.** The full selection pipeline, recovered from the PPOC delivery documents and reconciled against the data. **Figure: cohort funnel.** This is the single most consequential subsection in the report; see §5A.
+- 1.5 **The de-identification envelope.** Calendar dates, names, sites, providers, and time-of-day are absent; `age_in_days` is the only clock. Stated once, here, with the list of checks it forecloses, then referenced from Part 2 rather than re-argued.
 
 ### Part 2 — Checklist coverage
 - 2.1 **Coverage table.** Every item in `docs/ehr_eda_checklist.md`, mapped to: covered / partially covered / not applicable, the report section holding the evidence, and — for anything not fully covered — the reason.
 - 2.2 **What this snapshot cannot tell you.** The N/A items consolidated into one list a researcher can read in a minute, so nobody spends a day looking for a provider field.
+- 2.3 **Selection effects you cannot analyse around.** Distinct from 2.2: these are questions the data will happily *appear* to answer while returning a biased result. Rare-code exclusion, alive-only ascertainment, the ≥5-measurement requirement, and the recency filter each belong here, with the specific analyses each one invalidates.
 
 ### Part 3 — Integrity
 - 3.1 Keys, grain, and uniqueness.
@@ -140,16 +170,16 @@ Drafted now because it determines what the script must compute. Status is my ass
 
 | Checklist item | Status | Note |
 | --- | --- | --- |
-| 0. Extraction window | Partial | Snapshot date known; no calendar dates in the data, so no start/end window. |
-| 0. Inclusion/exclusion logic | Covered | From `docs/data_description.md`. |
+| 0. Extraction window | **Covered** | Recovered from the delivery documents: cohort as of 31 Dec 2024, extract 03 Feb 2025, registry snapshot 18 Jul 2024. Not in the data; not previously in the repo. |
+| 0. Inclusion/exclusion logic | **Covered, and it is the headline** | Full four-step funnel with counts reconciling to 250,588. See §5A.1. `docs/data_description.md` does not contain it. |
 | 0. Vendor/version, migration events | Covered | `orig_enc_source_Epic_yn` marks Epic against converted records — the migration signal. |
 | 0. Data dictionary present | Covered | `docs/*.md` + `datapackage.json`; drift check is computable. |
 | 0. Raw vs CDM vs custom | Covered | Custom extract **plus a derived augmentation layer** — the distinction that matters most here. |
-| 1. Row/table counts | Covered | Reconcile against `manifest.json`. |
+| 1. Row/table counts | Covered | Reconcile against `manifest.json` **and against the vendor's own stated counts**, including lab orders (6,578,838) and patients with a lab (247,271), both of which already reproduce exactly. |
 | 1. Primary key uniqueness | Covered | All eight resources. |
 | 1. Referential integrity | Covered | Includes the populated-but-unresolvable `visit_id` finding. |
 | 1. Duplicate patient detection | **N/A** | No DOB, name, or linkage key survives de-identification. |
-| 1. Schema drift | Covered | Live schema against `datapackage.json`. |
+| 1. Schema drift | Covered, **and it is non-empty** | Live schema against `datapackage.json` *and* against the vendor dictionary; three documented medication class fields were never delivered. See §5A.3. |
 | 1. Grain per table | Covered | Including that `(patient_id, age_in_days)` is *not* unique in visits. |
 | 2. Timestamp logic | Covered | Order / result / start / end age fields and their differing semantics. |
 | 2. Impossible sequences | Covered | Result before order, end before start, pre-birth ages. |
@@ -160,7 +190,7 @@ Drafted now because it determines what the script must compute. Status is my ass
 | 3. Missingness per field | Covered | All 254 columns → Part 6. |
 | 3. Missingness pattern | Covered | By age, sex, encounter type, source system. |
 | 3. Sentinel values | Covered | Zero, blank, `UNKNOWN`, `Unable to collect`, and similar. |
-| 3. Not-measured vs measured-negative | Covered | Labs especially. |
+| 3. Not-measured vs measured-negative | Covered, **and two fields are currently misread** | `result_flag` null = normal and `resolved_date_age_in_days` null = active problem. See §5A.2. |
 | 3. Missingness by site/provider | **N/A** | No site, department, provider, or facility field exists. Encounter type is the nearest available proxy and is used instead. |
 | 4. Univariate distributions | Covered | All continuous fields. |
 | 4. Unit inconsistencies | Covered | Part 4.4. |
@@ -177,7 +207,7 @@ Drafted now because it determines what the script must compute. Status is my ass
 | 6. Template/boilerplate | **N/A** | No note text. |
 | 6. Documentation timing | **N/A** | No timestamps. |
 | 6. Order-result reconciliation | Covered | Labs. |
-| 7. Cohort representativeness | Partial | Distributions reported; **no external benchmark ships with this repo**, so the comparison is left to the reader and that limit is stated. |
+| 7. Cohort representativeness | Partial, **and the cohort is not representative** | No external benchmark ships with this repo, but the selection rules are now known: alive-only, ≥5 growth measurements, recency-filtered, rare-code-excluded. Reported as a selection description rather than an unexplained distribution. |
 | 7. Encounter-type mix | Covered | Part 3.7. |
 | 7. Follow-up time distribution | Covered | Trajectory span and later-visit availability. |
 | 7. Site/provider volume | **N/A** | No such field. |
@@ -185,11 +215,81 @@ Drafted now because it determines what the script must compute. Status is my ass
 | 8. Guideline/policy shift | **N/A** | Requires calendar time. |
 | 8. Vendor changeover effects | Partial | Epic-vs-converted contrast only. |
 
-Twelve items are not applicable and four more are partial. **Publishing that list is a deliverable in itself** — it is the difference between a researcher spending an hour confirming a field does not exist and reading one line.
+After folding in the delivery documents, eleven items are not applicable and three more are partial; two that were partial are now fully covered. **Publishing that list is a deliverable in itself** — it is the difference between a researcher spending an hour confirming a field does not exist and reading one line.
+
+---
+
+## 5A. What the PPOC delivery documents add
+
+Three documents shipped with the data: a cohort/exclusion workbook, a field dictionary workbook, and a Visio extract diagram. I inspected all three. **Almost none of their content is in this repository**, and several items contradict or explain findings in the existing report.
+
+### 5A.1 The cohort was heavily selected, and the repo does not say so
+
+Recovered from the extract diagram and the workbook Summary sheet, reconciled against the data:
+
+| Step | Remaining |
+| --- | --- |
+| PPOC active-patient registry, age < 18 as of 31 Dec 2024 | 361,326 |
+| less patients of 2 practices that declined participation | 352,017 |
+| ≥ 5 growth measurements on distinct dates of one type, spanning > 1095 days, last measurement < 400 days ago (under-3s exempted from the span rule) | 290,175 |
+| less patients carrying any **rare** diagnosis, medication, or lab | **250,588** |
+
+The final count matches the snapshot exactly. So do the per-resource row counts in the diagram, and two counts nothing in this repo records: **6,578,838 lab orders** and **247,271 patients with ≥ 1 lab**, both of which reproduce from the data exactly. That is strong independent confirmation the bundle is the delivered extract.
+
+**"Active" means alive.** The registry requires living status = alive, not a test or inactive record, an active PPOC PCP association, and either a visit in the last 3 years or one scheduled in the next 15 months.
+
+**"Rare" means fewer than 11 occurrences in the data set**, and the exclusion removed the *patient*, not the code: 18,604 of 30,493 ICD-10 codes, 1,391 of 2,503 medications, and 9,621 of 13,402 lab procedures were classed rare.
+
+**Consequences that must be stated prominently and are currently stated nowhere:**
+
+- **Rare-disease, rare-exposure, and rare-lab research is invalid on this data.** Roughly 61% of diagnosis codes, 56% of medications, and 72% of lab procedures were removed along with every patient who had one. `docs/data_description.md` currently advertises "disease prevalence" and "pharmacoepidemiology" as use cases. That guidance is unsafe as written and the new report must say so plainly.
+- **No deceased patients exist**, so mortality is not an available outcome and any survival framing is censored by construction.
+- **Trajectory richness is an entry criterion, not a finding.** Every patient has ≥ 5 growth measurements of some type. Statistics like "97.9% have at least three height observations" describe the selection rule, not pediatric primary care, and the report must frame them that way.
+- **The recency filter right-censors by design** — last measurement within 400 days of 31 Dec 2024.
+- **A calendar anchor exists after all.** Ages are relative to birth, but the cohort is pinned to 31 Dec 2024 and the extract to 03 Feb 2025. Section 1.5's "no calendar axis" claim needs this qualification.
+
+One discrepancy between the two source documents to record rather than resolve silently: the workbook says under-3s with ≥ 5 measurements are exempt from the *span* requirement (N = 55,833); the diagram says the exemption is for age < 3 with *at least 1* measurement. The workbook also says "less than 11 occurrences" where the exclusion sheets say "< 10 patients". The report states both readings and flags the ambiguity.
+
+### 5A.2 Field semantics the dictionary settles, and the current report gets wrong
+
+| Field | Dictionary says | Consequence |
+| --- | --- | --- |
+| `result_flag` | "(NONE) indicates a normal result. Any other value indicates abnormal." | The delivered data has **15,550,985 nulls and no literal "(NONE)"**. Null therefore means **normal**, not missing. Treating it as missing discards the largest normal-result signal in the file. |
+| `resolved_date_age_in_days` | "null = problem currently active" | **951,677 nulls are active problems, not missing data.** The existing report frames this as 44.3% populated, implying missingness. |
+| `visit_id` (labs, meds, referrals) | "may not match to all if ordered outside a visit" | The 30–42% unresolved rate is **expected and documented**, not a defect. The current report presents it as a surprise. |
+| `lab_procedure_name` / `lab_procedure_description` | description "may provide more information for the Care Everywhere labs" | Care Everywhere rows carry the useful text in `description`, not `name`. |
+| labs, granularity note | "lab results may not properly link to the original order, creating duplicate records" | The vendor documents the duplicate-result-line behaviour the report measures at 31,628 pairs. |
+| labs, coverage note | "Includes care everywhere labs (without results)" | Explains the 14.5% of lab rows with no `result_value`. |
+| `med_order_date_age_in_days` | for historically documented meds this is the *documentation* date, and start dates "may be inaccurate" | Explains the 9.3% start-before-order violations as a documented property, not corruption. |
+| `med_end_date_age_in_days` | "may be future dates if medication is currently active" | Explains end-date anomalies. |
+| `orig_enc_source_Epic_yn` | converted encounters "may be missing diagnosis information" | Explains 17.3% diagnosis presence on conversion encounters. |
+| `sex` | "values: M, F, U" | `U` is a documented category, not a data error. |
+
+Every row above turns an unexplained observation into a documented one. That is the difference between a researcher filing a bug and a researcher writing one line of handling code.
+
+### 5A.3 Schema drift: three documented fields were never delivered
+
+Comparing the dictionary against the live bundle, column by column:
+
+| Resource | Result |
+| --- | --- |
+| patients, visits, problem_list, referrals, labs | dictionary and delivery agree |
+| **medications** | **`med_therapeutic_class`, `med_pharmaceutical_class`, `med_pharmaceutical_subclass` are documented but absent** |
+
+Anyone planning a drug-class analysis will find those three fields promised by the dictionary and missing from the data. This belongs in Part 1.1 and in the field index.
+
+### 5A.4 Handling rule for the source documents — public repository
+
+`ppoc-patient-list-notes-*.xlsx` is **not safe to publish**. Its `exclusion - labs` sheet lists 9,622 lab procedure names, of which 523 exceed 45 characters and 11 contain explicit calendar dates, because free-text clinical narrative was typed into the procedure-name field at the source. Examples carry a facility name, a date, an age, and family circumstances, each at a unique-patient count of 1.
+
+This repository is public. All three delivery documents are now gitignored; the dictionary and the diagram scan clean and can be un-ignored deliberately if redistribution is intended, but the notes workbook should not be.
+
+**Rule for the report:** facts, counts, and field semantics may be carried over. **No verbatim lab procedure name, and no free-text string from any source document, may appear in any output.** A neutrality-audit style test enforces it: no output may contain a calendar-date pattern outside the two known cohort anchors.
 
 ---
 
 ## 6. New analyses this report adds
+
 
 Beyond reorganising and de-projecting what already exists, the following are not in the current report. I verified the first one while drafting this plan, because a plan that promises findings should demonstrate at least one.
 
@@ -210,7 +310,16 @@ The augmentation preserves every shared measurement exactly except BMI. The gap 
 
 This is exactly the class of trap the report should catch, and nothing in the current report looks for it.
 
-### 6.2 Other additions
+### 6.2 Corrections the delivery documents force
+
+Not new computation so much as new *reading* of existing computation, and each one changes a conclusion:
+- `result_flag` null means normal, not missing (15,550,985 rows).
+- `resolved_date_age_in_days` null means an active problem, not missing (951,677 rows).
+- Unresolved `visit_id` in labs, medications, and referrals is documented expected behaviour for orders placed outside a visit, not a linkage defect.
+- Medication start-before-order violations are a documented property of historically documented medications.
+- Trajectory-richness statistics describe the cohort entry rule, not pediatric care.
+
+### 6.3 Other additions
 - **Schema drift** of the live bundle against `datapackage.json`.
 - **Sentinel-value sweep** across all categorical and numeric fields.
 - **BMI recomputation** from `height_cm` and `weight_kg` against the distributed `bmi`, at both layers.
@@ -224,20 +333,21 @@ This is exactly the class of trap the report should catch, and nothing in the cu
 
 ## 7. Figure inventory
 
-Ten figures, each tied to a claim that is genuinely harder to make in a table.
+Eleven figures, each tied to a claim that is genuinely harder to make in a table.
 
 | # | Figure | Part | Type |
 | --- | --- | --- | --- |
-| 1 | Resource map with row counts and link-resolution rates | 1.2 | diagram |
-| 2 | Missingness matrix, field × age band | 3.4 | heatmap |
-| 3 | Visit volume and measurement availability by age | 3.4 | line |
-| 4 | Terminal-digit heaping by age band | 4.2 | grouped bar |
-| 5 | Height / weight / BMI distributions with review bounds | 4.3 | histogram |
-| 6 | Head-circumference value clusters, log scale, ×2.54 bands marked | 4.4 | histogram |
-| 7 | Transcription mechanism enrichment, observed vs null | 4.4 | grouped bar |
-| 8 | Apparent height-loss rate by age, split by sex | 4.5 | line |
-| 9 | Height z-score tail asymmetry against the +3 bound | 4.6 | histogram |
-| 10 | Trajectory span: share of children retaining N height observations | 4.1 | step |
+| 1 | Cohort construction funnel, 361,326 → 250,588, with each exclusion labelled | 1.4 | funnel |
+| 2 | Resource map with row counts and link-resolution rates | 1.2 | diagram |
+| 3 | Missingness matrix, field × age band | 3.4 | heatmap |
+| 4 | Visit volume and measurement availability by age | 3.4 | line |
+| 5 | Terminal-digit heaping by age band | 4.2 | grouped bar |
+| 6 | Height / weight / BMI distributions with review bounds | 4.3 | histogram |
+| 7 | Head-circumference value clusters, log scale, ×2.54 bands marked | 4.4 | histogram |
+| 8 | Transcription mechanism enrichment, observed vs null | 4.4 | grouped bar |
+| 9 | Apparent height-loss rate by age, split by sex | 4.5 | line |
+| 10 | Height z-score tail asymmetry against the +3 bound | 4.6 | histogram |
+| 11 | Trajectory span: share of children retaining N height observations | 4.1 | step |
 
 ---
 
@@ -280,9 +390,10 @@ Outputs to `reports/ppoc-eda/`.
 **Privacy.** Read-only connection. Aggregate output only. Suppression below 10 records, applied centrally in `context.py` rather than per probe. A render-time assertion rejects any cell that matches an identifier column's value pattern, so a probe cannot leak an id by accident.
 
 **Verification, four gates:**
-1. **Snapshot agreement** — row counts and sha256 against `manifest.json`; abort on mismatch rather than silently profiling a different extract.
+1. **Snapshot agreement** — row counts and sha256 against `manifest.json`, plus the vendor's independently stated counts from the delivery documents (250,588 patients, 6,494,473 visits, 6,578,838 lab orders, 247,271 patients with a lab). Abort on mismatch rather than silently profiling a different extract.
 2. **Internal consistency** — every number in the HTML and Markdown traces to a `findings.json` key; a test asserts no orphan literals in the templates.
-3. **Determinism** — two runs, byte-identical.
+3. **Determinism** — two runs produce identical `findings.json`; HTML and Markdown byte-identical; the PDF is rebuilt only when `findings.json` changes, so an unchanged snapshot yields no new blob.
+3a. **Disclosure guard** — no output may contain a verbatim source-document free-text string or a calendar-date pattern outside the two known cohort anchors. Enforced as a test, because the source documents carry clinical narrative and this repository is public.
 4. **Detector validation** — this repo already generates synthetic PPOC-shaped data under `src/synthetic`. Build a fixture with *known injected artifacts* (whole-foot heights, decimal-shifted weights, double-converted head circumferences) and assert the probes recover them at the injected rate. This tests that the detectors work, not merely that the plumbing runs — and no existing test does that.
 
 ---
@@ -292,13 +403,14 @@ Outputs to `reports/ppoc-eda/`.
 | Phase | Deliverable | Gate |
 | --- | --- | --- |
 | 1 | `context.py`, `findings.py`, both renderers, one trivial probe end to end | Three outputs produced, determinism gate green |
-| 2 | `charts.py` with all six primitives, one real figure | Renders in light and dark, no external requests |
-| 3 | Parts 1–3 probes | Coverage table complete, every N/A justified |
+| 2 | `charts.py` with all seven primitives, one real figure | Renders in light, dark, and print; no external requests |
+| 2a | PDF step: Chrome discovery, print stylesheet, metadata normalization, rebuild-on-change gate | PDF opens, matches the HTML, and a no-op rebuild leaves the file untouched |
+| 3 | Parts 1–3 probes, including the cohort funnel and the vendor-count reconciliation | Coverage table complete, every N/A justified, vendor counts agree |
 | 4 | Part 4 anthropometrics, including the ported transcription and shrinkage probes | Figures 4–10 |
 | 5 | Parts 5–7, field index, artifact catalogue | Detector-validation tests green |
-| 6 | Part 0 and Part 8 prose, cross-links, final read-through | Neutrality audit: zero hits for the forbidden terms |
+| 6 | Part 0 and Part 8 prose, cross-links, final read-through | Neutrality audit and disclosure guard both green |
 
-The neutrality audit in phase 6 is mechanical — grep the outputs for `GrowthChartLiteracy`, `E3|E5a|E7|E9`, `stimul`, `counterfactual`, `serializ`, `this project`, and any absolute path outside the repo. It belongs in the test suite, not in a human's eyes.
+The neutrality audit in phase 6 is mechanical — grep the outputs for `GrowthChartLiteracy`, `E3|E5a|E7|E9`, `stimul`, `counterfactual`, `serializ`, `this project`, and any absolute path outside the repo. The disclosure guard is the same shape: no verbatim source-document free text, no calendar date outside the two cohort anchors. Both belong in the test suite, not in a human's eyes.
 
 ---
 
@@ -306,8 +418,10 @@ The neutrality audit in phase 6 is mechanical — grep the outputs for `GrowthCh
 
 1. **Charts:** hand-rolled SVG with no new dependency, as recommended — or add `matplotlib` under an optional `report` dependency group?
 2. **Outputs:** all three (HTML + JSON + Markdown), or drop the Markdown mirror? Note that GitHub will not render a committed HTML file in the browser, so the Markdown mirror is what a reviewer sees in a pull request. That is the main argument for keeping it.
-3. **Commit the built outputs**, or treat them as build products and gitignore them? Committing makes the report readable straight from a clone; it also puts a large generated HTML file in history.
+3. ~~Commit the built outputs?~~ **Decided: yes**, HTML and PDF both, so the report is viewable on GitHub. Blob churn is bounded by the rebuild-on-change gate in §3.
 4. **Field index scope:** collapse `enc_diag_1`–`33` and `race_1`–`8` to one row each as proposed, or list every column?
 5. **Follow-on:** once this exists, reduce `growth-chart-literacy-real-data-eda.md` to a thin project overlay that cites this report instead of restating it? Worth doing, but a separate task.
+6. **New — source documents:** all three are now gitignored (§5A.4). Keep it that way, or un-ignore the dictionary workbook and the extract diagram, which scan clean? The notes workbook should stay out regardless.
+7. **New — correct `docs/data_description.md`?** It advertises "disease prevalence" and "pharmacoepidemiology" use cases that the rare-code exclusion undermines. That file is read by people and by LLMs as the authority on this dataset. I would fix it now rather than wait for the new report, as a small separate commit.
 
-I would proceed with the recommendation on every item above unless you say otherwise; item 3 is the only one where I have no strong preference.
+I would proceed with the recommendation on every item above unless you say otherwise. Items 6 and 7 are the ones I would act on soonest.

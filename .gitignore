@@ -1,3 +1,13 @@
 .DS_Store
 .worktrees/
 __pycache__/
+
+# PPOC source delivery documents. This repository is public.
+# ppoc-patient-list-notes-*.xlsx carries free-text lab procedure names holding
+# clinical narrative, facility names, patient ages, and calendar dates at a
+# unique-patient count of 1 — treat as PHI-adjacent and never publish it.
+# The dictionary and the extract diagram scan clean, but they are vendor
+# delivery documents; un-ignore them deliberately if redistribution is intended.
+docs/ppoc-patient-list-notes-*.xlsx
+docs/ppoc-extract-data-dictionary-*.xlsx
+docs/ppoc-growth-charts-ai-project-data-extract-*.pdf
