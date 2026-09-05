@@ -67,12 +67,15 @@ def _open(height: int, title: str, desc: str) -> list[str]:
     ]
 
 
-def _yaxis(parts: list[str], ticks: list[float], y_of, x0: int, x1: int) -> None:
+def _yaxis(parts: list[str], ticks: list[float], y_of, x0: int, x1: int,
+           suffix: str = "") -> None:
+    """Grid lines and tick labels. The suffix carries the unit onto the axis, so a
+    percentage does not read as a bare count."""
     for t in ticks:
         y = y_of(t)
         parts.append(f'<line class="vx-grid" x1="{x0}" y1="{y:.1f}" x2="{x1}" y2="{y:.1f}"/>')
         parts.append(f'<text class="vx-tick" x="{x0 - 8}" y="{y + 4:.1f}" '
-                     f'text-anchor="end">{fmt_tick(t)}</text>')
+                     f'text-anchor="end">{fmt_tick(t)}{esc(suffix)}</text>')
 
 
 def _legend(parts: list[str], series: list[str], y: int) -> None:
@@ -111,8 +114,9 @@ def funnel(data: dict) -> str:
         )
         parts.append(f'<text class="vx-value" x="{PAD["l"] + w + 8:.1f}" y="{y + 18}">'
                      f'{s["value"]:,}</text>')
-        parts.append(f'<text class="vx-label vx-wrap" x="{PAD["l"] + 8}" y="{y + 18}" '
-                     f'fill="var(--on-mark)">{esc(s["label"])}</text>')
+        parts.append(f'<text class="vx-label" x="{PAD["l"] + 12}" y="{y + 19}" '
+                     f'style="fill:var(--on-mark);font-weight:600">'
+                     f'{esc(s["label"])}</text>')
     parts.append("</svg>")
     return "".join(parts)
 
@@ -134,7 +138,7 @@ def bars(data: dict) -> str:
 
     parts = _open(height, data.get("title", "Bar chart"),
                   f"{len(cats)} categories, {len(series)} series.")
-    _yaxis(parts, ticks, y_of, PAD["l"], W - PAD["r"])
+    _yaxis(parts, ticks, y_of, PAD["l"], W - PAD["r"], suffix)
     inner = (W - PAD["l"] - PAD["r"]) / max(len(cats), 1)
     bw = (inner * 0.68) / len(series)
     for ci, cat in enumerate(cats):
@@ -167,7 +171,7 @@ def line(data: dict) -> str:
     series = data["series"]
     suffix = data.get("suffix", "")
     height = data.get("height", 300)
-    plot_b = height - PAD["b"]
+    plot_b = height - PAD["b"] - (16 if len(series) > 1 else 0)
     vals = [v for s in series for v in s["values"] if v is not None]
     ticks = nice_ticks(min(vals + [0]), max(vals or [1]))
     lo, top = min(ticks), max(ticks)
@@ -176,13 +180,17 @@ def line(data: dict) -> str:
         span = (top - lo) or 1
         return plot_b - (plot_b - PAD["t"]) * ((v - lo) / span)
 
+    label_series = len(series) > 1
+    reserve = (14 + max((7.0 * len(s["name"]) for s in series), default=0)
+               if label_series else 8)
+
     def x_of(i: int) -> float:
         n = max(len(xs) - 1, 1)
-        return PAD["l"] + (W - PAD["l"] - PAD["r"] - 46) * (i / n)
+        return PAD["l"] + (W - PAD["l"] - PAD["r"] - reserve) * (i / n)
 
     parts = _open(height, data.get("title", "Line chart"),
                   f"{len(series)} series over {len(xs)} points.")
-    _yaxis(parts, ticks, y_of, PAD["l"], W - PAD["r"])
+    _yaxis(parts, ticks, y_of, PAD["l"], W - PAD["r"], suffix)
     for si, s in enumerate(series):
         pts = [(x_of(i), y_of(v)) for i, v in enumerate(s["values"]) if v is not None]
         if not pts:
@@ -193,9 +201,11 @@ def line(data: dict) -> str:
             parts.append(f'<g class="vx-mark"><title>{esc(s["name"])}: {v:,.4g}{esc(suffix)}'
                          f'</title><circle class="vx-dot" cx="{x:.1f}" cy="{y:.1f}" r="4" '
                          f'fill="var(--series-{si + 1})"/></g>')
-        lx, ly = pts[-1]
-        parts.append(f'<text class="vx-label" x="{lx + 8:.1f}" y="{ly + 4:.1f}" '
-                     f'fill="var(--series-{si + 1})">{esc(s["name"])}</text>')
+        if label_series:
+            lx, ly = pts[-1]
+            parts.append(f'<text class="vx-label" x="{lx + 8:.1f}" y="{ly + 4:.1f}" '
+                         f'style="fill:var(--series-{si + 1})">'
+                         f'{esc(s["name"])}</text>')
     stride = max(1, len(xs) // 9)
     for i, xv in enumerate(xs):
         if i % stride:
@@ -204,6 +214,8 @@ def line(data: dict) -> str:
                      f'text-anchor="middle">{esc(xv)}</text>')
     parts.append(f'<line class="vx-axis" x1="{PAD["l"]}" y1="{plot_b}" '
                  f'x2="{W - PAD["r"]}" y2="{plot_b}"/>')
+    if label_series:
+        _legend(parts, [s["name"] for s in series], height - 4)
     parts.append("</svg>")
     return "".join(parts)
 
@@ -244,7 +256,7 @@ def hist(data: dict) -> str:
         x = x_of(mark["at"])
         parts.append(f'<line class="vx-rule" x1="{x:.1f}" y1="{PAD["t"]}" x2="{x:.1f}" '
                      f'y2="{plot_b}"/>')
-        parts.append(f'<text class="vx-label vx-rule-label" x="{x + 5:.1f}" '
+        parts.append(f'<text class="vx-rule-label" x="{x + 5:.1f}" '
                      f'y="{PAD["t"] + 12}">{esc(mark["label"])}</text>')
     for t in nice_ticks(lo, hi, 6):
         parts.append(f'<text class="vx-tick" x="{x_of(t):.1f}" y="{plot_b + 16}" '

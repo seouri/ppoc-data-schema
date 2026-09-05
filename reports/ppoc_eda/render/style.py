@@ -119,7 +119,7 @@ svg.vx {{ display: block; max-width: 100%; }}
 @media print {{
   /* Force the light palette: a dark ground is wrong on paper. */
   :root, :root[data-theme="dark"] {{ {_vars(LIGHT)} color-scheme: light; }}
-  @page {{ size: A4; margin: 16mm 14mm; }}
+  @page {{ size: Letter; margin: 0.6in 0.55in; }}
   body {{ font-size: 10.5pt; line-height: 1.5; background: #fff; }}
   .wrap {{ display: block; max-width: none; padding: 0; }}
   nav.toc, .themetoggle {{ display: none; }}
