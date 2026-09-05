@@ -50,12 +50,12 @@ def diagnoses(ctx: Context) -> list[Finding]:
         f"""WITH s AS (SELECT patient_id, unnest([{ENC_DIAG}]) AS code FROM visits),
         f AS (SELECT code, count(*) AS slots, count(DISTINCT patient_id) AS pts
               FROM s WHERE code IS NOT NULL AND trim(code) <> ''
-              GROUP BY 1 ORDER BY slots DESC {{limit}}),
+              GROUP BY 1 ORDER BY slots DESC, code {{limit}}),
         l AS ({ICD_LOOKUP})
         SELECT f.code, coalesce(l.descr, '[not in the ICD-10 lookup]'),
                f.slots, f.pts
         FROM f LEFT JOIN l ON replace(f.code, '.', '') = l.code
-        ORDER BY f.slots DESC""")
+        ORDER BY f.slots DESC, f.code""")
     enc_covered = 100.0 * sum(r[2] for r in top_enc) / enc_total
 
     top_pl, pl_distinct, pl_complete = listing(ctx,
@@ -63,12 +63,12 @@ def diagnoses(ctx: Context) -> list[Finding]:
         f"""WITH f AS (SELECT pl_diag AS code, count(*) AS entries,
                           count(DISTINCT patient_id) AS pts
                    FROM problem_list WHERE pl_diag IS NOT NULL
-                   GROUP BY 1 ORDER BY entries DESC {{limit}}),
+                   GROUP BY 1 ORDER BY entries DESC, code {{limit}}),
         l AS ({ICD_LOOKUP})
         SELECT f.code, coalesce(l.descr, '[not in the ICD-10 lookup]'),
                f.entries, f.pts
         FROM f LEFT JOIN l ON replace(f.code, '.', '') = l.code
-        ORDER BY f.entries DESC""")
+        ORDER BY f.entries DESC, f.code""")
 
     pc = patient_codes(ctx)
     cats, silent = ctx.one(f"""
@@ -81,10 +81,10 @@ def diagnoses(ctx: Context) -> list[Finding]:
         f"SELECT count(DISTINCT substr(code, 1, 3)) FROM {pc}",
         f"""WITH f AS (SELECT substr(code, 1, 3) AS cat,
                           count(DISTINCT patient_id) AS n
-                   FROM {pc} GROUP BY 1 ORDER BY n DESC {{limit}}),
+                   FROM {pc} GROUP BY 1 ORDER BY n DESC, cat {{limit}}),
         l AS ({ICD_LOOKUP})
         SELECT f.cat, coalesce(l.descr, '[not in the ICD-10 lookup]'), f.n
-        FROM f LEFT JOIN l ON f.cat = l.code ORDER BY f.n DESC""")
+        FROM f LEFT JOIN l ON f.cat = l.code ORDER BY f.n DESC, f.cat""")
     rollup = [{"category": c, "descr": d, "patients": n} for c, d, n in roll_raw]
 
     pl_rows, pl_pts, pl_resolved = ctx.one(
@@ -162,7 +162,7 @@ def labs(ctx: Context) -> list[Finding]:
         """SELECT lab_procedure_name, count(*) AS n,
                   count(DISTINCT patient_id) AS pts
            FROM labs WHERE lab_procedure_name IS NOT NULL
-           GROUP BY 1 ORDER BY n DESC {limit}""")
+           GROUP BY 1 ORDER BY n DESC, lab_procedure_name {limit}""")
     no_result = ctx.scalar(
         "SELECT count(*) FROM labs WHERE result_value IS NULL "
         "OR trim(result_value) = ''")
@@ -215,12 +215,12 @@ def medications(ctx: Context) -> list[Finding]:
         """SELECT med_simple_generic_name, count(*) AS n,
                   count(DISTINCT patient_id) AS pts
            FROM medications WHERE med_simple_generic_name IS NOT NULL
-           GROUP BY 1 ORDER BY n DESC {limit}""")
+           GROUP BY 1 ORDER BY n DESC, med_simple_generic_name {limit}""")
     kinds = ctx.q("""
         SELECT med_record_type, count(*) AS n, count(DISTINCT patient_id) AS pts,
                100.0 * count(med_start_date_age_in_days) / count(*) AS start_pct,
                100.0 * count(med_end_date_age_in_days) / count(*) AS end_pct
-        FROM medications GROUP BY 1 ORDER BY n DESC""")
+        FROM medications GROUP BY 1 ORDER BY n DESC, med_record_type""")
     absent = ["med_therapeutic_class", "med_pharmaceutical_class",
               "med_pharmaceutical_subclass"]
 
@@ -271,7 +271,7 @@ def referrals(ctx: Context) -> list[Finding]:
                   quantile_cont(referral_date_age_in_days, 0.5) / 365.25 AS med_age
            FROM referrals WHERE requested_specialty IS NOT NULL
              AND trim(requested_specialty) <> ''
-           GROUP BY 1 ORDER BY n DESC {limit}""")
+           GROUP BY 1 ORDER BY n DESC, requested_specialty {limit}""")
     spec_missing, visits_missing = ctx.one(
         "SELECT sum(CASE WHEN requested_specialty IS NULL "
         "         OR trim(requested_specialty) = '' THEN 1 ELSE 0 END), "
@@ -334,7 +334,7 @@ def identity(ctx: Context) -> list[Finding]:
         """These vocabularies are short enough to list in full."""
         return ctx.q(f"""
             SELECT coalesce(nullif(trim(CAST({col} AS VARCHAR)), ''), '[blank]') AS v,
-                   count(*) AS n FROM patients GROUP BY 1 ORDER BY n DESC""")
+                   count(*) AS n FROM patients GROUP BY 1 ORDER BY n DESC, v""")
 
     sex_rows = [{"category": v, "patients": n, "share": 100.0 * n / total}
                 for v, n in dist("sex")]

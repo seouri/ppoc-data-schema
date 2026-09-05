@@ -27,7 +27,7 @@ def codes(ctx: Context) -> list[Finding]:
         SELECT code, count(*) FROM slots
         WHERE code IS NOT NULL AND trim(code) <> ''
           AND NOT regexp_matches(code, '{ICD10}')
-        GROUP BY 1 ORDER BY 2 DESC LIMIT 6""")
+        GROUP BY 1 ORDER BY 2 DESC, code LIMIT 6""")
 
     loinc_total, loinc_have = ctx.one(
         "SELECT count(*), count(result_loinc_code) FROM labs")
@@ -133,7 +133,7 @@ def capture(ctx: Context) -> list[Finding]:
                   100.0 * count(height_in) / count(*) AS h,
                   100.0 * count(enc_diag_1) / count(*) AS d
            FROM visits_augmented WHERE encounter_type IS NOT NULL
-           GROUP BY 1 ORDER BY n DESC {limit}""")
+           GROUP BY 1 ORDER BY n DESC, encounter_type {limit}""")
     # A type existing is itself informative, so the row stays and only its
     # numbers are withheld when the cell is too small to show.
     rows = [{"encounter": e,
@@ -148,7 +148,7 @@ def capture(ctx: Context) -> list[Finding]:
         SELECT orig_enc_source_Epic_yn AS src, count(*) AS n,
                100.0 * count(height_in) / count(*) AS h,
                100.0 * count(enc_diag_1) / count(*) AS d
-        FROM visits_augmented GROUP BY 1 ORDER BY n DESC""")
+        FROM visits_augmented GROUP BY 1 ORDER BY n DESC, src""")
     epic_rows = [{"source": "Epic" if s == "Y" else "converted from a legacy system",
                   "visits": n, "height": h, "diag": d} for s, n, h, d in epic]
 

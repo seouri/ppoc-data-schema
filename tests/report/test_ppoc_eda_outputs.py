@@ -157,3 +157,20 @@ def test_coverage_map_cites_only_sections_that_exist() -> None:
             cited.update(re.findall(r"\b(\d+\.\d+)\b", row.get("note", "")))
     missing = sorted(cited - existing)
     assert not missing, f"coverage map cites sections that do not exist: {missing}"
+
+
+def test_frequency_orderings_carry_a_tiebreak() -> None:
+    """A frequency ordering without a tiebreak is not reproducible.
+
+    DuckDB orders ties by whatever its parallel scan produced, so `ORDER BY n
+    DESC` alone lets equal-count rows swap between runs. That rewrites the
+    committed HTML and PDF on every rebuild and defeats the change-detection
+    gate, which is how it was found.
+    """
+    probes = Path(__file__).resolve().parents[2] / "reports" / "ppoc_eda" / "probes"
+    offenders = []
+    for path in probes.glob("*.py"):
+        for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if re.search(r"ORDER BY .*\bDESC\b", line) and "DESC," not in line:
+                offenders.append(f"{path.name}:{n}: {line.strip()}")
+    assert not offenders, "frequency ordering without a tiebreak:\n" + "\n".join(offenders)

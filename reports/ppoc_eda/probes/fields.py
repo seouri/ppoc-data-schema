@@ -142,7 +142,7 @@ def sentinels(ctx: Context) -> list[Finding]:
     flag_raw, flag_distinct, flag_complete = listing(ctx,
         "SELECT count(*) FROM (SELECT result_flag FROM labs GROUP BY 1)",
         "SELECT result_flag, count(*) AS n FROM labs "
-        "GROUP BY 1 ORDER BY n DESC {limit}")
+        "GROUP BY 1 ORDER BY n DESC, result_flag {limit}")
     flag_rows = [
         {"value": v if v is not None else "null", "rows": ctx.suppress(n),
          "meaning": "normal result" if v is None else "abnormal"}

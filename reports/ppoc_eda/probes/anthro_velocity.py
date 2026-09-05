@@ -66,7 +66,7 @@ def velocity(ctx: Context) -> list[Finding]:
     gap_rows = ctx.q("""
         SELECT delta_age_in_days_height AS gap, count(*) FROM visits_augmented
         WHERE delta_age_in_days_height IS NOT NULL
-        GROUP BY 1 ORDER BY 2 DESC LIMIT 8""")
+        GROUP BY 1 ORDER BY 2 DESC, gap LIMIT 8""")
 
     f = Finding(
         id="anthro.velocity", part="4.8",

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-05T20:35:55Z",
+  "generated_at": "2026-09-05T20:50:58Z",
   "parts": [
     {
       "findings": [
@@ -1501,17 +1501,12 @@
                 {
                   "meaning": "abnormal",
                   "rows": null,
-                  "value": "Invalid Low"
-                },
-                {
-                  "meaning": "abnormal",
-                  "rows": null,
                   "value": "Delta Abnormal High"
                 },
                 {
                   "meaning": "abnormal",
                   "rows": null,
-                  "value": "In Process"
+                  "value": "Invalid Low"
                 },
                 {
                   "meaning": "abnormal",
@@ -1521,17 +1516,17 @@
                 {
                   "meaning": "abnormal",
                   "rows": null,
-                  "value": "Delta Critical High"
-                },
-                {
-                  "meaning": "abnormal",
-                  "rows": null,
                   "value": "Class 2: Moderate Level Allergen Specific IgE"
                 },
                 {
                   "meaning": "abnormal",
                   "rows": null,
-                  "value": "Sig Change Down"
+                  "value": "Delta Critical High"
+                },
+                {
+                  "meaning": "abnormal",
+                  "rows": null,
+                  "value": "In Process"
                 },
                 {
                   "meaning": "abnormal",
@@ -1541,12 +1536,17 @@
                 {
                   "meaning": "abnormal",
                   "rows": null,
-                  "value": "Moderately Sensitive"
+                  "value": "Sig Change Down"
                 },
                 {
                   "meaning": "abnormal",
                   "rows": null,
                   "value": "Delta Abnormal Low"
+                },
+                {
+                  "meaning": "abnormal",
+                  "rows": null,
+                  "value": "Moderately Sensitive"
                 },
                 {
                   "meaning": "abnormal",
@@ -2020,13 +2020,6 @@
                 },
                 {
                   "diag": null,
-                  "encounter": "Erroneous Telephone Encounter",
-                  "height": null,
-                  "visits": null,
-                  "weight": null
-                },
-                {
-                  "diag": null,
                   "encounter": "Episode Changes",
                   "height": null,
                   "visits": null,
@@ -2034,7 +2027,7 @@
                 },
                 {
                   "diag": null,
-                  "encounter": "OurPractice Advisory",
+                  "encounter": "Erroneous Telephone Encounter",
                   "height": null,
                   "visits": null,
                   "weight": null
@@ -2042,6 +2035,13 @@
                 {
                   "diag": null,
                   "encounter": "ED",
+                  "height": null,
+                  "visits": null,
+                  "weight": null
+                },
+                {
+                  "diag": null,
+                  "encounter": "OurPractice Advisory",
                   "height": null,
                   "visits": null,
                   "weight": null

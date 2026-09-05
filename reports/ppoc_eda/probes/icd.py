@@ -43,9 +43,9 @@ def hierarchy(ctx: Context) -> list[Finding]:
             HAVING sum(CASE WHEN code = substr(code, 1, 3) THEN 1 ELSE 0 END) = 0)""")
 
     literal = ctx.q(f"""SELECT code, count(DISTINCT patient_id) AS n FROM {pc}
-                        GROUP BY 1 ORDER BY n DESC LIMIT 6""")
+                        GROUP BY 1 ORDER BY n DESC, code LIMIT 6""")
     rolled = ctx.q(f"""SELECT substr(code, 1, 3), count(DISTINCT patient_id) AS n
-                       FROM {pc} GROUP BY 1 ORDER BY n DESC LIMIT 6""")
+                       FROM {pc} GROUP BY 1 ORDER BY n DESC, 1 LIMIT 6""")
     rows = [{"rank": i + 1, "literal": lc, "literal_n": ln,
              "category": rc, "category_n": rn}
             for i, ((lc, ln), (rc, rn)) in enumerate(zip(literal, rolled, strict=True))]
@@ -58,7 +58,7 @@ def hierarchy(ctx: Context) -> list[Finding]:
                          f"WHERE code LIKE '{ex_cat}%'")
     ex_children = ctx.q(f"""SELECT code, count(DISTINCT patient_id) AS n FROM {pc}
                             WHERE code LIKE '{ex_cat}%' GROUP BY 1
-                            ORDER BY n DESC LIMIT 5""")
+                            ORDER BY n DESC, code LIMIT 5""")
 
     f = Finding(
         id="icd.hierarchy", part="3.9",

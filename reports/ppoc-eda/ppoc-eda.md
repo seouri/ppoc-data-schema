@@ -349,16 +349,16 @@ Two of the largest null populations in this extract are not missing data at all,
 | Low Off-Scale | 17 | abnormal |
 | Critical Low | 13 | abnormal |
 | Class 0: Absent Allergen Specific IgE | — | abnormal |
-| Invalid Low | — | abnormal |
 | Delta Abnormal High | — | abnormal |
-| In Process | — | abnormal |
+| Invalid Low | — | abnormal |
 | Better | — | abnormal |
-| Delta Critical High | — | abnormal |
 | Class 2: Moderate Level Allergen Specific IgE | — | abnormal |
-| Sig Change Down | — | abnormal |
+| Delta Critical High | — | abnormal |
+| In Process | — | abnormal |
 | Class 3: High Level Allergen Specific IgE | — | abnormal |
-| Moderately Sensitive | — | abnormal |
+| Sig Change Down | — | abnormal |
 | Delta Abnormal Low | — | abnormal |
+| Moderately Sensitive | — | abnormal |
 | Worse | — | abnormal |
 
 All 36 distinct values are listed.
@@ -459,10 +459,10 @@ Completeness by age says how often a column is filled. Encounter type says wheth
 | Routine Prenatal | — | — | — | — |
 | Transcribe Orders | — | — | — | — |
 | Patient Care Review | — | — | — | — |
-| Erroneous Telephone Encounter | — | — | — | — |
 | Episode Changes | — | — | — | — |
-| OurPractice Advisory | — | — | — | — |
+| Erroneous Telephone Encounter | — | — | — | — |
 | ED | — | — | — | — |
+| OurPractice Advisory | — | — | — | — |
 | Treatment | — | — | — | — |
 
 All 45 distinct values are listed. 9 carry too few visits to show a count.
