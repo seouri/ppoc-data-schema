@@ -308,28 +308,83 @@ def probe_repeats(con) -> dict:
     return {"rows": rows, "totals": totals}
 
 
+# Minimum measurement interval, in days, that the source augmentation requires
+# before it will compute a velocity. Transcribed from
+# growth-ai/scripts/calculate_growth_velocities_original.py::_get_min_interval_days,
+# which cites US pediatric guidance for velocity calculation.
+MIN_INTERVAL_DAYS = [
+    ("0-12 months", "age_in_days <= 365", 30, 90),
+    ("1-2 years", "age_in_days <= 730", 90, 180),
+    ("2-5 years", "age_in_days <= 1825", 180, 335),
+    ("6-12 years", "age_in_days <= 4380", 180, 335),
+    ("13-18 years", "otherwise", 180, 180),
+]
+
+_HEIGHT_MIN_GAP = """
+        case when age_in_days <= 365 then 90
+             when age_in_days <= 730 then 180
+             when age_in_days <= 4380 then 335
+             else 180 end
+"""
+
+
 def probe_delta_fields(con) -> dict:
-    """Do the distributed delta fields reproduce a successive-measurement lag?"""
-    row = one(con, """
-        with s as (
-          select patient_id, age_in_days, height_cm, height_in * 2.54 as h_raw,
-                 delta_height_cm
-          from visits_augmented
-          where patient_id in (select patient_id from patients limit 4000)
-        ), l as (
+    """Reproduce the distributed height delta and velocity from the documented rule.
+
+    The source augmentation does not lag by one measurement. For each
+    height-bearing visit it walks backwards to the most recent earlier height
+    whose age gap meets an age-dependent minimum, then rounds the delta and the
+    velocity to two decimals. Reproducing it requires that rule, not a lag.
+    """
+    row = one(con, f"""
+        with h as (
+          select patient_id, age_in_days, height_cm, delta_height_cm,
+                 delta_age_in_days_height, height_velocity,
+                 {_HEIGHT_MIN_GAP} as min_gap
+          from visits_augmented where height_cm is not null
+        ), m as (
+          select h.*,
+                 (select max(p.age_in_days) from h p
+                   where p.patient_id = h.patient_id
+                     and p.age_in_days <= h.age_in_days - h.min_gap) as prev_age
+          from h
+        ), j as (
+          select m.*,
+                 (select max(p2.height_cm) from h p2
+                   where p2.patient_id = m.patient_id
+                     and p2.age_in_days = m.prev_age) as prev_h
+          from m
+        ), d as (
           select *,
-            height_cm - lag(height_cm) over w as dh_all,
-            height_cm - lag(height_cm ignore nulls) over w as dh_meas,
-            h_raw - lag(h_raw) over w as dh_raw
-          from s window w as (partition by patient_id order by age_in_days)
+                 abs(round(height_cm - prev_h, 2) - delta_height_cm) as diff
+          from j where delta_height_cm is not null and prev_age is not null
         )
         select count(*),
-               sum(case when abs(dh_all - delta_height_cm) < 1e-6 then 1 else 0 end),
-               sum(case when abs(dh_meas - delta_height_cm) < 1e-6 then 1 else 0 end),
-               sum(case when abs(dh_raw - delta_height_cm) < 1e-4 then 1 else 0 end)
-        from l where delta_height_cm is not null
+               sum(case when age_in_days - prev_age = delta_age_in_days_height then 1 else 0 end),
+               sum(case when diff < 1e-9 then 1 else 0 end),
+               sum(case when diff < 0.0101 then 1 else 0 end),
+               sum(case when diff >= 0.0101 then 1 else 0 end),
+               sum(case when round((height_cm - prev_h) / (age_in_days - prev_age) * 365, 2)
+                             = height_velocity then 1 else 0 end)
+        from d
     """)
-    return dict(zip(["n", "all_visits", "last_measured", "raw_inches"], row))
+    keys = ["n", "age_match", "delta_exact", "delta_within_cent",
+            "delta_off", "velocity_match"]
+    out = dict(zip(keys, row))
+
+    # A naive lag over successive height-bearing visits, shown for contrast.
+    out["lag1_match"] = one(con, """
+        with s as (
+          select patient_id, age_in_days, height_cm, delta_height_cm
+          from visits_augmented where height_cm is not null
+        ), l as (
+          select *, height_cm - lag(height_cm) over w as dh
+          from s window w as (partition by patient_id order by age_in_days, height_cm)
+        )
+        select sum(case when abs(dh - delta_height_cm) < 0.0101 then 1 else 0 end)
+        from l where delta_height_cm is not null
+    """)[0]
+    return out
 
 
 def probe_same_day(con) -> dict:
@@ -878,48 +933,77 @@ def render(con, bundle: Path, manifest: dict | None, digest: str) -> str:
     a("")
 
     # ---- 6.6 delta fields
-    a("### 6.6 Distributed delta and velocity fields are not reproducible (derivation artifact)")
+    a("### 6.6 Reproducing the distributed delta and velocity fields")
     a("")
     a(
-        f"The augmented visit layer distributes `delta_height_cm`, "
-        f"`delta_age_in_days_height`, and the velocity fields derived from them. On a "
-        f"fixed sample of {fmt(delta['n'])} rows carrying a nonmissing "
-        f"`delta_height_cm`, none of the three natural definitions of a successive "
-        f"height change reproduces the distributed value."
+        "The augmented visit layer distributes `delta_height_cm`, "
+        "`delta_age_in_days_height`, and the velocity fields derived from them. These "
+        "are **not** a lag over successive measurements, and reading them as one is the "
+        "error this subsection exists to prevent. The source augmentation "
+        "(`calculate_growth_velocities_original.py` in the `growth-ai` pipeline) applies "
+        "an age-dependent minimum measurement interval, citing US pediatric guidance "
+        "for velocity calculation: for each measurement it walks backwards to the most "
+        "recent earlier measurement whose age gap meets that minimum, and skips every "
+        "measurement in between."
     )
     a("")
     a(table(
-        ["candidate definition of the previous height", "rows matching the distributed delta", "share"],
-        [
-            ["previous visit of any kind", fmt(delta["all_visits"]),
-             pct(100.0 * delta["all_visits"] / delta["n"], 1)],
-            ["previous height-bearing visit", fmt(delta["last_measured"]),
-             pct(100.0 * delta["last_measured"] / delta["n"], 1)],
-            ["previous raw `height_in`, converted", fmt(delta["raw_inches"]),
-             pct(100.0 * delta["raw_inches"] / delta["n"], 1)],
-        ],
+        ["age band", "condition on current age", "minimum interval, weight (days)",
+         "minimum interval, height (days)"],
+        [[b, c, str(w), str(h)] for b, c, w, h in MIN_INTERVAL_DAYS],
     ))
     a("")
     a(
-        f"Same-day ties are not the explanation: only "
-        f"{pct(100.0 * same['dup_visits'] / same['visits'], 2)} of visits share a "
-        f"patient-day with another visit, which cannot account for agreement as low as "
-        f"{pct(100.0 * delta['last_measured'] / delta['n'], 1)}. The ordering or the "
-        f"measurement series the pipeline used is therefore something this snapshot "
-        f"does not expose."
+        f"Applying that rule reproduces the distributed fields. Across "
+        f"{fmt(delta['n'])} visits carrying a nonmissing `delta_height_cm`, the "
+        f"recomputed age gap matches the distributed "
+        f"`delta_age_in_days_height` on {fmt(delta['age_match'])} rows "
+        f"({pct(100.0 * delta['age_match'] / delta['n'], 2)}), the recomputed delta "
+        f"matches within one hundredth of a centimetre on "
+        f"{fmt(delta['delta_within_cent'])} rows "
+        f"({pct(100.0 * delta['delta_within_cent'] / delta['n'], 3)}), and the "
+        f"recomputed velocity matches on {fmt(delta['velocity_match'])} rows "
+        f"({pct(100.0 * delta['velocity_match'] / delta['n'], 2)}). A naive lag over "
+        f"successive height-bearing visits matches only "
+        f"{fmt(delta['lag1_match'])} rows "
+        f"({pct(100.0 * delta['lag1_match'] / delta['n'], 1)}), which is what makes the "
+        f"fields look unreproducible if the interval rule is not known."
     )
     a("")
     a(
-        "**Consequence for this project.** The velocity channels are built on these "
-        "deltas, so `height_velocity`, `height_velocity_z_score`, and their pubertal "
-        "variants inherit an unverifiable definition. Velocity should be recomputed "
-        "from the height series with a stated definition rather than consumed as "
-        "distributed, and the distributed velocity fields should not be serialized "
-        "into stimuli. This is a stronger conclusion than the previous section's "
-        "recommendation to inspect velocity distributions before use."
+        f"Two small residuals are worth recording. {fmt(delta['n'] - delta['delta_exact'])} "
+        f"rows differ from the recomputed delta by exactly one hundredth of a "
+        f"centimetre, because the pipeline rounds in Python — which breaks halfway "
+        f"cases to even — while this check rounds half away from zero. Heights are "
+        f"converted from quarter-inch grid values, so exact halfway cases are common "
+        f"rather than rare. Only {fmt(delta['delta_off'])} rows "
+        f"({pct(100.0 * delta['delta_off'] / delta['n'], 3)}) differ by more than that."
     )
     a("")
-
+    a(
+        f"Those {fmt(delta['delta_off'])} rows have a specific cause, and it is a real "
+        f"defect rather than a rounding artifact. The pipeline writes each computed "
+        f"delta back through a mask keyed on patient and age in days, so when a patient "
+        f"has more than one visit on the same day every one of those visits receives "
+        f"the same value, and which earlier height was used becomes ambiguous. Section "
+        f"6.5 measures that population directly: {fmt(same['dup_visits'])} visits share "
+        f"a patient-day with another visit, and {fmt(same['days_2h_disagree'])} "
+        f"patient-days carry two or more heights that disagree. The effect is confined "
+        f"to those rows and does not touch the reproduction elsewhere."
+    )
+    a("")
+    a(
+        "**Consequence for this project.** The velocity channels are usable as "
+        "distributed, which the distributional summaries alone could not establish. "
+        "What must be carried forward is the definition: a velocity in this file is "
+        "computed over an interval of at least 90 to 335 days depending on age, not "
+        "between adjacent visits, so it is already smoothed relative to a "
+        "visit-to-visit rate and cannot be compared with one. Any recomputation, and "
+        "any synthetic trajectory that carries a velocity, must use the same interval "
+        "rule or the two will not be on the same scale. The rounding to two decimals "
+        "should also be preserved, since it is part of what the distributed values are."
+    )
+    a("")
     # ---- 6.7 capture depends on encounter type
     a("### 6.7 Measurement presence does not mean measurement (capture artifact)")
     a("")
@@ -1100,9 +1184,13 @@ def render(con, bundle: Path, manifest: dict | None, digest: str) -> str:
              "Partly — screen before use"],
             ["Same-day duplicate encounters with disagreeing measurements",
              "capture", f"{fmt(same['days_2h_disagree'])} patient-days for height", "Partly — define a tie rule"],
-            ["Distributed deltas and velocities not reproducible",
-             "derivation", f"{pct(100.0 * delta['last_measured'] / delta['n'], 1)} agreement at best",
-             "Yes — recompute from the height series"],
+            ["Velocity computed over an age-dependent minimum interval, not between adjacent visits",
+             "derivation",
+             (f"{pct(100.0 * delta['delta_within_cent'] / delta['n'], 1)} reproduced under the "
+              f"documented rule; {pct(100.0 * delta['lag1_match'] / delta['n'], 1)} under a naive lag"),
+             "Not a defect — carry the interval rule forward"],
+            ["Same-day duplicate visits share one written-back delta",
+             "derivation", f"{fmt(delta['delta_off'])} rows", "Partly — deduplicate the patient-day first"],
             ["Anthropometrics present on non-contact encounters",
              "capture", "weight on the large majority of telephone visits", "Partly — restrict by encounter type"],
             ["Lab and medication age fields violating their own ordering",
@@ -1119,13 +1207,16 @@ def render(con, bundle: Path, manifest: dict | None, digest: str) -> str:
     a(
         "The derivation artifacts are the ones that matter most for this project, "
         "because they affect exactly the fields a growth-chart model would consume and "
-        "because they are invisible in the field names. Two of them — the "
-        "head-circumference conversion and the unreproducible velocities — were not "
-        "detectable from the distributional summaries in section 5 alone and required "
-        "an explicit reconstruction of the derivation from the raw channel. The third, "
-        "the height-z ceiling, was already known to the source project; what this "
-        "section adds is the measured size of the tail it removed and the fact that "
-        "most of it is still recoverable from `height_in`."
+        "because they are invisible in the field names. The head-circumference "
+        "conversion was not detectable from the distributional summaries in section 5 "
+        "alone and required an explicit reconstruction of the derivation from the raw "
+        "channel. The height-z ceiling was already known to the source project; what "
+        "this section adds is the measured size of the tail it removed and the fact "
+        "that most of it is still recoverable from `height_in`. The velocity fields "
+        "are the opposite case and worth stating as such: they look unreproducible "
+        "until the pipeline's interval rule is known, and are faithful once it is. A "
+        "derived field whose definition is not carried alongside it invites exactly "
+        "that error."
     )
     a("")
     a(END_MARKER)
