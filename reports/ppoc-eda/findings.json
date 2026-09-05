@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-05T19:05:54Z",
+  "generated_at": "2026-09-05T19:18:15Z",
   "parts": [
     {
       "findings": [
@@ -1730,6 +1730,71 @@
             "tele_visits": 22053,
             "tele_weight": 99.2699405977
           }
+        },
+        {
+          "artifact": {
+            "kind": "capture",
+            "name": "Two measurements of one channel on one patient-day that disagree",
+            "recoverable": "Partly — define an explicit tie rule before ordering by age",
+            "scale": "942 patient-days for height, median spread 3.17 cm"
+          },
+          "id": "integrity.sameday",
+          "part": "3.8",
+          "tables": [
+            {
+              "caption": "Patient-days carrying more than one value of a channel",
+              "columns": [
+                "channel",
+                "multi",
+                "disagree",
+                "share",
+                "median",
+                "p95",
+                "max"
+              ],
+              "id": "t-sameday",
+              "rows": [
+                {
+                  "channel": "height",
+                  "disagree": 942,
+                  "max": 34.925,
+                  "median": 3.175,
+                  "multi": 2958,
+                  "p95": 12.1619,
+                  "share": 31.845841785,
+                  "unit": "cm"
+                },
+                {
+                  "channel": "weight",
+                  "disagree": 2648,
+                  "max": 36.568,
+                  "median": 0.118,
+                  "multi": 5319,
+                  "p95": 3.64355,
+                  "share": 49.7837939462,
+                  "unit": "kg"
+                },
+                {
+                  "channel": "head circumference",
+                  "disagree": 837,
+                  "max": 397.76,
+                  "median": 0.51,
+                  "multi": 1475,
+                  "p95": 27.798,
+                  "share": 56.7457627119,
+                  "unit": "cm"
+                }
+              ]
+            }
+          ],
+          "title": "Same-day measurements that disagree",
+          "values": {
+            "h_disagree": 942,
+            "h_max": 34.925,
+            "h_median": 3.175,
+            "h_multi": 2958,
+            "h_share": 31.845841785
+          }
         }
       ],
       "number": "3",
@@ -3356,6 +3421,313 @@
             "within": 2786432,
             "within_share": 99.9878712631
           }
+        },
+        {
+          "figures": [
+            {
+              "caption": "Mean height z-score by age band and sex",
+              "data": {
+                "height": 280,
+                "series": [
+                  {
+                    "name": "female",
+                    "values": [
+                      0.363,
+                      0.354,
+                      0.119,
+                      0.218,
+                      -0.0
+                    ]
+                  },
+                  {
+                    "name": "male",
+                    "values": [
+                      0.341,
+                      0.338,
+                      0.208,
+                      0.312,
+                      0.147
+                    ]
+                  }
+                ],
+                "title": "Mean height z by age and sex",
+                "x": [
+                  "0-2",
+                  "2-5",
+                  "5-10",
+                  "10-15",
+                  "15-18"
+                ]
+              },
+              "id": "fig-profile",
+              "kind": "line"
+            }
+          ],
+          "id": "anthro.profile",
+          "part": "4.9",
+          "tables": [
+            {
+              "caption": "Measurements and derived z-scores by age band and sex",
+              "columns": [
+                "band",
+                "sex",
+                "visits",
+                "patients",
+                "height_cm",
+                "height_z",
+                "height_z_sd",
+                "weight_z",
+                "bmi_z"
+              ],
+              "id": "t-profile",
+              "rows": [
+                {
+                  "band": "0-2",
+                  "bmi_z": null,
+                  "height_cm": 66.3476346281,
+                  "height_z": 0.362575076124,
+                  "height_z_sd": 1.00182444998,
+                  "patients": 95419,
+                  "sex": "F",
+                  "visits": 1294946,
+                  "weight_z": -0.144053260761
+                },
+                {
+                  "band": "0-2",
+                  "bmi_z": null,
+                  "height_cm": 67.9600505118,
+                  "height_z": 0.341356350454,
+                  "height_z_sd": 0.991784368648,
+                  "patients": 99226,
+                  "sex": "M",
+                  "visits": 1397984,
+                  "weight_z": -0.167217835011
+                },
+                {
+                  "band": "2-5",
+                  "bmi_z": 0.149913759555,
+                  "height_cm": 96.0331770295,
+                  "height_z": 0.3538396758,
+                  "height_z_sd": 0.97379108942,
+                  "patients": 92851,
+                  "sex": "F",
+                  "visits": 677359,
+                  "weight_z": 0.284784823105
+                },
+                {
+                  "band": "2-5",
+                  "bmi_z": 0.147652829695,
+                  "height_cm": 97.2579443399,
+                  "height_z": 0.338386127135,
+                  "height_z_sd": 0.994806736521,
+                  "patients": 96604,
+                  "sex": "M",
+                  "visits": 716626,
+                  "weight_z": 0.369128159475
+                },
+                {
+                  "band": "5-10",
+                  "bmi_z": 0.418003212596,
+                  "height_cm": 122.499994405,
+                  "height_z": 0.119409650239,
+                  "height_z_sd": 0.980503003565,
+                  "patients": 82246,
+                  "sex": "F",
+                  "visits": 745589,
+                  "weight_z": 0.362218286492
+                },
+                {
+                  "band": "5-10",
+                  "bmi_z": 0.428375351099,
+                  "height_cm": 123.634703733,
+                  "height_z": 0.208271129787,
+                  "height_z_sd": 0.988819889688,
+                  "patients": 85364,
+                  "sex": "M",
+                  "visits": 784028,
+                  "weight_z": 0.450707333126
+                },
+                {
+                  "band": "10-15",
+                  "bmi_z": 0.450907521556,
+                  "height_cm": 151.876601614,
+                  "height_z": 0.218173865579,
+                  "height_z_sd": 0.99287637789,
+                  "patients": 50775,
+                  "sex": "F",
+                  "visits": 366624,
+                  "weight_z": 0.489279070053
+                },
+                {
+                  "band": "10-15",
+                  "bmi_z": 0.475233924034,
+                  "height_cm": 152.660038502,
+                  "height_z": 0.311575018118,
+                  "height_z_sd": 1.01233831527,
+                  "patients": 52556,
+                  "sex": "M",
+                  "visits": 375601,
+                  "weight_z": 0.574730050832
+                },
+                {
+                  "band": "15-18",
+                  "bmi_z": 0.452939121156,
+                  "height_cm": 162.462547604,
+                  "height_z": -0.000374823523372,
+                  "height_z_sd": 0.991066928371,
+                  "patients": 17530,
+                  "sex": "F",
+                  "visits": 72447,
+                  "weight_z": 0.45157686695
+                },
+                {
+                  "band": "15-18",
+                  "bmi_z": 0.476486444884,
+                  "height_cm": 173.915952078,
+                  "height_z": 0.146814964283,
+                  "height_z_sd": 0.950298762345,
+                  "patients": 18049,
+                  "sex": "M",
+                  "visits": 63194,
+                  "weight_z": 0.646114897426
+                }
+              ]
+            }
+          ],
+          "title": "Age- and sex-stratified growth profile",
+          "values": {
+            "best_z": 0.362575076124,
+            "n_bands": 5,
+            "worst_z": -0.000374823523372
+          }
+        },
+        {
+          "id": "anthro.dependence",
+          "part": "4.10",
+          "tables": [
+            {
+              "caption": "Variance components and serial correlation",
+              "columns": [
+                "quantity",
+                "value",
+                "meaning"
+              ],
+              "id": "t-dependence",
+              "rows": [
+                {
+                  "meaning": "how far children sit from one another",
+                  "quantity": "between-child SD of patient means",
+                  "value": 0.913999250768
+                },
+                {
+                  "meaning": "how much one child's channel moves",
+                  "quantity": "within-child SD about a patient's own mean",
+                  "value": 0.426186297768
+                },
+                {
+                  "meaning": "share of variance that is between children",
+                  "quantity": "implied intraclass correlation",
+                  "value": 0.821406576794
+                },
+                {
+                  "meaning": "correlation of successive values, 1,744,631 pairs",
+                  "quantity": "lag-1 autocorrelation",
+                  "value": 0.924904374056
+                }
+              ]
+            }
+          ],
+          "title": "Within-child dependence in the height channel",
+          "values": {
+            "between": 0.913999250768,
+            "eff": 1.21742390218,
+            "icc": 0.821406576794,
+            "n_pat": 199727,
+            "pairs": 1744631,
+            "rho": 0.924904374056,
+            "within": 0.426186297768
+          }
+        },
+        {
+          "figures": [
+            {
+              "caption": "Distribution of recorded BMI categories",
+              "data": {
+                "categories": [
+                  "underweight",
+                  "normal",
+                  "overweight",
+                  "obese"
+                ],
+                "height": 240,
+                "series": [
+                  {
+                    "name": "visits",
+                    "values": [
+                      83602,
+                      1338418,
+                      280226,
+                      253091
+                    ]
+                  }
+                ],
+                "title": "BMI categories"
+              },
+              "id": "fig-bmi-cat",
+              "kind": "bar"
+            }
+          ],
+          "id": "anthro.bmi",
+          "part": "4.11",
+          "tables": [
+            {
+              "caption": "Recorded BMI categories",
+              "columns": [
+                "category",
+                "visits",
+                "share",
+                "patients"
+              ],
+              "id": "t-bmi-cat",
+              "rows": [
+                {
+                  "category": "underweight",
+                  "patients": 33608,
+                  "share": 4.27558011739,
+                  "visits": 83602
+                },
+                {
+                  "category": "normal",
+                  "patients": 193723,
+                  "share": 68.4494795526,
+                  "visits": 1338418
+                },
+                {
+                  "category": "overweight",
+                  "patients": 84669,
+                  "share": 14.3313403265,
+                  "visits": 280226
+                },
+                {
+                  "category": "obese",
+                  "patients": 49998,
+                  "share": 12.9436000035,
+                  "visits": 253091
+                }
+              ]
+            }
+          ],
+          "title": "BMI: recomputation and recorded categories",
+          "values": {
+            "med": 9.72365683083e-07,
+            "n": 1955339,
+            "obese_share": 12.9436000035,
+            "off": 0,
+            "off_share": 0.0,
+            "over_share": 14.3313403265,
+            "p95": 3.00341227408e-06,
+            "total": 1955337
+          }
         }
       ],
       "number": "4",
@@ -4156,6 +4528,391 @@
             "v95": 56.0,
             "vmax": 244,
             "vmean": 25.916935368
+          }
+        },
+        {
+          "figures": [
+            {
+              "caption": "Patients carrying each derived flag",
+              "data": {
+                "categories": [
+                  "healthy",
+                  "chronic_dx",
+                  "growth_dx",
+                  "stunting",
+                  "wasting",
+                  "underweight",
+                  "obesity"
+                ],
+                "height": 250,
+                "series": [
+                  {
+                    "name": "patients",
+                    "values": [
+                      24471,
+                      203935,
+                      35907,
+                      17889,
+                      66704,
+                      33608,
+                      49998
+                    ]
+                  }
+                ],
+                "title": "Derived patient flags"
+              },
+              "id": "fig-flags",
+              "kind": "bar"
+            }
+          ],
+          "id": "growth.flags",
+          "part": "5.6",
+          "tables": [
+            {
+              "caption": "Patient-level flags",
+              "columns": [
+                "flag",
+                "meaning",
+                "patients",
+                "share"
+              ],
+              "id": "t-flags",
+              "rows": [
+                {
+                  "flag": "healthy_flag",
+                  "meaning": "carries none of the tracked conditions",
+                  "patients": 24471,
+                  "share": 9.76543170463
+                },
+                {
+                  "flag": "chronic_dx_flag",
+                  "meaning": "any chronic diagnosis",
+                  "patients": 203935,
+                  "share": 81.3825881527
+                },
+                {
+                  "flag": "growth_dx_flag",
+                  "meaning": "any of the tracked growth-relevant diagnoses",
+                  "patients": 35907,
+                  "share": 14.3290979616
+                },
+                {
+                  "flag": "ever_stunting_flag",
+                  "meaning": "height z below the stunting threshold at any visit",
+                  "patients": 17889,
+                  "share": 7.13880952001
+                },
+                {
+                  "flag": "ever_wasting_flag",
+                  "meaning": "weight-for-length or -stature below the wasting threshold",
+                  "patients": 66704,
+                  "share": 26.6189921305
+                },
+                {
+                  "flag": "ever_underweight_flag",
+                  "meaning": "BMI below the underweight threshold at any visit",
+                  "patients": 33608,
+                  "share": 13.4116557856
+                },
+                {
+                  "flag": "ever_obesity_flag",
+                  "meaning": "BMI at or above the obesity threshold at any visit",
+                  "patients": 49998,
+                  "share": 19.9522722557
+                }
+              ]
+            },
+            {
+              "caption": "Per-patient z-score summaries, averaged over patients with more than one value",
+              "columns": [
+                "ch",
+                "n",
+                "mean",
+                "sd"
+              ],
+              "id": "t-zsummary",
+              "rows": [
+                {
+                  "ch": "height",
+                  "mean": 0.298015054881,
+                  "n": 248172,
+                  "sd": 0.514720462824
+                },
+                {
+                  "ch": "weight",
+                  "mean": 0.127462758068,
+                  "n": 249595,
+                  "sd": 0.537069369579
+                },
+                {
+                  "ch": "BMI",
+                  "mean": 0.292688785285,
+                  "n": 199693,
+                  "sd": 0.530873831331
+                }
+              ]
+            }
+          ],
+          "title": "Patient-level derived flags and summaries",
+          "values": {
+            "dx_first_month": 25208,
+            "dx_first_share": 70.2368347729,
+            "dx_median": 0.027,
+            "dx_negative": 35,
+            "dx_observed": 35890,
+            "growth_n": 35907,
+            "total": 250588
+          }
+        },
+        {
+          "id": "growth.codes",
+          "part": "5.7",
+          "tables": [
+            {
+              "caption": "The tracked growth-relevant diagnosis codes",
+              "columns": [
+                "code",
+                "descr",
+                "patients",
+                "median_age"
+              ],
+              "id": "t-growth-codes",
+              "rows": [
+                {
+                  "code": "P92.6",
+                  "descr": "Failure to thrive in newborn",
+                  "median_age": 0.025,
+                  "patients": 14428
+                },
+                {
+                  "code": "P07",
+                  "descr": "Disorders of newborn related to short gestation and low birth weight, not elsewhere classified",
+                  "median_age": 0.03,
+                  "patients": 11014
+                },
+                {
+                  "code": "P05",
+                  "descr": "Disorders of newborn related to slow fetal growth and fetal malnutrition",
+                  "median_age": 0.011,
+                  "patients": 4069
+                },
+                {
+                  "code": "E30.1",
+                  "descr": "Precocious puberty",
+                  "median_age": 7.871,
+                  "patients": 3405
+                },
+                {
+                  "code": "P70",
+                  "descr": "Transitory disorders of carbohydrate metabolism specific to newborn",
+                  "median_age": 0.003,
+                  "patients": 3353
+                },
+                {
+                  "code": "K90.0",
+                  "descr": "Celiac disease",
+                  "median_age": 7.199,
+                  "patients": 898
+                },
+                {
+                  "code": "E10",
+                  "descr": "Type 1 diabetes mellitus",
+                  "median_age": 7.858,
+                  "patients": 491
+                },
+                {
+                  "code": "E34.3",
+                  "descr": "Short stature due to endocrine disorder",
+                  "median_age": 10.387,
+                  "patients": 447
+                },
+                {
+                  "code": "E30.0",
+                  "descr": "Delayed puberty",
+                  "median_age": 13.637,
+                  "patients": 419
+                },
+                {
+                  "code": "E03.9",
+                  "descr": "Hypothyroidism, unspecified",
+                  "median_age": 6.004,
+                  "patients": 309
+                },
+                {
+                  "code": "Q90",
+                  "descr": "Down syndrome",
+                  "median_age": 0.049,
+                  "patients": 205
+                },
+                {
+                  "code": "E23.0",
+                  "descr": "Hypopituitarism",
+                  "median_age": 9.0265,
+                  "patients": 150
+                },
+                {
+                  "code": "K50",
+                  "descr": "Crohn's disease [regional enteritis]",
+                  "median_age": 11.064,
+                  "patients": 113
+                },
+                {
+                  "code": "E34.4",
+                  "descr": "Constitutional tall stature",
+                  "median_age": 4.047,
+                  "patients": 83
+                },
+                {
+                  "code": "N18",
+                  "descr": "Chronic kidney disease (CKD)",
+                  "median_age": 4.5355,
+                  "patients": 70
+                },
+                {
+                  "code": "K51",
+                  "descr": "Ulcerative colitis",
+                  "median_age": 11.9505,
+                  "patients": 62
+                },
+                {
+                  "code": "Q87.1",
+                  "descr": "Congenital malformation syndromes predominantly associated with short stature",
+                  "median_age": 3.261,
+                  "patients": 58
+                },
+                {
+                  "code": "P04.3",
+                  "descr": "Newborn affected by maternal use of alcohol",
+                  "median_age": 0.498,
+                  "patients": 53
+                },
+                {
+                  "code": "Q87.3",
+                  "descr": "Congenital malformation syndromes involving early overgrowth",
+                  "median_age": 1.763,
+                  "patients": 46
+                },
+                {
+                  "code": "Q98.4",
+                  "descr": "Klinefelter syndrome, unspecified",
+                  "median_age": 0.0205,
+                  "patients": 42
+                },
+                {
+                  "code": "Q96",
+                  "descr": "Turner's syndrome",
+                  "median_age": 0.145,
+                  "patients": 36
+                },
+                {
+                  "code": "Q87.2",
+                  "descr": "Congenital malformation syndromes predominantly involving limbs",
+                  "median_age": 1.7985,
+                  "patients": 32
+                },
+                {
+                  "code": "E23.6",
+                  "descr": "Other disorders of pituitary gland",
+                  "median_age": 8.285,
+                  "patients": 31
+                },
+                {
+                  "code": "Q98.0",
+                  "descr": "Klinefelter syndrome karyotype 47, XXY",
+                  "median_age": 0.018,
+                  "patients": 26
+                },
+                {
+                  "code": "Q98.5",
+                  "descr": "Karyotype 47, XYY",
+                  "median_age": 0.014,
+                  "patients": 17
+                },
+                {
+                  "code": "Q87.4",
+                  "descr": "Marfan syndrome",
+                  "median_age": 5.624,
+                  "patients": 17
+                },
+                {
+                  "code": "Q77",
+                  "descr": "Osteochondrodysplasia with defects of growth of tubular bones and spine",
+                  "median_age": 5.131,
+                  "patients": 15
+                },
+                {
+                  "code": "Q78.0",
+                  "descr": "Osteogenesis imperfecta",
+                  "median_age": 1.6335,
+                  "patients": 10
+                }
+              ]
+            },
+            {
+              "caption": "Referrals by growth-relevant specialty family",
+              "columns": [
+                "family",
+                "referrals",
+                "share",
+                "patients",
+                "median_age"
+              ],
+              "id": "t-growth-spec",
+              "rows": [
+                {
+                  "family": "Endocrinology",
+                  "median_age": 9.4045174538,
+                  "patients": 5790,
+                  "referrals": 6916,
+                  "share": 1.97697719158
+                },
+                {
+                  "family": "Gastroenterology",
+                  "median_age": 5.57700205339,
+                  "patients": 12764,
+                  "referrals": 14715,
+                  "share": 4.20636486035
+                },
+                {
+                  "family": "Nutrition and dietetics",
+                  "median_age": 9.39082819986,
+                  "patients": 8912,
+                  "referrals": 11038,
+                  "share": 3.15527389252
+                },
+                {
+                  "family": "Nephrology",
+                  "median_age": 6.03148528405,
+                  "patients": 937,
+                  "referrals": 1087,
+                  "share": 0.310725015508
+                },
+                {
+                  "family": "Genetics",
+                  "median_age": 3.19780971937,
+                  "patients": 2116,
+                  "referrals": 2426,
+                  "share": 0.693485637186
+                },
+                {
+                  "family": "all other specialties",
+                  "median_age": null,
+                  "patients": null,
+                  "referrals": 313645,
+                  "share": 89.6571734029
+                }
+              ]
+            }
+          ],
+          "title": "The extract's growth orientation: tracked codes and referral pathways",
+          "values": {
+            "matched": 36182,
+            "matched_share": 10.3428265971,
+            "n_codes": 33,
+            "n_shown": 28,
+            "ref_total": 349827,
+            "top_code": "P92.6",
+            "top_pts": 14428
           }
         }
       ],
@@ -5844,6 +6601,13 @@
                   "where": "3.7"
                 },
                 {
+                  "artifact": "Two measurements of one channel on one patient-day that disagree",
+                  "class": "capture",
+                  "recoverable": "Partly — define an explicit tie rule before ordering by age",
+                  "scale": "942 patient-days for height, median spread 3.17 cm",
+                  "where": "3.8"
+                },
+                {
                   "artifact": "Terminal-digit heaping on the imperial recording grid",
                   "class": "capture",
                   "recoverable": "No — it is the precision the measurement actually has",
@@ -5892,7 +6656,7 @@
           "values": {
             "kindlist": "capture, derivation, linkage, selection",
             "kinds": 4,
-            "n": 13
+            "n": 14
           }
         }
       ],

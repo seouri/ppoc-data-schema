@@ -419,6 +419,24 @@ The source-system split is the migration signal. Records converted from the prac
 
 **Implications for analysis.** A visit-level indicator that a measurement is present is not evidence that a measurement was taken at that encounter. If your design counts measurement occasions — visit density, monitoring intensity, follow-up adherence — restrict to encounter types where physical measurement is possible rather than relying on presence. And any diagnosis-based rate computed across the whole extract mixes two populations with very different coding completeness.
 
+### 3.8 Same-day measurements that disagree
+
+Section 3.1 shows that a patient-day can carry more than one visit. Where those visits each carry the same measurement, they often do not agree, and the size of the disagreement is a direct estimate of how far two records of the same child on the same day can sit apart.
+
+**Patient-days carrying more than one value of a channel**
+
+| channel | patient-days with 2 or more | of which they disagree | share disagreeing | median spread | 95th percentile | maximum |
+| --- | --- | --- | --- | --- | --- | --- |
+| height | 2,958 | 942 | 31.8% | 3.175 | 12.16 | 34.92 |
+| weight | 5,319 | 2,648 | 49.8% | 0.118 | 3.64 | 36.57 |
+| head circumference | 1,475 | 837 | 56.7% | 0.510 | 27.80 | 397.76 |
+
+Spread columns are in each channel's own unit and describe only the disagreeing days, not the panel.
+
+The height spread is the notable one. A median disagreement of 3.17 cm between two heights recorded for the same child on the same day is far larger in relative terms than the weight equivalent, and it is the size of difference expected when recumbent length and standing height are mixed, or when one value is carried from an earlier note. Section 4.5 finds the same effect across the length-to-height transition age, seen there across months rather than within a day.
+
+**Implications for analysis.** These days need a tie rule chosen before the analysis, not left to whatever order the query returns. Taking the minimum, the maximum, the mean, or the first row are all defensible and they give different answers; what is not defensible is not knowing which one you took. Deduplicate the patient-day before any window function, since 4.8 shows the derivation layer's own ambiguity on exactly these rows.
+
 ## 4. Anthropometrics
 
 The richest and most artifact-prone measurements in the extract.
@@ -665,6 +683,65 @@ Two residuals are worth recording. 372,482 rows differ by exactly one hundredth 
 
 **Implications for analysis.** The velocity channels are usable as distributed, which a distributional summary alone could not establish. What must travel with them is the definition: a velocity here is computed over an interval of at least 90 to 335 days depending on age, not between adjacent visits, so it is already smoothed relative to a visit-to-visit rate and cannot be compared with one. Any recomputation, and any synthetic series carrying a velocity, must use the same rule or the two are not on the same scale. The rounding to two decimals is part of what the distributed values are.
 
+### 4.9 Age- and sex-stratified growth profile
+
+A reference table for anyone who needs to know what ordinary looks like in this extract before deciding what is unusual. Mean z-scores run from -0.00 to 0.36 across the age and sex cells, so the cohort sits close to the reference population on average even though it is not a sample of one.
+
+**Measurements and derived z-scores by age band and sex**
+
+| age band (years) | sex | visits | patients | mean height | mean height z | height z SD | mean weight z | mean BMI z |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 0-2 | F | 1,294,946 | 95,419 | 66.3 cm | 0.363 | 1.002 | -0.144 | — |
+| 0-2 | M | 1,397,984 | 99,226 | 68.0 cm | 0.341 | 0.992 | -0.167 | — |
+| 2-5 | F | 677,359 | 92,851 | 96.0 cm | 0.354 | 0.974 | 0.285 | 0.150 |
+| 2-5 | M | 716,626 | 96,604 | 97.3 cm | 0.338 | 0.995 | 0.369 | 0.148 |
+| 5-10 | F | 745,589 | 82,246 | 122.5 cm | 0.119 | 0.981 | 0.362 | 0.418 |
+| 5-10 | M | 784,028 | 85,364 | 123.6 cm | 0.208 | 0.989 | 0.451 | 0.428 |
+| 10-15 | F | 366,624 | 50,775 | 151.9 cm | 0.218 | 0.993 | 0.489 | 0.451 |
+| 10-15 | M | 375,601 | 52,556 | 152.7 cm | 0.312 | 1.012 | 0.575 | 0.475 |
+| 15-18 | F | 72,447 | 17,530 | 162.5 cm | -0.000 | 0.991 | 0.452 | 0.453 |
+| 15-18 | M | 63,194 | 18,049 | 173.9 cm | 0.147 | 0.950 | 0.646 | 0.476 |
+
+*Figure — Mean height z-score by age band and sex. Rendered in `index.html` at `#fig-profile`.*
+
+**Implications for analysis.** Read the height-z column against 4.6 before using it: its upper tail is truncated at +3, so every mean here is pulled very slightly downward relative to an untruncated reference, and the effect grows in the bands where tall children are most numerous. The SD column is the more useful one for scaling, and it is close to 1 by construction of the z transform rather than as a finding.
+
+### 4.10 Within-child dependence in the height channel
+
+Repeated measurements of one child are not independent observations, and the size of that dependence decides how much information a visit count actually carries. Measured on the height z-score at age 2 or later, across 199,727 patients with at least two values.
+
+**Variance components and serial correlation**
+
+| quantity | value | what it says |
+| --- | --- | --- |
+| between-child SD of patient means | 0.9140 | how far children sit from one another |
+| within-child SD about a patient's own mean | 0.4262 | how much one child's channel moves |
+| implied intraclass correlation | 0.8214 | share of variance that is between children |
+| lag-1 autocorrelation | 0.9249 | correlation of successive values, 1,744,631 pairs |
+
+A child's height z-score is strongly self-similar: successive values correlate at 0.925, and 82.1% of the total variance is between children rather than within them. The design-effect consequence is blunt: in the limit of many measurements a child contributes about 1.2 independent observations, not one per visit, however many visits are recorded.
+
+**Implications for analysis.** Resample and model at the patient level, not the visit level: a visit-level standard error on any quantity aggregated across this panel will be far too small. And treat these as sample statistics rather than the parameters of a process that would generate them — a patient's mean carries residual variation as well as the child's own level, so the between-child SD of patient means overstates the underlying channel SD, while the sample SD within a positively autocorrelated series understates its marginal SD. Calibrate a generative model against these by simulation rather than by setting its parameters equal to them.
+
+### 4.11 BMI: recomputation and recorded categories
+
+BMI is the one derived channel that can be checked against its own inputs. Across 1,955,339 visits carrying a BMI together with both a weight and a height, recomputing weight in kilograms over height in metres squared gives a median absolute difference of 9.7e-07 and a 95th percentile of 3.0e-06 — floating-point noise, nothing more. 0 visits differ by more than 0.1. The channel is internally consistent, so a BMI here disagreeing with your own calculation means you used a different height or weight, not that the field is wrong.
+
+**Recorded BMI categories**
+
+| category | visits | share of categorised visits | distinct patients |
+| --- | --- | --- | --- |
+| underweight | 83,602 | 4.3% | 33,608 |
+| normal | 1,338,418 | 68.4% | 193,723 |
+| overweight | 280,226 | 14.3% | 84,669 |
+| obese | 253,091 | 12.9% | 49,998 |
+
+*Figure — Distribution of recorded BMI categories. Rendered in `index.html` at `#fig-bmi-cat`.*
+
+The category is present only where a BMI percentile is, which 1.3 and 3.4 show means age 2 or later. Of 1,955,337 categorised visits, 14.3% are overweight and 12.9% obese.
+
+**Implications for analysis.** This is a distribution over recorded visits, not a prevalence: children with more visits contribute more rows, BMI is missing selectively by age and encounter type, and 1.4 shows the cohort is not a population sample. Aggregate to the patient before quoting any proportion, state the age window, and prefer the continuous percentile to the category where the analysis allows it, since the cut points discard most of the information.
+
 ## 5. Other clinical domains
 
 Diagnoses, laboratory results, medications, referrals, and demographics.
@@ -865,6 +942,90 @@ Observation per patient is dense, as the cohort rule in 1.4 requires. The median
 
 **Implications for analysis.** Identity non-response is large enough to change a subgroup contrast on its own, so report it as its own category rather than dropping it. And because entry to this cohort required both a measurement history and a recent visit, the visit distribution describes the selection as much as the care; it is a feasibility figure, not an estimate of pediatric utilisation.
 
+### 5.6 Patient-level derived flags and summaries
+
+The augmented patient layer carries seven boolean flags and a block of per-patient z-score summaries. They are conveniences computed from the visit layer, not independent observations, and each inherits whatever the channel it summarises does — the height-z flags inherit the truncation of 4.6, the BMI flags inherit the age-2 floor of 1.3.
+
+**Patient-level flags**
+
+| flag | set when the patient | patients | share of cohort |
+| --- | --- | --- | --- |
+| healthy_flag | carries none of the tracked conditions | 24,471 | 9.8% |
+| chronic_dx_flag | any chronic diagnosis | 203,935 | 81.4% |
+| growth_dx_flag | any of the tracked growth-relevant diagnoses | 35,907 | 14.3% |
+| ever_stunting_flag | height z below the stunting threshold at any visit | 17,889 | 7.1% |
+| ever_wasting_flag | weight-for-length or -stature below the wasting threshold | 66,704 | 26.6% |
+| ever_underweight_flag | BMI below the underweight threshold at any visit | 33,608 | 13.4% |
+| ever_obesity_flag | BMI at or above the obesity threshold at any visit | 49,998 | 20.0% |
+
+*Figure — Patients carrying each derived flag. Rendered in `index.html` at `#fig-flags`.*
+
+`growth_dx_flag` marks 35,907 patients. Where an age at diagnosis is observed (35,890 patients) its median is 0.027 years, and 25,208 of those (70.2%) are assigned their code within the first month of life. That is a statement about when the code was recorded, not about when a condition began.
+
+**Per-patient z-score summaries, averaged over patients with more than one value**
+
+| channel | patients | mean of patient means | mean of patient SDs |
+| --- | --- | --- | --- |
+| height | 248,172 | 0.2980 | 0.5147 |
+| weight | 249,595 | 0.1275 | 0.5371 |
+| BMI | 199,693 | 0.2927 | 0.5309 |
+
+**Implications for analysis.** A flag is a recorded derivation, not an adjudicated clinical state, and the concentration of growth-diagnosis ages in the first month shows why: much of what the flag marks is perinatal coding rather than a growth trajectory that was observed and interpreted over years. Use the flags to describe the derived layer or to stratify descriptively; recompute from the visit layer against a stated rule if a flag is doing analytic work.
+
+### 5.7 The extract's growth orientation: tracked codes and referral pathways
+
+This extract was assembled around growth. Cohort entry required a growth-measurement history (1.4), and the augmentation layer records, for each patient, the age at which any of 33 specific diagnosis codes was first recorded. That panel is a design choice made upstream, and knowing which codes are in it is the difference between using the derived columns and guessing at them.
+
+**The tracked growth-relevant diagnosis codes**
+
+| ICD-10 | description | patients | median age at first record |
+| --- | --- | --- | --- |
+| P92.6 | Failure to thrive in newborn | 14,428 | 0.03 y |
+| P07 | Disorders of newborn related to short gestation and low birth weight, not elsewhere classified | 11,014 | 0.03 y |
+| P05 | Disorders of newborn related to slow fetal growth and fetal malnutrition | 4,069 | 0.01 y |
+| E30.1 | Precocious puberty | 3,405 | 7.87 y |
+| P70 | Transitory disorders of carbohydrate metabolism specific to newborn | 3,353 | 0.00 y |
+| K90.0 | Celiac disease | 898 | 7.20 y |
+| E10 | Type 1 diabetes mellitus | 491 | 7.86 y |
+| E34.3 | Short stature due to endocrine disorder | 447 | 10.39 y |
+| E30.0 | Delayed puberty | 419 | 13.64 y |
+| E03.9 | Hypothyroidism, unspecified | 309 | 6.00 y |
+| Q90 | Down syndrome | 205 | 0.05 y |
+| E23.0 | Hypopituitarism | 150 | 9.03 y |
+| K50 | Crohn's disease [regional enteritis] | 113 | 11.06 y |
+| E34.4 | Constitutional tall stature | 83 | 4.05 y |
+| N18 | Chronic kidney disease (CKD) | 70 | 4.54 y |
+| K51 | Ulcerative colitis | 62 | 11.95 y |
+| Q87.1 | Congenital malformation syndromes predominantly associated with short stature | 58 | 3.26 y |
+| P04.3 | Newborn affected by maternal use of alcohol | 53 | 0.50 y |
+| Q87.3 | Congenital malformation syndromes involving early overgrowth | 46 | 1.76 y |
+| Q98.4 | Klinefelter syndrome, unspecified | 42 | 0.02 y |
+| Q96 | Turner's syndrome | 36 | 0.14 y |
+| Q87.2 | Congenital malformation syndromes predominantly involving limbs | 32 | 1.80 y |
+| E23.6 | Other disorders of pituitary gland | 31 | 8.29 y |
+| Q98.0 | Klinefelter syndrome karyotype 47, XXY | 26 | 0.02 y |
+| Q98.5 | Karyotype 47, XYY | 17 | 0.01 y |
+| Q87.4 | Marfan syndrome | 17 | 5.62 y |
+| Q77 | Osteochondrodysplasia with defects of growth of tubular bones and spine | 15 | 5.13 y |
+| Q78.0 | Osteogenesis imperfecta | 10 | 1.63 y |
+
+Codes carried by fewer patients than the suppression threshold are omitted. Counts are recorded frequencies inside a cohort that excluded every patient with a code seen fewer than 11 times, so this panel cannot be read as prevalence.
+
+The referral resource shows the same orientation from the action side. Grouping requested specialties into the families a growth question would reach for accounts for 36,182 of 349,827 referrals (10.3%).
+
+**Referrals by growth-relevant specialty family**
+
+| specialty family | referrals | share of all referrals | patients | median age |
+| --- | --- | --- | --- | --- |
+| Endocrinology | 6,916 | 1.98% | 5,790 | 9.40 y |
+| Gastroenterology | 14,715 | 4.21% | 12,764 | 5.58 y |
+| Nutrition and dietetics | 11,038 | 3.16% | 8,912 | 9.39 y |
+| Nephrology | 1,087 | 0.31% | 937 | 6.03 y |
+| Genetics | 2,426 | 0.69% | 2,116 | 3.20 y |
+| all other specialties | 313,645 | 89.66% | — | — |
+
+**Implications for analysis.** These two tables describe what the upstream pipeline chose to track, not what is clinically relevant to growth in general: a code absent from the panel may still be present in the encounter and problem-list resources of 5.1, and a specialty family here is a string match on a free-text field rather than a clinical taxonomy. Use the panel to understand the derived columns; go to the raw diagnosis resources for anything else.
+
 ## 6. Field index
 
 Every column, with its population, range, and the findings that govern it.
@@ -1060,7 +1221,7 @@ One row per known artifact, with its scale and whether it can be repaired.
 
 ### 7.1 Every artifact this report measured
 
-One row per artifact, gathered from the findings that measured them. The class says who produced the artifact, which decides whether it can be repaired: a derivation artifact can be recomputed without touching the clinical record, a capture artifact cannot, a selection artifact is outside the extract entirely. 13 artifacts across 4 classes (capture, derivation, linkage, selection).
+One row per artifact, gathered from the findings that measured them. The class says who produced the artifact, which decides whether it can be repaired: a derivation artifact can be recomputed without touching the clinical record, a capture artifact cannot, a selection artifact is outside the extract entirely. 14 artifacts across 4 classes (capture, derivation, linkage, selection).
 
 **Artifact catalogue**
 
@@ -1073,6 +1234,7 @@ One row per artifact, gathered from the findings that measured them. The class s
 | Age fields that violate their own ordering | capture | lab result before order, and medication start before order | No — do not treat differences between them as durations | 3.3 |
 | Laboratory results are semi-structured text | capture | 487,168 comparator-prefixed values; only 44.2% of rows parse as a number | Yes — parse comparators explicitly rather than casting | 3.6 |
 | Anthropometrics recorded on encounters with no physical contact | capture | weight present on 99% of 22,053 telephone encounters | Partly — restrict by encounter type before counting measurement occasions | 3.7 |
+| Two measurements of one channel on one patient-day that disagree | capture | 942 patient-days for height, median spread 3.17 cm | Partly — define an explicit tie rule before ordering by age | 3.8 |
 | Terminal-digit heaping on the imperial recording grid | capture | 80.0% of heights fall on a quarter inch | No — it is the precision the measurement actually has | 4.2 |
 | Wrong-unit and decimal-place entry in the typed measurement fields | capture | 1,371 whole-foot heights, 143 centimetre values in the inch field, and a weight decimal artifact enriched 17-fold | Yes — bound and repair the raw imperial columns before converting | 4.4 |
 | Apparent height loss from the recording grid on a flat trajectory | capture | 0.66% of pairs over a year apart, falling to 0.083% at ages 2 to 10 | Not a defect — do not filter it as an outlier | 4.5 |
