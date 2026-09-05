@@ -112,7 +112,7 @@ Both commands use this repository's `datapackage.json` by default, validate all 
 
 | Output | Use |
 | --- | --- |
-| [`ppoc-eda.pdf`](reports/ppoc-eda/ppoc-eda.pdf) | 52 pages; GitHub renders it in the browser |
+| [`ppoc-eda.pdf`](reports/ppoc-eda/ppoc-eda.pdf) | 55 pages; GitHub renders it in the browser |
 | [`index.html`](reports/ppoc-eda/index.html) | self-contained — inline figures, sticky contents, find-in-page |
 | [`ppoc-eda.md`](reports/ppoc-eda/ppoc-eda.md) | text mirror, for grep and pull-request review |
 | [`findings.json`](reports/ppoc-eda/findings.json) | every number the report states, keyed by finding |

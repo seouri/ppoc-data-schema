@@ -10,6 +10,7 @@ from __future__ import annotations
 from ..context import Context
 from ..findings import Column as C
 from ..findings import Figure, Finding, Para, Table, probe
+from ..listing import listing, note
 from .icd import patient_codes
 
 ENC_DIAG = ", ".join(f"enc_diag_{i}" for i in range(1, 34))
@@ -42,22 +43,27 @@ def diagnoses(ctx: Context) -> list[Finding]:
             WHERE code IS NOT NULL AND trim(code) <> '' GROUP BY 1)
         SELECT n, count(*) FROM s GROUP BY 1 ORDER BY 1 LIMIT 12""")
 
-    top_enc = ctx.q(f"""
-        WITH s AS (SELECT patient_id, unnest([{ENC_DIAG}]) AS code FROM visits),
+    top_enc, enc_distinct, enc_complete = listing(ctx,
+        f"""SELECT count(DISTINCT code) FROM (
+              SELECT unnest([{ENC_DIAG}]) AS code FROM visits)
+            WHERE code IS NOT NULL AND trim(code) <> ''""",
+        f"""WITH s AS (SELECT patient_id, unnest([{ENC_DIAG}]) AS code FROM visits),
         f AS (SELECT code, count(*) AS slots, count(DISTINCT patient_id) AS pts
               FROM s WHERE code IS NOT NULL AND trim(code) <> ''
-              GROUP BY 1 ORDER BY slots DESC LIMIT 15),
+              GROUP BY 1 ORDER BY slots DESC {{limit}}),
         l AS ({ICD_LOOKUP})
         SELECT f.code, coalesce(l.descr, '[not in the ICD-10 lookup]'),
                f.slots, f.pts
         FROM f LEFT JOIN l ON replace(f.code, '.', '') = l.code
         ORDER BY f.slots DESC""")
+    enc_covered = 100.0 * sum(r[2] for r in top_enc) / enc_total
 
-    top_pl = ctx.q(f"""
-        WITH f AS (SELECT pl_diag AS code, count(*) AS entries,
+    top_pl, pl_distinct, pl_complete = listing(ctx,
+        "SELECT count(DISTINCT pl_diag) FROM problem_list WHERE pl_diag IS NOT NULL",
+        f"""WITH f AS (SELECT pl_diag AS code, count(*) AS entries,
                           count(DISTINCT patient_id) AS pts
                    FROM problem_list WHERE pl_diag IS NOT NULL
-                   GROUP BY 1 ORDER BY entries DESC LIMIT 15),
+                   GROUP BY 1 ORDER BY entries DESC {{limit}}),
         l AS ({ICD_LOOKUP})
         SELECT f.code, coalesce(l.descr, '[not in the ICD-10 lookup]'),
                f.entries, f.pts
@@ -71,13 +77,15 @@ def diagnoses(ctx: Context) -> list[Finding]:
                    SELECT substr(code, 1, 3) AS c FROM {pc} GROUP BY 1
                    HAVING sum(CASE WHEN code = substr(code, 1, 3) THEN 1 ELSE 0 END) = 0))
         FROM {pc}""")
-    rollup = [{"category": c, "descr": d, "patients": n} for c, d, n in ctx.q(f"""
-        WITH f AS (SELECT substr(code, 1, 3) AS cat,
+    roll_raw, roll_distinct, roll_complete = listing(ctx,
+        f"SELECT count(DISTINCT substr(code, 1, 3)) FROM {pc}",
+        f"""WITH f AS (SELECT substr(code, 1, 3) AS cat,
                           count(DISTINCT patient_id) AS n
-                   FROM {pc} GROUP BY 1 ORDER BY n DESC LIMIT 15),
+                   FROM {pc} GROUP BY 1 ORDER BY n DESC {{limit}}),
         l AS ({ICD_LOOKUP})
         SELECT f.cat, coalesce(l.descr, '[not in the ICD-10 lookup]'), f.n
-        FROM f LEFT JOIN l ON f.cat = l.code ORDER BY f.n DESC""")]
+        FROM f LEFT JOIN l ON f.cat = l.code ORDER BY f.n DESC""")
+    rollup = [{"category": c, "descr": d, "patients": n} for c, d, n in roll_raw]
 
     pl_rows, pl_pts, pl_resolved = ctx.one(
         "SELECT count(*), count(DISTINCT patient_id), "
@@ -109,7 +117,8 @@ def diagnoses(ctx: Context) -> list[Finding]:
                C("pts", "patients", ",", align="right")],
               [{"code": c, "descr": d, "slots": s, "pts": p}
                for c, d, s, p in top_enc],
-              note=SELECTION_NOTE),
+              note=note(enc_distinct, enc_complete, enc_covered, "filled slots")
+                   + " " + SELECTION_NOTE),
         Para("The problem list holds {pl_rows:,} entries for {pl_pts:,} patients, of "
              "which {pl_resolved_share:.1f}% carry a resolved age. As 3.5 shows, the "
              "remainder are open problems rather than missing dates."),
@@ -118,7 +127,9 @@ def diagnoses(ctx: Context) -> list[Finding]:
                C("entries", "entries", ",", align="right"),
                C("pts", "patients", ",", align="right")],
               [{"code": c, "descr": d, "entries": e, "pts": p}
-               for c, d, e, p in top_pl]),
+               for c, d, e, p in top_pl],
+              note=note(pl_distinct, pl_complete,
+                        100.0 * sum(r[2] for r in top_pl) / pl_rows, "entries")),
         Para("**Both tables above count literal codes**, which is the right unit "
              "for describing what gets typed but the wrong one for counting a "
              "condition. Rolling the same data up to the three-character category "
@@ -128,7 +139,8 @@ def diagnoses(ctx: Context) -> list[Finding]:
              role="warning"),
         Table("t-dx-rollup", "The same diagnoses rolled up to their ICD-10 category",
               [C("category", "category"), C("descr", "description"),
-               C("patients", "patients", ",", align="right")], rollup),
+               C("patients", "patients", ",", align="right")], rollup,
+              note=note(roll_distinct, roll_complete)),
         Para("**Implications for analysis.** Encounter diagnoses and problem-list "
              "entries answer different questions and should not be pooled without "
              "saying why: the first is what was coded at a contact, the second is "
@@ -144,10 +156,13 @@ def labs(ctx: Context) -> list[Finding]:
     rows, orders, pts = ctx.one(
         "SELECT count(*), count(DISTINCT lab_order_id), count(DISTINCT patient_id) "
         "FROM labs")
-    top = ctx.q("""
-        SELECT lab_procedure_name, count(*) AS n, count(DISTINCT patient_id) AS pts
-        FROM labs WHERE lab_procedure_name IS NOT NULL
-        GROUP BY 1 ORDER BY n DESC LIMIT 15""")
+    top, lab_distinct, lab_complete = listing(ctx,
+        "SELECT count(DISTINCT lab_procedure_name) FROM labs "
+        "WHERE lab_procedure_name IS NOT NULL",
+        """SELECT lab_procedure_name, count(*) AS n,
+                  count(DISTINCT patient_id) AS pts
+           FROM labs WHERE lab_procedure_name IS NOT NULL
+           GROUP BY 1 ORDER BY n DESC {limit}""")
     no_result = ctx.scalar(
         "SELECT count(*) FROM labs WHERE result_value IS NULL "
         "OR trim(result_value) = ''")
@@ -174,7 +189,9 @@ def labs(ctx: Context) -> list[Finding]:
               [C("name", "procedure"), C("n", "rows", ",", align="right"),
                C("pts", "patients", ",", align="right")],
               [{"name": n, "n": c, "pts": p} for n, c, p in top],
-              note=SELECTION_NOTE),
+              note=note(lab_distinct, lab_complete,
+                        100.0 * sum(r[1] for r in top) / rows, "rows")
+                   + " " + SELECTION_NOTE),
         Para("{no_result:,} rows ({no_result_share:.1f}%) carry no result value at "
              "all, and {orphan_order:,} orders ({orphan_share:.1f}%) have no "
              "resulted component on any line. Both are expected rather than broken: "
@@ -192,11 +209,13 @@ def labs(ctx: Context) -> list[Finding]:
 def medications(ctx: Context) -> list[Finding]:
     rows, pts = ctx.one(
         "SELECT count(*), count(DISTINCT patient_id) FROM medications")
-    top = ctx.q("""
-        SELECT med_simple_generic_name, count(*) AS n,
-               count(DISTINCT patient_id) AS pts
-        FROM medications WHERE med_simple_generic_name IS NOT NULL
-        GROUP BY 1 ORDER BY n DESC LIMIT 15""")
+    top, med_distinct, med_complete = listing(ctx,
+        "SELECT count(DISTINCT med_simple_generic_name) FROM medications "
+        "WHERE med_simple_generic_name IS NOT NULL",
+        """SELECT med_simple_generic_name, count(*) AS n,
+                  count(DISTINCT patient_id) AS pts
+           FROM medications WHERE med_simple_generic_name IS NOT NULL
+           GROUP BY 1 ORDER BY n DESC {limit}""")
     kinds = ctx.q("""
         SELECT med_record_type, count(*) AS n, count(DISTINCT patient_id) AS pts,
                100.0 * count(med_start_date_age_in_days) / count(*) AS start_pct,
@@ -225,7 +244,9 @@ def medications(ctx: Context) -> list[Finding]:
               [C("name", "generic name"), C("n", "records", ",", align="right"),
                C("pts", "patients", ",", align="right")],
               [{"name": n, "n": c, "pts": p} for n, c, p in top],
-              note=SELECTION_NOTE),
+              note=note(med_distinct, med_complete,
+                        100.0 * sum(r[1] for r in top) / rows, "records")
+                   + " " + SELECTION_NOTE),
         Para("**Three documented fields were never delivered.** The data dictionary "
              "describes {n_absent} medication classification columns — {absent} — "
              "and none is present in the extract. Any analysis by drug class has to "
@@ -242,12 +263,15 @@ def medications(ctx: Context) -> list[Finding]:
 @probe("domains.referrals", "5.4")
 def referrals(ctx: Context) -> list[Finding]:
     rows, pts = ctx.one("SELECT count(*), count(DISTINCT patient_id) FROM referrals")
-    top = ctx.q("""
-        SELECT requested_specialty, count(*) AS n, count(DISTINCT patient_id) AS pts,
-               quantile_cont(referral_date_age_in_days, 0.5) / 365.25 AS med_age
-        FROM referrals WHERE requested_specialty IS NOT NULL
-          AND trim(requested_specialty) <> ''
-        GROUP BY 1 ORDER BY n DESC LIMIT 15""")
+    top, spec_distinct, spec_complete = listing(ctx,
+        "SELECT count(DISTINCT requested_specialty) FROM referrals "
+        "WHERE requested_specialty IS NOT NULL AND trim(requested_specialty) <> ''",
+        """SELECT requested_specialty, count(*) AS n,
+                  count(DISTINCT patient_id) AS pts,
+                  quantile_cont(referral_date_age_in_days, 0.5) / 365.25 AS med_age
+           FROM referrals WHERE requested_specialty IS NOT NULL
+             AND trim(requested_specialty) <> ''
+           GROUP BY 1 ORDER BY n DESC {limit}""")
     spec_missing, visits_missing = ctx.one(
         "SELECT sum(CASE WHEN requested_specialty IS NULL "
         "         OR trim(requested_specialty) = '' THEN 1 ELSE 0 END), "
@@ -285,7 +309,9 @@ def referrals(ctx: Context) -> list[Finding]:
                C("med_age", "median age", ".2f", " y", align="right")],
               [{"specialty": s, "n": n, "pts": p, "med_age": a}
                for s, n, p, a in top],
-              note=SELECTION_NOTE),
+              note=note(spec_distinct, spec_complete,
+                        100.0 * sum(r[1] for r in top) / rows, "referrals")
+                   + " " + SELECTION_NOTE),
         Para("{spec_missing:,} referrals ({spec_share:.2f}%) carry no requested "
              "specialty and {visits_missing:,} ({visits_share:.1f}%) no requested "
              "visit count. The data dictionary also warns that referrals are not "
@@ -304,10 +330,11 @@ def referrals(ctx: Context) -> list[Finding]:
 def identity(ctx: Context) -> list[Finding]:
     total = ctx.scalar("SELECT count(*) FROM patients")
 
-    def dist(col: str, limit: int = 10):
+    def dist(col: str):
+        """These vocabularies are short enough to list in full."""
         return ctx.q(f"""
             SELECT coalesce(nullif(trim(CAST({col} AS VARCHAR)), ''), '[blank]') AS v,
-                   count(*) AS n FROM patients GROUP BY 1 ORDER BY n DESC LIMIT {limit}""")
+                   count(*) AS n FROM patients GROUP BY 1 ORDER BY n DESC""")
 
     sex_rows = [{"category": v, "patients": n, "share": 100.0 * n / total}
                 for v, n in dist("sex")]

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-05T20:20:11Z",
+  "generated_at": "2026-09-05T20:35:55Z",
   "parts": [
     {
       "findings": [
@@ -1412,6 +1412,146 @@
                   "meaning": "abnormal",
                   "rows": 5881,
                   "value": "(NONE)"
+                },
+                {
+                  "meaning": "abnormal",
+                  "rows": 4273,
+                  "value": "Normal"
+                },
+                {
+                  "meaning": "abnormal",
+                  "rows": 3056,
+                  "value": "Panic"
+                },
+                {
+                  "meaning": "abnormal",
+                  "rows": 1704,
+                  "value": "Intermediate"
+                },
+                {
+                  "meaning": "abnormal",
+                  "rows": 1406,
+                  "value": "Low Panic"
+                },
+                {
+                  "meaning": "abnormal",
+                  "rows": 373,
+                  "value": "Critical"
+                },
+                {
+                  "meaning": "abnormal",
+                  "rows": 188,
+                  "value": "Negative"
+                },
+                {
+                  "meaning": "abnormal",
+                  "rows": 134,
+                  "value": "High Off-Scale"
+                },
+                {
+                  "meaning": "abnormal",
+                  "rows": 123,
+                  "value": "Susceptible-Dose Dependent"
+                },
+                {
+                  "meaning": "abnormal",
+                  "rows": 99,
+                  "value": "Abnormal High"
+                },
+                {
+                  "meaning": "abnormal",
+                  "rows": 92,
+                  "value": "Abnormal Low"
+                },
+                {
+                  "meaning": "abnormal",
+                  "rows": 84,
+                  "value": "Invalid High"
+                },
+                {
+                  "meaning": "abnormal",
+                  "rows": 68,
+                  "value": "Sig Change Up"
+                },
+                {
+                  "meaning": "abnormal",
+                  "rows": 35,
+                  "value": "Positive"
+                },
+                {
+                  "meaning": "abnormal",
+                  "rows": 23,
+                  "value": "Critical High"
+                },
+                {
+                  "meaning": "abnormal",
+                  "rows": 17,
+                  "value": "Low Off-Scale"
+                },
+                {
+                  "meaning": "abnormal",
+                  "rows": 13,
+                  "value": "Critical Low"
+                },
+                {
+                  "meaning": "abnormal",
+                  "rows": null,
+                  "value": "Class 0: Absent Allergen Specific IgE"
+                },
+                {
+                  "meaning": "abnormal",
+                  "rows": null,
+                  "value": "Invalid Low"
+                },
+                {
+                  "meaning": "abnormal",
+                  "rows": null,
+                  "value": "Delta Abnormal High"
+                },
+                {
+                  "meaning": "abnormal",
+                  "rows": null,
+                  "value": "In Process"
+                },
+                {
+                  "meaning": "abnormal",
+                  "rows": null,
+                  "value": "Better"
+                },
+                {
+                  "meaning": "abnormal",
+                  "rows": null,
+                  "value": "Delta Critical High"
+                },
+                {
+                  "meaning": "abnormal",
+                  "rows": null,
+                  "value": "Class 2: Moderate Level Allergen Specific IgE"
+                },
+                {
+                  "meaning": "abnormal",
+                  "rows": null,
+                  "value": "Sig Change Down"
+                },
+                {
+                  "meaning": "abnormal",
+                  "rows": null,
+                  "value": "Class 3: High Level Allergen Specific IgE"
+                },
+                {
+                  "meaning": "abnormal",
+                  "rows": null,
+                  "value": "Moderately Sensitive"
+                },
+                {
+                  "meaning": "abnormal",
+                  "rows": null,
+                  "value": "Delta Abnormal Low"
+                },
+                {
+                  "meaning": "abnormal",
+                  "rows": null,
+                  "value": "Worse"
                 }
               ]
             },
@@ -1695,6 +1835,223 @@
                   "height": 30.7032444369,
                   "visits": 11774,
                   "weight": 97.5624256837
+                },
+                {
+                  "diag": 98.1069237511,
+                  "encounter": "New Patient",
+                  "height": 79.7633654689,
+                  "visits": 11410,
+                  "weight": 99.921121823
+                },
+                {
+                  "diag": 99.5375508694,
+                  "encounter": "Nutrition",
+                  "height": 73.7698853126,
+                  "visits": 5406,
+                  "weight": 99.7965223825
+                },
+                {
+                  "diag": 93.2566168009,
+                  "encounter": "Medication Management",
+                  "height": 75.9263521289,
+                  "visits": 4345,
+                  "weight": 99.9079401611
+                },
+                {
+                  "diag": 69.1494981511,
+                  "encounter": "Nurse Only",
+                  "height": 36.1595351294,
+                  "visits": 3786,
+                  "weight": 96.883254094
+                },
+                {
+                  "diag": 9.01416122004,
+                  "encounter": "Abstract",
+                  "height": 83.1154684096,
+                  "visits": 3672,
+                  "weight": 99.4008714597
+                },
+                {
+                  "diag": 99.4296577947,
+                  "encounter": "Flu",
+                  "height": 13.6882129278,
+                  "visits": 2104,
+                  "weight": 96.4353612167
+                },
+                {
+                  "diag": 99.710982659,
+                  "encounter": "Lactation Consult",
+                  "height": 11.6329479769,
+                  "visits": 1384,
+                  "weight": 100.0
+                },
+                {
+                  "diag": 78.6824574389,
+                  "encounter": "Lab",
+                  "height": 37.3056994819,
+                  "visits": 1351,
+                  "weight": 97.0392301999
+                },
+                {
+                  "diag": 49.7382198953,
+                  "encounter": "Lactation Encounter",
+                  "height": 1.8698578908,
+                  "visits": 1337,
+                  "weight": 99.7756170531
+                },
+                {
+                  "diag": 96.017699115,
+                  "encounter": "Procedure visit",
+                  "height": 56.3421828909,
+                  "visits": 678,
+                  "weight": 97.7876106195
+                },
+                {
+                  "diag": 96.347826087,
+                  "encounter": "Pre-op/Pre-procedure Orders",
+                  "height": 84.347826087,
+                  "visits": 575,
+                  "weight": 100.0
+                },
+                {
+                  "diag": 30.4504504505,
+                  "encounter": "Erroneous Encounter",
+                  "height": 45.9459459459,
+                  "visits": 555,
+                  "weight": 99.8198198198
+                },
+                {
+                  "diag": 51.6483516484,
+                  "encounter": "Orders Only",
+                  "height": 78.3882783883,
+                  "visits": 273,
+                  "weight": 99.6336996337
+                },
+                {
+                  "diag": 2.36966824645,
+                  "encounter": "External Contact",
+                  "height": 99.5260663507,
+                  "visits": 211,
+                  "weight": 100.0
+                },
+                {
+                  "diag": 18.1818181818,
+                  "encounter": "Patient Message",
+                  "height": 30.6220095694,
+                  "visits": 209,
+                  "weight": 95.6937799043
+                },
+                {
+                  "diag": 94.4055944056,
+                  "encounter": "Evaluation",
+                  "height": 74.1258741259,
+                  "visits": 143,
+                  "weight": 99.3006993007
+                },
+                {
+                  "diag": 90.4761904762,
+                  "encounter": "Lab Requisition",
+                  "height": 14.2857142857,
+                  "visits": 63,
+                  "weight": 96.8253968254
+                },
+                {
+                  "diag": 0.0,
+                  "encounter": "Scanned Document",
+                  "height": 95.652173913,
+                  "visits": 23,
+                  "weight": 100.0
+                },
+                {
+                  "diag": 0.0,
+                  "encounter": "Letter (Out)",
+                  "height": 94.4444444444,
+                  "visits": 18,
+                  "weight": 100.0
+                },
+                {
+                  "diag": 66.6666666667,
+                  "encounter": "Refill",
+                  "height": 0.0,
+                  "visits": 12,
+                  "weight": 100.0
+                },
+                {
+                  "diag": 0.0,
+                  "encounter": "History",
+                  "height": 45.4545454545,
+                  "visits": 11,
+                  "weight": 100.0
+                },
+                {
+                  "diag": 100.0,
+                  "encounter": "Ophth Exam",
+                  "height": 0.0,
+                  "visits": 11,
+                  "weight": 100.0
+                },
+                {
+                  "diag": null,
+                  "encounter": "Hospital",
+                  "height": null,
+                  "visits": null,
+                  "weight": null
+                },
+                {
+                  "diag": null,
+                  "encounter": "Routine Prenatal",
+                  "height": null,
+                  "visits": null,
+                  "weight": null
+                },
+                {
+                  "diag": null,
+                  "encounter": "Transcribe Orders",
+                  "height": null,
+                  "visits": null,
+                  "weight": null
+                },
+                {
+                  "diag": null,
+                  "encounter": "Patient Care Review",
+                  "height": null,
+                  "visits": null,
+                  "weight": null
+                },
+                {
+                  "diag": null,
+                  "encounter": "Erroneous Telephone Encounter",
+                  "height": null,
+                  "visits": null,
+                  "weight": null
+                },
+                {
+                  "diag": null,
+                  "encounter": "Episode Changes",
+                  "height": null,
+                  "visits": null,
+                  "weight": null
+                },
+                {
+                  "diag": null,
+                  "encounter": "OurPractice Advisory",
+                  "height": null,
+                  "visits": null,
+                  "weight": null
+                },
+                {
+                  "diag": null,
+                  "encounter": "ED",
+                  "height": null,
+                  "visits": null,
+                  "weight": null
+                },
+                {
+                  "diag": null,
+                  "encounter": "Treatment",
+                  "height": null,
+                  "visits": null,
+                  "weight": null
                 }
               ]
             },
@@ -1726,7 +2083,9 @@
           "title": "Capture: measurement presence is not measurement occurrence",
           "values": {
             "conv_diag": 86.1024102963,
-            "n_types": 14,
+            "enc_distinct": 45,
+            "n_types": 45,
+            "suppressed": 9,
             "tele_visits": 22053,
             "tele_weight": 99.2699405977
           }
@@ -3990,6 +4349,66 @@
                   "descr": "Health examination for newborn under 8 days old",
                   "pts": 105062,
                   "slots": 124627
+                },
+                {
+                  "code": "IMO0002",
+                  "descr": "[not in the ICD-10 lookup]",
+                  "pts": 42737,
+                  "slots": 116950
+                },
+                {
+                  "code": "F90.2",
+                  "descr": "Attention-deficit hyperactivity disorder, combined type",
+                  "pts": 15694,
+                  "slots": 112292
+                },
+                {
+                  "code": "Z29.3",
+                  "descr": "Encounter for prophylactic fluoride administration",
+                  "pts": 52897,
+                  "slots": 107178
+                },
+                {
+                  "code": "Z68.53",
+                  "descr": "Body mass index [BMI] pediatric, 85th percentile to less than 95th percentile for age",
+                  "pts": 52088,
+                  "slots": 105889
+                },
+                {
+                  "code": "J45.20",
+                  "descr": "Mild intermittent asthma, uncomplicated",
+                  "pts": 24479,
+                  "slots": 93013
+                },
+                {
+                  "code": "R21",
+                  "descr": "Rash and other nonspecific skin eruption",
+                  "pts": 62699,
+                  "slots": 92028
+                },
+                {
+                  "code": "K21.9",
+                  "descr": "Gastro-esophageal reflux disease without esophagitis",
+                  "pts": 31748,
+                  "slots": 90172
+                },
+                {
+                  "code": "F41.9",
+                  "descr": "Anxiety disorder, unspecified",
+                  "pts": 24519,
+                  "slots": 81476
+                },
+                {
+                  "code": "K59.00",
+                  "descr": "Constipation, unspecified",
+                  "pts": 39182,
+                  "slots": 80647
+                },
+                {
+                  "code": "H66.001",
+                  "descr": "Acute suppurative otitis media without spontaneous rupture of ear drum, right ear",
+                  "pts": 49374,
+                  "slots": 76772
                 }
               ]
             },
@@ -4092,6 +4511,66 @@
                   "descr": "[not in the ICD-10 lookup]",
                   "entries": 12915,
                   "pts": 12915
+                },
+                {
+                  "code": "R62.51",
+                  "descr": "Failure to thrive (child)",
+                  "entries": 12503,
+                  "pts": 12503
+                },
+                {
+                  "code": "J30.9",
+                  "descr": "Allergic rhinitis, unspecified",
+                  "entries": 11383,
+                  "pts": 11383
+                },
+                {
+                  "code": "Z91.018",
+                  "descr": "Allergy to other foods",
+                  "entries": 11308,
+                  "pts": 11308
+                },
+                {
+                  "code": "J06.9",
+                  "descr": "Acute upper respiratory infection, unspecified",
+                  "entries": 11197,
+                  "pts": 11197
+                },
+                {
+                  "code": "B08.1",
+                  "descr": "Molluscum contagiosum",
+                  "entries": 10781,
+                  "pts": 10781
+                },
+                {
+                  "code": "Z38.00",
+                  "descr": "Single liveborn infant, delivered vaginally",
+                  "entries": 10304,
+                  "pts": 10304
+                },
+                {
+                  "code": "R63.39",
+                  "descr": "Other feeding difficulties",
+                  "entries": 10088,
+                  "pts": 10088
+                },
+                {
+                  "code": "R01.1",
+                  "descr": "Cardiac murmur, unspecified",
+                  "entries": 10081,
+                  "pts": 10081
+                },
+                {
+                  "code": "G47.9",
+                  "descr": "Sleep disorder, unspecified",
+                  "entries": 9772,
+                  "pts": 9772
+                },
+                {
+                  "code": "J45.909",
+                  "descr": "Unspecified asthma, uncomplicated",
+                  "entries": 9502,
+                  "pts": 9502
                 }
               ]
             },
@@ -4178,6 +4657,56 @@
                   "category": "R21",
                   "descr": "Rash and other nonspecific skin eruption",
                   "patients": 63738
+                },
+                {
+                  "category": "P92",
+                  "descr": "Feeding problems of newborn",
+                  "patients": 62842
+                },
+                {
+                  "category": "Z29",
+                  "descr": "Encounter for other prophylactic measures",
+                  "patients": 61612
+                },
+                {
+                  "category": "K59",
+                  "descr": "Other functional intestinal disorders",
+                  "patients": 57481
+                },
+                {
+                  "category": "H65",
+                  "descr": "Nonsuppurative otitis media",
+                  "patients": 57167
+                },
+                {
+                  "category": "L20",
+                  "descr": "Atopic dermatitis",
+                  "patients": 52206
+                },
+                {
+                  "category": "R09",
+                  "descr": "Other symptoms and signs involving the circulatory and respiratory system",
+                  "patients": 51549
+                },
+                {
+                  "category": "J30",
+                  "descr": "Vasomotor and allergic rhinitis",
+                  "patients": 48747
+                },
+                {
+                  "category": "R06",
+                  "descr": "Abnormalities of breathing",
+                  "patients": 48551
+                },
+                {
+                  "category": "Z28",
+                  "descr": "Immunization not carried out and underimmunization status",
+                  "patients": 47456
+                },
+                {
+                  "category": "IMO",
+                  "descr": "[not in the ICD-10 lookup]",
+                  "patients": 45678
                 }
               ]
             }
@@ -4282,6 +4811,56 @@
                   "n": 214567,
                   "name": "URINE CULTURE",
                   "pts": 43877
+                },
+                {
+                  "n": 193586,
+                  "name": "POCT HEMOGLOBIN",
+                  "pts": 86845
+                },
+                {
+                  "n": 182893,
+                  "name": "RAPID STREP A, IMMUNOASSAY",
+                  "pts": 45620
+                },
+                {
+                  "n": 172419,
+                  "name": "POCT INFLUENZA A/B IMMUNOASSAY",
+                  "pts": 35207
+                },
+                {
+                  "n": 148974,
+                  "name": "LIPID PANEL",
+                  "pts": 23764
+                },
+                {
+                  "n": 147291,
+                  "name": "STREP A CULTURE",
+                  "pts": 37984
+                },
+                {
+                  "n": 140801,
+                  "name": "HEMOGLOBIN",
+                  "pts": 60227
+                },
+                {
+                  "n": 131125,
+                  "name": "THROAT CULTURE",
+                  "pts": 37007
+                },
+                {
+                  "n": 130811,
+                  "name": "URINALYSIS WITH MICROSCOPIC",
+                  "pts": 7635
+                },
+                {
+                  "n": 119448,
+                  "name": "STREP A NUCLEIC ACID DETECTION",
+                  "pts": 28102
+                },
+                {
+                  "n": 112796,
+                  "name": "INFLUENZA A/B NUCLEIC ACID",
+                  "pts": 22382
                 }
               ]
             }
@@ -4412,6 +4991,56 @@
                   "n": 72065,
                   "name": "Cetirizine HCl",
                   "pts": 34707
+                },
+                {
+                  "n": 69883,
+                  "name": "Azithromycin",
+                  "pts": 46509
+                },
+                {
+                  "n": 64757,
+                  "name": "Cephalexin",
+                  "pts": 43345
+                },
+                {
+                  "n": 60074,
+                  "name": "Triamcinolone Acetonide",
+                  "pts": 31238
+                },
+                {
+                  "n": 58782,
+                  "name": "Nystatin",
+                  "pts": 34023
+                },
+                {
+                  "n": 56361,
+                  "name": "FLUoxetine HCl",
+                  "pts": 6637
+                },
+                {
+                  "n": 55797,
+                  "name": "Cholecalciferol",
+                  "pts": 40031
+                },
+                {
+                  "n": 53467,
+                  "name": "Erythromycin",
+                  "pts": 39136
+                },
+                {
+                  "n": 49233,
+                  "name": "Sertraline HCl",
+                  "pts": 6289
+                },
+                {
+                  "n": 48115,
+                  "name": "guanFACINE HCl",
+                  "pts": 6701
+                },
+                {
+                  "n": 46362,
+                  "name": "Spacer/Aero-Holding Chambers",
+                  "pts": 28820
                 }
               ]
             }
@@ -4557,6 +5186,66 @@
                   "n": 9302,
                   "pts": 8511,
                   "specialty": "Early Intervention"
+                },
+                {
+                  "med_age": 3.90691307324,
+                  "n": 8532,
+                  "pts": 6794,
+                  "specialty": "Developmental Medicine"
+                },
+                {
+                  "med_age": 9.36618754278,
+                  "n": 6641,
+                  "pts": 5583,
+                  "specialty": "Endocrinology"
+                },
+                {
+                  "med_age": 5.14442162902,
+                  "n": 6573,
+                  "pts": 5002,
+                  "specialty": "Occupational Therapy"
+                },
+                {
+                  "med_age": 3.77960301164,
+                  "n": 4206,
+                  "pts": 3889,
+                  "specialty": "General Surgery"
+                },
+                {
+                  "med_age": 9.02532511978,
+                  "n": 4134,
+                  "pts": 3537,
+                  "specialty": "Psychology"
+                },
+                {
+                  "med_age": 4.80219028063,
+                  "n": 3926,
+                  "pts": 3539,
+                  "specialty": "Pulmonary Disease"
+                },
+                {
+                  "med_age": 0.517453798768,
+                  "n": 3454,
+                  "pts": 3269,
+                  "specialty": "Plastic Surgery"
+                },
+                {
+                  "med_age": 10.5900068446,
+                  "n": 2885,
+                  "pts": 2458,
+                  "specialty": "Psychiatry"
+                },
+                {
+                  "med_age": 11.4825462012,
+                  "n": 2863,
+                  "pts": 2608,
+                  "specialty": "Podiatry"
+                },
+                {
+                  "med_age": 0.402464065708,
+                  "n": 2415,
+                  "pts": 2302,
+                  "specialty": "Neurosurgery"
                 }
               ]
             }
@@ -4705,6 +5394,16 @@
                   "category": "Unable to collect",
                   "patients": 492,
                   "share": 0.196338212524
+                },
+                {
+                  "category": "Native Hawaiian or Other Pacific Islander",
+                  "patients": 248,
+                  "share": 0.0989672290772
+                },
+                {
+                  "category": "Patient does not know",
+                  "patients": 126,
+                  "share": 0.0502817373537
                 }
               ]
             }

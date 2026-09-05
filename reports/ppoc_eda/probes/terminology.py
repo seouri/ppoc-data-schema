@@ -5,6 +5,7 @@ from __future__ import annotations
 from ..context import Context
 from ..findings import Artifact, Finding, Para, Table, probe
 from ..findings import Column as C
+from ..listing import listing, note
 
 ENC_DIAG = ", ".join(f"enc_diag_{i}" for i in range(1, 34))
 ICD10 = r"^[A-TV-Z][0-9][0-9AB](\.?[0-9A-TV-Z]{0,4})?$"
@@ -124,15 +125,24 @@ def codes(ctx: Context) -> list[Finding]:
 
 @probe("terminology.capture", "3.7")
 def capture(ctx: Context) -> list[Finding]:
-    enc_rows = ctx.q("""
-        SELECT encounter_type, count(*) AS n,
-               100.0 * count(weight_oz) / count(*) AS w,
-               100.0 * count(height_in) / count(*) AS h,
-               100.0 * count(enc_diag_1) / count(*) AS d
-        FROM visits_augmented WHERE encounter_type IS NOT NULL
-        GROUP BY 1 HAVING count(*) >= 10000 ORDER BY n DESC LIMIT 14""")
-    rows = [{"encounter": e, "visits": n, "weight": w, "height": h, "diag": d}
+    enc_rows, enc_distinct, enc_complete = listing(ctx,
+        "SELECT count(DISTINCT encounter_type) FROM visits_augmented "
+        "WHERE encounter_type IS NOT NULL",
+        """SELECT encounter_type, count(*) AS n,
+                  100.0 * count(weight_oz) / count(*) AS w,
+                  100.0 * count(height_in) / count(*) AS h,
+                  100.0 * count(enc_diag_1) / count(*) AS d
+           FROM visits_augmented WHERE encounter_type IS NOT NULL
+           GROUP BY 1 ORDER BY n DESC {limit}""")
+    # A type existing is itself informative, so the row stays and only its
+    # numbers are withheld when the cell is too small to show.
+    rows = [{"encounter": e,
+             "visits": ctx.suppress(n),
+             "weight": w if ctx.suppress(n) is not None else None,
+             "height": h if ctx.suppress(n) is not None else None,
+             "diag": d if ctx.suppress(n) is not None else None}
             for e, n, w, h, d in enc_rows]
+    suppressed = sum(1 for r in rows if r["visits"] is None)
 
     epic = ctx.q("""
         SELECT orig_enc_source_Epic_yn AS src, count(*) AS n,
@@ -148,6 +158,7 @@ def capture(ctx: Context) -> list[Finding]:
         title="Capture: measurement presence is not measurement occurrence",
         values={"tele_weight": tele["weight"] if tele else 0.0,
                 "tele_visits": tele["visits"] if tele else 0,
+                "enc_distinct": enc_distinct, "suppressed": suppressed,
                 "conv_diag": min(r["diag"] for r in epic_rows),
                 "n_types": len(rows)},
         artifact=Artifact(
@@ -168,7 +179,9 @@ def capture(ctx: Context) -> list[Finding]:
                C("weight", "weight present", ".1f", "%", align="right"),
                C("height", "height present", ".1f", "%", align="right"),
                C("diag", "first diagnosis", ".1f", "%", align="right")], rows,
-              note="Encounter types with fewer than 10,000 visits are omitted."),
+              note=note(enc_distinct, enc_complete)
+                   + (f" {suppressed} carry too few visits to show a count."
+                      if suppressed else "")),
         Para("Telephone encounters carry a weight on {tele_weight:.1f}% of "
              "{tele_visits:,} visits. A weight cannot be measured over the "
              "telephone, so those values were produced some other way — reported by "

@@ -332,6 +332,36 @@ Two of the largest null populations in this extract are not missing data at all,
 | Resistant | 10,278 | abnormal |
 | High Panic | 9,744 | abnormal |
 | (NONE) | 5,881 | abnormal |
+| Normal | 4,273 | abnormal |
+| Panic | 3,056 | abnormal |
+| Intermediate | 1,704 | abnormal |
+| Low Panic | 1,406 | abnormal |
+| Critical | 373 | abnormal |
+| Negative | 188 | abnormal |
+| High Off-Scale | 134 | abnormal |
+| Susceptible-Dose Dependent | 123 | abnormal |
+| Abnormal High | 99 | abnormal |
+| Abnormal Low | 92 | abnormal |
+| Invalid High | 84 | abnormal |
+| Sig Change Up | 68 | abnormal |
+| Positive | 35 | abnormal |
+| Critical High | 23 | abnormal |
+| Low Off-Scale | 17 | abnormal |
+| Critical Low | 13 | abnormal |
+| Class 0: Absent Allergen Specific IgE | — | abnormal |
+| Invalid Low | — | abnormal |
+| Delta Abnormal High | — | abnormal |
+| In Process | — | abnormal |
+| Better | — | abnormal |
+| Delta Critical High | — | abnormal |
+| Class 2: Moderate Level Allergen Specific IgE | — | abnormal |
+| Sig Change Down | — | abnormal |
+| Class 3: High Level Allergen Specific IgE | — | abnormal |
+| Moderately Sensitive | — | abnormal |
+| Delta Abnormal Low | — | abnormal |
+| Worse | — | abnormal |
+
+All 36 distinct values are listed.
 
 The data dictionary defines `result_flag` as an HL7 abnormality category in which the value `(NONE)` means a normal result and anything else means abnormal. This extract contains 5,881 literal `(NONE)` values and 15,550,985 nulls — 90.3% of all lab rows. The sentinel became a null somewhere between the source system and delivery, so **a null flag means normal, not unknown**.
 
@@ -403,8 +433,39 @@ Completeness by age says how often a column is filled. Encounter type says wheth
 | Clinical Support | 15,347 | 99.3% | 15.4% | 83.4% |
 | Documentation | 13,107 | 98.3% | 84.4% | 8.6% |
 | Immunization | 11,774 | 97.6% | 30.7% | 93.4% |
+| New Patient | 11,410 | 99.9% | 79.8% | 98.1% |
+| Nutrition | 5,406 | 99.8% | 73.8% | 99.5% |
+| Medication Management | 4,345 | 99.9% | 75.9% | 93.3% |
+| Nurse Only | 3,786 | 96.9% | 36.2% | 69.1% |
+| Abstract | 3,672 | 99.4% | 83.1% | 9.0% |
+| Flu | 2,104 | 96.4% | 13.7% | 99.4% |
+| Lactation Consult | 1,384 | 100.0% | 11.6% | 99.7% |
+| Lab | 1,351 | 97.0% | 37.3% | 78.7% |
+| Lactation Encounter | 1,337 | 99.8% | 1.9% | 49.7% |
+| Procedure visit | 678 | 97.8% | 56.3% | 96.0% |
+| Pre-op/Pre-procedure Orders | 575 | 100.0% | 84.3% | 96.3% |
+| Erroneous Encounter | 555 | 99.8% | 45.9% | 30.5% |
+| Orders Only | 273 | 99.6% | 78.4% | 51.6% |
+| External Contact | 211 | 100.0% | 99.5% | 2.4% |
+| Patient Message | 209 | 95.7% | 30.6% | 18.2% |
+| Evaluation | 143 | 99.3% | 74.1% | 94.4% |
+| Lab Requisition | 63 | 96.8% | 14.3% | 90.5% |
+| Scanned Document | 23 | 100.0% | 95.7% | 0.0% |
+| Letter (Out) | 18 | 100.0% | 94.4% | 0.0% |
+| Refill | 12 | 100.0% | 0.0% | 66.7% |
+| History | 11 | 100.0% | 45.5% | 0.0% |
+| Ophth Exam | 11 | 100.0% | 0.0% | 100.0% |
+| Hospital | — | — | — | — |
+| Routine Prenatal | — | — | — | — |
+| Transcribe Orders | — | — | — | — |
+| Patient Care Review | — | — | — | — |
+| Erroneous Telephone Encounter | — | — | — | — |
+| Episode Changes | — | — | — | — |
+| OurPractice Advisory | — | — | — | — |
+| ED | — | — | — | — |
+| Treatment | — | — | — | — |
 
-Encounter types with fewer than 10,000 visits are omitted.
+All 45 distinct values are listed. 9 carry too few visits to show a count.
 
 Telephone encounters carry a weight on 99.3% of 22,053 visits. A weight cannot be measured over the telephone, so those values were produced some other way — reported by a caregiver, carried from a nearby in-person encounter, or attached to an encounter whose type label does not describe how the patient was seen. Which of those it is cannot be determined from this extract.
 
@@ -804,8 +865,18 @@ Diagnoses arrive two ways: up to 33 coded slots per encounter, and a problem lis
 | J02.0 | Streptococcal pharyngitis | 129,310 | 71,029 |
 | B34.9 | Viral infection, unspecified | 125,662 | 68,886 |
 | Z00.110 | Health examination for newborn under 8 days old | 124,627 | 105,062 |
+| IMO0002 | [not in the ICD-10 lookup] | 116,950 | 42,737 |
+| F90.2 | Attention-deficit hyperactivity disorder, combined type | 112,292 | 15,694 |
+| Z29.3 | Encounter for prophylactic fluoride administration | 107,178 | 52,897 |
+| Z68.53 | Body mass index [BMI] pediatric, 85th percentile to less than 95th percentile for age | 105,889 | 52,088 |
+| J45.20 | Mild intermittent asthma, uncomplicated | 93,013 | 24,479 |
+| R21 | Rash and other nonspecific skin eruption | 92,028 | 62,699 |
+| K21.9 | Gastro-esophageal reflux disease without esophagitis | 90,172 | 31,748 |
+| F41.9 | Anxiety disorder, unspecified | 81,476 | 24,519 |
+| K59.00 | Constipation, unspecified | 80,647 | 39,182 |
+| H66.001 | Acute suppurative otitis media without spontaneous rupture of ear drum, right ear | 76,772 | 49,374 |
 
-Every count here is a recorded frequency within a selected cohort. Patients carrying any code that occurred fewer than 11 times were removed before delivery (1.4), so rare entries are absent by construction and nothing in this table is a population rate.
+The 25 most frequent of 8,029 distinct values, covering 52.8% of filled slots; the remaining 8,004 values hold the rest. Every count here is a recorded frequency within a selected cohort. Patients carrying any code that occurred fewer than 11 times were removed before delivery (1.4), so rare entries are absent by construction and nothing in this table is a population rate.
 
 The problem list holds 1,709,584 entries for 238,823 patients, of which 44.3% carry a resolved age. As 3.5 shows, the remainder are open problems rather than missing dates.
 
@@ -828,6 +899,18 @@ The problem list holds 1,709,584 entries for 238,823 patients, of which 44.3% ca
 | L20.83 | Infantile (acute) (chronic) eczema | 13,282 | 13,282 |
 | F90.2 | Attention-deficit hyperactivity disorder, combined type | 12,918 | 12,918 |
 | IMO0002 | [not in the ICD-10 lookup] | 12,915 | 12,915 |
+| R62.51 | Failure to thrive (child) | 12,503 | 12,503 |
+| J30.9 | Allergic rhinitis, unspecified | 11,383 | 11,383 |
+| Z91.018 | Allergy to other foods | 11,308 | 11,308 |
+| J06.9 | Acute upper respiratory infection, unspecified | 11,197 | 11,197 |
+| B08.1 | Molluscum contagiosum | 10,781 | 10,781 |
+| Z38.00 | Single liveborn infant, delivered vaginally | 10,304 | 10,304 |
+| R63.39 | Other feeding difficulties | 10,088 | 10,088 |
+| R01.1 | Cardiac murmur, unspecified | 10,081 | 10,081 |
+| G47.9 | Sleep disorder, unspecified | 9,772 | 9,772 |
+| J45.909 | Unspecified asthma, uncomplicated | 9,502 | 9,502 |
+
+The 25 most frequent of 4,739 distinct values, covering 20.7% of entries; the remaining 4,714 values hold the rest.
 
 **Both tables above count literal codes**, which is the right unit for describing what gets typed but the wrong one for counting a condition. Rolling the same data up to the three-character category changes which diagnoses appear at all — see 3.9, and note that 1,204 of the 1,327 categories in this extract never appear as a bare code, so an exact-match query for them returns zero.
 
@@ -850,6 +933,18 @@ The problem list holds 1,709,584 entries for 238,823 patients, of which 44.3% ca
 | H10 | Conjunctivitis | 74,858 |
 | Z68 | Body mass index [BMI] | 64,527 |
 | R21 | Rash and other nonspecific skin eruption | 63,738 |
+| P92 | Feeding problems of newborn | 62,842 |
+| Z29 | Encounter for other prophylactic measures | 61,612 |
+| K59 | Other functional intestinal disorders | 57,481 |
+| H65 | Nonsuppurative otitis media | 57,167 |
+| L20 | Atopic dermatitis | 52,206 |
+| R09 | Other symptoms and signs involving the circulatory and respiratory system | 51,549 |
+| J30 | Vasomotor and allergic rhinitis | 48,747 |
+| R06 | Abnormalities of breathing | 48,551 |
+| Z28 | Immunization not carried out and underimmunization status | 47,456 |
+| IMO | [not in the ICD-10 lookup] | 45,678 |
+
+The 25 most frequent of 1,327 distinct values; 1,302 more are not shown.
 
 **Implications for analysis.** Encounter diagnoses and problem-list entries answer different questions and should not be pooled without saying why: the first is what was coded at a contact, the second is what the chart asserts about the child, including resolved history. Neither is an adjudicated clinical truth, and a code's absence is not evidence a condition was absent.
 
@@ -876,8 +971,18 @@ The problem list holds 1,709,584 entries for 238,823 patients, of which 44.3% ca
 | POCT RAPID STREP A IMMUNOASSAY | 268,011 | 69,548 |
 | POCT COVID-19, INFLUENZA, AND RSV NUCLEIC ACID (AMPLIFIED PROBE) | 267,208 | 22,586 |
 | URINE CULTURE | 214,567 | 43,877 |
+| POCT HEMOGLOBIN | 193,586 | 86,845 |
+| RAPID STREP A, IMMUNOASSAY | 182,893 | 45,620 |
+| POCT INFLUENZA A/B IMMUNOASSAY | 172,419 | 35,207 |
+| LIPID PANEL | 148,974 | 23,764 |
+| STREP A CULTURE | 147,291 | 37,984 |
+| HEMOGLOBIN | 140,801 | 60,227 |
+| THROAT CULTURE | 131,125 | 37,007 |
+| URINALYSIS WITH MICROSCOPIC | 130,811 | 7,635 |
+| STREP A NUCLEIC ACID DETECTION | 119,448 | 28,102 |
+| INFLUENZA A/B NUCLEIC ACID | 112,796 | 22,382 |
 
-Every count here is a recorded frequency within a selected cohort. Patients carrying any code that occurred fewer than 11 times were removed before delivery (1.4), so rare entries are absent by construction and nothing in this table is a population rate.
+The 25 most frequent of 3,742 distinct values, covering 75.9% of rows; the remaining 3,717 values hold the rest. Every count here is a recorded frequency within a selected cohort. Patients carrying any code that occurred fewer than 11 times were removed before delivery (1.4), so rare entries are absent by construction and nothing in this table is a population rate.
 
 2,494,261 rows (14.5%) carry no result value at all, and 2,283,186 orders (34.7%) have no resulted component on any line. Both are expected rather than broken: the extract includes externally sourced labs that arrive without results. 3.6 covers how the values that do exist are shaped.
 
@@ -913,8 +1018,18 @@ Every count here is a recorded frequency within a selected cohort. Patients carr
 | Mupirocin | 74,769 | 51,626 |
 | Hydrocortisone | 72,204 | 40,563 |
 | Cetirizine HCl | 72,065 | 34,707 |
+| Azithromycin | 69,883 | 46,509 |
+| Cephalexin | 64,757 | 43,345 |
+| Triamcinolone Acetonide | 60,074 | 31,238 |
+| Nystatin | 58,782 | 34,023 |
+| FLUoxetine HCl | 56,361 | 6,637 |
+| Cholecalciferol | 55,797 | 40,031 |
+| Erythromycin | 53,467 | 39,136 |
+| Sertraline HCl | 49,233 | 6,289 |
+| guanFACINE HCl | 48,115 | 6,701 |
+| Spacer/Aero-Holding Chambers | 46,362 | 28,820 |
 
-Every count here is a recorded frequency within a selected cohort. Patients carrying any code that occurred fewer than 11 times were removed before delivery (1.4), so rare entries are absent by construction and nothing in this table is a population rate.
+The 25 most frequent of 1,073 distinct values, covering 64.0% of records; the remaining 1,048 values hold the rest. Every count here is a recorded frequency within a selected cohort. Patients carrying any code that occurred fewer than 11 times were removed before delivery (1.4), so rare entries are absent by construction and nothing in this table is a population rate.
 
 **Three documented fields were never delivered.** The data dictionary describes 3 medication classification columns — `med_therapeutic_class`, `med_pharmaceutical_class`, `med_pharmaceutical_subclass` — and none is present in the extract. Any analysis by drug class has to map `med_simple_generic_name` itself.
 
@@ -945,8 +1060,18 @@ Every count here is a recorded frequency within a selected cohort. Patients carr
 | Speech Pathology | 9,879 | 7,634 | 3.84 y |
 | Physical Therapy | 9,861 | 8,249 | 11.25 y |
 | Early Intervention | 9,302 | 8,511 | 1.41 y |
+| Developmental Medicine | 8,532 | 6,794 | 3.91 y |
+| Endocrinology | 6,641 | 5,583 | 9.37 y |
+| Occupational Therapy | 6,573 | 5,002 | 5.14 y |
+| General Surgery | 4,206 | 3,889 | 3.78 y |
+| Psychology | 4,134 | 3,537 | 9.03 y |
+| Pulmonary Disease | 3,926 | 3,539 | 4.80 y |
+| Plastic Surgery | 3,454 | 3,269 | 0.52 y |
+| Psychiatry | 2,885 | 2,458 | 10.59 y |
+| Podiatry | 2,863 | 2,608 | 11.48 y |
+| Neurosurgery | 2,415 | 2,302 | 0.40 y |
 
-Every count here is a recorded frequency within a selected cohort. Patients carrying any code that occurred fewer than 11 times were removed before delivery (1.4), so rare entries are absent by construction and nothing in this table is a population rate.
+The 25 most frequent of 119 distinct values, covering 85.4% of referrals; the remaining 94 values hold the rest. Every count here is a recorded frequency within a selected cohort. Patients carrying any code that occurred fewer than 11 times were removed before delivery (1.4), so rare entries are absent by construction and nothing in this table is a population rate.
 
 27,452 referrals (7.85%) carry no requested specialty and 26,601 (7.6%) no requested visit count. The data dictionary also warns that referrals are not always documented in the source system, so absence of a referral is not evidence none was made.
 
@@ -990,6 +1115,8 @@ Identity fields are recorded categories, not attributes of the children. Non-res
 | American Indian or Alaska Native | 625 | 0.2% |
 | Middle Eastern or Northern African | 512 | 0.2% |
 | Unable to collect | 492 | 0.2% |
+| Native Hawaiian or Other Pacific Islander | 248 | 0.1% |
+| Patient does not know | 126 | 0.1% |
 
 Race is a multi-select of up to eight slots; only the first is shown. 13,191 patients (5.3%) have a second race recorded, so this table understates multiracial identity.
 

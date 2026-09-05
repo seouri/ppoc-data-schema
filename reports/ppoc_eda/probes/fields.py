@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from ..context import RESOURCES, Context
 from ..findings import Column, Figure, Finding, Para, Table, probe
+from ..listing import listing, note
 
 #: Repeated column families are collapsed to a single indexed row.
 FAMILIES = (("enc_diag_", "enc_diag_1..33"), ("race_", "race_1..8"))
@@ -138,11 +139,14 @@ def sentinels(ctx: Context) -> list[Finding]:
         rows.append({"resource": table, "field": field, "pattern": label,
                      "rows": ctx.suppress(n)})
 
+    flag_raw, flag_distinct, flag_complete = listing(ctx,
+        "SELECT count(*) FROM (SELECT result_flag FROM labs GROUP BY 1)",
+        "SELECT result_flag, count(*) AS n FROM labs "
+        "GROUP BY 1 ORDER BY n DESC {limit}")
     flag_rows = [
-        {"value": v if v is not None else "null", "rows": n,
+        {"value": v if v is not None else "null", "rows": ctx.suppress(n),
          "meaning": "normal result" if v is None else "abnormal"}
-        for v, n in ctx.q(
-            "SELECT result_flag, count(*) FROM labs GROUP BY 1 ORDER BY 2 DESC LIMIT 8")
+        for v, n in flag_raw
     ]
     flag_null = ctx.scalar("SELECT count(*) FROM labs WHERE result_flag IS NULL")
     flag_none = ctx.scalar("SELECT count(*) FROM labs WHERE result_flag = '(NONE)'")
@@ -164,7 +168,8 @@ def sentinels(ctx: Context) -> list[Finding]:
              "the signal in their columns."),
         Table("t-flags", "Laboratory result flags",
               [Column("value", "result_flag"), Column("rows", "rows", ",", align="right"),
-               Column("meaning", "meaning")], flag_rows),
+               Column("meaning", "meaning")], flag_rows,
+              note=note(flag_distinct, flag_complete)),
         Para("The data dictionary defines `result_flag` as an HL7 abnormality "
              "category in which the value `(NONE)` means a normal result and "
              "anything else means abnormal. This extract contains {flag_none:,} "
