@@ -1,7 +1,7 @@
 # Plan: a project-neutral EDA reference for the PPOC snapshot
 
-**Status:** proposed, not yet implemented
-**Supersedes nothing.** `reports/growth-chart-literacy-real-data-eda.md` and its two generators stay as they are; this is a new, parallel deliverable built from scratch.
+**Status:** implemented. The report is built by `reports/build_ppoc_eda.py` and published to `reports/ppoc-eda/`.
+**Outcome.** It did supersede the earlier work in the end: `reports/growth-chart-literacy-real-data-eda.md` has been reduced to a thin project overlay that cites this report, and the two generators under `reports/eda/` were removed once every analysis they produced had a counterpart here. `reports/audit_coverage.py` guards that split.
 
 ---
 
@@ -353,7 +353,7 @@ Eleven figures, each tied to a claim that is genuinely harder to make in a table
 
 ## 8. Script architecture
 
-New package, no modification of and no import from the existing generators. Probe *logic* may be adapted from `reports/eda/build_ehr_artifact_profile.py`, which is already verified and deterministic — re-deriving the permutation-null machinery would be waste.
+New package, with no modification of and no import from the generators that existed at the time. Probe *logic* was adapted from the earlier, already-verified artifact profiler rather than re-derived — the permutation-null machinery in particular. Those generators have since been deleted; the ported figures were checked against their output before they went.
 
 ```
 reports/ppoc_eda/
