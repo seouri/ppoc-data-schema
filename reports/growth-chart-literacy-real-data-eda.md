@@ -1,7 +1,7 @@
 # Real-data exploratory analysis for GrowthChartLiteracy
 
 **Analysis date:** 2026-09-04
-**Source root:** `/Users/joon/w/p3-data/all`
+**Sources:** sections 1–5 and 7–10 from the CSV snapshot at `/Users/joon/w/p3-data/all`; section 6 from the typed DuckDB bundle `ppoc.duckdb` (package `ppoc-pediatric-ehr` 1.0.0, snapshot `2026-08-24`, sha256 `425c6f873cefc149344570561a03b33c69a6a6af7fa18bc777c0429579507116`), read-only
 **Scope:** aggregate-only descriptive analysis of the real, de-identified PPOC snapshot; no patient-level identifiers or row-level records are included in this report.
 
 ## Executive summary
@@ -11,6 +11,8 @@ The snapshot contains **250,588 patients** and **6,494,473 augmented visits** sp
 For the GrowthChartLiteracy question, the strongest usable signal is the repeated height trajectory. Height is available at **99.9% of patients** at least once, **97.9%** have at least three height-derived observations across all ages, and **75.1%** retain at least three at age 2 years or later. That supports longitudinal trajectory work, while the visit-level completeness table shows why the missingness must remain explicit rather than being treated as random.
 
 The distributed anthropometric layer also contains clinically important quality hazards. In particular, the head-circumference channel extends beyond the review range of 25–65 cm in **15,025 visits**, and head-circumference z-scores beyond ±5 occur in **16,663 visits**. These are data-quality findings, not clinical diagnoses. Weight-for-length, weight-for-stature, BMI, and head-circumference z-scores should be screened before they are used to construct stimuli or outcomes.
+
+Section 6 profiles these and other characteristic EHR artifacts directly, and three of its findings change how the derived layer can be used. First, the distributed **height z-score is truncated at exactly +3** while its lower tail runs to −5: only **21 visits** sit at or above +3 where roughly **15,800** would be expected, so the tall-stature tail of the height channel is effectively absent. Second, **13,467 of the 15,025** out-of-range head circumferences are ordinary infant measurements that were put through an inch-to-centimetre conversion a second time, which makes that channel largely recoverable rather than simply unusable, though its z transform is separately defective. Third, the distributed **`delta_*` and velocity fields cannot be reproduced** from any natural definition of a successive height change (19.0% agreement at best), so velocity must be recomputed rather than consumed as supplied. Alongside these, height is recorded on a quarter-inch grid in **80.0%** of visits, which sets a floor on the trajectory deflection that is detectable at all.
 
 The patient-level `growth_dx_flag` is present in **35,907 patients**; its median recorded age is **0.027 years**, with **70.1%** of age-observed flagged patients assigned a code in the first month. This supports the source project’s decision to treat diagnosis-code flags as descriptive rather than as a direct label of multi-year trajectory interpretation.
 
@@ -222,7 +224,227 @@ For 1,955,339 age-2-or-later rows with distributed BMI, weight, and height, the 
 
 The category distribution is a description of recorded visits with a nonmissing BMI percentile. It is not a prevalence estimate: children with more visits contribute more observations, BMI is missing selectively, and the network’s patient mix and observation window are not a population-sampling frame.
 
-## 6. Diagnosis landscape
+<!-- BEGIN ehr-artifact-profile -->
+
+## 6. Common EHR data artifacts
+
+This section profiles recording, transformation, and linkage artifacts that are characteristic of electronic health record extracts. It was computed from the typed DuckDB bundle rather than the CSV directory; the generator and provenance are documented in the methods section. Every finding below describes the behaviour of a recording and derivation system. None of them is a statement about any child, and none is a clinical judgement.
+
+Two distinct actors produce these artifacts and the report keeps them separate. Some are **capture artifacts** introduced where care is delivered and data are typed, such as digit rounding and repeated same-day measurements. Others are **derivation artifacts** introduced by the augmentation pipeline that computed z-scores, percentiles, velocities, and flags. A derivation artifact can be repaired without touching the clinical record; a capture artifact cannot.
+
+**Bundle agreement check.** Before any new figure was computed, six review counts from the previous section were recomputed from the bundle: head circumference outside the 25–65 cm review range (15,025), |BMI z| > 5 (400), |weight-for-length z| > 5 (1,123), |weight-for-stature z| > 5 (246), |head-circumference z| > 5 (16,663), and BMI outside 8–60 (44). All six reproduce the values reported in section 5, so the bundle is the same snapshot (`2026-08-24`) and the counts in this section are directly comparable with the rest of the report.
+
+### 6.1 Asymmetric truncation of the height z-score (derivation artifact)
+
+The distributed height z-score is bounded above at exactly 3.00 while its lower tail runs to -4.9992. The truncation is not visible as a pile-up at the boundary, so it is easy to miss: only 21 visits sit at or above +3, and the upper tail decays smoothly right up to the bound.
+
+The asymmetry is what exposes it. The two tails should be broadly comparable in a z-score channel, and they are not.
+
+| tail | visits beyond 2.5 in absolute z | visits beyond 3 in absolute z | share of the 2.5 mass continuing past 3 |
+| --- | --- | --- | --- |
+| lower (negative z) | 21,248 | 9,637 | 45.4% |
+| upper (positive z) | 34,732 | 21 | 0.06% |
+
+In the lower tail, 45.4% of the mass beyond |z| = 2.5 continues past |z| = 3. If the upper tail behaved the same way, roughly 15,800 visits would sit above +3; 21 do. The tall-stature tail of the height channel is therefore effectively absent, while the short-stature tail is retained down to −5.
+
+The obvious candidate mechanism does not survive checking. 17,971 visits carry a raw `height_in` but no derived `height_cm`, so the pipeline does discard some measurements — but those discards are short-skewed, not tall-skewed (1,719 imply a stature below 40 cm against 403 above 190 cm), and even counting every tall discard leaves the gap roughly forty times unexplained. Nor is the mass being dropped at the z step: only 46 visits carry a derived height with no z-score. The missing observations were never present in the derived channel rather than removed from it, which is consistent with a reference lookup that terminates at +3 — the height percentile stops at 99.87, the value z = 3 implies — but the snapshot does not expose the derivation, and the mechanism is not identifiable from it. The truncation itself does not depend on the explanation.
+
+The bound is also channel-specific and undocumented in the field names. Weight z runs -4.9991 to 4.9995 and BMI z runs -18.7803 to 6.7026, so the three channels do not share a common support. Any model that consumes several z channels together inherits that inconsistency silently.
+
+**Consequence for this project.** Tall stature is one of the two directions a growth-chart reader is asked to recognise. A height channel whose upper tail stops at +3 cannot support a tall-stature arm, and it will also distort any trajectory that approaches the bound from below. Constructed stimuli should not be calibrated against this channel's upper tail, and the tall-stature codes in the diagnosis table (E34.4 constitutional tall stature, Q87.3 early overgrowth) cannot be paired with a matching measured trajectory here.
+
+The percentile channels show the same bounds from the other side.
+
+| channel | n | at 0 | share at 0 | at 100 | share at 100 | minimum | maximum |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| height percentile | 3,491,616 | 2,801 | 0.080% | 0 | 0.000% | 0.00 | 99.87 |
+| weight percentile | 6,482,932 | 3,584 | 0.055% | 5,221 | 0.081% | 0.00 | 100.00 |
+| BMI percentile | 1,955,337 | 1,599 | 0.082% | 1,590 | 0.081% | 0.00 | 100.00 |
+| weight-for-length percentile | 2,027,317 | 6,151 | 0.303% | 1,203 | 0.059% | 0.00 | 100.00 |
+| weight-for-stature percentile | 1,371,347 | 1,509 | 0.110% | 856 | 0.062% | 0.00 | 100.00 |
+
+The height percentile never reaches 100 because its z-score never exceeds +3, whereas weight, BMI, weight-for-length, and weight-for-stature percentiles all carry a point mass at both 0 and 100. Those exact-0 and exact-100 values are saturated rather than measured and should not be treated as continuous.
+
+### 6.2 Terminal-digit heaping and measurement granularity (capture artifact)
+
+Height and weight are captured in imperial units (`height_in`, `weight_oz`) and the metric fields are exact conversions of them. The recorded values are strongly heaped on human-readable fractions: of 3,509,633 heights, 31.0% fall on a whole inch, 54.9% on a half inch, and 80.0% on a quarter inch. Of 6,488,028 weights, 54.4% fall on a whole ounce, 30.4% on a half pound, and 24.6% on a whole pound.
+
+Heaping is not uniform across childhood. Infant weights are recorded in ounces, and older children's weights are recorded to the pound, so the effective precision of the weight channel degrades as children age.
+
+| age_band | visits | weights on a whole pound | heights on a whole inch |
+| --- | --- | --- | --- |
+| 0-<2 years | 2,687,964 | 8.1% | 33.0% |
+| 2-<5 years | 1,394,136 | 33.3% | 32.1% |
+| 5-<10 years | 1,528,542 | 37.3% | 29.1% |
+| 10-<15 years | 741,702 | 39.4% | 27.2% |
+| 15-18 years | 135,684 | 37.2% | 25.3% |
+
+**Consequence for this project.** A quarter inch is 0.635 cm, and 80.0% of heights sit on that grid. The derived `height_cm` values carry two decimal places and imply a precision the underlying measurement does not have. This sets a floor on the trajectory deflection that is detectable at all: a deviation smaller than roughly half the rounding interval is not distinguishable from the rounding itself. Serialized stimuli should either preserve the observed grid or state the assumed precision explicitly, because a model shown `height_cm = 104.14` is being given a digit the clinic never measured.
+
+### 6.3 Unit-conversion integrity and a recoverable head-circumference defect
+
+The imperial-to-metric conversions are exact. Across 3,491,662 visits with both a raw and a derived height, 0 disagree with `height_in × 2.54` by more than 0.01 cm; across 6,483,007 weight pairs, 0 disagree with `weight_oz × 0.0283495`. The height and weight channels carry no unit-conversion defect.
+
+Head circumference does. Its out-of-range values form structured clusters.
+
+| head_circ_cm band | visits | median | minimum | maximum |
+| --- | --- | --- | --- | --- |
+| below 10 cm | 174 | 4.10 | 0.00 | 9.65 |
+| 10 to <25 cm | 943 | 18.00 | 10.00 | 24.77 |
+| 25 to 65 cm (within review range) | 1,620,665 | 44.00 | 25.00 | 65.00 |
+| >65 to 200 cm | 13,472 | 110.49 | 65.50 | 193.04 |
+| above 200 cm | 436 | 252.22 | 202.57 | 505.46 |
+
+The cluster between 65 and 200 cm is not noise. It holds 13,472 visits with a median of 110.49 cm, and 13,467 of them — 99.96% — fall back inside the 25–65 cm review range when divided by 2.54, with a median of 43.5 cm. That is a normal infant head circumference. These are centimetre values that were passed through an inch-to-centimetre conversion a second time. A further 436 visits sit above 200 cm, of which 356 become plausible after dividing by 2.54 twice, consistent with the same conversion applied again.
+
+This one defect explains most of the head-circumference damage the previous section reported. Of 16,663 visits with |head-circumference z| > 5, 14,899 (89.4%) sit on a head circumference outside the review range, and the double-converted cluster alone accounts for 13,467 of them. The remaining 1,764 visits have a plausible head circumference but still produce |z| > 5, so the z transform is independently defective as well and repairing the units would not fully fix the channel.
+
+**Consequence for this project.** The previous section's guidance to exclude head-circumference z-score is confirmed, but the diagnosis is now specific rather than general: the raw channel is mostly recoverable by a documented division, and the derived z channel has a second, separate defect. That distinction matters because it means the raw head-circumference measurements are largely usable after repair, which the earlier framing did not establish.
+
+### 6.4 Repeated measurements: zero growth, apparent shrinkage, and copy-forward
+
+Across 1,746,627 successive age-2-or-later height pairs, 88,887 (5.09%) record exactly no change despite a positive age gap, and 59,134 (3.39%) record a decrease. Children in this age range do not shrink, so both categories are recording behaviour rather than physiology. Their dependence on the interval between measurements separates two different mechanisms.
+
+| age gap between successive heights | pairs | exactly zero change | any decrease | decrease over 1 inch |
+| --- | --- | --- | --- | --- |
+| up to 7 days | 25,987 | 47.84% | 21.34% | 1.95% |
+| 8 to 30 days | 82,685 | 32.00% | 19.05% | 1.43% |
+| 31 to 90 days | 170,561 | 16.38% | 10.51% | 0.96% |
+| 91 to 180 days | 205,195 | 5.15% | 4.22% | 0.52% |
+| 181 to 365 days | 368,333 | 1.57% | 1.45% | 0.19% |
+| over 365 days | 893,866 | 0.64% | 0.66% | 0.05% |
+
+At short intervals the rates are dominated by measurement noise and rounding: within a week, a child genuinely has not grown a measurable amount, and the quarter-inch grid absorbs the rest, so nearly half of repeat heights are identical and a fifth are lower. At long intervals both mechanisms should vanish, and they do not entirely — over a year apart, exactly-zero change and apparent shrinkage each still occur in well under one percent of pairs, which is the residue consistent with a value carried forward or entered in error.
+
+**Consequence for this project.** The short-interval rates are an empirical measurement-error estimate rather than a defect, and they are directly usable for the matched-noise requirement in the counterfactual stimulus design: any synthetic trajectory whose repeat measurements are noiseless will be unrealistically clean relative to this panel. The long-interval residue is a different matter and should be screened before serialization.
+
+### 6.5 Same-day duplicate encounters and same-day measurement disagreement
+
+Visit identifiers are unique, but a patient can have more than one visit row on the same age in days. This affects 5,478 patient-days (0.08% of 6,488,911) and 11,040 visits (0.17%). The rate is low, but it means `age_in_days` is not a unique key within a patient and any analysis that orders a trajectory by age alone has ties to resolve.
+
+Where the same day carries two or more measurements, they often disagree. 2,958 patient-days carry at least two heights and 942 of those disagree (31.8%); 5,319 carry at least two weights and 2,648 disagree (49.8%).
+
+| channel | patient-days with a disagreement | median spread | 95th percentile | maximum |
+| --- | --- | --- | --- | --- |
+| height | 942 | 3.18 cm | 12.16 cm | 34.93 cm |
+| weight | 2,648 | 0.118 kg | 3.64 kg | 36.57 kg |
+
+The height spread is the notable one. A median disagreement of 3.18 cm between two heights recorded on the same day is far larger than same-day weight disagreement in relative terms, and it is the size of difference expected when recumbent length and standing height are mixed, or when one value is carried from a previous note. It describes discordant same-day pairs rather than the panel as a whole, but it is a direct estimate of how far two heights recorded for the same child on the same day can sit apart.
+
+### 6.6 Distributed delta and velocity fields are not reproducible (derivation artifact)
+
+The augmented visit layer distributes `delta_height_cm`, `delta_age_in_days_height`, and the velocity fields derived from them. On a fixed sample of 43,952 rows carrying a nonmissing `delta_height_cm`, none of the three natural definitions of a successive height change reproduces the distributed value.
+
+| candidate definition of the previous height | rows matching the distributed delta | share |
+| --- | --- | --- |
+| previous visit of any kind | 4,210 | 9.6% |
+| previous height-bearing visit | 8,357 | 19.0% |
+| previous raw `height_in`, converted | 3,906 | 8.9% |
+
+Same-day ties are not the explanation: only 0.17% of visits share a patient-day with another visit, which cannot account for agreement as low as 19.0%. The ordering or the measurement series the pipeline used is therefore something this snapshot does not expose.
+
+**Consequence for this project.** The velocity channels are built on these deltas, so `height_velocity`, `height_velocity_z_score`, and their pubertal variants inherit an unverifiable definition. Velocity should be recomputed from the height series with a stated definition rather than consumed as distributed, and the distributed velocity fields should not be serialized into stimuli. This is a stronger conclusion than the previous section's recommendation to inspect velocity distributions before use.
+
+### 6.7 Measurement presence does not mean measurement (capture artifact)
+
+Section 3 reported measurement completeness by age and by source system. Encounter type is the stratifier that shows the completeness figures cannot be read as measurement occurrence.
+
+| encounter_type | visits | weight present | height present | first diagnosis present |
+| --- | --- | --- | --- | --- |
+| Office Visit | 4,725,643 | 99.9% | 52.2% | 95.8% |
+| Well Visit (Conv.) | 778,452 | 99.7% | 98.2% | 94.4% |
+| Sick | 580,991 | 99.8% | 16.8% | 95.4% |
+| Follow-Up | 92,370 | 99.6% | 24.7% | 93.1% |
+| Walk-In | 79,679 | 99.9% | 8.6% | 96.9% |
+| Consult | 32,355 | 99.8% | 53.4% | 99.6% |
+| Conversion Encounter | 32,007 | 99.8% | 66.5% | 17.3% |
+| Newborn | 31,142 | 98.2% | 87.0% | 99.1% |
+| Telemedicine | 25,658 | 97.3% | 44.6% | 99.8% |
+| Telephone | 22,053 | 98.6% | 49.7% | 34.8% |
+| Weight Check | 16,295 | 99.8% | 37.3% | 96.4% |
+| Clinical Support | 15,347 | 99.3% | 15.3% | 83.4% |
+| Documentation | 13,107 | 97.0% | 82.5% | 8.6% |
+| Immunization | 11,774 | 97.3% | 30.5% | 93.4% |
+| New Patient | 11,410 | 99.8% | 79.2% | 98.1% |
+
+Telephone and telemedicine encounters carry a weight on the large majority of visits. A weight cannot be measured over the telephone, so those values were produced some other way — reported by a caregiver, populated from a nearby in-person encounter, or attached to an encounter whose type label does not describe how the patient was seen. The mechanism is not simple last-value carry-forward, as the following table shows.
+
+| encounter_type | visits with a weight | weight identical to previous visit | identical with a gap over 7 days |
+| --- | --- | --- | --- |
+| Office Visit | 4,721,269 | 3.5% | 2.9% |
+| Well Visit (Conv.) | 776,132 | 1.7% | 1.4% |
+| Sick | 579,649 | 5.8% | 4.8% |
+| Telemedicine | 24,977 | 6.5% | 5.4% |
+| Telephone | 21,753 | 6.0% | 2.4% |
+| Clinical Support | 15,233 | 4.3% | 2.1% |
+| Documentation | 12,719 | 25.9% | 31.6% |
+
+Only documentation encounters show a carry-forward signature, where about a quarter of weights exactly repeat the previous value and the rate rises rather than falls as the gap widens. Telephone and telemedicine weights mostly differ from the previous recorded weight, so the mechanism there is not last-value carry-forward; what it is instead is not identifiable from this snapshot.
+
+**Consequence for this project.** A visit-level indicator that a measurement is present is not evidence that a measurement was taken at that encounter. The schedule-density manipulation in the counterfactual design assumes measurement-bearing visits are real measurement occasions; that assumption should be enforced by restricting to encounter types where physical measurement is possible, not by measurement presence alone.
+
+### 6.8 Cross-resource temporal and linkage integrity
+
+Age in days is the only clock in this snapshot, and ordering violations within a resource are visible directly. Counts below 10 are suppressed.
+
+| integrity check | violating rows | rows checked | share |
+| --- | --- | --- | --- |
+| Lab result age earlier than lab order age | 583,055 | 14,947,495 | 3.901% |
+| Medication start age earlier than order age | 329,107 | 3,539,983 | 9.297% |
+| Medication end age earlier than start age | 12,709 | 3,179,759 | 0.400% |
+| Problem resolved age earlier than noted age | 0 | 754,996 | 0.000% |
+| Problem noted before birth (negative age) | 650 | 1,702,300 | 0.038% |
+| Lab ordered before birth (negative age) | 47 | 17,230,681 | 0.000% |
+| Medication ordered before birth (negative age) | <10 | 3,823,049 | 0.000% |
+| Visit recorded before birth (negative age) | 0 | 6,494,473 | 0.000% |
+
+The lab and medication violations are the substantial ones. A result age earlier than its order age and a start age earlier than its order age both indicate that these age fields are derived from different source timestamps with different semantics, so differences between them are not reliable durations. The small number of pre-birth ages are unrecoverable date errors.
+
+Visit linkage is incomplete in every resource that carries a visit identifier, not only in referrals.
+
+| resource | rows | rows with a visit_id | share missing a visit_id | nonnull visit_id not matching a visit | share of nonnull unresolved |
+| --- | --- | --- | --- | --- | --- |
+| labs | 17,230,681 | 17,229,876 | 0.00% | 5,201,657 | 30.19% |
+| medications | 3,823,049 | 3,823,049 | 0.00% | 1,592,437 | 41.65% |
+| referrals | 349,827 | 324,997 | 7.10% | 98,623 | 30.35% |
+
+The medication result is the one that changes an assumption elsewhere in the package: `medications.visit_id` is declared required and is populated on every row, yet a large share of those values do not correspond to any visit in this snapshot. A required, populated foreign key that does not resolve is easy to mistake for a complete link. Section 8's referral linkage finding is therefore not specific to referrals; it is a property of the extract.
+
+### 6.9 Laboratory results are semi-structured text
+
+`result_value` is a text field. Of 17,230,681 rows, 2,494,261 (14.5%) carry no value at all, 7,621,449 (44.2%) parse as a number, and 7,114,971 (41.3%) do not. Among the non-numeric values, 484,242 are censored results carrying a comparator prefix such as `<3.3`, and the remainder are qualitative results (`NEGATIVE`, `NOT DETECTED`, `TRACE`), specimen descriptors, and administrative non-results (`NOT REPORTED`, `SEE NOTE`). A naive numeric cast silently discards nearly half the populated values and, more seriously, treats a left-censored result as missing rather than as a bound.
+
+The declared key holds: `(lab_order_id, result_component_name, result_line_num)` has 0 duplicate groups. But 31,628 order-and-component pairs appear on more than one result line, and 23,679 of those (74.9%) carry disagreeing values — repeated or corrected results within a single order. Joining on order and component without the line number will multiply rows and pick an arbitrary value.
+
+### 6.10 Vocabulary and categorical-string hygiene
+
+Diagnosis strings are almost entirely well-formed ICD-10. Of 14,714,503 filled encounter-diagnosis slots across 8,029 distinct codes, 120,393 (0.82%) are not ICD-10-shaped; of 1,709,584 problem-list entries across 4,739 distinct codes, 13,555 (0.79%) are not. In both resources the non-conforming values are entirely `IMO0001` and `IMO0002`, proprietary Intelligent Medical Objects placeholders that Epic emits when a clinical term has no ICD-10 equivalent. `IMO0002` is the entry that appears in the problem-list table of this report as `[not in ICD-10 lookup]`: it is not a lookup failure but a code that carries no diagnostic meaning on its own. It should be excluded from code-based cohort definitions rather than treated as an unmapped diagnosis.
+
+Categorical free-text fields are cleaner than is typical for an EHR extract. Normalising case and internal whitespace collapses lab procedure names from 3,742 to 3,739 distinct values, medication generic names from 1,073 to 1,073, and requested specialties from 119 to 119. Only the lab vocabulary collapses at all, and only by 3. Cosmetic irregularities are common — 1,669,090 lab rows carry an internal double space, and tall-man lettering such as `EPINEPHrine` is preserved from the source system — but they do not fragment the vocabularies. Grouping by these fields is safe after trimming; the risk here is presentational, not analytic.
+
+### 6.11 Artifact summary
+
+| artifact | class | scale in this snapshot | recoverable? |
+| --- | --- | --- | --- |
+| Height z-score truncated at +3 with the lower tail retained to −5 | derivation | 21 visits at the bound; roughly 15,800 expected above it | No — recompute z from raw height and a stated reference |
+| Percentile point mass at exactly 0 and 100 | derivation | up to 6,151 visits in a single channel | No — treat as saturated |
+| Terminal-digit heaping on quarter-inch and pound grids | capture | 80.0% of heights on a quarter inch | No — inherent precision limit |
+| Head circumference double-converted inch-to-centimetre | derivation | 13,467 visits | Yes — divide by 2.54 |
+| Head-circumference z defective on plausible measurements | derivation | 1,764 visits | No — recompute or exclude |
+| Zero or negative height change over long intervals | capture | 0.64% and 0.66% of pairs over a year apart | Partly — screen before use |
+| Same-day duplicate encounters with disagreeing measurements | capture | 942 patient-days for height | Partly — define a tie rule |
+| Distributed deltas and velocities not reproducible | derivation | 19.0% agreement at best | Yes — recompute from the height series |
+| Anthropometrics present on non-contact encounters | capture | weight on the large majority of telephone visits | Partly — restrict by encounter type |
+| Lab and medication age fields violating their own ordering | capture | 583,055 and 329,107 rows | No — do not treat as durations |
+| Populated visit_id not resolving to a visit | linkage | labs, medications, and referrals all affected | No — treat linkage as incomplete |
+| Laboratory results as semi-structured text with censored values | capture | 484,242 comparator-prefixed results | Yes — parse comparators explicitly |
+| Proprietary IMO placeholder codes | capture | 133,948 slots and entries | Yes — exclude from code-based cohorts |
+
+The derivation artifacts are the ones that matter most for this project, because they affect exactly the fields a growth-chart model would consume and because they are invisible in the field names. Three of them — the height-z ceiling, the head-circumference conversion, and the unreproducible velocities — were not detectable from the distributional summaries in section 5 alone and required an explicit reconstruction of the derivation from the raw channel.
+
+<!-- END ehr-artifact-profile -->
+
+## 7. Diagnosis landscape
 
 ### Patient-level flags
 
@@ -340,7 +562,7 @@ This table is limited to `enc_diag_1`, the first-listed encounter diagnosis, and
 
 Problem-list entries do not carry a complete visit-level link and may include active, historical, or resolved conditions. Their presence is useful for case-mix context, but absence is not evidence that a condition was never present.
 
-## 7. Specialty referrals and recorded care pathways
+## 8. Specialty referrals and recorded care pathways
 
 The referral file contains 349,827 records for 138,071 patients. The median recorded referral age is 5.98 years (IQR 2.02–10.60). Missingness is 7.8% for requested specialty, 7.1% for visit ID, and 7.6% for recorded referral visit count.
 
@@ -408,7 +630,7 @@ Patient IDs resolve for 100.0% of referral rows. Only 64.7% of referral rows hav
 
 Per the GrowthChartLiteracy plan, referrals are inventoried here but no referral-versus-utilization model, AUROC, calibration curve, or endpoint claim is estimated. The action label is subject to positive-unlabeled interpretation: no recorded referral may mean no action, action outside the network, incomplete capture, or insufficient look-forward.
 
-## 8. Labs, medications, and problem-list context
+## 9. Labs, medications, and problem-list context
 
 These resources provide case-mix and care-process context but are not substituted for the growth trajectory. The report summarizes counts and completeness without printing laboratory results, medication dates, or patient-linked records.
 
@@ -484,7 +706,7 @@ These resources provide case-mix and care-process context but are not substitute
 | J06.9 | Acute upper respiratory infection, unspecified | 11,197 | 11,197 |
 | B08.1 | Molluscum contagiosum | 10,781 | 10,781 |
 
-## 9. Research and clinical implications for GrowthChartLiteracy
+## 10. Research and clinical implications for GrowthChartLiteracy
 
 ### What the data support
 
@@ -505,6 +727,10 @@ The real-data profile did not simply supply candidate subjects. It identified wh
 | **Age and sex define the reference frame** | Calendar dates are absent and age is the only clock; 75.1% retain at least three heights at age 2 years or later, while BMI is structurally available only from age 2 in the augmented pipeline. | The primary trajectory frame is age 2 years and above, sex-specific reference curves are retained, and E9 tests whether the same crossing has different meaning in mid-childhood and the peripubertal window. |
 | **Raw and derived representations coexist** | The augmented visit layer contains raw measurements alongside z-scores, percentiles, BMI, velocities, and clinical flags; the underlying clinical object is a plotted trajectory, while the planned model input is serialized text. | E3 compares raw, derived, and combined features across table, sentence, and digit-string formats, selects the format in a held-out split, and treats downstream findings as conditional on text serialization. |
 | **Anthropometric quality is heterogeneous** | Head-circumference z-scores reach 306,212.60 and weight-for-length z-scores reach -145.60; 15,025 head-circumference values fall outside 25–65 cm. | Plausibility bounds are applied before serialization, head-circumference z-score is excluded until repaired or validated, and distributed flags are checked rather than assumed to be ground truth. |
+| **The derived z and percentile channels are bounded, asymmetrically and inconsistently** | Height z is truncated at exactly +3 with only 21 visits at the bound against roughly 15,800 expected, while its lower tail runs to −5 and weight and BMI z use different supports; height percentile never reaches 100, and the other percentile channels carry a point mass at both 0 and 100. | Tall stature cannot be represented from this channel, so no tall-stature arm is drawn from measured trajectories and E9's peripubertal contrasts avoid the upper bound. Z-scores are recomputed from raw measurements against a stated reference before serialization rather than consumed as distributed. |
+| **Recorded precision is coarser than the derived fields imply** | 80.0% of heights fall on a quarter-inch grid (0.635 cm) and whole-pound weight recording rises from 8.1% in infancy to 39.4% at 10–<15 years, yet derived `height_cm` carries two decimals. | The detectable-deflection floor is set from the observed grid rather than from the derived precision, E5a's matched noise is calibrated to it, and serialized stimuli either preserve the grid or state the assumed precision so that a spurious digit is not presented as a measurement. |
+| **Measurement presence is not measurement occurrence** | Weight is recorded on 98.6% of telephone and 97.3% of telemedicine encounters, where physical measurement is impossible, and only about 6% of those repeat the previous value exactly. | Trajectory eligibility is defined by encounter types where measurement is possible, not by measurement presence, so E5a's schedule-density manipulation operates on real measurement occasions. |
+| **Derived longitudinal fields are not reproducible** | No definition of a successive height change reproduces the distributed `delta_height_cm` (19.0% agreement at best), and same-day duplicate encounters are too rare (0.17% of visits) to explain the gap. | Velocity is recomputed from the height series under a stated definition; distributed velocity and delta fields are excluded from features and stimuli. |
 
 The cohort is large enough that the planned real-patient samples are not supply-constrained. The binding constraints are comparable observation windows, trustworthy labels, and clinician time, which is why the core relies on constructed or counterfactual stimuli and the clinician panel validates roughly 110 curves rather than adjudicating thousands of real records.
 
@@ -524,19 +750,31 @@ Taken together, these characteristics make the study a layered, within-subject c
 2. Define trajectory eligibility using measurement availability, not only visit count; report the number of height-bearing observations, span, and gaps.
 3. Resample and model at the patient or trajectory level, not the visit level, when estimating uncertainty.
 4. Treat missingness as potentially informative. Show missingness by age band, sex, race/ethnicity recording, encounter source, and utilization band before interpreting any subgroup contrast.
-5. Recompute or validate distributed anthropometric flags after applying an explicit, source-documented plausibility pipeline. Exclude head-circumference z-score from trajectory serialization until its transform is repaired or independently validated.
+5. Recompute or validate distributed anthropometric flags after applying an explicit, source-documented plausibility pipeline. Exclude head-circumference z-score from trajectory serialization until its transform is repaired or independently validated. Repair the head-circumference measurement channel by dividing the double-converted cluster by 2.54 rather than discarding it, and note that the z transform remains defective on 1,764 visits with a plausible measurement.
 6. Keep diagnosis, referral, and utilization labels separate. A diagnosis code is a recorded code; a referral is a recorded action; neither is an adjudicated physiologic truth.
 7. Pre-specify the referral index and look-forward before estimating action-related performance, and report the result as record-based rather than as a diagnosis of the child.
+8. Recompute z-scores and percentiles from raw measurements against an explicitly stated reference. Do not consume the distributed height z-score where the tall tail matters, and treat percentile values of exactly 0 and 100 as saturated rather than continuous.
+9. State the assumed measurement precision wherever a trajectory is serialized, and do not present derived decimals the recording grid does not support. Set any detectable-deflection threshold at or above the rounding interval.
+10. Recompute velocity from the height series under a stated definition. Do not use the distributed `delta_*` or `*_velocity` fields as model inputs until their definition is recovered from the source pipeline.
+11. Restrict measurement-bearing visits by encounter type before treating them as measurement occasions, and resolve same-day ties with an explicit rule since `age_in_days` is not unique within a patient.
+12. Treat visit-level linkage as incomplete in every resource, not only referrals. A populated `visit_id` in labs or medications does not imply a resolvable link, and lab and medication age fields violate their own ordering often enough that differences between them are not reliable durations.
 
-## 10. Methods and reproducibility
+## 11. Methods and reproducibility
 
 The analysis used DuckDB 1.5.5 through the repository’s `uv` environment. The script materializes only selected columns needed for aggregate queries, uses age in days as the time axis, and does not export identifiers. Quantiles use DuckDB `quantile_cont`; repeated-measure summaries use patient-level grouping and age-ordered window functions. The ICD-10 lookup is normalized to one description per code before joins to prevent lookup duplication from multiplying diagnosis rows. Visit-level tables are explicitly labeled as visit-level; patient-level ever-patterns are grouped by patient.
+
+Section 6 was computed separately from the typed DuckDB bundle rather than the CSV directory, because the artifact probes need repeated windowed passes over the full visit table. The bundle is opened read-only and never copied into the repository; the section emits aggregate tables only, and counts below 10 are suppressed. Before any artifact figure was computed the generator recomputes six review counts from section 5 and the section reports whether they agree, so a bundle drawn from a different snapshot would be visible rather than silently mixed into the report. Successive-measurement statistics in section 6 use an explicit `lag()` over height-bearing visits ordered by age; the distributed `delta_*` fields are not used as inputs because section 6.6 shows they do not reproduce that lag.
 
 The report was generated by:
 
 ```sh
 PPOC_DATA_ROOT=/Users/joon/w/p3-data/all uv run python reports/eda/build_growth_chart_literacy_eda.py
+
+uv run python reports/eda/build_ehr_artifact_profile.py \
+  --bundle /Users/joon/src/tries/ppoc-duckdb-real/ppoc.duckdb
 ```
+
+The second command regenerates section 6 in place between its `ehr-artifact-profile` markers, so that section stays measured rather than hand-maintained.
 
 The report is descriptive and exploratory. It does not constitute a registered endpoint analysis, a clinical validation study, a diagnostic device evaluation, or evidence of clinical benefit. The source data remain outside the repository; only this aggregate report and its analysis script are written locally.
 
