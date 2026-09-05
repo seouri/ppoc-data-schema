@@ -8,9 +8,10 @@ report once did. That list was verified against the project report's own text
 while it still contained the measurements; the comparison now runs against the
 list, so deleting a probe is caught as a regression.
 
-Overlay consistency: the overlay is maintained by hand and states that the data
-report is authoritative, so every figure it quotes must still appear there. This
-is what stops the two drifting apart.
+Quoted-figure consistency: the overlay and the README are maintained by hand and
+defer to the data report, so every figure they quote must still appear there.
+This is what stops them drifting apart. The README's checklist counts were wrong
+on their first writing, which is why they are checked rather than trusted.
 
 Coverage is judged against the data report's prose and tables with the field
 index excluded, because that index names all 254 columns and would score a topic
@@ -26,7 +27,8 @@ import re
 import sys
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
-OLD = REPO / "reports" / "growth-chart-literacy-real-data-eda.md"
+OVERLAY = REPO / "reports" / "growth-chart-literacy-real-data-eda.md"
+README = REPO / "README.md"
 NEW_MD = REPO / "reports" / "ppoc-eda" / "ppoc-eda.md"
 
 EXCLUDED = ("Retained in the project overlay, not the data report: "
@@ -82,9 +84,9 @@ TOPICS: list[tuple[str, str, str | None]] = [
     ("§11", "methods and reproducibility", r"Methods, determinism"),
 ]
 
-# Figures the overlay quotes, with the section it cites. Each must still appear
-# in the data report; if one does not, the overlay has drifted from its source.
-OVERLAY_FIGURES = [
+# Figures the hand-maintained files quote, with the section each cites. Every one
+# must still appear in the data report; if it does not, that file has drifted.
+QUOTED_FIGURES = [
     ("0.925", "4.10", "lag-1 height-z autocorrelation"),
     ("0.821", "4.10", "intraclass correlation"),
     ("1.2", "4.10", "independent observations per child in the limit"),
@@ -100,6 +102,12 @@ OVERLAY_FIGURES = [
     ("99.99", "4.8", "velocity reproduction under the interval rule"),
     ("43.7", "4.8", "velocity reproduction under a naive lag"),
     ("335", "4.8", "longest minimum interval in the velocity rule"),
+    # README
+    ("250,588", "1.4", "patients after the four cohort exclusions"),
+    ("61%", "1.4", "of ICD-10 codes removed with their patients"),
+    ("56%", "1.4", "of medications removed with their patients"),
+    ("72%", "1.4", "of lab procedures removed with their patients"),
+    ("44", "2.1", "checklist items"),
 ]
 
 
@@ -114,7 +122,8 @@ def main() -> int:
     if not NEW_MD.is_file():
         print("the neutral report has not been built", file=sys.stderr)
         return 2
-    hay, overlay = haystack(), OLD.read_text(encoding="utf-8")
+    hay = haystack()
+    quoting = OVERLAY.read_text(encoding="utf-8") + README.read_text(encoding="utf-8")
 
     covered, excluded, missing = [], [], []
     for section, name, pattern in TOPICS:
@@ -135,11 +144,11 @@ def main() -> int:
         for section, name, pattern in missing:
             print(f"  MISSING   {section:6s} {name}  (looked for /{pattern}/)")
 
-    print("\nOVERLAY CONSISTENCY  (every figure the overlay quotes must still "
-          "be in the data report)")
+    print("\nQUOTED FIGURES  (every figure the overlay or README quotes must "
+          "still be in the data report)")
     bad = 0
-    for value, section, label in OVERLAY_FIGURES:
-        quoted = value in overlay
+    for value, section, label in QUOTED_FIGURES:
+        quoted = value in quoting
         backed = value in hay
         ok = (not quoted) or backed
         bad += not ok
@@ -154,10 +163,10 @@ def main() -> int:
     print()
     if missing or bad:
         print(f"RESULT  {len(missing)} analyses missing, "
-              f"{bad} overlay figures unbacked")
+              f"{bad} quoted figures unbacked")
         return 1
     print("RESULT  every analysis is in the data report or the overlay; "
-          "every figure the overlay quotes is backed by the data report")
+          "every quoted figure is backed by the data report")
     return 0
 
 
