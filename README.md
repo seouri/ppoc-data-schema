@@ -39,6 +39,7 @@ These project-governance statements apply to the restricted PPOC source snapshot
 - [`reports/ppoc-eda/`](reports/ppoc-eda/) — exploratory analysis of the snapshot.
 - [`docs/synthetic-generator.md`](docs/synthetic-generator.md) — synthetic fixture generation.
 - [`docs/ehr_eda_checklist.md`](docs/ehr_eda_checklist.md) — the general EHR exploratory-analysis checklist.
+- [`reports/audit.sh`](reports/audit.sh) — one command to check the reports, links, lint and tests.
 
 ## Validate or regenerate the descriptor
 
