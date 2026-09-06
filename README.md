@@ -84,7 +84,7 @@ Both commands use this repository's `datapackage.json` by default, validate all 
 uv run python reports/build_ppoc_eda.py --bundle /secure/ppoc-duckdb/ppoc.duckdb
 ```
 
-[`growth-chart-literacy-real-data-eda.md`](reports/growth-chart-literacy-real-data-eda.md) is the project overlay on that report; [`audit_coverage.py`](reports/audit_coverage.py) checks the split stays honest.
+[`growth-chart-literacy-real-data-eda.md`](reports/growth-chart-literacy-real-data-eda.md) is the project overlay on that report; [`audit.sh`](reports/audit.sh) checks the whole of it — determinism, coverage, neutrality, links, lint and tests.
 
 ## Synthetic generator
 
