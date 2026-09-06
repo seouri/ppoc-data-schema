@@ -103,15 +103,14 @@ QUOTED_FIGURES = [
     ("99.99", "4.8", "velocity reproduction under the interval rule"),
     ("43.7", "4.8", "velocity reproduction under a naive lag"),
     ("335", "4.8", "longest minimum interval in the velocity rule"),
-    # README
+    # docs/data_description.md. The README used to quote these too; it now links
+    # the report instead of summarising it, so nothing there needs checking.
     ("250,588", "1.4", "patients after the four cohort exclusions"),
     ("61%", "1.4", "of ICD-10 codes removed with their patients"),
     ("56%", "1.4", "of medications removed with their patients"),
     ("72%", "1.4", "of lab procedures removed with their patients"),
-    ("44", "2.1", "checklist items"),
     ("1,204", "3.9", "categories that never appear as a bare code"),
     ("1,327", "3.9", "three-character categories after rollup"),
-    # data_description.md quotes the same hierarchy figures
 ]
 
 

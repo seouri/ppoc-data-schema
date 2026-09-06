@@ -108,32 +108,15 @@ Both commands use this repository's `datapackage.json` by default, validate all 
 
 ## Exploratory data analysis
 
-[`reports/ppoc-eda/`](reports/ppoc-eda/) is a project-neutral analysis of this snapshot, written so that nobody repeats work already done or misses a check they should have run. It answers four questions without opening the database: what the extract contains, whether a given field can be trusted, whether a surprising number is already known, and whether a standard check was skipped or is simply impossible here.
+[`reports/ppoc-eda/`](reports/ppoc-eda/) profiles this snapshot: what it holds, which fields can be trusted, and which standard checks it cannot support at all. **Read part 1.4 before designing a study** — how the cohort was built forecloses whole classes of question, and no field reveals it. Part 0 says where to start.
 
-| Output | Use |
-| --- | --- |
-| [`ppoc-eda.pdf`](reports/ppoc-eda/ppoc-eda.pdf) | 55 pages; GitHub renders it in the browser |
-| [`index.html`](reports/ppoc-eda/index.html) | self-contained — inline figures, sticky contents, find-in-page |
-| [`ppoc-eda.md`](reports/ppoc-eda/ppoc-eda.md) | text mirror, for grep and pull-request review |
-| [`findings.json`](reports/ppoc-eda/findings.json) | every number the report states, keyed by finding |
-
-37 findings across 9 parts, with 19 figures and 54 tables, all measured from the typed DuckDB bundle for snapshot `2026-08-24`. Four parts are worth reading before designing anything:
-
-- **1.4, how this cohort was built.** The 250,588 patients are what remains after four exclusions applied upstream, including the removal of every patient carrying a diagnosis, medication, or lab that occurred fewer than 11 times — 61% of ICD-10 codes, 56% of medications, and 72% of lab procedures left with their patients. **Rare-condition, rare-exposure, and mortality questions are foreclosed by construction, not merely sparse.**
-- **2.1, checklist coverage.** All 44 items of the general checklist mapped to covered, partial, or not applicable, with a reason. Nine checks cannot be run against this extract at all and four more only partly; knowing which ones saves a day looking for fields that do not exist.
-- **3.9, counting diagnosis codes.** ICD-10 is a hierarchy and matching a code exactly counts one node of it rather than the condition. 1,204 of the 1,327 categories in this extract never appear as a bare code, so an exact-match query for them returns zero.
-- **7.1, the artifact catalogue.** One row per known recording or derivation artifact, with its scale in this snapshot and whether it can be repaired.
-
-Rebuild it from an approved bundle:
+[PDF](reports/ppoc-eda/ppoc-eda.pdf) (GitHub renders it) · [HTML](reports/ppoc-eda/index.html) · [Markdown](reports/ppoc-eda/ppoc-eda.md) · [`findings.json`](reports/ppoc-eda/findings.json)
 
 ```sh
-uv run python reports/build_ppoc_eda.py \
-  --bundle /secure/ppoc-duckdb/ppoc.duckdb
+uv run python reports/build_ppoc_eda.py --bundle /secure/ppoc-duckdb/ppoc.duckdb
 ```
 
-The four outputs are rewritten only when the findings change, so rebuilding an unchanged snapshot leaves the committed files untouched. The PDF step uses headless Chrome and is skipped with a clear message when no browser is found; the other three outputs always build. Use `--list-probes` to see what runs and `--only` to iterate on one.
-
-[`reports/growth-chart-literacy-real-data-eda.md`](reports/growth-chart-literacy-real-data-eda.md) is a thin overlay carrying only what is specific to the growth-chart study, citing the report above for every measurement; [`reports/audit_coverage.py`](reports/audit_coverage.py) checks that the split stays honest.
+[`growth-chart-literacy-real-data-eda.md`](reports/growth-chart-literacy-real-data-eda.md) is the project overlay on that report; [`audit_coverage.py`](reports/audit_coverage.py) checks the split stays honest.
 
 ## Synthetic generator
 
