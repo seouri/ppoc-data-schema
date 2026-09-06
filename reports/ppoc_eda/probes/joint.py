@@ -488,3 +488,161 @@ def treatment(ctx: Context) -> list[Finding]:
              "makes the same point about referrals.", role="implication"),
     ]
     return [f]
+
+
+#: Ages outside this window are excluded from the two-resource comparison. The
+#: problem list carries noted ages down to -123 years, which 3.3 counts as
+#: pre-birth entries; left in, a single one turns a lead of days into a lead of
+#: a century.
+PLAUSIBLE_AGE = "BETWEEN 0 AND 18.5"
+SAME_DAY = 0.01  # years, about three and a half days
+
+
+@probe("joint.sources", "5.11")
+def sources(ctx: Context) -> list[Finding]:
+    dx_cols = [c for c in ctx.columns("patients_augmented")
+               if c.startswith("dx_age_years_")]
+    codes = [c.replace("dx_age_years_", "").upper().replace("_", ".")
+             for c in dx_cols]
+    values = ", ".join(f"('{c}')" for c in codes)
+    enc = ", ".join(f"enc_diag_{i}" for i in range(1, 34))
+
+    ctx.con.execute(f"""
+        CREATE TEMP TABLE _enc_first AS
+        WITH e AS (SELECT patient_id, age_in_days, unnest([{enc}]) AS code
+                   FROM visits),
+             t(tc) AS (VALUES {values})
+        SELECT e.patient_id, t.tc, min(e.age_in_days) / 365.25 AS age
+        FROM e JOIN t ON starts_with(e.code, t.tc)
+        WHERE e.age_in_days / 365.25 {PLAUSIBLE_AGE}
+        GROUP BY 1, 2""")
+    ctx.con.execute(f"""
+        CREATE TEMP TABLE _pl_first AS
+        WITH t(tc) AS (VALUES {values})
+        SELECT p.patient_id, t.tc,
+               min(p.noted_date_age_in_days) / 365.25 AS age
+        FROM problem_list p JOIN t ON starts_with(p.pl_diag, t.tc)
+        WHERE p.noted_date_age_in_days IS NOT NULL
+          AND p.noted_date_age_in_days / 365.25 {PLAUSIBLE_AGE}
+        GROUP BY 1, 2""")
+
+    union, both, enc_only, pl_only = ctx.one("""
+        SELECT count(*),
+               sum(CASE WHEN e.age IS NOT NULL AND p.age IS NOT NULL
+                        THEN 1 ELSE 0 END),
+               sum(CASE WHEN p.age IS NULL THEN 1 ELSE 0 END),
+               sum(CASE WHEN e.age IS NULL THEN 1 ELSE 0 END)
+        FROM _enc_first e FULL OUTER JOIN _pl_first p USING (patient_id, tc)""")
+
+    earlier, same, later = ctx.one(f"""
+        SELECT sum(CASE WHEN p.age < e.age - {SAME_DAY} THEN 1 ELSE 0 END),
+               sum(CASE WHEN abs(p.age - e.age) <= {SAME_DAY} THEN 1 ELSE 0 END),
+               sum(CASE WHEN p.age > e.age + {SAME_DAY} THEN 1 ELSE 0 END)
+        FROM _enc_first e JOIN _pl_first p USING (patient_id, tc)""")
+    lead_med, lead_p90 = ctx.one(f"""
+        SELECT quantile_cont((e.age - p.age) * 365.25, 0.5),
+               quantile_cont((e.age - p.age) * 365.25, 0.9)
+        FROM _enc_first e JOIN _pl_first p USING (patient_id, tc)
+        WHERE p.age < e.age - {SAME_DAY}""")
+    lag_med, lag_p90 = ctx.one(f"""
+        SELECT quantile_cont((p.age - e.age) * 365.25, 0.5),
+               quantile_cont((p.age - e.age) * 365.25, 0.9)
+        FROM _enc_first e JOIN _pl_first p USING (patient_id, tc)
+        WHERE p.age > e.age + {SAME_DAY}""")
+
+    per_code = [
+        {"code": c, "union": n, "both": b, "enc_only": eo, "pl_only": po,
+         "enc_share": 100.0 * (b + eo) / n, "pl_share": 100.0 * (b + po) / n,
+         "med_diff": md}
+        for c, n, b, eo, po, md in ctx.q("""
+            SELECT coalesce(e.tc, p.tc) AS code, count(*) AS n,
+                   sum(CASE WHEN e.age IS NOT NULL AND p.age IS NOT NULL
+                            THEN 1 ELSE 0 END),
+                   sum(CASE WHEN p.age IS NULL THEN 1 ELSE 0 END),
+                   sum(CASE WHEN e.age IS NULL THEN 1 ELSE 0 END),
+                   quantile_cont(CASE WHEN e.age IS NOT NULL AND p.age IS NOT NULL
+                                      THEN (p.age - e.age) * 365.25 END, 0.5)
+            FROM _enc_first e FULL OUTER JOIN _pl_first p USING (patient_id, tc)
+            GROUP BY 1 HAVING count(*) >= 10 ORDER BY n DESC, code""")]
+    worst_enc = min(per_code, key=lambda r: r["enc_share"])
+    worst_pl = min(per_code, key=lambda r: r["pl_share"])
+
+    f = Finding(
+        id="joint.sources", part="5.11",
+        title="The same code in two resources: encounter diagnoses against the "
+              "problem list",
+        values={
+            "union": union, "both": both, "both_share": 100.0 * both / union,
+            "enc_only": enc_only, "enc_only_share": 100.0 * enc_only / union,
+            "pl_only": pl_only, "pl_only_share": 100.0 * pl_only / union,
+            "same": same, "same_share": 100.0 * same / both,
+            "earlier": earlier, "earlier_share": 100.0 * earlier / both,
+            "later": later, "later_share": 100.0 * later / both,
+            "lead_med": lead_med, "lead_p90": lead_p90,
+            "lag_med": lag_med, "lag_p90": lag_p90,
+            "worst_enc": worst_enc["code"], "worst_enc_share": worst_enc["enc_share"],
+            "worst_pl": worst_pl["code"], "worst_pl_share": worst_pl["pl_share"],
+        },
+        artifact=Artifact(
+            name="A diagnosis code's resource coverage depends on the code",
+            kind="capture",
+            scale="{enc_only_share:.0f}% of patient-code pairs appear only in "
+                  "encounter diagnoses and {pl_only_share:.0f}% only in the "
+                  "problem list",
+            recoverable="Yes — take the union of both resources, as the derived "
+                        "columns do",
+        ),
+    )
+    f.blocks = [
+        Para("A growth code can reach the record two ways: coded at an encounter, "
+             "or noted on the problem list. 5.7 established that the derived "
+             "`dx_age_years_*` columns take the earliest of both. This asks what "
+             "would be lost by taking only one, and whether the two agree on when "
+             "the diagnosis happened."),
+        Para("Across the {union:,} patient-and-code pairs the tracked panel "
+             "produces, only {both:,} ({both_share:.1f}%) appear in both "
+             "resources. {enc_only:,} ({enc_only_share:.1f}%) are encounter-coded "
+             "and never reach the problem list, and {pl_only:,} "
+             "({pl_only_share:.1f}%) are the reverse. **Neither resource alone is "
+             "a complete record of the diagnosis.**"),
+        Table("t-source-code", "Where each tracked code appears",
+              [C("code", "ICD-10"), C("union", "patient-code pairs", ",", align="right"),
+               C("both", "in both", ",", align="right"),
+               C("enc_only", "encounter only", ",", align="right"),
+               C("pl_only", "problem list only", ",", align="right"),
+               C("enc_share", "found by encounters", ".0f", "%", align="right"),
+               C("pl_share", "found by problem list", ".0f", "%", align="right"),
+               C("med_diff", "median problem-list lag", ".0f", " d", align="right")],
+              per_code,
+              note="Codes with fewer than ten pairs are omitted. A negative lag "
+                   "means the problem list noted the diagnosis first."),
+        Para("The split is strongly code-dependent, which is the part that would "
+             "catch an analysis out. Reading encounter diagnoses alone finds "
+             "{worst_enc_share:.0f}% of `{worst_enc}` pairs; reading the problem "
+             "list alone finds {worst_pl_share:.0f}% of `{worst_pl}` pairs. A "
+             "single-resource cohort definition is therefore not uniformly "
+             "incomplete — it is incomplete by a different amount for every "
+             "condition, which biases comparisons between them."),
+        Para("Where both resources carry the code they mostly agree on the date: "
+             "{same:,} of {both:,} pairs ({same_share:.1f}%) fall within a few "
+             "days. When they disagree the problem list more often leads than "
+             "lags — {earlier_share:.1f}% against {later_share:.1f}% — by a median "
+             "of {lead_med:.0f} days against {lag_med:.0f}, with 90th percentiles "
+             "of {lead_p90:.0f} and {lag_p90:.0f} days. That direction is "
+             "consistent with the problem list carrying history noted before the "
+             "code was used at a visit, which is what the data dictionary "
+             "describes it as holding."),
+        Para("This comparison is restricted to ages between 0 and 18.5 years. The "
+             "problem list carries noted ages down to -123 years, which 3.3 counts "
+             "among its pre-birth entries; a single one of those turns a lead of "
+             "days into a lead of a century, so they are excluded here rather than "
+             "allowed to set the tail.", role="method"),
+        Para("**Implications for analysis.** Take the union of both resources for "
+             "any cohort definition or index date, and take the earliest record as "
+             "the derived columns do. If you must use one resource, measure what "
+             "it costs for your specific codes rather than assuming a uniform "
+             "rate. And treat the {later:,} pairs where the problem list lags as a "
+             "documentation delay rather than a later onset — the encounter had "
+             "already coded it.", role="implication"),
+    ]
+    return [f]

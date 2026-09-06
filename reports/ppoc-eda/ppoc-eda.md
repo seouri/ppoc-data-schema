@@ -1349,6 +1349,55 @@ One bound on this table comes from 1.4. The cohort excluded every patient carryi
 
 **Implications for analysis.** If the diagnosis code is the label, treatment and workup records have to be excluded from the features or the model will read the answer off them; excluding them is easy because they are identifiable by name. The more useful move is to treat the first growth workup as the index event: it marks when a clinician became concerned, it is dated when a trajectory exists, and predicting it is the question an early-detection model is actually being asked. The cost is population size, 1,410 against 237 on treatment alone and 35,890 on the code, and the caveat is that a workup is an action rather than an adjudicated outcome — 5.4 makes the same point about referrals.
 
+### 5.11 The same code in two resources: encounter diagnoses against the problem list
+
+A growth code can reach the record two ways: coded at an encounter, or noted on the problem list. 5.7 established that the derived `dx_age_years_*` columns take the earliest of both. This asks what would be lost by taking only one, and whether the two agree on when the diagnosis happened.
+
+Across the 39,896 patient-and-code pairs the tracked panel produces, only 19,984 (50.1%) appear in both resources. 14,430 (36.2%) are encounter-coded and never reach the problem list, and 5,482 (13.7%) are the reverse. **Neither resource alone is a complete record of the diagnosis.**
+
+**Where each tracked code appears**
+
+| ICD-10 | patient-code pairs | in both | encounter only | problem list only | found by encounters | found by problem list | median problem-list lag |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| P92.6 | 14,428 | 4,386 | 9,936 | 106 | 99% | 31% | 0 d |
+| P07 | 11,005 | 7,609 | 1,689 | 1,707 | 84% | 85% | 0 d |
+| P05 | 4,069 | 2,526 | 467 | 1,076 | 74% | 89% | 0 d |
+| E30.1 | 3,405 | 1,635 | 1,635 | 135 | 96% | 52% | 0 d |
+| P70 | 3,351 | 1,010 | 179 | 2,162 | 35% | 95% | 0 d |
+| K90.0 | 898 | 772 | 63 | 63 | 93% | 93% | -28 d |
+| E10 | 491 | 441 | 23 | 27 | 95% | 95% | -6 d |
+| E34.3 | 447 | 264 | 141 | 42 | 91% | 68% | 0 d |
+| E30.0 | 419 | 273 | 116 | 30 | 93% | 72% | 0 d |
+| E03.9 | 309 | 168 | 103 | 38 | 88% | 67% | 0 d |
+| Q90 | 205 | 195 | 7 | 3 | 99% | 97% | 0 d |
+| E23.0 | 150 | 133 | 5 | 12 | 92% | 97% | -161 d |
+| K50 | 113 | 95 | 4 | 14 | 88% | 96% | -157 d |
+| E34.4 | 83 | 60 | 12 | 11 | 87% | 86% | 0 d |
+| N18 | 70 | 53 | 6 | 11 | 84% | 91% | -76 d |
+| K51 | 62 | 50 | 7 | 5 | 92% | 89% | -132 d |
+| Q87.1 | 58 | 51 | 3 | 4 | 93% | 95% | 0 d |
+| P04.3 | 53 | 35 | 3 | 15 | 72% | 94% | 0 d |
+| Q87.3 | 46 | 41 | 3 | 2 | 96% | 93% | -37 d |
+| Q98.4 | 42 | 34 | 8 | 0 | 100% | 81% | -3 d |
+| Q96 | 36 | 31 | 2 | 3 | 92% | 94% | -4 d |
+| Q87.2 | 32 | 27 | 1 | 4 | 88% | 97% | -19 d |
+| E23.6 | 31 | 21 | 4 | 6 | 81% | 87% | 0 d |
+| Q98.0 | 26 | 22 | 2 | 2 | 92% | 92% | -4 d |
+| Q87.4 | 17 | 13 | 2 | 2 | 88% | 88% | 0 d |
+| Q98.5 | 17 | 15 | 0 | 2 | 88% | 100% | 0 d |
+| Q77 | 15 | 14 | 1 | 0 | 100% | 93% | 0 d |
+| Q78.0 | 10 | 10 | 0 | 0 | 100% | 100% | 0 d |
+
+Codes with fewer than ten pairs are omitted. A negative lag means the problem list noted the diagnosis first.
+
+The split is strongly code-dependent, which is the part that would catch an analysis out. Reading encounter diagnoses alone finds 35% of `P70` pairs; reading the problem list alone finds 31% of `P92.6` pairs. A single-resource cohort definition is therefore not uniformly incomplete — it is incomplete by a different amount for every condition, which biases comparisons between them.
+
+Where both resources carry the code they mostly agree on the date: 12,373 of 19,984 pairs (61.9%) fall within a few days. When they disagree the problem list more often leads than lags — 26.9% against 11.2% — by a median of 33 days against 50, with 90th percentiles of 515 and 1217 days. That direction is consistent with the problem list carrying history noted before the code was used at a visit, which is what the data dictionary describes it as holding.
+
+This comparison is restricted to ages between 0 and 18.5 years. The problem list carries noted ages down to -123 years, which 3.3 counts among its pre-birth entries; a single one of those turns a lead of days into a lead of a century, so they are excluded here rather than allowed to set the tail.
+
+**Implications for analysis.** Take the union of both resources for any cohort definition or index date, and take the earliest record as the derived columns do. If you must use one resource, measure what it costs for your specific codes rather than assuming a uniform rate. And treat the 2,241 pairs where the problem list lags as a documentation delay rather than a later onset — the encounter had already coded it.
+
 ## 6. Field index
 
 Every column, with its population, range, and the findings that govern it.
@@ -1544,7 +1593,7 @@ One row per known artifact, with its scale and whether it can be repaired.
 
 ### 7.1 Every artifact this report measured
 
-One row per artifact, gathered from the findings that measured them. The class says who produced the artifact, which decides whether it can be repaired: a derivation artifact can be recomputed without touching the clinical record, a capture artifact cannot, a selection artifact is outside the extract entirely. 18 artifacts across 4 classes (capture, derivation, linkage, selection).
+One row per artifact, gathered from the findings that measured them. The class says who produced the artifact, which decides whether it can be repaired: a derivation artifact can be recomputed without touching the clinical record, a capture artifact cannot, a selection artifact is outside the extract entirely. 19 artifacts across 4 classes (capture, derivation, linkage, selection).
 
 **Artifact catalogue**
 
@@ -1568,6 +1617,7 @@ One row per artifact, gathered from the findings that measured them. The class s
 | Diagnosis label precedes the growth trajectory it would be predicted from | selection | 51% of labelled patients have no height recorded before their diagnosis | No — use a different label or a different index date | 5.8 |
 | A derived flag that is disjoint from the diagnosis flag by construction | derivation | healthy_flag is set for 0.0% of growth-diagnosed patients | Yes — define the negative class explicitly instead | 5.9 |
 | Treatment and workup records reveal the diagnosis, and date it a decade later than the code | capture | growth hormone is 5.1 times enriched for the label; its median order age is 10.8 years against 0.027 for the code | Yes — exclude them as features, or index on them instead | 5.10 |
+| A diagnosis code's resource coverage depends on the code | capture | 36% of patient-code pairs appear only in encounter diagnoses and 14% only in the problem list | Yes — take the union of both resources, as the derived columns do | 5.11 |
 
 ## 8. Methods and limitations
 

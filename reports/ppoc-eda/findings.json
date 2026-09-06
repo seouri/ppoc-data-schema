@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-06T15:01:54Z",
+  "generated_at": "2026-09-06T15:39:25Z",
   "parts": [
     {
       "findings": [
@@ -6496,6 +6496,338 @@
             "w_total": 1410,
             "w_zero_share": 0.63829787
           }
+        },
+        {
+          "artifact": {
+            "kind": "capture",
+            "name": "A diagnosis code's resource coverage depends on the code",
+            "recoverable": "Yes — take the union of both resources, as the derived columns do",
+            "scale": "36% of patient-code pairs appear only in encounter diagnoses and 14% only in the problem list"
+          },
+          "id": "joint.sources",
+          "part": "5.11",
+          "tables": [
+            {
+              "caption": "Where each tracked code appears",
+              "columns": [
+                "code",
+                "union",
+                "both",
+                "enc_only",
+                "pl_only",
+                "enc_share",
+                "pl_share",
+                "med_diff"
+              ],
+              "id": "t-source-code",
+              "rows": [
+                {
+                  "both": 4386,
+                  "code": "P92.6",
+                  "enc_only": 9936,
+                  "enc_share": 99.265317,
+                  "med_diff": 0.0,
+                  "pl_only": 106,
+                  "pl_share": 31.133906,
+                  "union": 14428
+                },
+                {
+                  "both": 7609,
+                  "code": "P07",
+                  "enc_only": 1689,
+                  "enc_share": 84.488869,
+                  "med_diff": 0.0,
+                  "pl_only": 1707,
+                  "pl_share": 84.652431,
+                  "union": 11005
+                },
+                {
+                  "both": 2526,
+                  "code": "P05",
+                  "enc_only": 467,
+                  "enc_share": 73.556156,
+                  "med_diff": 0.0,
+                  "pl_only": 1076,
+                  "pl_share": 88.522979,
+                  "union": 4069
+                },
+                {
+                  "both": 1635,
+                  "code": "E30.1",
+                  "enc_only": 1635,
+                  "enc_share": 96.035242,
+                  "med_diff": 0.0,
+                  "pl_only": 135,
+                  "pl_share": 51.982379,
+                  "union": 3405
+                },
+                {
+                  "both": 1010,
+                  "code": "P70",
+                  "enc_only": 179,
+                  "enc_share": 35.481946,
+                  "med_diff": 0.0,
+                  "pl_only": 2162,
+                  "pl_share": 94.658311,
+                  "union": 3351
+                },
+                {
+                  "both": 772,
+                  "code": "K90.0",
+                  "enc_only": 63,
+                  "enc_share": 92.98441,
+                  "med_diff": -28.0,
+                  "pl_only": 63,
+                  "pl_share": 92.98441,
+                  "union": 898
+                },
+                {
+                  "both": 441,
+                  "code": "E10",
+                  "enc_only": 23,
+                  "enc_share": 94.501018,
+                  "med_diff": -6.0,
+                  "pl_only": 27,
+                  "pl_share": 95.315682,
+                  "union": 491
+                },
+                {
+                  "both": 264,
+                  "code": "E34.3",
+                  "enc_only": 141,
+                  "enc_share": 90.604027,
+                  "med_diff": 0.0,
+                  "pl_only": 42,
+                  "pl_share": 68.456376,
+                  "union": 447
+                },
+                {
+                  "both": 273,
+                  "code": "E30.0",
+                  "enc_only": 116,
+                  "enc_share": 92.840095,
+                  "med_diff": 0.0,
+                  "pl_only": 30,
+                  "pl_share": 72.315036,
+                  "union": 419
+                },
+                {
+                  "both": 168,
+                  "code": "E03.9",
+                  "enc_only": 103,
+                  "enc_share": 87.702265,
+                  "med_diff": 0.0,
+                  "pl_only": 38,
+                  "pl_share": 66.666667,
+                  "union": 309
+                },
+                {
+                  "both": 195,
+                  "code": "Q90",
+                  "enc_only": 7,
+                  "enc_share": 98.536585,
+                  "med_diff": 0.0,
+                  "pl_only": 3,
+                  "pl_share": 96.585366,
+                  "union": 205
+                },
+                {
+                  "both": 133,
+                  "code": "E23.0",
+                  "enc_only": 5,
+                  "enc_share": 92.0,
+                  "med_diff": -161.0,
+                  "pl_only": 12,
+                  "pl_share": 96.666667,
+                  "union": 150
+                },
+                {
+                  "both": 95,
+                  "code": "K50",
+                  "enc_only": 4,
+                  "enc_share": 87.610619,
+                  "med_diff": -157.0,
+                  "pl_only": 14,
+                  "pl_share": 96.460177,
+                  "union": 113
+                },
+                {
+                  "both": 60,
+                  "code": "E34.4",
+                  "enc_only": 12,
+                  "enc_share": 86.746988,
+                  "med_diff": 0.0,
+                  "pl_only": 11,
+                  "pl_share": 85.542169,
+                  "union": 83
+                },
+                {
+                  "both": 53,
+                  "code": "N18",
+                  "enc_only": 6,
+                  "enc_share": 84.285714,
+                  "med_diff": -76.0,
+                  "pl_only": 11,
+                  "pl_share": 91.428571,
+                  "union": 70
+                },
+                {
+                  "both": 50,
+                  "code": "K51",
+                  "enc_only": 7,
+                  "enc_share": 91.935484,
+                  "med_diff": -131.5,
+                  "pl_only": 5,
+                  "pl_share": 88.709677,
+                  "union": 62
+                },
+                {
+                  "both": 51,
+                  "code": "Q87.1",
+                  "enc_only": 3,
+                  "enc_share": 93.103448,
+                  "med_diff": 0.0,
+                  "pl_only": 4,
+                  "pl_share": 94.827586,
+                  "union": 58
+                },
+                {
+                  "both": 35,
+                  "code": "P04.3",
+                  "enc_only": 3,
+                  "enc_share": 71.698113,
+                  "med_diff": 0.0,
+                  "pl_only": 15,
+                  "pl_share": 94.339623,
+                  "union": 53
+                },
+                {
+                  "both": 41,
+                  "code": "Q87.3",
+                  "enc_only": 3,
+                  "enc_share": 95.652174,
+                  "med_diff": -37.0,
+                  "pl_only": 2,
+                  "pl_share": 93.478261,
+                  "union": 46
+                },
+                {
+                  "both": 34,
+                  "code": "Q98.4",
+                  "enc_only": 8,
+                  "enc_share": 100.0,
+                  "med_diff": -3.0,
+                  "pl_only": 0,
+                  "pl_share": 80.952381,
+                  "union": 42
+                },
+                {
+                  "both": 31,
+                  "code": "Q96",
+                  "enc_only": 2,
+                  "enc_share": 91.666667,
+                  "med_diff": -4.0,
+                  "pl_only": 3,
+                  "pl_share": 94.444444,
+                  "union": 36
+                },
+                {
+                  "both": 27,
+                  "code": "Q87.2",
+                  "enc_only": 1,
+                  "enc_share": 87.5,
+                  "med_diff": -19.0,
+                  "pl_only": 4,
+                  "pl_share": 96.875,
+                  "union": 32
+                },
+                {
+                  "both": 21,
+                  "code": "E23.6",
+                  "enc_only": 4,
+                  "enc_share": 80.645161,
+                  "med_diff": 0.0,
+                  "pl_only": 6,
+                  "pl_share": 87.096774,
+                  "union": 31
+                },
+                {
+                  "both": 22,
+                  "code": "Q98.0",
+                  "enc_only": 2,
+                  "enc_share": 92.307692,
+                  "med_diff": -4.0,
+                  "pl_only": 2,
+                  "pl_share": 92.307692,
+                  "union": 26
+                },
+                {
+                  "both": 13,
+                  "code": "Q87.4",
+                  "enc_only": 2,
+                  "enc_share": 88.235294,
+                  "med_diff": 0.0,
+                  "pl_only": 2,
+                  "pl_share": 88.235294,
+                  "union": 17
+                },
+                {
+                  "both": 15,
+                  "code": "Q98.5",
+                  "enc_only": 0,
+                  "enc_share": 88.235294,
+                  "med_diff": 0.0,
+                  "pl_only": 2,
+                  "pl_share": 100.0,
+                  "union": 17
+                },
+                {
+                  "both": 14,
+                  "code": "Q77",
+                  "enc_only": 1,
+                  "enc_share": 100.0,
+                  "med_diff": 0.5,
+                  "pl_only": 0,
+                  "pl_share": 93.333333,
+                  "union": 15
+                },
+                {
+                  "both": 10,
+                  "code": "Q78.0",
+                  "enc_only": 0,
+                  "enc_share": 100.0,
+                  "med_diff": 0.0,
+                  "pl_only": 0,
+                  "pl_share": 100.0,
+                  "union": 10
+                }
+              ]
+            }
+          ],
+          "title": "The same code in two resources: encounter diagnoses against the problem list",
+          "values": {
+            "both": 19984,
+            "both_share": 50.090235,
+            "earlier": 5370,
+            "earlier_share": 26.871497,
+            "enc_only": 14430,
+            "enc_only_share": 36.16904,
+            "lag_med": 50.0,
+            "lag_p90": 1217.0,
+            "later": 2241,
+            "later_share": 11.213971,
+            "lead_med": 33.0,
+            "lead_p90": 515.1,
+            "pl_only": 5482,
+            "pl_only_share": 13.740726,
+            "same": 12373,
+            "same_share": 61.914532,
+            "union": 39896,
+            "worst_enc": "P70",
+            "worst_enc_share": 35.481946,
+            "worst_pl": "P92.6",
+            "worst_pl_share": 31.133906
+          }
         }
       ],
       "number": "5",
@@ -8258,6 +8590,13 @@
                   "recoverable": "Yes — exclude them as features, or index on them instead",
                   "scale": "growth hormone is 5.1 times enriched for the label; its median order age is 10.8 years against 0.027 for the code",
                   "where": "5.10"
+                },
+                {
+                  "artifact": "A diagnosis code's resource coverage depends on the code",
+                  "class": "capture",
+                  "recoverable": "Yes — take the union of both resources, as the derived columns do",
+                  "scale": "36% of patient-code pairs appear only in encounter diagnoses and 14% only in the problem list",
+                  "where": "5.11"
                 }
               ]
             }
@@ -8266,7 +8605,7 @@
           "values": {
             "kindlist": "capture, derivation, linkage, selection",
             "kinds": 4,
-            "n": 18
+            "n": 19
           }
         }
       ],
