@@ -32,43 +32,13 @@ These project-governance statements apply to the restricted PPOC source snapshot
 
 ## Contents
 
-- [`datapackage.json`](datapackage.json): field types, nullability, constraints, keys, encodings, and resource metadata.
-- [`docs/data_description.md`](docs/data_description.md): dataset overview, relationships, and analysis guidance.
-- [`docs/`](docs/): resource-specific field descriptions.
-- [`schema/README.md`](schema/README.md): Python loading examples.
-- [`schema/build.py`](schema/build.py): regenerate and validate `datapackage.json`.
-- [`schema/profile.py`](schema/profile.py): recompute the snapshot statistics from the CSVs.
-- [`schema/stats.json`](schema/stats.json): the statistics `build.py` reads, so the descriptor rebuilds without the data.
-- [`scripts/export_parquet.py`](scripts/export_parquet.py): export the eight typed CSV resources as a verified Parquet bundle.
-- [`scripts/build_duckdb.py`](scripts/build_duckdb.py): build a verified, materialized typed DuckDB bundle.
-- [`docs/synthetic-generator.md`](docs/synthetic-generator.md): ordinary synthetic generation and optional governed aggregate-calibration boundaries.
-- [`reports/ppoc-eda/`](reports/ppoc-eda/): exploratory data analysis of the snapshot — read this before analysing the data.
-- [`reports/build_ppoc_eda.py`](reports/build_ppoc_eda.py): rebuild that report from a DuckDB bundle.
-- [`docs/ehr_eda_checklist.md`](docs/ehr_eda_checklist.md): the general EHR exploratory-analysis checklist the report is measured against.
-
-## Resources
-
-| Resource | Rows | Fields | Description |
-| --- | ---: | ---: | --- |
-| [`patients.csv`](docs/patients.md) | 250,588 | 11 | Patient demographics |
-| [`patients_augmented.csv`](docs/patients_augmented.md) | 250,588 | 87 | Patient-level growth and diagnosis summaries |
-| [`visits.csv`](docs/visits.md) | 6,494,473 | 43 | Visit-level measurements and diagnoses |
-| [`visits_augmented.csv`](docs/visits_augmented.md) | 6,494,473 | 82 | Visit-level derived growth metrics and flags |
-| [`labs.csv`](docs/labs.md) | 17,230,681 | 12 | Laboratory result components |
-| [`medications.csv`](docs/medications.md) | 3,823,049 | 8 | Medication records |
-| [`problem_list.csv`](docs/problem_list.md) | 1,709,584 | 5 | Problem-list entries |
-| [`referrals.csv`](docs/referrals.md) | 349,827 | 6 | Specialty referrals |
-
-The package expects these CSVs beside `datapackage.json`. To keep the descriptor in this repository while reading CSVs from another directory, set `PPOC_DATA_ROOT` for the Python example in [`schema/README.md`](schema/README.md).
-
-## Relationships
-
-- `patients.csv` and `patients_augmented.csv` contain one row per `patient_id`.
-- `visits.csv` and `visits_augmented.csv` contain `patient_id` and `visit_id`.
-- `labs.csv`, `medications.csv`, and `referrals.csv` link to patients through `patient_id`; lab and referral `visit_id` values are nullable, medication `visit_id` is required, and nonnull values in all three resources may not match a visit row.
-- `problem_list.csv` links to patients through `patient_id` and has no direct visit key.
-
-Use the `foreignKeys` and `x-logicalForeignKeys` entries in `datapackage.json` for the declared join relationships and their row-level link statistics.
+- [`docs/data_description.md`](docs/data_description.md) — the eight resources, how they join, and how the cohort was built. Start here.
+- [`datapackage.json`](datapackage.json) — the Frictionless descriptor: types, nullability, constraints, keys, encodings.
+- [`docs/`](docs/) — a field-level description per resource.
+- [`schema/README.md`](schema/README.md) — schema-driven loading in Python, and the declared join relationships.
+- [`reports/ppoc-eda/`](reports/ppoc-eda/) — exploratory analysis of the snapshot.
+- [`docs/synthetic-generator.md`](docs/synthetic-generator.md) — synthetic fixture generation.
+- [`docs/ehr_eda_checklist.md`](docs/ehr_eda_checklist.md) — the general EHR exploratory-analysis checklist.
 
 ## Validate or regenerate the descriptor
 
@@ -87,8 +57,6 @@ with the DuckDB CLI on `PATH` and rebuild:
 python3 schema/profile.py --data-root /path/to/csvs --snapshot 2026-08-24
 python3 schema/build.py
 ```
-
-The Python usage example includes schema-driven pandas loading, declared CSV encodings, nullable types, column selection, and key inspection.
 
 ## Analytical exports
 
