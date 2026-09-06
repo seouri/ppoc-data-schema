@@ -1307,10 +1307,39 @@ Two rows here matter for anyone assembling a training set. `healthy_flag` is set
 | GnRH agonist | 203 | 107 | 52.7% | 3.7x | 96 | 10.2 y |
 | antithyroid | 31 | 8 | 25.8% | 1.8x | 23 | 11.1 y |
 | mineralocorticoid | 60 | 9 | 15.0% | 1.0x | 51 | 13.3 y |
-| IGF-1 | 1,151 | 301 | 26.2% | 1.8x | 850 | 8.7 y |
-| growth hormone assay | 108 | 29 | 26.9% | 1.9x | 79 | 9.1 y |
 
 Matched by string against the free-text generic and procedure names, so these are indicative rather than a curated vocabulary. Hydrocortisone and estradiol are excluded deliberately: both are common in this population for topical and contraceptive indications that have nothing to do with growth.
+
+**The laboratory workup, ordered by how much it discriminates**
+
+| test | patients | share flagged | against the base rate | median age at first order |
+| --- | --- | --- | --- | --- |
+| karyotype | 20 | 50.0% | 3.49x | 6.1 y |
+| estradiol | 1,198 | 32.9% | 2.30x | 12.2 y |
+| luteinising hormone | 2,103 | 31.2% | 2.18x | 13.0 y |
+| follicle-stimulating hormone | 2,379 | 28.9% | 2.02x | 13.4 y |
+| testosterone | 2,083 | 28.3% | 1.98x | 13.3 y |
+| growth hormone assay | 108 | 26.9% | 1.87x | 9.1 y |
+| IGF-1 | 1,151 | 26.2% | 1.83x | 8.7 y |
+| chromosomal microarray | 350 | 22.6% | 1.58x | 3.9 y |
+| cortisol | 271 | 20.3% | 1.42x | 11.1 y |
+| prolactin | 1,738 | 18.2% | 1.27x | 14.1 y |
+| ferritin | 18,578 | 17.1% | 1.19x | 5.6 y |
+| coeliac transglutaminase | 19,004 | 15.8% | 1.10x | 8.3 y |
+| total IgA | 22,776 | 15.7% | 1.09x | 7.1 y |
+| free thyroxine | 24,692 | 14.9% | 1.04x | 9.8 y |
+| alkaline phosphatase | 26,555 | 14.5% | 1.01x | 9.1 y |
+| thyroid stimulating hormone | 31,252 | 14.3% | 1.00x | 9.6 y |
+| C-reactive protein | 21,357 | 14.0% | 0.98x | 7.0 y |
+| erythrocyte sedimentation rate | 26,765 | 13.9% | 0.97x | 7.3 y |
+| creatinine | 30,000 | 13.8% | 0.96x | 8.4 y |
+| vitamin D | 11,796 | 11.8% | 0.82x | 11.0 y |
+
+Ordered by lift. The same string-matching caveat applies, and a test's presence means it was ordered, not that it was abnormal — 3.6 shows result values are semi-structured text.
+
+The panel splits cleanly in two. The specific endocrine and genetic tests carry real signal — karyotype leads at 3.49 times the base rate — while the general screens that accompany a growth evaluation carry almost none: 8 of the 20 tests sit below 1.1, together covering 195,193 patient-test pairs. Thyroid stimulating hormone is the clearest case, ordered for 31,252 patients at a lift of 1.00 — a high-volume feature carrying essentially no information about this label.
+
+One bound on this table comes from 1.4. The cohort excluded every patient carrying a lab procedure seen fewer than 11 times, which removed 9,621 of 13,402 procedures along with their patients. The most specialised growth workup is therefore the most likely to be missing entirely, and the rarest test that survives here — karyotype, at 20 patients — sits just above that threshold. Read the sparse rows as a floor rather than a count.
 
 **As features these leak.** Against a base rate of 14.3%, 237 patients ever prescribed growth hormone are 72.6% flagged — 5.1 times enriched. A model given medication history has been told the answer for those patients, and the same holds in weaker form for the other rows.
 

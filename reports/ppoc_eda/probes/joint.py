@@ -285,13 +285,40 @@ TREATMENTS = [
     ("antithyroid", "lower(med_simple_generic_name) LIKE '%methimaz%'"),
     ("mineralocorticoid", "lower(med_simple_generic_name) LIKE '%fludrocort%'"),
 ]
-WORKUPS = [
-    ("IGF-1", ("upper(lab_procedure_name) LIKE '%IGF%' "
-              "OR upper(result_component_name) LIKE '%IGF%'")),
-    ("growth hormone assay",
-     ("upper(lab_procedure_name) LIKE '%GROWTH HORMONE%' "
-     "OR upper(result_component_name) LIKE '%GROWTH HORMONE%'")),
+#: The laboratory panel a growth evaluation draws on, from the most specific to
+#: the general screens that accompany it. Matched on the procedure name and the
+#: result component, since a test such as TSH usually arrives as one component
+#: of a panel rather than as a procedure of its own.
+LAB_PANEL = [
+    ("karyotype", "%KARYOTYPE%"),
+    ("chromosomal microarray", "%MICROARRAY%|%CHROMOSOM%"),
+    ("growth hormone assay", "%GROWTH HORMONE%"),
+    ("IGF-1", "%IGF%"),
+    ("cortisol", "%CORTISOL%"),
+    ("prolactin", "%PROLACTIN%"),
+    ("luteinising hormone", "%LUTEINIZING%|% LH%"),
+    ("follicle-stimulating hormone", "%FOLLICLE%|%FSH%"),
+    ("testosterone", "%TESTOSTERONE%"),
+    ("estradiol", "%ESTRADIOL%"),
+    ("thyroid stimulating hormone", "%THYROID STIM%|%TSH%"),
+    ("free thyroxine", "%T4%"),
+    ("coeliac transglutaminase", "%TRANSGLUTAMIN%"),
+    ("total IgA", "%IGA%"),
+    ("ferritin", "%FERRITIN%"),
+    ("vitamin D", "%VITAMIN D%|%25-HYDROXY%"),
+    ("erythrocyte sedimentation rate", "%SEDIMENTATION%"),
+    ("C-reactive protein", "%C-REACTIVE%"),
+    ("alkaline phosphatase", "%ALKALINE PHOS%"),
+    ("creatinine", "%CREATININE%"),
 ]
+
+
+def _lab_condition(patterns: str) -> str:
+    """One condition matching either the procedure or the result component."""
+    return " OR ".join(
+        f"upper(lab_procedure_name) LIKE '{p}' "
+        f"OR upper(result_component_name) LIKE '{p}'"
+        for p in patterns.split("|"))
 #: The index event a growth model would actually want: the first time growth was
 #: worked up or treated.
 WORKUP_INDEX = """
@@ -312,21 +339,27 @@ WORKUP_INDEX = """
 def treatment(ctx: Context) -> list[Finding]:
     base = ctx.scalar("SELECT 100.0 * sum(CASE WHEN growth_dx_flag = 1 THEN 1 ELSE 0 END)"
                       " / count(*) FROM patients_augmented")
-    rows = []
-    for label, cond, table, agecol in (
-        [(lab, c, "medications", "med_order_date_age_in_days") for lab, c in TREATMENTS]
-        + [(lab, c, "labs", "lab_order_date_age_in_days") for lab, c in WORKUPS]
-    ):
+    def marker_row(label, cond, table, agecol):
         n, flagged, med_age = ctx.one(f"""
             WITH t AS (SELECT patient_id, min({agecol}) / 365.25 AS first_age
                        FROM {table} WHERE {cond} GROUP BY 1)
             SELECT count(*), sum(CASE WHEN p.growth_dx_flag = 1 THEN 1 ELSE 0 END),
                    quantile_cont(t.first_age, 0.5)
             FROM t JOIN patients_augmented p USING (patient_id)""")
-        rows.append({"marker": label, "patients": ctx.suppress(n), "flagged": flagged,
-                     "share": 100.0 * flagged / n if n else None,
-                     "lift": (100.0 * flagged / n) / base if n else None,
-                     "unflagged": n - flagged, "med_age": med_age})
+        return {"marker": label, "patients": ctx.suppress(n), "flagged": flagged,
+                "share": 100.0 * flagged / n if n else None,
+                "lift": (100.0 * flagged / n) / base if n else None,
+                "unflagged": n - flagged, "med_age": med_age, "n": n}
+
+    rows = [marker_row(lab, c, "medications", "med_order_date_age_in_days")
+            for lab, c in TREATMENTS]
+    labs = [marker_row(lab, _lab_condition(pat), "labs",
+                       "lab_order_date_age_in_days")
+            for lab, pat in LAB_PANEL]
+    labs = [r for r in labs if r["n"]]
+    labs.sort(key=lambda r: -r["lift"])
+    flat = [r for r in labs if r["lift"] < 1.1]
+    flat_patients = sum(r["n"] for r in flat)
 
     ctx.con.execute(f"CREATE TEMP TABLE _workup AS {WORKUP_INDEX}")
     ctx.con.execute("""
@@ -343,7 +376,10 @@ def treatment(ctx: Context) -> list[Finding]:
     w_med_h = ctx.scalar("SELECT quantile_cont(n_before, 0.5) FROM _workup_pre")
 
     gh = next(r for r in rows if r["marker"] == "growth hormone")
-    igf = next(r for r in rows if r["marker"] == "IGF-1")
+    igf = next(r for r in labs if r["marker"] == "IGF-1")
+    top_lab = labs[0]
+    tsh = next(r for r in labs
+               if r["marker"] == "thyroid stimulating hormone")
 
     f = Finding(
         id="joint.treatment", part="5.10",
@@ -356,6 +392,11 @@ def treatment(ctx: Context) -> list[Finding]:
             "w_total": w_total, "w_med_age": w_med_age,
             "w_ge2": w_ge2, "w_ge2_share": 100.0 * w_ge2 / w_total,
             "w_zero_share": 100.0 * w_zero / w_total, "w_med_h": w_med_h,
+            "top_lab": top_lab["marker"], "top_lift": top_lab["lift"],
+            "tsh_n": tsh["n"], "tsh_lift": tsh["lift"],
+            "n_flat": len(flat), "flat_patients": flat_patients,
+            "karyo_n": min(r["n"] for r in labs),
+            "n_labs": len(labs),
         },
         artifact=Artifact(
             name="Treatment and workup records reveal the diagnosis, and date it "
@@ -388,6 +429,31 @@ def treatment(ctx: Context) -> list[Finding]:
                    "deliberately: both are common in this population for topical "
                    "and contraceptive indications that have nothing to do with "
                    "growth."),
+        Table("t-lab-panel", "The laboratory workup, ordered by how much it "
+                             "discriminates",
+              [C("marker", "test"), C("patients", "patients", ",", align="right"),
+               C("share", "share flagged", ".1f", "%", align="right"),
+               C("lift", "against the base rate", ".2f", "x", align="right"),
+               C("med_age", "median age at first order", ".1f", " y",
+                 align="right")], labs,
+              note="Ordered by lift. The same string-matching caveat applies, and "
+                   "a test's presence means it was ordered, not that it was "
+                   "abnormal — 3.6 shows result values are semi-structured text."),
+        Para("The panel splits cleanly in two. The specific endocrine and genetic "
+             "tests carry real signal — {top_lab} leads at {top_lift:.2f} times the "
+             "base rate — while the general screens that accompany a growth "
+             "evaluation carry almost none: {n_flat} of the {n_labs} tests sit "
+             "below 1.1, together covering {flat_patients:,} patient-test pairs. "
+             "Thyroid stimulating hormone is the clearest case, ordered for "
+             "{tsh_n:,} patients at a lift of {tsh_lift:.2f} — a high-volume "
+             "feature carrying essentially no information about this label."),
+        Para("One bound on this table comes from 1.4. The cohort excluded every "
+             "patient carrying a lab procedure seen fewer than 11 times, which "
+             "removed 9,621 of 13,402 procedures along with their patients. The "
+             "most specialised growth workup is therefore the most likely to be "
+             "missing entirely, and the rarest test that survives here — "
+             "karyotype, at {karyo_n} patients — sits just above that threshold. "
+             "Read the sparse rows as a floor rather than a count.", role="method"),
         Para("**As features these leak.** Against a base rate of {base:.1f}%, "
              "{gh_n:,} patients ever prescribed growth hormone are "
              "{gh_share:.1f}% flagged — {gh_lift:.1f} times enriched. A model given "

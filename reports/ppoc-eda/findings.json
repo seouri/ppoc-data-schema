@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-06T14:24:22Z",
+  "generated_at": "2026-09-06T15:01:54Z",
   "parts": [
     {
       "findings": [
@@ -6209,6 +6209,7 @@
                   "lift": 5.0647877,
                   "marker": "growth hormone",
                   "med_age": 10.819986,
+                  "n": 237,
                   "patients": 237,
                   "share": 72.57384,
                   "unflagged": 65
@@ -6218,6 +6219,7 @@
                   "lift": 4.321442,
                   "marker": "thyroid hormone",
                   "med_age": 7.6933607,
+                  "n": 541,
                   "patients": 541,
                   "share": 61.922366,
                   "unflagged": 206
@@ -6227,6 +6229,7 @@
                   "lift": 3.6784841,
                   "marker": "GnRH agonist",
                   "med_age": 10.160164,
+                  "n": 203,
                   "patients": 203,
                   "share": 52.70936,
                   "unflagged": 96
@@ -6236,6 +6239,7 @@
                   "lift": 1.8009823,
                   "marker": "antithyroid",
                   "med_age": 11.085558,
+                  "n": 31,
                   "patients": 31,
                   "share": 25.806452,
                   "unflagged": 23
@@ -6245,27 +6249,223 @@
                   "lift": 1.046821,
                   "marker": "mineralocorticoid",
                   "med_age": 13.33744,
+                  "n": 60,
                   "patients": 60,
                   "share": 15.0,
                   "unflagged": 51
+                }
+              ]
+            },
+            {
+              "caption": "The laboratory workup, ordered by how much it discriminates",
+              "columns": [
+                "marker",
+                "patients",
+                "share",
+                "lift",
+                "med_age"
+              ],
+              "id": "t-lab-panel",
+              "rows": [
+                {
+                  "flagged": 10,
+                  "lift": 3.4894032,
+                  "marker": "karyotype",
+                  "med_age": 6.0862423,
+                  "n": 20,
+                  "patients": 20,
+                  "share": 50.0,
+                  "unflagged": 10
                 },
                 {
-                  "flagged": 301,
-                  "lift": 1.8250397,
-                  "marker": "IGF-1",
-                  "med_age": 8.6817248,
-                  "patients": 1151,
-                  "share": 26.151173,
-                  "unflagged": 850
+                  "flagged": 394,
+                  "lift": 2.2952001,
+                  "marker": "estradiol",
+                  "med_age": 12.156057,
+                  "n": 1198,
+                  "patients": 1198,
+                  "share": 32.888147,
+                  "unflagged": 804
+                },
+                {
+                  "flagged": 656,
+                  "lift": 2.1769363,
+                  "marker": "luteinising hormone",
+                  "med_age": 13.010267,
+                  "n": 2103,
+                  "patients": 2103,
+                  "share": 31.193533,
+                  "unflagged": 1447
+                },
+                {
+                  "flagged": 687,
+                  "lift": 2.0153173,
+                  "marker": "follicle-stimulating hormone",
+                  "med_age": 13.382615,
+                  "n": 2379,
+                  "patients": 2379,
+                  "share": 28.87768,
+                  "unflagged": 1692
+                },
+                {
+                  "flagged": 590,
+                  "lift": 1.9767142,
+                  "marker": "testosterone",
+                  "med_age": 13.303217,
+                  "n": 2083,
+                  "patients": 2083,
+                  "share": 28.324532,
+                  "unflagged": 1493
                 },
                 {
                   "flagged": 29,
                   "lift": 1.8739387,
                   "marker": "growth hormone assay",
                   "med_age": 9.065024,
+                  "n": 108,
                   "patients": 108,
                   "share": 26.851852,
                   "unflagged": 79
+                },
+                {
+                  "flagged": 301,
+                  "lift": 1.8250397,
+                  "marker": "IGF-1",
+                  "med_age": 8.6817248,
+                  "n": 1151,
+                  "patients": 1151,
+                  "share": 26.151173,
+                  "unflagged": 850
+                },
+                {
+                  "flagged": 79,
+                  "lift": 1.5752163,
+                  "marker": "chromosomal microarray",
+                  "med_age": 3.9342916,
+                  "n": 350,
+                  "patients": 350,
+                  "share": 22.571429,
+                  "unflagged": 271
+                },
+                {
+                  "flagged": 55,
+                  "lift": 1.4163629,
+                  "marker": "cortisol",
+                  "med_age": 11.115674,
+                  "n": 271,
+                  "patients": 271,
+                  "share": 20.295203,
+                  "unflagged": 216
+                },
+                {
+                  "flagged": 317,
+                  "lift": 1.2728893,
+                  "marker": "prolactin",
+                  "med_age": 14.080767,
+                  "n": 1738,
+                  "patients": 1738,
+                  "share": 18.239356,
+                  "unflagged": 1421
+                },
+                {
+                  "flagged": 3176,
+                  "lift": 1.1930611,
+                  "marker": "ferritin",
+                  "med_age": 5.6303901,
+                  "n": 18578,
+                  "patients": 18578,
+                  "share": 17.095489,
+                  "unflagged": 15402
+                },
+                {
+                  "flagged": 2999,
+                  "lift": 1.1013176,
+                  "marker": "coeliac transglutaminase",
+                  "med_age": 8.2778919,
+                  "n": 19004,
+                  "patients": 19004,
+                  "share": 15.780888,
+                  "unflagged": 16005
+                },
+                {
+                  "flagged": 3569,
+                  "lift": 1.0935792,
+                  "marker": "total IgA",
+                  "med_age": 7.063655,
+                  "n": 22776,
+                  "patients": 22776,
+                  "share": 15.670004,
+                  "unflagged": 19207
+                },
+                {
+                  "flagged": 3683,
+                  "lift": 1.0409422,
+                  "marker": "free thyroxine",
+                  "med_age": 9.7905544,
+                  "n": 24692,
+                  "patients": 24692,
+                  "share": 14.915762,
+                  "unflagged": 21009
+                },
+                {
+                  "flagged": 3848,
+                  "lift": 1.0112765,
+                  "marker": "alkaline phosphatase",
+                  "med_age": 9.1307324,
+                  "n": 26555,
+                  "patients": 26555,
+                  "share": 14.49068,
+                  "unflagged": 22707
+                },
+                {
+                  "flagged": 4483,
+                  "lift": 1.0010876,
+                  "marker": "thyroid stimulating hormone",
+                  "med_age": 9.6495551,
+                  "n": 31252,
+                  "patients": 31252,
+                  "share": 14.344682,
+                  "unflagged": 26769
+                },
+                {
+                  "flagged": 2988,
+                  "lift": 0.97638589,
+                  "marker": "C-reactive protein",
+                  "med_age": 7.0198494,
+                  "n": 21357,
+                  "patients": 21357,
+                  "share": 13.990729,
+                  "unflagged": 18369
+                },
+                {
+                  "flagged": 3733,
+                  "lift": 0.9733564,
+                  "marker": "erythrocyte sedimentation rate",
+                  "med_age": 7.3319644,
+                  "n": 26765,
+                  "patients": 26765,
+                  "share": 13.947319,
+                  "unflagged": 23032
+                },
+                {
+                  "flagged": 4136,
+                  "lift": 0.96214477,
+                  "marker": "creatinine",
+                  "med_age": 8.3942505,
+                  "n": 30000,
+                  "patients": 30000,
+                  "share": 13.786667,
+                  "unflagged": 25864
+                },
+                {
+                  "flagged": 1394,
+                  "lift": 0.824725,
+                  "marker": "vitamin D",
+                  "med_age": 11.030801,
+                  "n": 11796,
+                  "patients": 11796,
+                  "share": 11.817565,
+                  "unflagged": 10402
                 }
               ]
             }
@@ -6273,6 +6473,7 @@
           "title": "Treatment and workup: better timing than the label, and leakage",
           "values": {
             "base": 14.329098,
+            "flat_patients": 195193,
             "gh_age": 10.819986,
             "gh_lift": 5.0647877,
             "gh_n": 237,
@@ -6281,6 +6482,13 @@
             "igf_n": 1151,
             "igf_share": 26.151173,
             "igf_unflagged": 850,
+            "karyo_n": 20,
+            "n_flat": 8,
+            "n_labs": 20,
+            "top_lab": "karyotype",
+            "top_lift": 3.4894032,
+            "tsh_lift": 1.0010876,
+            "tsh_n": 31252,
             "w_ge2": 1383,
             "w_ge2_share": 98.085106,
             "w_med_age": 9.1143053,
