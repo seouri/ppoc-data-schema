@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-06T13:50:31Z",
+  "generated_at": "2026-09-06T14:24:22Z",
   "parts": [
     {
       "findings": [
@@ -6180,6 +6180,114 @@
             "worst_both": 44.48963,
             "worst_gap": 55.338417
           }
+        },
+        {
+          "artifact": {
+            "kind": "capture",
+            "name": "Treatment and workup records reveal the diagnosis, and date it a decade later than the code",
+            "recoverable": "Yes — exclude them as features, or index on them instead",
+            "scale": "growth hormone is 5.1 times enriched for the label; its median order age is 10.8 years against 0.027 for the code"
+          },
+          "id": "joint.treatment",
+          "part": "5.10",
+          "tables": [
+            {
+              "caption": "Growth and endocrine treatment and workup markers",
+              "columns": [
+                "marker",
+                "patients",
+                "flagged",
+                "share",
+                "lift",
+                "unflagged",
+                "med_age"
+              ],
+              "id": "t-treatment",
+              "rows": [
+                {
+                  "flagged": 172,
+                  "lift": 5.0647877,
+                  "marker": "growth hormone",
+                  "med_age": 10.819986,
+                  "patients": 237,
+                  "share": 72.57384,
+                  "unflagged": 65
+                },
+                {
+                  "flagged": 335,
+                  "lift": 4.321442,
+                  "marker": "thyroid hormone",
+                  "med_age": 7.6933607,
+                  "patients": 541,
+                  "share": 61.922366,
+                  "unflagged": 206
+                },
+                {
+                  "flagged": 107,
+                  "lift": 3.6784841,
+                  "marker": "GnRH agonist",
+                  "med_age": 10.160164,
+                  "patients": 203,
+                  "share": 52.70936,
+                  "unflagged": 96
+                },
+                {
+                  "flagged": 8,
+                  "lift": 1.8009823,
+                  "marker": "antithyroid",
+                  "med_age": 11.085558,
+                  "patients": 31,
+                  "share": 25.806452,
+                  "unflagged": 23
+                },
+                {
+                  "flagged": 9,
+                  "lift": 1.046821,
+                  "marker": "mineralocorticoid",
+                  "med_age": 13.33744,
+                  "patients": 60,
+                  "share": 15.0,
+                  "unflagged": 51
+                },
+                {
+                  "flagged": 301,
+                  "lift": 1.8250397,
+                  "marker": "IGF-1",
+                  "med_age": 8.6817248,
+                  "patients": 1151,
+                  "share": 26.151173,
+                  "unflagged": 850
+                },
+                {
+                  "flagged": 29,
+                  "lift": 1.8739387,
+                  "marker": "growth hormone assay",
+                  "med_age": 9.065024,
+                  "patients": 108,
+                  "share": 26.851852,
+                  "unflagged": 79
+                }
+              ]
+            }
+          ],
+          "title": "Treatment and workup: better timing than the label, and leakage",
+          "values": {
+            "base": 14.329098,
+            "gh_age": 10.819986,
+            "gh_lift": 5.0647877,
+            "gh_n": 237,
+            "gh_share": 72.57384,
+            "gh_unflagged": 65,
+            "igf_n": 1151,
+            "igf_share": 26.151173,
+            "igf_unflagged": 850,
+            "w_ge2": 1383,
+            "w_ge2_share": 98.085106,
+            "w_med_age": 9.1143053,
+            "w_med_h": 13.0,
+            "w_total": 1410,
+            "w_zero_share": 0.63829787
+          }
         }
       ],
       "number": "5",
@@ -7935,6 +8043,13 @@
                   "recoverable": "Yes — define the negative class explicitly instead",
                   "scale": "healthy_flag is set for 0.0% of growth-diagnosed patients",
                   "where": "5.9"
+                },
+                {
+                  "artifact": "Treatment and workup records reveal the diagnosis, and date it a decade later than the code",
+                  "class": "capture",
+                  "recoverable": "Yes — exclude them as features, or index on them instead",
+                  "scale": "growth hormone is 5.1 times enriched for the label; its median order age is 10.8 years against 0.027 for the code",
+                  "where": "5.10"
                 }
               ]
             }
@@ -7943,7 +8058,7 @@
           "values": {
             "kindlist": "capture, derivation, linkage, selection",
             "kinds": 4,
-            "n": 17
+            "n": 18
           }
         }
       ],

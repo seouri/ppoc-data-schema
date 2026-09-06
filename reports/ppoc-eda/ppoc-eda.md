@@ -1294,6 +1294,32 @@ Two rows here matter for anyone assembling a training set. `healthy_flag` is set
 
 **Implications for analysis.** Count complete observations, not visits: the usable input rate is the joint column, not the weight column, and it varies by more than ten points across childhood so a cohort defined by complete rows is age-selected. Never use `healthy_flag` as the negative class for a growth-diagnosis model. The cross-resource footprint is a weak discriminator — a referral is present for 61.9% of labelled against 54.0% of unlabelled patients — which is reassuring for leakage but means these resources add little on their own.
 
+### 5.10 Treatment and workup: better timing than the label, and leakage
+
+5.8 shows the diagnosis code arrives too early to be predicted from a growth curve. The medication and laboratory resources carry a second set of growth signals, and they behave in the opposite way. Both matter: as features they leak, and as index events they are far better dated than the code.
+
+**Growth and endocrine treatment and workup markers**
+
+| marker | patients | with a growth diagnosis | share flagged | against the base rate | treated but unflagged | median age at first record |
+| --- | --- | --- | --- | --- | --- | --- |
+| growth hormone | 237 | 172 | 72.6% | 5.1x | 65 | 10.8 y |
+| thyroid hormone | 541 | 335 | 61.9% | 4.3x | 206 | 7.7 y |
+| GnRH agonist | 203 | 107 | 52.7% | 3.7x | 96 | 10.2 y |
+| antithyroid | 31 | 8 | 25.8% | 1.8x | 23 | 11.1 y |
+| mineralocorticoid | 60 | 9 | 15.0% | 1.0x | 51 | 13.3 y |
+| IGF-1 | 1,151 | 301 | 26.2% | 1.8x | 850 | 8.7 y |
+| growth hormone assay | 108 | 29 | 26.9% | 1.9x | 79 | 9.1 y |
+
+Matched by string against the free-text generic and procedure names, so these are indicative rather than a curated vocabulary. Hydrocortisone and estradiol are excluded deliberately: both are common in this population for topical and contraceptive indications that have nothing to do with growth.
+
+**As features these leak.** Against a base rate of 14.3%, 237 patients ever prescribed growth hormone are 72.6% flagged — 5.1 times enriched. A model given medication history has been told the answer for those patients, and the same holds in weaker form for the other rows.
+
+**And the label misses cases they identify.** 65 of those growth-hormone patients carry no growth diagnosis in the tracked panel at all, as do 850 of the 1,151 with an IGF-1 test. Being treated for a growth disorder and being labelled with one are substantially different populations here, which bounds how well any model scored against the code can do.
+
+**The timing is the useful part.** The diagnosis code has a median age of 0.027 years (5.8). Growth hormone is first ordered at a median of 10.8 years, and the first growth workup or treatment of any kind at a median of 9.1 — roughly a decade later, and at an age where a trajectory exists. Taking the first growth workup or treatment as the index event instead of the code gives 1,410 patients, of whom **98.1% have at least two prior heights** and the median has 13. Only 0.6% have none. Against the code label's 24.1% and 50.6% respectively, that is a reversal.
+
+**Implications for analysis.** If the diagnosis code is the label, treatment and workup records have to be excluded from the features or the model will read the answer off them; excluding them is easy because they are identifiable by name. The more useful move is to treat the first growth workup as the index event: it marks when a clinician became concerned, it is dated when a trajectory exists, and predicting it is the question an early-detection model is actually being asked. The cost is population size, 1,410 against 237 on treatment alone and 35,890 on the code, and the caveat is that a workup is an action rather than an adjudicated outcome — 5.4 makes the same point about referrals.
+
 ## 6. Field index
 
 Every column, with its population, range, and the findings that govern it.
@@ -1489,7 +1515,7 @@ One row per known artifact, with its scale and whether it can be repaired.
 
 ### 7.1 Every artifact this report measured
 
-One row per artifact, gathered from the findings that measured them. The class says who produced the artifact, which decides whether it can be repaired: a derivation artifact can be recomputed without touching the clinical record, a capture artifact cannot, a selection artifact is outside the extract entirely. 17 artifacts across 4 classes (capture, derivation, linkage, selection).
+One row per artifact, gathered from the findings that measured them. The class says who produced the artifact, which decides whether it can be repaired: a derivation artifact can be recomputed without touching the clinical record, a capture artifact cannot, a selection artifact is outside the extract entirely. 18 artifacts across 4 classes (capture, derivation, linkage, selection).
 
 **Artifact catalogue**
 
@@ -1512,6 +1538,7 @@ One row per artifact, gathered from the findings that measured them. The class s
 | Velocity computed over an age-dependent minimum interval, not between adjacent visits | derivation | 99.99% reproduced under the interval rule against 43.7% under a naive lag | Not a defect — carry the interval rule alongside the field | 4.8 |
 | Diagnosis label precedes the growth trajectory it would be predicted from | selection | 51% of labelled patients have no height recorded before their diagnosis | No — use a different label or a different index date | 5.8 |
 | A derived flag that is disjoint from the diagnosis flag by construction | derivation | healthy_flag is set for 0.0% of growth-diagnosed patients | Yes — define the negative class explicitly instead | 5.9 |
+| Treatment and workup records reveal the diagnosis, and date it a decade later than the code | capture | growth hormone is 5.1 times enriched for the label; its median order age is 10.8 years against 0.027 for the code | Yes — exclude them as features, or index on them instead | 5.10 |
 
 ## 8. Methods and limitations
 

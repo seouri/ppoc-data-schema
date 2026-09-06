@@ -269,3 +269,156 @@ def features(ctx: Context) -> list[Finding]:
              "these resources add little on their own.", role="implication"),
     ]
     return [f]
+
+
+#: Treatments whose indication in a pediatric primary-care record is
+#: unambiguous. Hydrocortisone and estradiol are deliberately absent: both are
+#: common here for reasons unrelated to growth — topical dermatology and
+#: contraception — so including them would measure those instead.
+TREATMENTS = [
+    ("growth hormone", "lower(med_simple_generic_name) LIKE '%somatropin%'"),
+    ("thyroid hormone", "lower(med_simple_generic_name) LIKE '%levothyrox%'"),
+    ("GnRH agonist",
+     ("lower(med_simple_generic_name) LIKE '%leuprolid%' "
+     "OR lower(med_simple_generic_name) LIKE '%histrelin%' "
+     "OR lower(med_simple_generic_name) LIKE '%triptorelin%'")),
+    ("antithyroid", "lower(med_simple_generic_name) LIKE '%methimaz%'"),
+    ("mineralocorticoid", "lower(med_simple_generic_name) LIKE '%fludrocort%'"),
+]
+WORKUPS = [
+    ("IGF-1", ("upper(lab_procedure_name) LIKE '%IGF%' "
+              "OR upper(result_component_name) LIKE '%IGF%'")),
+    ("growth hormone assay",
+     ("upper(lab_procedure_name) LIKE '%GROWTH HORMONE%' "
+     "OR upper(result_component_name) LIKE '%GROWTH HORMONE%'")),
+]
+#: The index event a growth model would actually want: the first time growth was
+#: worked up or treated.
+WORKUP_INDEX = """
+    SELECT patient_id, min(age) AS idx FROM (
+        SELECT patient_id, med_order_date_age_in_days / 365.25 AS age
+        FROM medications WHERE lower(med_simple_generic_name) LIKE '%somatropin%'
+        UNION ALL
+        SELECT patient_id, lab_order_date_age_in_days / 365.25 FROM labs
+        WHERE upper(lab_procedure_name) LIKE '%IGF%'
+           OR upper(result_component_name) LIKE '%IGF%'
+           OR upper(lab_procedure_name) LIKE '%GROWTH HORMONE%'
+           OR upper(result_component_name) LIKE '%GROWTH HORMONE%')
+    WHERE age IS NOT NULL GROUP BY 1
+"""
+
+
+@probe("joint.treatment", "5.10")
+def treatment(ctx: Context) -> list[Finding]:
+    base = ctx.scalar("SELECT 100.0 * sum(CASE WHEN growth_dx_flag = 1 THEN 1 ELSE 0 END)"
+                      " / count(*) FROM patients_augmented")
+    rows = []
+    for label, cond, table, agecol in (
+        [(lab, c, "medications", "med_order_date_age_in_days") for lab, c in TREATMENTS]
+        + [(lab, c, "labs", "lab_order_date_age_in_days") for lab, c in WORKUPS]
+    ):
+        n, flagged, med_age = ctx.one(f"""
+            WITH t AS (SELECT patient_id, min({agecol}) / 365.25 AS first_age
+                       FROM {table} WHERE {cond} GROUP BY 1)
+            SELECT count(*), sum(CASE WHEN p.growth_dx_flag = 1 THEN 1 ELSE 0 END),
+                   quantile_cont(t.first_age, 0.5)
+            FROM t JOIN patients_augmented p USING (patient_id)""")
+        rows.append({"marker": label, "patients": ctx.suppress(n), "flagged": flagged,
+                     "share": 100.0 * flagged / n if n else None,
+                     "lift": (100.0 * flagged / n) / base if n else None,
+                     "unflagged": n - flagged, "med_age": med_age})
+
+    ctx.con.execute(f"CREATE TEMP TABLE _workup AS {WORKUP_INDEX}")
+    ctx.con.execute("""
+        CREATE TEMP TABLE _workup_pre AS
+        SELECT w.patient_id, w.idx, count(v.height_cm) AS n_before
+        FROM _workup w LEFT JOIN visits_augmented v
+          ON v.patient_id = w.patient_id AND v.height_cm IS NOT NULL
+         AND v.age_in_years < w.idx
+        GROUP BY 1, 2""")
+    w_total = ctx.scalar("SELECT count(*) FROM _workup_pre")
+    w_med_age = ctx.scalar("SELECT quantile_cont(idx, 0.5) FROM _workup_pre")
+    w_ge2 = ctx.scalar("SELECT count(*) FROM _workup_pre WHERE n_before >= 2")
+    w_zero = ctx.scalar("SELECT count(*) FROM _workup_pre WHERE n_before = 0")
+    w_med_h = ctx.scalar("SELECT quantile_cont(n_before, 0.5) FROM _workup_pre")
+
+    gh = next(r for r in rows if r["marker"] == "growth hormone")
+    igf = next(r for r in rows if r["marker"] == "IGF-1")
+
+    f = Finding(
+        id="joint.treatment", part="5.10",
+        title="Treatment and workup: better timing than the label, and leakage",
+        values={
+            "base": base, "gh_n": gh["patients"], "gh_share": gh["share"],
+            "gh_lift": gh["lift"], "gh_unflagged": gh["unflagged"],
+            "gh_age": gh["med_age"], "igf_n": igf["patients"],
+            "igf_share": igf["share"], "igf_unflagged": igf["unflagged"],
+            "w_total": w_total, "w_med_age": w_med_age,
+            "w_ge2": w_ge2, "w_ge2_share": 100.0 * w_ge2 / w_total,
+            "w_zero_share": 100.0 * w_zero / w_total, "w_med_h": w_med_h,
+        },
+        artifact=Artifact(
+            name="Treatment and workup records reveal the diagnosis, and date it "
+                 "a decade later than the code",
+            kind="capture",
+            scale="growth hormone is {gh_lift:.1f} times enriched for the label; "
+                  "its median order age is {gh_age:.1f} years against 0.027 for "
+                  "the code",
+            recoverable="Yes — exclude them as features, or index on them instead",
+        ),
+    )
+    f.blocks = [
+        Para("5.8 shows the diagnosis code arrives too early to be predicted from a "
+             "growth curve. The medication and laboratory resources carry a second "
+             "set of growth signals, and they behave in the opposite way. Both "
+             "matter: as features they leak, and as index events they are far "
+             "better dated than the code."),
+        Table("t-treatment", "Growth and endocrine treatment and workup markers",
+              [C("marker", "marker"),
+               C("patients", "patients", ",", align="right"),
+               C("flagged", "with a growth diagnosis", ",", align="right"),
+               C("share", "share flagged", ".1f", "%", align="right"),
+               C("lift", "against the base rate", ".1f", "x", align="right"),
+               C("unflagged", "treated but unflagged", ",", align="right"),
+               C("med_age", "median age at first record", ".1f", " y", align="right")],
+              rows,
+              note="Matched by string against the free-text generic and procedure "
+                   "names, so these are indicative rather than a curated "
+                   "vocabulary. Hydrocortisone and estradiol are excluded "
+                   "deliberately: both are common in this population for topical "
+                   "and contraceptive indications that have nothing to do with "
+                   "growth."),
+        Para("**As features these leak.** Against a base rate of {base:.1f}%, "
+             "{gh_n:,} patients ever prescribed growth hormone are "
+             "{gh_share:.1f}% flagged — {gh_lift:.1f} times enriched. A model given "
+             "medication history has been told the answer for those patients, and "
+             "the same holds in weaker form for the other rows."),
+        Para("**And the label misses cases they identify.** {gh_unflagged:,} of "
+             "those growth-hormone patients carry no growth diagnosis in the "
+             "tracked panel at all, as do {igf_unflagged:,} of the {igf_n:,} with "
+             "an IGF-1 test. Being treated for a growth disorder and being labelled "
+             "with one are substantially different populations here, which bounds "
+             "how well any model scored against the code can do."),
+        Para("**The timing is the useful part.** The diagnosis code has a median "
+             "age of 0.027 years (5.8). Growth hormone is first ordered at a median "
+             "of {gh_age:.1f} years, and the first growth workup or treatment of "
+             "any kind at a median of {w_med_age:.1f} — roughly a decade later, "
+             "and at an age where a trajectory exists. Taking the "
+             "first growth workup or treatment as the index event instead of the "
+             "code gives {w_total:,} patients, of whom **{w_ge2_share:.1f}% have at "
+             "least two prior heights** and the median has {w_med_h:.0f}. Only "
+             "{w_zero_share:.1f}% have none. Against the code label's 24.1% and "
+             "50.6% respectively, that is a reversal."),
+        Para("**Implications for analysis.** If the diagnosis code is the label, "
+             "treatment and workup records have to be excluded from the features or "
+             "the model will read the answer off them; excluding them is easy "
+             "because they are identifiable by name. The more useful move is to "
+             "treat the first growth workup as the index event: it marks when a "
+             "clinician became concerned, it is dated when a trajectory exists, and "
+             "predicting it is the question an early-detection model is actually "
+             "being asked. The cost is population size, {w_total:,} against "
+             "{gh_n:,} on treatment alone and 35,890 on the code, and the caveat is "
+             "that a workup is an action rather than an adjudicated outcome — 5.4 "
+             "makes the same point about referrals.", role="implication"),
+    ]
+    return [f]
