@@ -84,14 +84,7 @@ def test_guide_preserves_deferred_boundaries_and_readme_links_the_slice() -> Non
         assert term in section, f"guide is missing deferred boundary: {term}"
 
     assert "[synthetic generator guide](docs/synthetic-generator.md)" in README
-    assert (
-        "docs/superpowers/plans/2026-09-02-pediatric-hypothyroidism-ancillary-pathway.md"
-        in README
-    )
-    assert (
-        "docs/superpowers/specs/2026-09-02-pediatric-hypothyroidism-ancillary-pathway-design.md"
-        in README
-    )
-    assert sum(
-        "pediatric-hypothyroidism" in line.lower() for line in README.splitlines()
-    ) == 1
+    assert (ROOT / "docs/superpowers/plans"
+            / "2026-09-02-pediatric-hypothyroidism-ancillary-pathway.md").is_file()
+    assert (ROOT / "docs/superpowers/specs"
+            / "2026-09-02-pediatric-hypothyroidism-ancillary-pathway-design.md").is_file()

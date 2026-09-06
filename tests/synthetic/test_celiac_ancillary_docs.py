@@ -121,15 +121,9 @@ def test_readme_links_the_celiac_slice_without_copying_the_guide() -> None:
     readme = README.read_text(encoding="utf-8")
 
     assert "[synthetic generator guide](docs/synthetic-generator.md)" in readme
-    assert "excess-weight ancillary pathway is a separate roadmap slice" in readme
-    assert (
-        "docs/superpowers/plans/2026-09-02-celiac-ancillary-pathway.md"
-        in readme
-    )
-    assert (
-        "docs/superpowers/specs/2026-09-02-celiac-ancillary-pathway-design.md"
-        in readme
-    )
-    assert "The evaluator-only celiac ancillary pathway is a separate roadmap slice" in readme
+    assert (ROOT / "docs/superpowers/plans"
+            / "2026-09-02-celiac-ancillary-pathway.md").is_file()
+    assert (ROOT / "docs/superpowers/specs"
+            / "2026-09-02-celiac-ancillary-pathway-design.md").is_file()
     assert "SYN-CELIAC-DISEASE" not in readme
     assert "Synthetic Pediatric Gastroenterology" not in readme

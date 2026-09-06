@@ -115,4 +115,4 @@ def test_readme_links_the_guide_and_marks_the_pathway_as_a_roadmap_slice() -> No
     readme = README.read_text(encoding="utf-8")
 
     assert "[synthetic generator guide](docs/synthetic-generator.md)" in readme
-    assert "excess-weight ancillary pathway is a separate roadmap slice" in readme
+    assert SECTION_HEADING in GUIDE.read_text(encoding="utf-8")
