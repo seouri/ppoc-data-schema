@@ -844,9 +844,9 @@ The category is present only where a BMI percentile is, which 1.3 and 3.4 show m
 
 **Implications for analysis.** This is a distribution over recorded visits, not a prevalence: children with more visits contribute more rows, BMI is missing selectively by age and encounter type, and 1.4 shows the cohort is not a population sample. Aggregate to the patient before quoting any proportion, state the age window, and prefer the continuous percentile to the category where the analysis allows it, since the cut points discard most of the information.
 
-## 5. Other clinical domains
+## 5. Clinical domains and cross-resource structure
 
-Diagnoses, laboratory results, medications, referrals, and demographics.
+Diagnoses, laboratory results, medications, referrals, and demographics, then how they line up against each other.
 
 ### 5.1 Diagnoses
 
@@ -1222,6 +1222,78 @@ The referral resource shows the same orientation from the action side. Grouping 
 
 **Implications for analysis.** Use the derived columns when you want an age at first record and are content with the panel upstream chose; go to the raw diagnosis resources for anything else, and match by prefix when you do. These tables describe what the pipeline tracks, not what is clinically relevant to growth in general: a code absent from the panel may still be present in 5.1, and a specialty family here is a string match on a free-text field rather than a clinical taxonomy.
 
+### 5.8 Label, trajectory, and utilization do not line up
+
+A model that identifies abnormal growth early needs three things to line up: a label, a measurement history that precedes it, and a care-process record that does not simply give the answer away. In this extract none of the three lines up with the others, and the mismatches are large enough to decide a study design.
+
+**The label mostly arrives before the trajectory does.** Of 35,890 patients carrying a growth diagnosis with a recorded age, 81.1% receive it before their first birthday, at a median age of 0.027 years. 5.7 shows why: the tracked panel is dominated by perinatal codes recorded within days of birth.
+
+*Figure — Height observations recorded before the growth diagnosis. Rendered in `index.html` at `#fig-pre-heights`.*
+
+**Heights available before the diagnosis**
+
+| heights recorded first | patients | share |
+| --- | --- | --- |
+| 0 | 18,157 | 50.6% |
+| 1 | 9,093 | 25.3% |
+| 2 | 1,674 | 4.7% |
+| 3-4 | 1,489 | 4.1% |
+| 5-9 | 2,047 | 5.7% |
+| 10 or more | 3,430 | 9.6% |
+
+**18,157 of those patients (50.6%) have no height recorded at all before their diagnosis, and 75.9% have at most one.** There is no trajectory to detect anything from: for most of the labelled population the code is not an outcome a growth curve could have anticipated, it is a fact recorded at or near birth. Any evaluation that scores prediction of this label across the whole labelled set is measuring something else.
+
+**Visit counts, lifetime and before the diagnosis**
+
+| group | patients | median lifetime visits | mean lifetime | median before diagnosis | mean before diagnosis |
+| --- | --- | --- | --- | --- | --- |
+| no growth diagnosis | 214,681 | 23 | 26.02 | 23 | 26.02 |
+| growth diagnosis | 35,907 | 22 | 25.32 | 1 | 4.57 |
+
+Patients with no growth diagnosis have no index date, so their before-diagnosis count is their lifetime count. That is exactly the asymmetry the note below describes.
+
+**Utilization separates the groups, but only because the index date does.** Over a lifetime the two groups are barely distinguishable — 25.32 visits on average against 26.02. Counted up to the diagnosis they are worlds apart, 4.57 against 26.02, because an undiagnosed patient has no index date and so contributes their whole record. A feature built from "observations before the index" therefore encodes which group a patient is in rather than anything about their growth, and it does so in the counter-intuitive direction: the labelled group has *fewer* prior visits, not more.
+
+**Implications for analysis.** Fixing this needs a common index date for both groups, chosen without reference to the label — a fixed age, a matched visit number, or a sampled pseudo-index for unlabelled patients. Only 8,640 labelled patients (24.1%) have two or more prior heights, which is the most a trajectory-based model could train on; restricting to them changes the population being studied and should be reported rather than done silently. And a model evaluated on this label at all is being scored against recorded coding practice, not against an adjudicated growth assessment; 5.6 makes the same point about the flag itself.
+
+### 5.9 What a feature vector actually contains
+
+Height and weight are the two measurements a growth model needs together, and 3.4 gives each one's availability separately. Jointly is what matters, because a visit missing either contributes no complete observation.
+
+**Visits carrying height, weight, and both**
+
+| age band (years) | visits | height | weight | both | weight without height |
+| --- | --- | --- | --- | --- | --- |
+| 0-2 | 2,693,000 | 56.9% | 99.8% | 56.8% | 43.0% |
+| 2-5 | 1,393,990 | 44.6% | 99.8% | 44.5% | 55.3% |
+| 5-10 | 1,529,617 | 53.6% | 99.9% | 53.5% | 46.3% |
+| 10-15 | 742,225 | 59.3% | 99.9% | 59.2% | 40.7% |
+| 15-18 | 135,641 | 56.7% | 99.9% | 56.6% | 43.3% |
+
+The joint rate tracks the height rate almost exactly: where a height exists a weight nearly always does too, so height alone is the binding constraint and the last column is what a height-and-weight model discards. It is worst at 2-5 years, where only 44.5% of visits carry both and 55.3% carry a weight with no height to pair it with.
+
+**Derived flags among labelled and unlabelled patients**
+
+| flag | set when the patient has | growth diagnosis | no growth diagnosis | ratio |
+| --- | --- | --- | --- | --- |
+| ever_stunting_flag | height below the stunting threshold | 21.8% | 4.7% | 4.65x |
+| ever_wasting_flag | weight-for-length or -stature below wasting | 36.4% | 25.0% | 1.46x |
+| ever_underweight_flag | BMI below the underweight threshold | 14.1% | 13.3% | 1.06x |
+| ever_obesity_flag | BMI at or above the obesity threshold | 14.6% | 20.9% | 0.70x |
+| chronic_dx_flag | any chronic diagnosis | 82.4% | 81.2% | 1.01x |
+| healthy_flag | carries none of the tracked conditions | 0.0% | 11.4% | 0.00x |
+
+Two rows here matter for anyone assembling a training set. `healthy_flag` is set for 0.0% of growth-diagnosed patients — it is **disjoint from the diagnosis flag by construction**, so using it as a negative class defines the outcome into the input and any model separating the two is learning the definition. `ever_stunting_flag`, by contrast, is a genuine correlate: 21.8% against 4.7%, a 4.7-fold enrichment derived from the measurements themselves rather than from the code.
+
+**Cross-resource footprint by label**
+
+| group | patients | has a referral | has a medication | has a lab |
+| --- | --- | --- | --- | --- |
+| growth diagnosis | 35,907 | 61.9% | 95.9% | 98.6% |
+| no growth diagnosis | 214,681 | 54.0% | 94.0% | 98.7% |
+
+**Implications for analysis.** Count complete observations, not visits: the usable input rate is the joint column, not the weight column, and it varies by more than ten points across childhood so a cohort defined by complete rows is age-selected. Never use `healthy_flag` as the negative class for a growth-diagnosis model. The cross-resource footprint is a weak discriminator — a referral is present for 61.9% of labelled against 54.0% of unlabelled patients — which is reassuring for leakage but means these resources add little on their own.
+
 ## 6. Field index
 
 Every column, with its population, range, and the findings that govern it.
@@ -1417,7 +1489,7 @@ One row per known artifact, with its scale and whether it can be repaired.
 
 ### 7.1 Every artifact this report measured
 
-One row per artifact, gathered from the findings that measured them. The class says who produced the artifact, which decides whether it can be repaired: a derivation artifact can be recomputed without touching the clinical record, a capture artifact cannot, a selection artifact is outside the extract entirely. 15 artifacts across 4 classes (capture, derivation, linkage, selection).
+One row per artifact, gathered from the findings that measured them. The class says who produced the artifact, which decides whether it can be repaired: a derivation artifact can be recomputed without touching the clinical record, a capture artifact cannot, a selection artifact is outside the extract entirely. 17 artifacts across 4 classes (capture, derivation, linkage, selection).
 
 **Artifact catalogue**
 
@@ -1438,6 +1510,8 @@ One row per artifact, gathered from the findings that measured them. The class s
 | Height z-score truncated above at +3 while the lower tail runs to -5 | derivation | 21 visits at or above +3 where roughly 15,800 would be expected | Yes — recompute from the retained raw height | 4.6 |
 | Head circumference passed through an inch-to-centimetre conversion a second time | derivation | 13,467 visits, 90% of all out-of-range values | Yes — divide by 2.54 before applying a plausible range, rather than deleting | 4.7 |
 | Velocity computed over an age-dependent minimum interval, not between adjacent visits | derivation | 99.99% reproduced under the interval rule against 43.7% under a naive lag | Not a defect — carry the interval rule alongside the field | 4.8 |
+| Diagnosis label precedes the growth trajectory it would be predicted from | selection | 51% of labelled patients have no height recorded before their diagnosis | No — use a different label or a different index date | 5.8 |
+| A derived flag that is disjoint from the diagnosis flag by construction | derivation | healthy_flag is set for 0.0% of growth-diagnosed patients | Yes — define the negative class explicitly instead | 5.9 |
 
 ## 8. Methods and limitations
 

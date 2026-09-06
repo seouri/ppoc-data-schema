@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-05T22:48:19Z",
+  "generated_at": "2026-09-06T13:50:31Z",
   "parts": [
     {
       "findings": [
@@ -5886,10 +5886,304 @@
             "short_codes": "`P07`, `P05`, `E30.1`, `P70`",
             "zero_exact": 14
           }
+        },
+        {
+          "artifact": {
+            "kind": "selection",
+            "name": "Diagnosis label precedes the growth trajectory it would be predicted from",
+            "recoverable": "No — use a different label or a different index date",
+            "scale": "51% of labelled patients have no height recorded before their diagnosis"
+          },
+          "figures": [
+            {
+              "caption": "Height observations recorded before the growth diagnosis",
+              "data": {
+                "categories": [
+                  "0",
+                  "1",
+                  "2",
+                  "3-4",
+                  "5-9",
+                  "10 or more"
+                ],
+                "height": 260,
+                "series": [
+                  {
+                    "name": "share of labelled patients",
+                    "values": [
+                      50.59,
+                      25.34,
+                      4.66,
+                      4.15,
+                      5.7,
+                      9.56
+                    ]
+                  }
+                ],
+                "suffix": "%",
+                "title": "Prior heights at the time of diagnosis"
+              },
+              "id": "fig-pre-heights",
+              "kind": "bar"
+            }
+          ],
+          "id": "joint.label",
+          "part": "5.8",
+          "tables": [
+            {
+              "caption": "Heights available before the diagnosis",
+              "columns": [
+                "band",
+                "patients",
+                "share"
+              ],
+              "id": "t-pre-heights",
+              "rows": [
+                {
+                  "band": "0",
+                  "patients": 18157,
+                  "share": 50.590694
+                },
+                {
+                  "band": "1",
+                  "patients": 9093,
+                  "share": 25.335748
+                },
+                {
+                  "band": "2",
+                  "patients": 1674,
+                  "share": 4.6642519
+                },
+                {
+                  "band": "3-4",
+                  "patients": 1489,
+                  "share": 4.148788
+                },
+                {
+                  "band": "5-9",
+                  "patients": 2047,
+                  "share": 5.7035386
+                },
+                {
+                  "band": "10 or more",
+                  "patients": 3430,
+                  "share": 9.5569797
+                }
+              ]
+            },
+            {
+              "caption": "Visit counts, lifetime and before the diagnosis",
+              "columns": [
+                "group",
+                "patients",
+                "med_life",
+                "mean_life",
+                "med_pre",
+                "mean_pre"
+              ],
+              "id": "t-util",
+              "rows": [
+                {
+                  "group": "no growth diagnosis",
+                  "mean_life": 26.016201,
+                  "mean_pre": 26.016201,
+                  "med_life": 23.0,
+                  "med_pre": 23.0,
+                  "patients": 214681
+                },
+                {
+                  "group": "growth diagnosis",
+                  "mean_life": 25.323447,
+                  "mean_pre": 4.569304,
+                  "med_life": 22.0,
+                  "med_pre": 1.0,
+                  "patients": 35907
+                }
+              ]
+            }
+          ],
+          "title": "Label, trajectory, and utilization do not line up",
+          "values": {
+            "dx_infant": 81.114517,
+            "dx_med": 0.027,
+            "life_flag": 25.323447,
+            "life_no": 26.016201,
+            "pre_flag": 4.569304,
+            "pre_med_flag": 1.0,
+            "pre_med_no": 23.0,
+            "pre_no": 26.016201,
+            "total": 35890,
+            "with_traj": 8640,
+            "with_traj_share": 24.073558,
+            "zero": 18157,
+            "zero_or_one": 27250,
+            "zero_or_one_share": 75.926442,
+            "zero_share": 50.590694
+          }
+        },
+        {
+          "artifact": {
+            "kind": "derivation",
+            "name": "A derived flag that is disjoint from the diagnosis flag by construction",
+            "recoverable": "Yes — define the negative class explicitly instead",
+            "scale": "healthy_flag is set for 0.0% of growth-diagnosed patients"
+          },
+          "id": "joint.features",
+          "part": "5.9",
+          "tables": [
+            {
+              "caption": "Visits carrying height, weight, and both",
+              "columns": [
+                "band",
+                "visits",
+                "height",
+                "weight",
+                "both",
+                "gap"
+              ],
+              "id": "t-joint-hw",
+              "rows": [
+                {
+                  "band": "0-2",
+                  "both": 56.753992,
+                  "gap": 43.016153,
+                  "height": 56.893984,
+                  "visits": 2693000,
+                  "weight": 99.770145
+                },
+                {
+                  "band": "2-5",
+                  "both": 44.48963,
+                  "gap": 55.338417,
+                  "height": 44.602687,
+                  "visits": 1393990,
+                  "weight": 99.828048
+                },
+                {
+                  "band": "5-10",
+                  "both": 53.534643,
+                  "gap": 46.346831,
+                  "height": 53.639702,
+                  "visits": 1529617,
+                  "weight": 99.881474
+                },
+                {
+                  "band": "10-15",
+                  "both": 59.216006,
+                  "gap": 40.660851,
+                  "height": 59.331604,
+                  "visits": 742225,
+                  "weight": 99.876857
+                },
+                {
+                  "band": "15-18",
+                  "both": 56.59572,
+                  "gap": 43.29222,
+                  "height": 56.689349,
+                  "visits": 135641,
+                  "weight": 99.887939
+                }
+              ]
+            },
+            {
+              "caption": "Derived flags among labelled and unlabelled patients",
+              "columns": [
+                "flag",
+                "meaning",
+                "flagged",
+                "unflagged",
+                "ratio"
+              ],
+              "id": "t-co-flags",
+              "rows": [
+                {
+                  "flag": "ever_stunting_flag",
+                  "flagged": 21.800763,
+                  "meaning": "height below the stunting threshold",
+                  "ratio": 4.6518334,
+                  "unflagged": 4.6864883
+                },
+                {
+                  "flag": "ever_wasting_flag",
+                  "flagged": 36.449717,
+                  "meaning": "weight-for-length or -stature below wasting",
+                  "ratio": 1.4594639,
+                  "unflagged": 24.97473
+                },
+                {
+                  "flag": "ever_underweight_flag",
+                  "flagged": 14.05854,
+                  "meaning": "BMI below the underweight threshold",
+                  "ratio": 1.0567582,
+                  "unflagged": 13.30346
+                },
+                {
+                  "flag": "ever_obesity_flag",
+                  "flagged": 14.576545,
+                  "meaning": "BMI at or above the obesity threshold",
+                  "ratio": 0.69906783,
+                  "unflagged": 20.851403
+                },
+                {
+                  "flag": "chronic_dx_flag",
+                  "flagged": 82.37948,
+                  "meaning": "any chronic diagnosis",
+                  "ratio": 1.0143276,
+                  "unflagged": 81.21585
+                },
+                {
+                  "flag": "healthy_flag",
+                  "flagged": 0.0,
+                  "meaning": "carries none of the tracked conditions",
+                  "ratio": 0.0,
+                  "unflagged": 11.398773
+                }
+              ]
+            },
+            {
+              "caption": "Cross-resource footprint by label",
+              "columns": [
+                "group",
+                "patients",
+                "referral",
+                "medication",
+                "lab"
+              ],
+              "id": "t-footprint",
+              "rows": [
+                {
+                  "group": "growth diagnosis",
+                  "lab": 98.649288,
+                  "medication": 95.928371,
+                  "patients": 35907,
+                  "referral": 61.923859
+                },
+                {
+                  "group": "no growth diagnosis",
+                  "lab": 98.680833,
+                  "medication": 94.036268,
+                  "patients": 214681,
+                  "referral": 53.957267
+                }
+              ]
+            }
+          ],
+          "title": "What a feature vector actually contains",
+          "values": {
+            "healthy_flagged": 0.0,
+            "ref_flag": 61.923859,
+            "ref_no": 53.957267,
+            "stunt_flagged": 21.800763,
+            "stunt_ratio": 4.6518334,
+            "stunt_unflagged": 4.6864883,
+            "worst_band": "2-5",
+            "worst_both": 44.48963,
+            "worst_gap": 55.338417
+          }
         }
       ],
       "number": "5",
-      "title": "Other clinical domains"
+      "title": "Clinical domains and cross-resource structure"
     },
     {
       "findings": [
@@ -7627,6 +7921,20 @@
                   "recoverable": "Not a defect — carry the interval rule alongside the field",
                   "scale": "99.99% reproduced under the interval rule against 43.7% under a naive lag",
                   "where": "4.8"
+                },
+                {
+                  "artifact": "Diagnosis label precedes the growth trajectory it would be predicted from",
+                  "class": "selection",
+                  "recoverable": "No — use a different label or a different index date",
+                  "scale": "51% of labelled patients have no height recorded before their diagnosis",
+                  "where": "5.8"
+                },
+                {
+                  "artifact": "A derived flag that is disjoint from the diagnosis flag by construction",
+                  "class": "derivation",
+                  "recoverable": "Yes — define the negative class explicitly instead",
+                  "scale": "healthy_flag is set for 0.0% of growth-diagnosed patients",
+                  "where": "5.9"
                 }
               ]
             }
@@ -7635,7 +7943,7 @@
           "values": {
             "kindlist": "capture, derivation, linkage, selection",
             "kinds": 4,
-            "n": 15
+            "n": 17
           }
         }
       ],

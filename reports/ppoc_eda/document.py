@@ -31,8 +31,9 @@ PARTS: list[tuple[str, str, str]] = [
      "Keys, linkage, the age axis, missingness, terminology, and capture."),
     ("4", "Anthropometrics",
      "The richest and most artifact-prone measurements in the extract."),
-    ("5", "Other clinical domains",
-     "Diagnoses, laboratory results, medications, referrals, and demographics."),
+    ("5", "Clinical domains and cross-resource structure",
+     ("Diagnoses, laboratory results, medications, referrals, and demographics, "
+      "then how they line up against each other.")),
     ("6", "Field index",
      "Every column, with its population, range, and the findings that govern it."),
     ("7", "Artifact catalogue",
