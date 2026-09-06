@@ -646,3 +646,159 @@ def sources(ctx: Context) -> list[Finding]:
              "already coded it.", role="implication"),
     ]
     return [f]
+
+
+#: Specialty families a growth question would reach for, matched on the
+#: free-text requested specialty as in 5.7.
+REFERRAL_FAMILIES = [
+    ("Endocrinology", "%endocrin%"),
+    ("Gastroenterology", "%gastroenter%"),
+    ("Genetics", "%genetic%"),
+    ("Nephrology", "%nephrolog%"),
+    ("Nutrition and dietetics",
+     "%nutrition%' OR lower(requested_specialty) LIKE '%dietit%"),
+]
+NEAR_DAYS = 30
+
+
+@probe("joint.referrals", "5.12")
+def referrals(ctx: Context) -> list[Finding]:
+    base = ctx.scalar("SELECT 100.0 * sum(CASE WHEN growth_dx_flag = 1 THEN 1 ELSE 0 END)"
+                      " / count(*) FROM patients_augmented")
+    rows = []
+    for family, pattern in REFERRAL_FAMILIES:
+        first = (f"""SELECT patient_id,
+                            min(referral_date_age_in_days) / 365.25 AS ra
+                     FROM referrals
+                     WHERE lower(requested_specialty) LIKE '{pattern}'
+                       AND referral_date_age_in_days IS NOT NULL
+                     GROUP BY 1""")
+        n, flagged, med_age = ctx.one(f"""
+            WITH t AS ({first})
+            SELECT count(*), sum(CASE WHEN p.growth_dx_flag = 1 THEN 1 ELSE 0 END),
+                   quantile_cont(t.ra, 0.5)
+            FROM t JOIN patients_augmented p USING (patient_id)""")
+        both, med_gap, first_share, near = ctx.one(f"""
+            WITH t AS ({first})
+            SELECT count(*), quantile_cont((t.ra - p.dx_age_years) * 365.25, 0.5),
+                   100.0 * sum(CASE WHEN t.ra < p.dx_age_years THEN 1 ELSE 0 END)
+                        / count(*),
+                   100.0 * sum(CASE WHEN abs(t.ra - p.dx_age_years) * 365.25
+                                    <= {NEAR_DAYS} THEN 1 ELSE 0 END) / count(*)
+            FROM t JOIN patients_augmented p USING (patient_id)
+            WHERE p.dx_age_years IS NOT NULL""")
+        dx_med = ctx.scalar(f"""
+            SELECT quantile_cont(p.dx_age_years, 0.5) FROM patients_augmented p
+            WHERE p.dx_age_years IS NOT NULL AND EXISTS (
+                SELECT 1 FROM referrals r WHERE r.patient_id = p.patient_id
+                AND lower(r.requested_specialty) LIKE '{pattern}')""")
+        rows.append({"family": family, "patients": ctx.suppress(n),
+                     "flagged": flagged, "lift": (100.0 * flagged / n) / base,
+                     "med_age": med_age, "both": both, "med_gap": med_gap,
+                     "first_share": first_share, "near": near, "dx_med": dx_med})
+
+    ctx.con.execute("""
+        CREATE TEMP TABLE _endo_pre AS
+        SELECT p.patient_id,
+               EXISTS (SELECT 1 FROM referrals r WHERE r.patient_id = p.patient_id
+                       AND lower(r.requested_specialty) LIKE '%endocrin%') AS endo,
+               count(v.height_cm) AS n_before
+        FROM patients_augmented p
+        LEFT JOIN visits_augmented v ON v.patient_id = p.patient_id
+             AND v.height_cm IS NOT NULL AND v.age_in_years < p.dx_age_years
+        WHERE p.growth_dx_flag = 1 AND p.dx_age_years IS NOT NULL
+        GROUP BY 1, 2""")
+    pre_rows = []
+    for label, cond in (("with an endocrinology referral", "endo"),
+                        ("without one", "NOT endo")):
+        n, none, ge2, med = ctx.one(f"""
+            SELECT count(*), sum(CASE WHEN n_before = 0 THEN 1 ELSE 0 END),
+                   sum(CASE WHEN n_before >= 2 THEN 1 ELSE 0 END),
+                   quantile_cont(n_before, 0.5)
+            FROM _endo_pre WHERE {cond}""")
+        pre_rows.append({"group": label, "patients": n,
+                         "none": 100.0 * none / n, "ge2": 100.0 * ge2 / n,
+                         "median": med})
+    endo = next(r for r in rows if r["family"] == "Endocrinology")
+    nutri = next(r for r in rows if r["family"] == "Nutrition and dietetics")
+
+    f = Finding(
+        id="joint.referrals", part="5.12",
+        title="Referral timing against the diagnosis, and the subgroup it finds",
+        values={
+            "base": base, "endo_n": endo["patients"], "endo_lift": endo["lift"],
+            "endo_age": endo["med_age"], "endo_dx": endo["dx_med"],
+            "endo_near": endo["near"], "endo_first": endo["first_share"],
+            "nutri_n": nutri["patients"], "nutri_lift": nutri["lift"],
+            "near_days": NEAR_DAYS,
+            "endo_ge2": pre_rows[0]["ge2"], "endo_none": pre_rows[0]["none"],
+            "endo_med": pre_rows[0]["median"], "endo_pre_n": pre_rows[0]["patients"],
+            "rest_ge2": pre_rows[1]["ge2"], "rest_none": pre_rows[1]["none"],
+        },
+        artifact=Artifact(
+            name="A growth diagnosis recorded at the referral rather than before it",
+            kind="capture",
+            scale="{endo_near:.0f}% of endocrinology-referred labelled patients "
+                  "carry the code within {near_days} days of the referral",
+            recoverable="No — but the subgroup it marks is the usable one",
+        ),
+    )
+    f.blocks = [
+        Para("5.7 gives the referral volume by specialty family. This asks the "
+             "question that volume cannot: for a patient who has both, does the "
+             "referral come before the diagnosis or after it, and does the answer "
+             "identify a different kind of patient."),
+        Table("t-ref-timing", "Referral families against the growth diagnosis",
+              [C("family", "specialty family"),
+               C("patients", "referred patients", ",", align="right"),
+               C("lift", "label lift", ".2f", "x", align="right"),
+               C("med_age", "median referral age", ".1f", " y", align="right"),
+               C("dx_med", "median diagnosis age", ".2f", " y", align="right"),
+               C("both", "with both", ",", align="right"),
+               C("med_gap", "median referral lag", ".0f", " d", align="right"),
+               C("first_share", "referral first", ".1f", "%", align="right"),
+               C("near", "within a month", ".1f", "%", align="right")], rows,
+              note="Lift is against a base labelled rate of "
+                   "{base:.1f}%. A negative lag would mean the referral came "
+                   "first; all five families are positive."),
+        Para("Two tiers again, as in the laboratory panel. Endocrinology carries "
+             "the signal at {endo_lift:.2f} times the base rate across "
+             "{endo_n:,} referred patients, while nutrition and dietetics — the "
+             "family a growth question might reach for first — sits at "
+             "{nutri_lift:.2f} across {nutri_n:,}, which is no signal at all."),
+        Para("**Referrals follow the code, not the other way round.** Every family "
+             "has a positive median lag, and only {endo_first:.1f}% of "
+             "endocrinology pairs have the referral first. A referral is therefore "
+             "not an earlier index event than the diagnosis in the way the "
+             "laboratory workup of 5.10 is."),
+        Para("**But endocrinology selects a different population, and that is the "
+             "useful part.** Among labelled patients referred to endocrinology the "
+             "median diagnosis age is {endo_dx:.2f} years, against 0.027 for the "
+             "labelled cohort as a whole (5.8), and {endo_near:.1f}% carry the code "
+             "within {near_days} days of the referral. These are not the perinatal "
+             "codes that dominate the label; they are diagnoses recorded in "
+             "childhood, at the moment a referral was made."),
+        Table("t-endo-pre", "Heights recorded before the diagnosis, by referral",
+              [C("group", "labelled patients"),
+               C("patients", "patients", ",", align="right"),
+               C("none", "no prior height", ".1f", "%", align="right"),
+               C("ge2", "two or more", ".1f", "%", align="right"),
+               C("median", "median prior heights", ".0f", align="right")], pre_rows),
+        Para("That difference decides whether the label is learnable. Of the "
+             "{endo_pre_n:,} labelled patients with an endocrinology referral, "
+             "{endo_ge2:.1f}% have at least two prior heights and the median has "
+             "{endo_med:.0f}; for everyone else those figures are {rest_ge2:.1f}% "
+             "and zero. 5.8's finding — that half the labelled population has no "
+             "trajectory before the code — is really a statement about the "
+             "perinatal majority, and it inverts inside this subgroup."),
+        Para("**Implications for analysis.** Do not use a referral as an early "
+             "index event; it lags the code in every family measured. Do use it as "
+             "a cohort filter: an endocrinology referral marks the patients whose "
+             "growth diagnosis was made in childhood with a measurement history "
+             "behind it, which is the population an early-detection question is "
+             "actually about. The cost is size, {endo_pre_n:,} against 35,890, and "
+             "the caveat from 5.4 stands — a referral is a recorded action, and "
+             "its absence is not evidence that none was warranted.",
+             role="implication"),
+    ]
+    return [f]

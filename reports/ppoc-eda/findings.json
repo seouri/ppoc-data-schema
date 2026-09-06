@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-06T15:39:25Z",
+  "generated_at": "2026-09-06T16:12:07Z",
   "parts": [
     {
       "findings": [
@@ -6828,6 +6828,141 @@
             "worst_pl": "P92.6",
             "worst_pl_share": 31.133906
           }
+        },
+        {
+          "artifact": {
+            "kind": "capture",
+            "name": "A growth diagnosis recorded at the referral rather than before it",
+            "recoverable": "No — but the subgroup it marks is the usable one",
+            "scale": "36% of endocrinology-referred labelled patients carry the code within 30 days of the referral"
+          },
+          "id": "joint.referrals",
+          "part": "5.12",
+          "tables": [
+            {
+              "caption": "Referral families against the growth diagnosis",
+              "columns": [
+                "family",
+                "patients",
+                "lift",
+                "med_age",
+                "dx_med",
+                "both",
+                "med_gap",
+                "first_share",
+                "near"
+              ],
+              "id": "t-ref-timing",
+              "rows": [
+                {
+                  "both": 1958,
+                  "dx_med": 7.1415,
+                  "family": "Endocrinology",
+                  "first_share": 24.208376,
+                  "flagged": 1958,
+                  "lift": 2.3600178,
+                  "med_age": 9.155373,
+                  "med_gap": 40.354125,
+                  "near": 36.006129,
+                  "patients": 5790
+                },
+                {
+                  "both": 2867,
+                  "dx_med": 0.041,
+                  "family": "Gastroenterology",
+                  "first_share": 15.172654,
+                  "flagged": 2868,
+                  "lift": 1.5680991,
+                  "med_age": 5.2580424,
+                  "med_gap": 188.10225,
+                  "near": 11.231252,
+                  "patients": 12764
+                },
+                {
+                  "both": 554,
+                  "dx_med": 0.027,
+                  "family": "Genetics",
+                  "first_share": 11.552347,
+                  "flagged": 554,
+                  "lift": 1.8271544,
+                  "med_age": 3.0513347,
+                  "med_gap": 364.53012,
+                  "near": 19.314079,
+                  "patients": 2116
+                },
+                {
+                  "both": 199,
+                  "dx_med": 0.038,
+                  "family": "Nephrology",
+                  "first_share": 16.582915,
+                  "flagged": 199,
+                  "lift": 1.4821584,
+                  "med_age": 5.5112936,
+                  "med_gap": 338.03175,
+                  "near": 18.592965,
+                  "patients": 937
+                },
+                {
+                  "both": 1296,
+                  "dx_med": 0.027,
+                  "family": "Nutrition and dietetics",
+                  "first_share": 12.731481,
+                  "flagged": 1296,
+                  "lift": 1.0148713,
+                  "med_age": 9.1143053,
+                  "med_gap": 833.914,
+                  "near": 5.941358,
+                  "patients": 8912
+                }
+              ]
+            },
+            {
+              "caption": "Heights recorded before the diagnosis, by referral",
+              "columns": [
+                "group",
+                "patients",
+                "none",
+                "ge2",
+                "median"
+              ],
+              "id": "t-endo-pre",
+              "rows": [
+                {
+                  "ge2": 69.254341,
+                  "group": "with an endocrinology referral",
+                  "median": 7.0,
+                  "none": 22.6762,
+                  "patients": 1958
+                },
+                {
+                  "ge2": 21.466462,
+                  "group": "without one",
+                  "median": 0.0,
+                  "none": 52.201462,
+                  "patients": 33932
+                }
+              ]
+            }
+          ],
+          "title": "Referral timing against the diagnosis, and the subgroup it finds",
+          "values": {
+            "base": 14.329098,
+            "endo_age": 9.155373,
+            "endo_dx": 7.1415,
+            "endo_first": 24.208376,
+            "endo_ge2": 69.254341,
+            "endo_lift": 2.3600178,
+            "endo_med": 7.0,
+            "endo_n": 5790,
+            "endo_near": 36.006129,
+            "endo_none": 22.6762,
+            "endo_pre_n": 1958,
+            "near_days": 30,
+            "nutri_lift": 1.0148713,
+            "nutri_n": 8912,
+            "rest_ge2": 21.466462,
+            "rest_none": 52.201462
+          }
         }
       ],
       "number": "5",
@@ -8597,6 +8732,13 @@
                   "recoverable": "Yes — take the union of both resources, as the derived columns do",
                   "scale": "36% of patient-code pairs appear only in encounter diagnoses and 14% only in the problem list",
                   "where": "5.11"
+                },
+                {
+                  "artifact": "A growth diagnosis recorded at the referral rather than before it",
+                  "class": "capture",
+                  "recoverable": "No — but the subgroup it marks is the usable one",
+                  "scale": "36% of endocrinology-referred labelled patients carry the code within 30 days of the referral",
+                  "where": "5.12"
                 }
               ]
             }
@@ -8605,7 +8747,7 @@
           "values": {
             "kindlist": "capture, derivation, linkage, selection",
             "kinds": 4,
-            "n": 19
+            "n": 20
           }
         }
       ],

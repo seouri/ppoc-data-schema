@@ -1398,6 +1398,39 @@ This comparison is restricted to ages between 0 and 18.5 years. The problem list
 
 **Implications for analysis.** Take the union of both resources for any cohort definition or index date, and take the earliest record as the derived columns do. If you must use one resource, measure what it costs for your specific codes rather than assuming a uniform rate. And treat the 2,241 pairs where the problem list lags as a documentation delay rather than a later onset — the encounter had already coded it.
 
+### 5.12 Referral timing against the diagnosis, and the subgroup it finds
+
+5.7 gives the referral volume by specialty family. This asks the question that volume cannot: for a patient who has both, does the referral come before the diagnosis or after it, and does the answer identify a different kind of patient.
+
+**Referral families against the growth diagnosis**
+
+| specialty family | referred patients | label lift | median referral age | median diagnosis age | with both | median referral lag | referral first | within a month |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Endocrinology | 5,790 | 2.36x | 9.2 y | 7.14 y | 1,958 | 40 d | 24.2% | 36.0% |
+| Gastroenterology | 12,764 | 1.57x | 5.3 y | 0.04 y | 2,867 | 188 d | 15.2% | 11.2% |
+| Genetics | 2,116 | 1.83x | 3.1 y | 0.03 y | 554 | 365 d | 11.6% | 19.3% |
+| Nephrology | 937 | 1.48x | 5.5 y | 0.04 y | 199 | 338 d | 16.6% | 18.6% |
+| Nutrition and dietetics | 8,912 | 1.01x | 9.1 y | 0.03 y | 1,296 | 834 d | 12.7% | 5.9% |
+
+Lift is against a base labelled rate of 14.3%. A negative lag would mean the referral came first; all five families are positive.
+
+Two tiers again, as in the laboratory panel. Endocrinology carries the signal at 2.36 times the base rate across 5,790 referred patients, while nutrition and dietetics — the family a growth question might reach for first — sits at 1.01 across 8,912, which is no signal at all.
+
+**Referrals follow the code, not the other way round.** Every family has a positive median lag, and only 24.2% of endocrinology pairs have the referral first. A referral is therefore not an earlier index event than the diagnosis in the way the laboratory workup of 5.10 is.
+
+**But endocrinology selects a different population, and that is the useful part.** Among labelled patients referred to endocrinology the median diagnosis age is 7.14 years, against 0.027 for the labelled cohort as a whole (5.8), and 36.0% carry the code within 30 days of the referral. These are not the perinatal codes that dominate the label; they are diagnoses recorded in childhood, at the moment a referral was made.
+
+**Heights recorded before the diagnosis, by referral**
+
+| labelled patients | patients | no prior height | two or more | median prior heights |
+| --- | --- | --- | --- | --- |
+| with an endocrinology referral | 1,958 | 22.7% | 69.3% | 7 |
+| without one | 33,932 | 52.2% | 21.5% | 0 |
+
+That difference decides whether the label is learnable. Of the 1,958 labelled patients with an endocrinology referral, 69.3% have at least two prior heights and the median has 7; for everyone else those figures are 21.5% and zero. 5.8's finding — that half the labelled population has no trajectory before the code — is really a statement about the perinatal majority, and it inverts inside this subgroup.
+
+**Implications for analysis.** Do not use a referral as an early index event; it lags the code in every family measured. Do use it as a cohort filter: an endocrinology referral marks the patients whose growth diagnosis was made in childhood with a measurement history behind it, which is the population an early-detection question is actually about. The cost is size, 1,958 against 35,890, and the caveat from 5.4 stands — a referral is a recorded action, and its absence is not evidence that none was warranted.
+
 ## 6. Field index
 
 Every column, with its population, range, and the findings that govern it.
@@ -1593,7 +1626,7 @@ One row per known artifact, with its scale and whether it can be repaired.
 
 ### 7.1 Every artifact this report measured
 
-One row per artifact, gathered from the findings that measured them. The class says who produced the artifact, which decides whether it can be repaired: a derivation artifact can be recomputed without touching the clinical record, a capture artifact cannot, a selection artifact is outside the extract entirely. 19 artifacts across 4 classes (capture, derivation, linkage, selection).
+One row per artifact, gathered from the findings that measured them. The class says who produced the artifact, which decides whether it can be repaired: a derivation artifact can be recomputed without touching the clinical record, a capture artifact cannot, a selection artifact is outside the extract entirely. 20 artifacts across 4 classes (capture, derivation, linkage, selection).
 
 **Artifact catalogue**
 
@@ -1618,6 +1651,7 @@ One row per artifact, gathered from the findings that measured them. The class s
 | A derived flag that is disjoint from the diagnosis flag by construction | derivation | healthy_flag is set for 0.0% of growth-diagnosed patients | Yes — define the negative class explicitly instead | 5.9 |
 | Treatment and workup records reveal the diagnosis, and date it a decade later than the code | capture | growth hormone is 5.1 times enriched for the label; its median order age is 10.8 years against 0.027 for the code | Yes — exclude them as features, or index on them instead | 5.10 |
 | A diagnosis code's resource coverage depends on the code | capture | 36% of patient-code pairs appear only in encounter diagnoses and 14% only in the problem list | Yes — take the union of both resources, as the derived columns do | 5.11 |
+| A growth diagnosis recorded at the referral rather than before it | capture | 36% of endocrinology-referred labelled patients carry the code within 30 days of the referral | No — but the subgroup it marks is the usable one | 5.12 |
 
 ## 8. Methods and limitations
 
