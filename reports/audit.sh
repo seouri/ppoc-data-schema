@@ -34,7 +34,21 @@ FAILED=()
 step() { printf '\n--- %s ---\n' "$1"; }
 ok()   { printf '  %s\n' "$1"; }
 bad()  { printf '  FAIL: %s\n' "$1"; FAILED+=("$1"); }
-check() { if [ "$1" -eq 0 ]; then ok "$2"; else bad "$2"; fi; }
+# On failure, show the captured output. Without this a failing step reports only
+# its summary line, which is enough on a terminal where the log file is still
+# there and useless in CI where it is not.
+check() {
+  if [ "$1" -eq 0 ]; then
+    ok "$2"
+    return
+  fi
+  bad "$2"
+  if [ -n "${3:-}" ] && [ -f "$3" ]; then
+    printf '  ---- output ----\n'
+    tail -n "${AUDIT_LOG_LINES:-60}" "$3" | sed 's/^/  | /'
+    printf '  ----------------\n'
+  fi
+}
 
 # The forced rebuild in step 3 dirties the outputs; always put them back.
 restore() { git checkout -- "$OUT" 2>/dev/null || true; }
@@ -86,23 +100,23 @@ cov=$?
 head -1 /tmp/audit_cov.txt | sed 's/^/  /'
 grep -E 'not quoted|UNBACKED|MISSING' /tmp/audit_cov.txt | sed 's/^/  /' \
   || ok "none unbacked, dead, or missing"
-check $cov "$(tail -1 /tmp/audit_cov.txt)"
+check $cov "$(tail -1 /tmp/audit_cov.txt)" "/tmp/audit_cov.txt"
 
 step "5. report audits (neutrality, disclosure, pdf, ordering)"
 "$PY" -m pytest tests/report -q > /tmp/audit_rep.txt 2>&1
-check $? "$(tail -1 /tmp/audit_rep.txt)"
+check $? "$(tail -1 /tmp/audit_rep.txt)" "/tmp/audit_rep.txt"
 
 step "6. repo-wide lint"
 "$PY" -m ruff check . > /tmp/audit_lint.txt 2>&1
-check $? "$(tail -1 /tmp/audit_lint.txt)"
+check $? "$(tail -1 /tmp/audit_lint.txt)" "/tmp/audit_lint.txt"
 
 step "7. vendored augmenter still byte-identical to its manifest"
 "$PY" -m pytest tests/test_augment_import.py -q > /tmp/audit_vend.txt 2>&1
-check $? "$(tail -1 /tmp/audit_vend.txt)"
+check $? "$(tail -1 /tmp/audit_vend.txt)" "/tmp/audit_vend.txt"
 
 step "8. descriptor"
 python3 schema/build.py --check > /tmp/audit_desc.txt 2>&1
-check $? "$(tail -1 /tmp/audit_desc.txt)"
+check $? "$(tail -1 /tmp/audit_desc.txt)" "/tmp/audit_desc.txt"
 
 step "9. documentation links"
 "$PY" - <<'PYEOF'
@@ -129,7 +143,7 @@ if [ "$QUICK" -eq 1 ]; then
 else
   step "10. full test suite"
   "$PY" -m pytest -q > /tmp/audit_all.txt 2>&1
-  check $? "$(tail -1 /tmp/audit_all.txt)"
+  check $? "$(tail -1 /tmp/audit_all.txt)" "/tmp/audit_all.txt"
 fi
 
 step "11. final state"
