@@ -37,8 +37,10 @@ which appeared in roughly one build in six.
   byte-identical** and pinned by SHA-256 in `data/augment-runtime-manifest.json`.
   Any edit, down to a trailing comment, fails `tests/test_augment_import.py`.
   Their lint findings are exempted in `pyproject.toml` for the same reason.
-- **Three tests in `tests/synthetic/test_counterfactual_manifest.py` pass on
-  macOS and fail on Linux.** They are pre-existing and unresolved: the quarantine
-  cleanup in `src/synthetic/native/counterfactual.py` takes its owner branch on
-  Linux where the tests expect its replacement branch. Do not assume you broke
-  them.
+- **Inode numbers are recycled on Linux and not on macOS.** The quarantine
+  cleanup in `src/synthetic/native/counterfactual.py` identifies a file by
+  `(st_dev, st_ino)`, so a test that unlinks a file and then creates its
+  "replacement" gets the freed inode back on ext4 and tmpfs, and the replacement
+  is indistinguishable from the owner. Allocate the replacement *before* freeing
+  the owner; `tests/synthetic/test_counterfactual_manifest.py` does this and
+  asserts the two identities differ.

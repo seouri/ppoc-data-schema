@@ -307,6 +307,35 @@ def test_truth_manifest_cleanup_uses_random_parent_quarantine_entry(
     assert quarantine.read_bytes() == b"created by this invocation"
 
 
+def _assert_replacement_is_a_different_inode(path: Path, owner_identity: tuple[int, int]) -> None:
+    """Guard the premise the replacement tests depend on.
+
+    Each simulates an actor swapping the manifest for a *different* inode.
+    Identity here is ``(st_dev, st_ino)``, which a bare ``stat`` does not pin:
+    once the owner is unlinked its inode number is free for reuse, and ext4 and
+    tmpfs reuse it immediately where APFS does not.  A replacement created after
+    that point can therefore carry the owner's identity, at which point it is
+    not a replacement at all -- ownership genuinely still matches and cleanup
+    correctly takes its owner branch, so the test fails on Linux for a reason
+    that has nothing to do with what it is testing.
+
+    Two inodes that coexist on one device cannot share a number, so each caller
+    allocates its replacement while the owner is still linked.  That is an
+    invariant rather than a probability: there is no flake window here and no
+    retry belongs in these tests.  The sibling tests that pass an owner
+    descriptor need no such care -- an open descriptor pins the inode across the
+    unlink, which is what makes their identity stable and this helper redundant
+    there.  Asserting the two identities differ keeps a regression failing on
+    the premise rather than on a confusing message mismatch.
+    """
+    replacement_identity = counterfactual_module._truth_manifest_identity(
+        os.stat(path, follow_symlinks=False)
+    )
+    assert replacement_identity != owner_identity, (
+        "the replacement reused the owner inode, so it is not a replacement"
+    )
+
+
 def test_truth_manifest_cleanup_leaves_replacement_seen_before_first_stat(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -316,6 +345,9 @@ def test_truth_manifest_cleanup_leaves_replacement_seen_before_first_stat(
     _absolute_parent, parent_descriptor = counterfactual_module._open_regular_parent(tmp_path)
     metadata = os.stat(destination, follow_symlinks=False)
     identity = counterfactual_module._truth_manifest_identity(metadata)
+    replacement = tmp_path / "replacement-before-first-stat"
+    replacement.write_bytes(b"replacement installed before first stat")
+    _assert_replacement_is_a_different_inode(replacement, identity)
     real_stat = counterfactual_module.os.stat
     swapped = False
 
@@ -327,8 +359,9 @@ def test_truth_manifest_cleanup_leaves_replacement_seen_before_first_stat(
     ) -> os.stat_result:
         nonlocal swapped
         if dir_fd == parent_descriptor and path == destination.name and not swapped:
-            destination.unlink()
-            destination.write_bytes(b"replacement installed before first stat")
+            # rename(2) replaces the destination atomically, so the owner
+            # inode is released only once the replacement holds one already.
+            replacement.rename(destination)
             swapped = True
         return real_stat(path, dir_fd=dir_fd, follow_symlinks=follow_symlinks)
 
@@ -434,6 +467,9 @@ def test_truth_manifest_cleanup_never_unlinks_post_restore_replacement(
     try:
         metadata = os.stat(destination, follow_symlinks=False)
         identity = counterfactual_module._truth_manifest_identity(metadata)
+        replacement = tmp_path / "replacement-before-restoration"
+        replacement.write_bytes(b"replacement before restoration")
+        _assert_replacement_is_a_different_inode(replacement, identity)
         original_match = counterfactual_module._truth_manifest_entry_matches
         original_link = counterfactual_module.os.link
         original_unlink = counterfactual_module.os.unlink
@@ -447,8 +483,7 @@ def test_truth_manifest_cleanup_never_unlinks_post_restore_replacement(
             nonlocal ownership_swapped
             matches = original_match(descriptor, name, expected_identity)
             if matches and not ownership_swapped:
-                destination.unlink()
-                destination.write_bytes(b"replacement before restoration")
+                replacement.rename(destination)
                 ownership_swapped = True
             return matches
 
@@ -524,6 +559,10 @@ def test_truth_manifest_cleanup_quarantines_nonlinkable_directory_replacement(
     try:
         metadata = os.stat(destination, follow_symlinks=False)
         identity = counterfactual_module._truth_manifest_identity(metadata)
+        replacement = destination.with_name("replacement-directory")
+        replacement.mkdir()
+        (replacement / "sentinel").write_bytes(b"directory replacement")
+        _assert_replacement_is_a_different_inode(replacement, identity)
         original_match = counterfactual_module._truth_manifest_entry_matches
         swapped = False
 
@@ -533,10 +572,9 @@ def test_truth_manifest_cleanup_quarantines_nonlinkable_directory_replacement(
             nonlocal swapped
             matches = original_match(descriptor, name, expected_identity)
             if matches and not swapped:
+                # A directory cannot be renamed over a file, so the owner
+                # goes first; the replacement already holds its own inode.
                 destination.unlink()
-                replacement = destination.with_name("replacement-directory")
-                replacement.mkdir()
-                (replacement / "sentinel").write_bytes(b"directory replacement")
                 replacement.rename(destination)
                 swapped = True
             return matches
