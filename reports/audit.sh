@@ -124,6 +124,7 @@ import pathlib, re, sys
 bad = []
 for name, base in (("README.md", "."),
                    ("docs/data_description.md", "docs"),
+                   ("schema/README.md", "schema"),
                    ("reports/growth-chart-literacy-real-data-eda.md", "reports")):
     for _, target in re.findall(r"\[([^\]]+)\]\(([^)]+)\)",
                                 pathlib.Path(name).read_text(encoding="utf-8")):
