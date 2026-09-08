@@ -210,7 +210,7 @@ This part exists so that nobody has to wonder whether a standard check was skipp
 | 8 Longitudinal | Calendar trend breaks | not applicable | No calendar axis. Age-axis profiles are reported instead and are not the same thing — 1.5 |
 | 8 Longitudinal | Guideline or policy shift | not applicable | Requires calendar time — 1.5 |
 | 8 Longitudinal | Vendor changeover effects | partial | The Epic against converted contrast only |
-| 9 Label | Shortcut screen against the label | covered | Every value of five fields and the derived patient columns, scored again under a second index — 5.13 |
+| 9 Label | Shortcut screen against the label | covered | Every value of seven categorical fields, scored again under a second index — 5.13; every numeric and constructed feature — 5.14 |
 
 The not-applicable list is the part worth reading before you start. Every entry is a consequence of de-identification or of what the extract simply does not carry, and no amount of analysis recovers any of them.
 
@@ -1434,7 +1434,7 @@ That difference decides whether the label is learnable. Of the 1,958 labelled pa
 
 ### 5.13 A shortcut audit: which fields encode the label
 
-5.10 and 5.12 measure the leakage in a list of candidates chosen for being clinically obvious. This section runs the search those sections imply: every value of 5 categorical fields that 200 or more patients carry, scored against the label. 2,638 values clear that floor, out of 13,944 distinct ones. Lift is the share of patients carrying a value who also carry `growth_dx_flag`, over the cohort's 14.33% base rate; a lift of 1 is no information.
+5.10 and 5.12 measure the leakage in a list of candidates chosen for being clinically obvious. This section runs the search those sections imply: every value of 7 categorical fields that 200 or more patients carry, scored against the label. 2,652 values clear that floor, out of 13,981 distinct ones. Lift is the share of patients carrying a value who also carry `growth_dx_flag`, over the cohort's 14.33% base rate; a lift of 1 is no information.
 
 A value counts once per patient, ever, with no temporal cut — which is what an unrestricted feature build sees, and it mixes leakage with concurrency: a code recorded at the same encounter as the diagnosis scores as high as one recorded years before it. Beside each lift is the same figure against the alternative index of 5.10, the first growth workup or treatment, which 1,410 patients carry at a base rate of 0.56%. It is suppressed where fewer than 10 patients back it, and where the value is itself part of the index definition — the somatropin, growth hormone and IGF records — since those score the index's maximum by construction rather than by discrimination.
 
@@ -1454,7 +1454,7 @@ Top 5 by lift among codes carried by 200 or more patients.
 
 What sits below the panel is the neighbourhood of a label 5.8 shows to be overwhelmingly perinatal: prematurity, its complications, and newborn morbidity. None is a growth code and none is tracked, but a patient carrying one was in the neonatal course that produced the label, and the screen clears 1,578 untracked codes in all. That is the kind of shortcut a curated exclusion list does not reach: it is built by naming the condition, and none of these names the condition.
 
-**The top of the lift distribution in the other four fields**
+**The top of the lift distribution in the other 6 fields**
 
 | field | value | patients | carry the label | lift | lift, workup index |
 | --- | --- | --- | --- | --- | --- |
@@ -1478,10 +1478,19 @@ What sits below the panel is the neighbourhood of a label 5.8 shows to be overwh
 | encounter type | Lactation Encounter | 523 | 17.0% | 1.19x | — |
 | encounter type | Lab | 1,216 | 16.7% | 1.17x | 1.75x |
 | encounter type | Newborn | 22,924 | 15.5% | 1.08x | 1.09x |
+| medication record type | External | 158,974 | 15.6% | 1.09x | 1.28x |
+| medication record type | Internal | 229,099 | 14.6% | 1.02x | 1.02x |
+| lab result flag | (NONE) | 3,696 | 41.3% | 2.88x | 0.91x |
+| lab result flag | High Panic | 5,857 | 24.8% | 1.73x | 0.49x |
+| lab result flag | Low Panic | 984 | 21.8% | 1.52x | — |
+| lab result flag | Panic | 2,091 | 16.0% | 1.12x | 1.19x |
+| lab result flag | High | 94,539 | 16.0% | 1.12x | 1.83x |
 
 Top 5 values per field, by lift, among those carried by 200 or more patients.
 
 Encounter type is the field the screen clears, and a measured null is as useful as a hit. Its highest value is `Clinical Support` at 1.83, and the types whose names promise growth surveillance sit at the base rate: the weight check at 0.98, the nutrition visit at 1.02. Nothing in the report would otherwise establish that, since an argument from the name alone points the other way.
+
+The two fields added last behave differently from each other and neither carries much. Medication record type is flat — 1.09 for a patient with any external record against 1.02 for an internal one. The laboratory result flag is flat too, apart from one value: its most enriched is the literal `(NONE)` at 2.88 across 3,696 patients, which 3.5 shows is the string meaning *normal* and which became a null on nine rows in ten. A flag value asserting that nothing was abnormal is the one that discriminates, which is more plausibly a fact about which records still carry the sentinel than about the children carrying them.
 
 **The medication screen finds what a curated list could not.** 16 of the 330 screened generic names lift higher than the 5.06 that 5.10 measures for growth hormone, and none of them is a growth treatment: `Insulin Disposable Pump`, `Insulin Glargine`, `Continuous Glucose Transmitter`, `Continuous Glucose Sensor`. Type 1 diabetes is in the tracked panel (5.7), so every product dispensed to a child who carries that code — consumables included — reconstructs part of the label. An exclusion list built by naming growth treatments does not catch a box of lancets.
 
@@ -1515,6 +1524,61 @@ Three rows deserve a second look. The pediatric BMI-percentile codes are the gro
 One bound on all of this comes from 1.4. The cohort excluded every code, medication and procedure seen fewer than 11 times along with the patients carrying them, and 5.10 measures how much of the laboratory vocabulary that removed. The rarest and most specific markers are the most likely to be gone, so a screen on this extract under-detects exactly the shortcuts it most wants to find.
 
 **Implications for analysis.** Screen rather than enumerate: run this against your own label and index before building a feature set, and re-run it after any change to either. Exclude the fields that reconstruct the label — the raw diagnosis slots and the problem list, `visits_count_pre_dx`, and the treatment records of 5.10 — and remember that a field carrying no clinical meaning can still discriminate. A lift measured here is an upper bound on what a temporally honest feature could contribute, not an estimate of it: everything above is scored without a cut, so a value that only ever appears alongside the diagnosis scores as high as one that precedes it.
+
+### 5.14 The same screen over the numbers: derived columns and constructed features
+
+5.13 screens categorical fields, where a lift answers the question. A continuous column needs a statistic that does not depend on where a threshold is put, so this section uses the rank statistic: the probability that a labelled patient ranks above an unlabelled one, with ties at their mid-rank. 0.5 is no separation. Below it means the labelled patients rank lower, which is a direction rather than an absence, so the tables sort on distance from 0.5 and carry it as its own column.
+
+Every numeric column of the augmented patient layer is screened — 41 of them, after setting aside the label and the 34 `dx_age_years` columns that carry its age. Beside each is the same statistic among patients whose record reaches 5 years of age and spans 5 years, which is a coarse control for how much record exists rather than a matched design.
+
+**The 10 delivered patient columns that separate the label most**
+
+| column | patients | rank statistic | distance from neutral | long records only |
+| --- | --- | --- | --- | --- |
+| `visits_count_pre_dx` | 250,588 | 0.075 | 0.849 | 0.115 |
+| `min_weight_z_score` | 250,577 | 0.305 | 0.390 | 0.320 |
+| `min_head_circ_z_score` | 200,584 | 0.318 | 0.365 | 0.325 |
+| `max_visit_age_days` | 250,588 | 0.339 | 0.322 | 0.376 |
+| `min_height_z_score` | 250,261 | 0.345 | 0.311 | 0.346 |
+| `mean_weight_z_score` | 250,577 | 0.353 | 0.294 | 0.396 |
+| `count_bmi_z_score` | 250,588 | 0.359 | 0.281 | 0.421 |
+| `std_height_z_score` | 248,172 | 0.640 | 0.280 | 0.653 |
+| `visits_span_days` | 250,588 | 0.365 | 0.270 | 0.424 |
+| `mean_head_circ_z_score` | 200,584 | 0.374 | 0.252 | 0.393 |
+
+Of 41 columns screened, 12 sit within 0.05 of 0.5 and carry almost nothing on their own.
+
+**After the column that is the label, growth and bookkeeping are interleaved.** `visits_count_pre_dx` leads at 0.075 because 5.13 shows it to be the label written as a count. Then the lowest weight z-score a child ever recorded at 0.305 — and immediately behind it the age at the last visit at 0.339, the number of BMI values at 0.359, and the span of the record at 0.365. **The shape of a patient's record separates this label about as well as the child's growth does**, because a labelled patient is younger and less observed when the label is perinatal (5.8).
+
+Two rows are worth putting side by side. The count of head circumference measurements separates at 0.605 and the stunting flag at 0.586: **how often a child was measured carries more about this label than whether the measurement was low.** Meanwhile `visits_count` itself is 0.488, which is nothing — lifetime volume does not discriminate, and the rate at which that volume accumulates does.
+
+**Constructed features, scored the same way**
+
+| feature | patients | rank statistic | distance from neutral | long records only |
+| --- | --- | --- | --- | --- |
+| visits per year of record | 250,588 | 0.664 | 0.328 | 0.621 |
+| median days between consecutive visits | 249,606 | 0.337 | 0.326 | 0.379 |
+| problem-list entries | 250,588 | 0.633 | 0.267 | 0.645 |
+| problem-list entries, excluding the tracked panel | 250,588 | 0.592 | 0.185 | 0.612 |
+| distinct laboratory orders | 250,588 | 0.564 | 0.128 | 0.606 |
+| share of visits carrying a height | 250,588 | 0.453 | 0.094 | 0.446 |
+| medication records | 250,588 | 0.535 | 0.070 | 0.584 |
+| head circumferences recorded after age 3 | 250,588 | 0.494 | 0.013 | 0.495 |
+| distinct laboratory procedures | 250,588 | 0.497 | 0.006 | 0.574 |
+| days carrying two or more heights (3.8) | 250,588 | 0.499 | 0.002 | 0.499 |
+| position in the delivered patient file | 250,588 | 0.501 | 0.002 | 0.500 |
+
+Features a modeller would build rather than find, each computed over the whole record with no temporal cut.
+
+**Contact intensity separates the label, and it is not only censoring.** Visits per year runs 0.664 and the median gap between visits 0.337; restricted to records of 5 years or more they hold at 0.621 and 0.379. A model given visit timing has been told something about the label that no growth measurement supplied. Read the rate with its denominator in mind, though: it divides by a span that is itself a 0.365 separator.
+
+The restriction controls the observation window and nothing else. Inside it 161,778 patients remain at a labelled rate of 10.4%, and their median age at diagnosis is still 0.077 years. The perinatal concentration survives the cut, so a separation that holds under it is bounded above by what an age-matched design would find, not established by it.
+
+**The problem-list count shows what contamination costs.** Counting every entry gives 0.633; counting only entries outside the tracked panel gives 0.592. The tracked codes reach the problem list (5.11), so the first number is part label and part utilisation, and only the second is a feature. A count over a diagnosis resource needs the label's own codes taken out of it before it means anything.
+
+Several results are negative, and they are worth recording as such. Days carrying two or more heights — the same-day disagreement of 3.8, read as a sign of a clinician re-measuring — sit at 0.499. A patient's position in the delivered file is 0.501: the delivery is not ordered by anything related to the label, which is the one shortcut that would have been invisible in every other check in this report. The breadth of the laboratory workup is 0.497 across the whole cohort but 0.574 among long records, which is the pattern to expect when a flat result is itself an artifact of the age mix rather than a finding: a null measured over this cohort is not a null.
+
+**Implications for analysis.** Screen continuous features the same way you screen categorical ones, and screen the ones you build as well as the ones you were given — the highest-ranking features here are a count of measurements and a rate of contact, neither of which looks like a leak in a feature list. Where a column describes the record rather than the child, either exclude it or make the observation window an explicit part of the design; 5.8's common index date is the same remedy arrived at from the other direction.
 
 ## 6. Field index
 

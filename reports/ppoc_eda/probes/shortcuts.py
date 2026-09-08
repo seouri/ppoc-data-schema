@@ -26,11 +26,11 @@ SUPPORT = 200
 #: Rows shown per field. The screen looks at everything; the table shows the top.
 TOP_N = 5
 
-#: Four of the five categorical fields a feature build would draw on, with the
-#: query that yields one row per patient and value; the diagnosis code is the
-#: fifth and is screened separately, since the tracked panel has to be split out
-#: of it. Free-text names are screened as delivered rather than normalised,
-#: since that is how a join would see them.
+#: Every categorical field a feature build would draw on except the diagnosis
+#: code, with the query that yields one row per patient and value. The code is
+#: screened separately because the tracked panel has to be split out of it.
+#: Free-text names are screened as delivered rather than normalised, since that
+#: is how a join would see them.
 SOURCES = [
     ("medication", "`medications.med_simple_generic_name`",
      "SELECT patient_id, med_simple_generic_name AS value FROM medications"),
@@ -40,6 +40,10 @@ SOURCES = [
      "SELECT patient_id, requested_specialty AS value FROM referrals"),
     ("encounter type", "`visits.encounter_type`",
      "SELECT patient_id, encounter_type AS value FROM visits"),
+    ("medication record type", "`medications.med_record_type`",
+     "SELECT patient_id, med_record_type AS value FROM medications"),
+    ("lab result flag", "`labs.result_flag`",
+     "SELECT patient_id, result_flag AS value FROM labs"),
 ]
 
 #: Candidates carried forward from the curated sections, plus the two the screen
@@ -200,7 +204,9 @@ def audit(ctx: Context) -> list[Finding]:
     med_high = [r for r in meds if r["lift"] > med_cut]
     med_examples = ", ".join(f"`{r['value']}`" for r in med_high[:4])
 
-    # --- the field the screen clears, which is a result of the same kind
+    # --- the fields the screen clears, which are results of the same kind
+    record_type = {str(r["value"]): r for r in screens["medication record type"]}
+    flags = {str(r["value"]): r for r in screens["lab result flag"]}
     enc = {str(r["value"]): r for r in screens["encounter type"]}
     enc_named = [("Weight Check", "weight check"), ("Nutrition", "nutrition visit")]
     enc_shown = [(label, enc[key]["lift"]) for key, label in enc_named if key in enc]
@@ -232,7 +238,7 @@ def audit(ctx: Context) -> list[Finding]:
         id="shortcuts.audit", part="5.13",
         title="A shortcut audit: which fields encode the label",
         values={
-            "support": SUPPORT, "screened": screened,
+            "support": SUPPORT, "screened": screened, "n_other": len(SOURCES),
             "distinct": sum(distinct.values()), "base": dx_base,
             "w_base": w_base, "w_n": w_n, "suppress": SUPPRESS_BELOW,
             "n_fields": len(SOURCES) + 1,
@@ -242,6 +248,9 @@ def audit(ctx: Context) -> list[Finding]:
             "med_high": len(med_high), "med_screened": len(meds),
             "med_examples": med_examples, "gh_lift": med_cut,
             "enc_top": enc_top, "enc_top_lift": screens["encounter type"][0]["lift"],
+            "ext_lift": record_type["External"]["lift"],
+            "int_lift": record_type["Internal"]["lift"],
+            "none_lift": flags["(NONE)"]["lift"], "none_n": flags["(NONE)"]["patients"],
             "enc_named": ", ".join(f"the {label} at {lift:.2f}"
                                    for label, lift in enc_shown),
             "yes_n": ctx.suppress(yes_n), "yes_hit": ctx.suppress(yes_hit),
@@ -308,7 +317,7 @@ def audit(ctx: Context) -> list[Finding]:
              "reach: it is built by naming the condition, and none of these names "
              "the condition."),
         Table("t-shortcut-fields",
-              "The top of the lift distribution in the other four fields",
+              "The top of the lift distribution in the other {n_other} fields",
               [C("field", "field"), C("value", "value"),
                C("patients", "patients", ",", align="right"),
                C("share", "carry the label", ".1f", "%", align="right"),
@@ -323,6 +332,16 @@ def audit(ctx: Context) -> list[Finding]:
              "surveillance sit at the base rate: {enc_named}. Nothing in the report "
              "would otherwise establish that, since an argument from the name alone "
              "points the other way."),
+        Para("The two fields added last behave differently from each other and "
+             "neither carries much. Medication record type is flat — {ext_lift:.2f} "
+             "for a patient with any external record against {int_lift:.2f} for an "
+             "internal one. The laboratory result flag is flat too, apart from one "
+             "value: its most enriched is the literal `(NONE)` at {none_lift:.2f} "
+             "across {none_n:,} patients, which 3.5 shows is the string meaning "
+             "*normal* and which became a null on nine rows in ten. A flag value "
+             "asserting that nothing was abnormal is the one that discriminates, "
+             "which is more plausibly a fact about which records still carry the "
+             "sentinel than about the children carrying them."),
         Para("**The medication screen finds what a curated list could not.** "
              "{med_high} of the {med_screened} screened generic names lift higher "
              "than the {gh_lift:.2f} that 5.10 measures for growth hormone, and "
@@ -412,4 +431,284 @@ def audit(ctx: Context) -> list[Finding]:
              "it.", role="implication"),
     ]
     f.blocks = blocks
+    return [f]
+
+
+# ---------------------------------------------------------------------------
+# 5.14 — the same question asked of the numbers
+# ---------------------------------------------------------------------------
+
+#: A lift needs a category. A continuous column needs a statistic that does not
+#: depend on where a threshold is put, so this is the rank statistic: the
+#: probability that a labelled patient ranks above an unlabelled one, with ties
+#: taking their mid-rank. 0.5 is no separation, and below 0.5 means the labelled
+#: patients rank lower rather than that the column carries nothing.
+NEUTRAL = 0.5
+
+#: The observation-window control: a record running to at least this age and
+#: spanning at least this long. Coarse rather than matched, and 5.14 says so.
+RESTRICT_DAYS = 1826
+
+NUMERIC_TABLE = "_shortcut_numeric"
+
+#: Features a modeller would build rather than find. Each is (key, label,
+#: expression over the assembled table). The pair of problem-list counts is
+#: deliberate: the tracked panel reaches the problem list (5.11), so the total
+#: is contaminated by the label and the difference between the two rows is how
+#: much.
+CONSTRUCTED = [
+    ("visits_per_year", "visits per year of record"),
+    ("med_gap", "median days between consecutive visits"),
+    ("problems_all", "problem-list entries"),
+    ("problems_untracked", "problem-list entries, excluding the tracked panel"),
+    ("lab_orders", "distinct laboratory orders"),
+    ("lab_procs", "distinct laboratory procedures"),
+    ("med_orders", "medication records"),
+    ("height_share", "share of visits carrying a height"),
+    ("hc_late", "head circumferences recorded after age 3"),
+    ("same_day", "days carrying two or more heights (3.8)"),
+    ("file_order", "position in the delivered patient file"),
+]
+
+
+def _tracked_codes(ctx: Context) -> list[str]:
+    return [c.replace("dx_age_years_", "").upper().replace("_", ".")
+            for c in ctx.columns("patients_augmented")
+            if c.startswith("dx_age_years_")]
+
+
+def _build_numeric(ctx: Context) -> None:
+    """One row per patient: the delivered columns plus the constructed ones."""
+    tracked = " OR ".join(f"starts_with(pl_diag, '{t}')" for t in _tracked_codes(ctx))
+    ctx.con.execute(f"""
+        CREATE OR REPLACE TEMP TABLE {NUMERIC_TABLE} AS
+        WITH v AS (
+            SELECT patient_id,
+                   avg(CASE WHEN height_in IS NOT NULL THEN 1.0 ELSE 0.0 END)
+                       AS height_share,
+                   CAST(sum(CASE WHEN head_circ_cm IS NOT NULL
+                                  AND age_in_days > 1095 THEN 1 ELSE 0 END)
+                        AS BIGINT) AS hc_late
+            FROM visits GROUP BY 1),
+        gaps AS (
+            SELECT patient_id, quantile_cont(gap, 0.5) AS med_gap FROM (
+                SELECT patient_id, age_in_days
+                       - lag(age_in_days) OVER (PARTITION BY patient_id
+                                                ORDER BY age_in_days) AS gap
+                FROM visits)
+            WHERE gap IS NOT NULL GROUP BY 1),
+        repeats AS (
+            SELECT patient_id, CAST(count(*) AS BIGINT) AS same_day FROM (
+                SELECT patient_id, age_in_days FROM visits
+                WHERE height_in IS NOT NULL GROUP BY 1, 2 HAVING count(*) >= 2)
+            GROUP BY 1),
+        labs_by_patient AS (
+            SELECT patient_id, count(DISTINCT lab_order_id) AS lab_orders,
+                   count(DISTINCT lab_procedure_name) AS lab_procs
+            FROM labs GROUP BY 1),
+        meds AS (SELECT patient_id, count(*) AS med_orders FROM medications GROUP BY 1),
+        probs AS (
+            SELECT patient_id, count(*) AS problems_all,
+                   sum(CASE WHEN {tracked} THEN 0 ELSE 1 END) AS problems_untracked
+            FROM problem_list GROUP BY 1)
+        SELECT p.*,
+               CASE WHEN p.max_visit_age_days >= {RESTRICT_DAYS}
+                     AND p.visits_span_days >= {RESTRICT_DAYS}
+                    THEN 1 ELSE 0 END AS long_record,
+               p.visits_count / greatest(p.visits_span_days, 1) * 365.25
+                   AS visits_per_year,
+               gaps.med_gap, v.height_share, v.hc_late,
+               coalesce(repeats.same_day, 0) AS same_day,
+               coalesce(labs_by_patient.lab_orders, 0) AS lab_orders,
+               coalesce(labs_by_patient.lab_procs, 0) AS lab_procs,
+               coalesce(meds.med_orders, 0) AS med_orders,
+               coalesce(probs.problems_all, 0) AS problems_all,
+               coalesce(probs.problems_untracked, 0) AS problems_untracked,
+               f.file_order
+        FROM patients_augmented p
+        LEFT JOIN v USING (patient_id)
+        LEFT JOIN gaps USING (patient_id)
+        LEFT JOIN repeats USING (patient_id)
+        LEFT JOIN labs_by_patient USING (patient_id)
+        LEFT JOIN meds USING (patient_id)
+        LEFT JOIN probs USING (patient_id)
+        LEFT JOIN (SELECT patient_id, rowid AS file_order FROM patients) f
+               USING (patient_id)""")
+
+
+def _auc(ctx: Context, column: str, where: str = "TRUE") -> tuple[float, int] | None:
+    """The rank statistic for one column, with ties at their mid-rank."""
+    total, labelled, rank_sum = ctx.one(f"""
+        WITH x AS (
+            SELECT growth_dx_flag AS dx, {column} AS value
+            FROM {NUMERIC_TABLE} WHERE {column} IS NOT NULL AND {where}),
+        r AS (
+            SELECT dx, rank() OVER (ORDER BY value) AS low,
+                   count(*) OVER (PARTITION BY value) AS ties
+            FROM x)
+        SELECT count(*), sum(dx),
+               sum(CASE WHEN dx = 1 THEN low + (ties - 1) / 2.0 ELSE 0 END)
+        FROM r""")
+    unlabelled = total - labelled
+    if not labelled or not unlabelled:
+        return None
+    auc = (rank_sum - labelled * (labelled + 1) / 2.0) / (labelled * unlabelled)
+    return auc, total
+
+
+def _score(ctx: Context, column: str, label: str) -> dict | None:
+    full = _auc(ctx, column)
+    if full is None:
+        return None
+    auc, n = full
+    long_record = _auc(ctx, column, "long_record = 1")
+    return {"column": label, "patients": ctx.suppress(n), "auc": auc,
+            "separation": abs(2.0 * auc - 1.0),
+            "long_auc": long_record[0] if long_record else None}
+
+
+@probe("shortcuts.numbers", "5.14")
+def numbers(ctx: Context) -> list[Finding]:
+    _labels(ctx)
+    _build_numeric(ctx)
+    types = ctx.coltype("patients_augmented")
+    dx_cols = [c for c in types if c.startswith("dx_age_years")]
+    delivered = [c for c in ctx.columns("patients_augmented")
+                 if types[c] in ("BIGINT", "DOUBLE", "INTEGER")
+                 and c != "growth_dx_flag" and not c.startswith("dx_age_years")]
+
+    rows = [r for r in (_score(ctx, c, f"`{c}`") for c in delivered) if r]
+    rows.sort(key=lambda r: (-float(format(r["separation"], ".8g")), r["column"]))
+    built = [r for r in (_score(ctx, key, label) for key, label in CONSTRUCTED) if r]
+    built.sort(key=lambda r: (-float(format(r["separation"], ".8g")), r["column"]))
+
+    top = rows[:10]
+    flat = [r for r in rows if r["separation"] < 0.1]
+    by_col = {r["column"]: r for r in rows}
+    by_key = {r["column"]: r for r in built}
+
+    n_long, labelled_long, dx_age_long = ctx.one(f"""
+        SELECT count(*), sum(growth_dx_flag), quantile_cont(dx_age_years, 0.5)
+        FROM {NUMERIC_TABLE} WHERE long_record = 1""")
+
+    f = Finding(
+        id="shortcuts.numbers", part="5.14",
+        title="The same screen over the numbers: derived columns and constructed "
+              "features",
+        values={
+            "delivered": len(delivered), "dx_cols": len(dx_cols),
+            "shown": len(top), "flat": len(flat), "neutral": NEUTRAL,
+            "built": len(built), "restrict_years": RESTRICT_DAYS / 365.25,
+            "n_long": n_long, "long_base": 100.0 * labelled_long / n_long,
+            "long_dx_age": dx_age_long,
+            "pre_dx_auc": by_col["`visits_count_pre_dx`"]["auc"],
+            "max_age_auc": by_col["`max_visit_age_days`"]["auc"],
+            "span_auc": by_col["`visits_span_days`"]["auc"],
+            "bmi_count_auc": by_col["`count_bmi_z_score`"]["auc"],
+            "min_weight_auc": by_col["`min_weight_z_score`"]["auc"],
+            "hc_count_auc": by_col["`count_head_circ_z_score`"]["auc"],
+            "stunting_auc": by_col["`ever_stunting_flag`"]["auc"],
+            "visits_auc": by_col["`visits_count`"]["auc"],
+            "rate_auc": by_key["visits per year of record"]["auc"],
+            "rate_long": by_key["visits per year of record"]["long_auc"],
+            "gap_auc": by_key["median days between consecutive visits"]["auc"],
+            "gap_long": by_key["median days between consecutive visits"]["long_auc"],
+            "prob_all": by_key["problem-list entries"]["auc"],
+            "prob_clean": by_key[
+                "problem-list entries, excluding the tracked panel"]["auc"],
+            "same_day_auc": by_key["days carrying two or more heights (3.8)"]["auc"],
+            "procs_auc": by_key["distinct laboratory procedures"]["auc"],
+            "procs_long": by_key["distinct laboratory procedures"]["long_auc"],
+            "order_auc": by_key["position in the delivered patient file"]["auc"],
+        },
+    )
+    f.blocks = [
+        Para("5.13 screens categorical fields, where a lift answers the question. A "
+             "continuous column needs a statistic that does not depend on where a "
+             "threshold is put, so this section uses the rank statistic: the "
+             "probability that a labelled patient ranks above an unlabelled one, "
+             "with ties at their mid-rank. {neutral} is no separation. Below it "
+             "means the labelled patients rank lower, which is a direction rather "
+             "than an absence, so the tables sort on distance from {neutral} and "
+             "carry it as its own column."),
+        Para("Every numeric column of the augmented patient layer is screened — "
+             "{delivered} of them, after setting aside the label and the "
+             "{dx_cols} `dx_age_years` columns that carry its age. Beside each is "
+             "the same statistic among patients whose record reaches "
+             "{restrict_years:.0f} years of age and spans {restrict_years:.0f} "
+             "years, which is a coarse control for how much record exists rather "
+             "than a matched design.", role="method"),
+        Table("t-numeric-delivered",
+              "The {shown} delivered patient columns that separate the label most",
+              [C("column", "column"), C("patients", "patients", ",", align="right"),
+               C("auc", "rank statistic", ".3f", align="right"),
+               C("separation", "distance from neutral", ".3f", align="right"),
+               C("long_auc", "long records only", ".3f", align="right")], top,
+              note="Of {delivered} columns screened, {flat} sit within 0.05 of "
+                   "{neutral} and carry almost nothing on their own."),
+        Para("**After the column that is the label, growth and bookkeeping are "
+             "interleaved.** `visits_count_pre_dx` leads at {pre_dx_auc:.3f} because "
+             "5.13 shows it to be the label written as a count. Then the lowest "
+             "weight z-score a child ever recorded at {min_weight_auc:.3f} — and "
+             "immediately behind it the age at the last visit at {max_age_auc:.3f}, "
+             "the number of BMI values at {bmi_count_auc:.3f}, and the span of the "
+             "record at {span_auc:.3f}. **The shape of a patient's record separates "
+             "this label about as well as the child's growth does**, because a "
+             "labelled patient is younger and less observed when the label is "
+             "perinatal (5.8)."),
+        Para("Two rows are worth putting side by side. The count of head "
+             "circumference measurements separates at {hc_count_auc:.3f} and the "
+             "stunting flag at {stunting_auc:.3f}: **how often a child was measured "
+             "carries more about this label than whether the measurement was low.** "
+             "Meanwhile `visits_count` itself is {visits_auc:.3f}, which is nothing "
+             "— lifetime volume does not discriminate, and the rate at which that "
+             "volume accumulates does."),
+        Table("t-numeric-built", "Constructed features, scored the same way",
+              [C("column", "feature"), C("patients", "patients", ",", align="right"),
+               C("auc", "rank statistic", ".3f", align="right"),
+               C("separation", "distance from neutral", ".3f", align="right"),
+               C("long_auc", "long records only", ".3f", align="right")], built,
+              note="Features a modeller would build rather than find, each computed "
+                   "over the whole record with no temporal cut."),
+        Para("**Contact intensity separates the label, and it is not only "
+             "censoring.** Visits per year runs {rate_auc:.3f} and the median gap "
+             "between visits {gap_auc:.3f}; restricted to records of "
+             "{restrict_years:.0f} years or more they hold at {rate_long:.3f} and "
+             "{gap_long:.3f}. A model given visit timing has been told something "
+             "about the label that no growth measurement supplied. Read the rate "
+             "with its denominator in mind, though: it divides by a span that is "
+             "itself a {span_auc:.3f} separator."),
+        Para("The restriction controls the observation window and nothing else. "
+             "Inside it {n_long:,} patients remain at a labelled rate of "
+             "{long_base:.1f}%, and their median age at diagnosis is still "
+             "{long_dx_age:.3f} years. The perinatal concentration survives the cut, "
+             "so a separation that holds under it is bounded above by what an "
+             "age-matched design would find, not established by it.", role="warning"),
+        Para("**The problem-list count shows what contamination costs.** Counting "
+             "every entry gives {prob_all:.3f}; counting only entries outside the "
+             "tracked panel gives {prob_clean:.3f}. The tracked codes reach the "
+             "problem list (5.11), so the first number is part label and part "
+             "utilisation, and only the second is a feature. A count over a "
+             "diagnosis resource needs the label's own codes taken out of it before "
+             "it means anything."),
+        Para("Several results are negative, and they are worth recording as such. "
+             "Days carrying two or more heights — the same-day disagreement of 3.8, "
+             "read as a sign of a clinician re-measuring — sit at "
+             "{same_day_auc:.3f}. A patient's position in the delivered file is "
+             "{order_auc:.3f}: the delivery is not ordered by anything related to "
+             "the label, which is the one shortcut that would have been invisible "
+             "in every other check in this report. The breadth of the laboratory "
+             "workup is {procs_auc:.3f} across the whole cohort but "
+             "{procs_long:.3f} among long records, which is the pattern to expect "
+             "when a flat result is itself an artifact of the age mix rather than "
+             "a finding: a null measured over this cohort is not a null."),
+        Para("**Implications for analysis.** Screen continuous features the same way "
+             "you screen categorical ones, and screen the ones you build as well as "
+             "the ones you were given — the highest-ranking features here are a "
+             "count of measurements and a rate of contact, neither of which looks "
+             "like a leak in a feature list. Where a column describes the record "
+             "rather than the child, either exclude it or make the observation "
+             "window an explicit part of the design; 5.8's common index date is the "
+             "same remedy arrived at from the other direction.", role="implication"),
+    ]
     return [f]

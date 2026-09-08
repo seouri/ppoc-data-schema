@@ -76,8 +76,8 @@ ITEMS = [
     ("8 Longitudinal", "Vendor changeover effects", PARTIAL,
      "The Epic against converted contrast only"),
     ("9 Label", "Shortcut screen against the label", COVERED,
-     ("Every value of five fields and the derived patient columns, scored again "
-     "under a second index — 5.13")),
+     ("Every value of seven categorical fields, scored again under a second "
+     "index — 5.13; every numeric and constructed feature — 5.14")),
 ]
 
 

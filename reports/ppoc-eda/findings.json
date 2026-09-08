@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-08T16:26:48Z",
+  "generated_at": "2026-09-08T17:32:26Z",
   "parts": [
     {
       "findings": [
@@ -803,7 +803,7 @@
                 },
                 {
                   "item": "Shortcut screen against the label",
-                  "note": "Every value of five fields and the derived patient columns, scored again under a second index — 5.13",
+                  "note": "Every value of seven categorical fields, scored again under a second index — 5.13; every numeric and constructed feature — 5.14",
                   "section": "9 Label",
                   "status": "covered"
                 }
@@ -7045,7 +7045,7 @@
               ]
             },
             {
-              "caption": "The top of the lift distribution in the other four fields",
+              "caption": "The top of the lift distribution in the other {n_other} fields",
               "columns": [
                 "field",
                 "value",
@@ -7235,6 +7235,69 @@
                   "share": 15.490316,
                   "value": "Newborn",
                   "workup_lift": 1.0853724
+                },
+                {
+                  "field": "medication record type",
+                  "flagged": 24738,
+                  "lift": 1.0859745,
+                  "patients": 158974,
+                  "share": 15.561035,
+                  "value": "External",
+                  "workup_lift": 1.2777953
+                },
+                {
+                  "field": "medication record type",
+                  "flagged": 33523,
+                  "lift": 1.0211765,
+                  "patients": 229099,
+                  "share": 14.632539,
+                  "value": "Internal",
+                  "workup_lift": 1.0224295
+                },
+                {
+                  "field": "lab result flag",
+                  "flagged": 1527,
+                  "lift": 2.8832893,
+                  "patients": 3696,
+                  "share": 41.314935,
+                  "value": "(NONE)",
+                  "workup_lift": 0.9136141
+                },
+                {
+                  "field": "lab result flag",
+                  "flagged": 1450,
+                  "lift": 1.7277223,
+                  "patients": 5857,
+                  "share": 24.756701,
+                  "value": "High Panic",
+                  "workup_lift": 0.48549629
+                },
+                {
+                  "field": "lab result flag",
+                  "flagged": 215,
+                  "lift": 1.5248408,
+                  "patients": 984,
+                  "share": 21.849593,
+                  "value": "Low Panic",
+                  "workup_lift": null
+                },
+                {
+                  "field": "lab result flag",
+                  "flagged": 335,
+                  "lift": 1.1180775,
+                  "patients": 2091,
+                  "share": 16.021043,
+                  "value": "Panic",
+                  "workup_lift": 1.1899129
+                },
+                {
+                  "field": "lab result flag",
+                  "flagged": 15109,
+                  "lift": 1.1153364,
+                  "patients": 94539,
+                  "share": 15.981764,
+                  "value": "High",
+                  "workup_lift": 1.8272435
                 }
               ]
             },
@@ -7335,34 +7398,249 @@
             "dil_lift": 3.6138714,
             "dil_n": 813,
             "dil_value": "ALKALINE PHOSPHATASE",
-            "distinct": 13944,
+            "distinct": 13981,
             "enc_named": "the weight check at 0.98, the nutrition visit at 1.02",
             "enc_top": "Clinical Support",
             "enc_top_lift": 1.8333239,
             "endo_lift": 2.3600178,
             "endo_workup": 16.145382,
+            "ext_lift": 1.0859745,
             "gh_lift": 5.0647877,
+            "int_lift": 1.0211765,
             "label_codes": 26,
             "max_lift": 6.9788064,
             "med_examples": "`Insulin Disposable Pump`, `Insulin Glargine`, `Continuous Glucose Transmitter`, `Continuous Glucose Sensor`",
             "med_high": 16,
             "med_screened": 330,
-            "n_fields": 5,
+            "n_fields": 7,
+            "n_other": 6,
             "native_lift": 1.4259471,
             "no_hit": 114,
             "no_n": 214795,
+            "none_lift": 2.8832893,
+            "none_n": 3696,
             "panel_lift": 1.0112765,
             "panel_n": 26555,
             "perfect": 26,
             "precision": 100.0,
             "recall": 99.682513,
-            "screened": 2638,
+            "screened": 2652,
             "support": 200,
             "suppress": 10,
             "w_base": 0.56267658,
             "w_n": 1410,
             "yes_hit": 35793,
             "yes_n": 35793
+          }
+        },
+        {
+          "id": "shortcuts.numbers",
+          "part": "5.14",
+          "tables": [
+            {
+              "caption": "The {shown} delivered patient columns that separate the label most",
+              "columns": [
+                "column",
+                "patients",
+                "auc",
+                "separation",
+                "long_auc"
+              ],
+              "id": "t-numeric-delivered",
+              "rows": [
+                {
+                  "auc": 0.075280239,
+                  "column": "`visits_count_pre_dx`",
+                  "long_auc": 0.11543089,
+                  "patients": 250588,
+                  "separation": 0.84943952
+                },
+                {
+                  "auc": 0.30498035,
+                  "column": "`min_weight_z_score`",
+                  "long_auc": 0.31976074,
+                  "patients": 250577,
+                  "separation": 0.39003931
+                },
+                {
+                  "auc": 0.31765483,
+                  "column": "`min_head_circ_z_score`",
+                  "long_auc": 0.32458712,
+                  "patients": 200584,
+                  "separation": 0.36469034
+                },
+                {
+                  "auc": 0.33888429,
+                  "column": "`max_visit_age_days`",
+                  "long_auc": 0.37631461,
+                  "patients": 250588,
+                  "separation": 0.32223143
+                },
+                {
+                  "auc": 0.34467447,
+                  "column": "`min_height_z_score`",
+                  "long_auc": 0.34596369,
+                  "patients": 250261,
+                  "separation": 0.31065107
+                },
+                {
+                  "auc": 0.35281117,
+                  "column": "`mean_weight_z_score`",
+                  "long_auc": 0.39619699,
+                  "patients": 250577,
+                  "separation": 0.29437765
+                },
+                {
+                  "auc": 0.35939532,
+                  "column": "`count_bmi_z_score`",
+                  "long_auc": 0.42103038,
+                  "patients": 250588,
+                  "separation": 0.28120936
+                },
+                {
+                  "auc": 0.64006152,
+                  "column": "`std_height_z_score`",
+                  "long_auc": 0.65330108,
+                  "patients": 248172,
+                  "separation": 0.28012303
+                },
+                {
+                  "auc": 0.36479341,
+                  "column": "`visits_span_days`",
+                  "long_auc": 0.42350235,
+                  "patients": 250588,
+                  "separation": 0.27041317
+                },
+                {
+                  "auc": 0.37408699,
+                  "column": "`mean_head_circ_z_score`",
+                  "long_auc": 0.39301835,
+                  "patients": 200584,
+                  "separation": 0.25182602
+                }
+              ]
+            },
+            {
+              "caption": "Constructed features, scored the same way",
+              "columns": [
+                "column",
+                "patients",
+                "auc",
+                "separation",
+                "long_auc"
+              ],
+              "id": "t-numeric-built",
+              "rows": [
+                {
+                  "auc": 0.66378847,
+                  "column": "visits per year of record",
+                  "long_auc": 0.62065681,
+                  "patients": 250588,
+                  "separation": 0.32757694
+                },
+                {
+                  "auc": 0.33696944,
+                  "column": "median days between consecutive visits",
+                  "long_auc": 0.37922206,
+                  "patients": 249606,
+                  "separation": 0.32606112
+                },
+                {
+                  "auc": 0.6334827,
+                  "column": "problem-list entries",
+                  "long_auc": 0.64492392,
+                  "patients": 250588,
+                  "separation": 0.26696539
+                },
+                {
+                  "auc": 0.59240932,
+                  "column": "problem-list entries, excluding the tracked panel",
+                  "long_auc": 0.6123007,
+                  "patients": 250588,
+                  "separation": 0.18481864
+                },
+                {
+                  "auc": 0.56424474,
+                  "column": "distinct laboratory orders",
+                  "long_auc": 0.606459,
+                  "patients": 250588,
+                  "separation": 0.12848948
+                },
+                {
+                  "auc": 0.45296611,
+                  "column": "share of visits carrying a height",
+                  "long_auc": 0.44568699,
+                  "patients": 250588,
+                  "separation": 0.094067776
+                },
+                {
+                  "auc": 0.53491601,
+                  "column": "medication records",
+                  "long_auc": 0.58368345,
+                  "patients": 250588,
+                  "separation": 0.069832018
+                },
+                {
+                  "auc": 0.49363422,
+                  "column": "head circumferences recorded after age 3",
+                  "long_auc": 0.49517301,
+                  "patients": 250588,
+                  "separation": 0.012731554
+                },
+                {
+                  "auc": 0.49693201,
+                  "column": "distinct laboratory procedures",
+                  "long_auc": 0.57351578,
+                  "patients": 250588,
+                  "separation": 0.0061359857
+                },
+                {
+                  "auc": 0.49887143,
+                  "column": "days carrying two or more heights (3.8)",
+                  "long_auc": 0.49923903,
+                  "patients": 250588,
+                  "separation": 0.0022571408
+                },
+                {
+                  "auc": 0.50099764,
+                  "column": "position in the delivered patient file",
+                  "long_auc": 0.50032237,
+                  "patients": 250588,
+                  "separation": 0.001995273
+                }
+              ]
+            }
+          ],
+          "title": "The same screen over the numbers: derived columns and constructed features",
+          "values": {
+            "bmi_count_auc": 0.35939532,
+            "built": 11,
+            "delivered": 41,
+            "dx_cols": 34,
+            "flat": 12,
+            "gap_auc": 0.33696944,
+            "gap_long": 0.37922206,
+            "hc_count_auc": 0.60513617,
+            "long_base": 10.392637,
+            "long_dx_age": 0.077,
+            "max_age_auc": 0.33888429,
+            "min_weight_auc": 0.30498035,
+            "n_long": 161778,
+            "neutral": 0.5,
+            "order_auc": 0.50099764,
+            "pre_dx_auc": 0.075280239,
+            "prob_all": 0.6334827,
+            "prob_clean": 0.59240932,
+            "procs_auc": 0.49693201,
+            "procs_long": 0.57351578,
+            "rate_auc": 0.66378847,
+            "rate_long": 0.62065681,
+            "restrict_years": 4.9993155,
+            "same_day_auc": 0.49887143,
+            "shown": 10,
+            "span_auc": 0.36479341,
+            "stunting_auc": 0.58557137,
+            "visits_auc": 0.48816378
           }
         }
       ],
