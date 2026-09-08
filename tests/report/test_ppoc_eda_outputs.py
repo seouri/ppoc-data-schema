@@ -155,6 +155,10 @@ def test_coverage_map_cites_only_sections_that_exist() -> None:
     for table in coverage.get("tables", []):
         for row in table["rows"]:
             cited.update(re.findall(r"\b(\d+\.\d+)\b", row.get("note", "")))
+    # Without this the test passes by parsing nothing at all, which is what a
+    # change to how a note is written would do. tests/report/test_coverage_map.py
+    # makes the same check against the source, before any rebuild.
+    assert cited, "no coverage-map row cites a section; the note format changed"
     missing = sorted(cited - existing)
     assert not missing, f"coverage map cites sections that do not exist: {missing}"
 
