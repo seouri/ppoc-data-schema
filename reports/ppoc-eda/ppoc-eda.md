@@ -160,7 +160,7 @@ Every item of the general EHR EDA checklist, mapped to what this snapshot can an
 
 ### 2.1 The checklist, item by item
 
-This part exists so that nobody has to wonder whether a standard check was skipped or was impossible. Of 44 items in the general EHR exploratory-analysis checklist, 31 are covered here, 4 are partially covered, and 9 cannot be run against this extract at all.
+This part exists so that nobody has to wonder whether a standard check was skipped or was impossible. Of 45 items in the general EHR exploratory-analysis checklist, 32 are covered here, 4 are partially covered, and 9 cannot be run against this extract at all.
 
 **Checklist coverage**
 
@@ -210,6 +210,7 @@ This part exists so that nobody has to wonder whether a standard check was skipp
 | 8 Longitudinal | Calendar trend breaks | not applicable | No calendar axis. Age-axis profiles are reported instead and are not the same thing — 1.5 |
 | 8 Longitudinal | Guideline or policy shift | not applicable | Requires calendar time — 1.5 |
 | 8 Longitudinal | Vendor changeover effects | partial | The Epic against converted contrast only |
+| 9 Label | Shortcut screen against the label | covered | Every value of five fields and the derived patient columns, scored again under a second index — 5.13 |
 
 The not-applicable list is the part worth reading before you start. Every entry is a consequence of de-identification or of what the extract simply does not carry, and no amount of analysis recovers any of them.
 
@@ -1431,6 +1432,90 @@ That difference decides whether the label is learnable. Of the 1,958 labelled pa
 
 **Implications for analysis.** Do not use a referral as an early index event; it lags the code in every family measured. Do use it as a cohort filter: an endocrinology referral marks the patients whose growth diagnosis was made in childhood with a measurement history behind it, which is the population an early-detection question is actually about. The cost is size, 1,958 against 35,890, and the caveat from 5.4 stands — a referral is a recorded action, and its absence is not evidence that none was warranted.
 
+### 5.13 A shortcut audit: which fields encode the label
+
+5.10 and 5.12 measure the leakage in a list of candidates chosen for being clinically obvious. This section runs the search those sections imply: every value of 5 categorical fields that 200 or more patients carry, scored against the label. 2,638 values clear that floor, out of 13,944 distinct ones. Lift is the share of patients carrying a value who also carry `growth_dx_flag`, over the cohort's 14.33% base rate; a lift of 1 is no information.
+
+A value counts once per patient, ever, with no temporal cut — which is what an unrestricted feature build sees, and it mixes leakage with concurrency: a code recorded at the same encounter as the diagnosis scores as high as one recorded years before it. Beside each lift is the same figure against the alternative index of 5.10, the first growth workup or treatment, which 1,410 patients carry at a base rate of 0.56%. It is suppressed where fewer than 10 patients back it, and where the value is itself part of the index definition — the somatropin, growth hormone and IGF records — since those score the index's maximum by construction rather than by discrimination.
+
+**The raw diagnosis fields carry the label verbatim.** 26 screened codes are one of the tracked panel or a descendant of one (3.9, 5.7), and 26 of those are carried by no unlabelled patient at all — a lift of 6.98, the maximum the base rate allows. Dropping the `dx_age_years_*` columns therefore does not take the label out of a feature set: `enc_diag_*` and `pl_diag` reconstruct it exactly. The table below excludes that group and shows what is left.
+
+**Diagnosis codes with the highest lift, excluding the tracked panel and its descendants**
+
+| ICD-10 | description | patients | carry the label | lift | lift, workup index |
+| --- | --- | --- | --- | --- | --- |
+| H35.103 | Retinopathy of prematurity, unspecified, bilateral | 244 | 97.1% | 6.78x | — |
+| P27.1 | Bronchopulmonary dysplasia originating in the perinatal period | 268 | 95.9% | 6.69x | — |
+| H35.109 | Retinopathy of prematurity, unspecified, unspecified eye | 251 | 94.4% | 6.59x | — |
+| P28.49 | Other apnea of newborn | 461 | 93.7% | 6.54x | — |
+| P61.2 | Anemia of prematurity | 751 | 93.2% | 6.50x | 3.31x |
+
+Top 5 by lift among codes carried by 200 or more patients.
+
+What sits below the panel is the neighbourhood of a label 5.8 shows to be overwhelmingly perinatal: prematurity, its complications, and newborn morbidity. None is a growth code and none is tracked, but a patient carrying one was in the neonatal course that produced the label, and the screen clears 1,578 untracked codes in all. That is the kind of shortcut a curated exclusion list does not reach: it is built by naming the condition, and none of these names the condition.
+
+**The top of the lift distribution in the other four fields**
+
+| field | value | patients | carry the label | lift | lift, workup index |
+| --- | --- | --- | --- | --- | --- |
+| medication | Insulin Disposable Pump | 214 | 100.0% | 6.98x | — |
+| medication | Insulin Glargine | 327 | 98.5% | 6.87x | — |
+| medication | Continuous Glucose Transmitter | 235 | 98.3% | 6.86x | — |
+| medication | Continuous Glucose Sensor | 306 | 97.4% | 6.80x | — |
+| medication | Glucagon | 364 | 97.3% | 6.79x | — |
+| lab procedure | ALKALINE PHOSPHATASE | 813 | 51.8% | 3.61x | 6.56x |
+| lab procedure | RSV AG EIA | 219 | 44.7% | 3.12x | — |
+| lab procedure | ANDROSTENEDIONE | 225 | 42.2% | 2.95x | — |
+| lab procedure | IGF BINDING PROTEIN 1(IGFBP-1) | 278 | 35.6% | 2.49x | — |
+| lab procedure | ALK PHOS | 482 | 33.4% | 2.33x | — |
+| referral specialty | Radiology | 203 | 43.3% | 3.03x | — |
+| referral specialty | Pediatric Gastroenterology | 327 | 39.8% | 2.77x | — |
+| referral specialty | Pediatric Ophthalmology | 286 | 39.5% | 2.76x | — |
+| referral specialty | Pediatric Endocrinology | 233 | 38.2% | 2.67x | 16.02x |
+| referral specialty | Endocrinology | 5,583 | 33.7% | 2.35x | 16.17x |
+| encounter type | Clinical Support | 11,005 | 26.3% | 1.83x | 1.07x |
+| encounter type | Immunization | 8,378 | 17.3% | 1.21x | 1.97x |
+| encounter type | Lactation Encounter | 523 | 17.0% | 1.19x | — |
+| encounter type | Lab | 1,216 | 16.7% | 1.17x | 1.75x |
+| encounter type | Newborn | 22,924 | 15.5% | 1.08x | 1.09x |
+
+Top 5 values per field, by lift, among those carried by 200 or more patients.
+
+Encounter type is the field the screen clears, and a measured null is as useful as a hit. Its highest value is `Clinical Support` at 1.83, and the types whose names promise growth surveillance sit at the base rate: the weight check at 0.98, the nutrition visit at 1.02. Nothing in the report would otherwise establish that, since an argument from the name alone points the other way.
+
+**The medication screen finds what a curated list could not.** 16 of the 330 screened generic names lift higher than the 5.06 that 5.10 measures for growth hormone, and none of them is a growth treatment: `Insulin Disposable Pump`, `Insulin Glargine`, `Continuous Glucose Transmitter`, `Continuous Glucose Sensor`. Type 1 diabetes is in the tracked panel (5.7), so every product dispensed to a child who carries that code — consumables included — reconstructs part of the label. An exclusion list built by naming growth treatments does not catch a box of lancets.
+
+**The unit of the screen decides the answer.** 5.10 matches `ALKALINE PHOSPHATASE` as a substring across the procedure name and the result component, finds 26,555 patients at a lift of 1.01, and reads it as a general screen carrying no information. Screened as a procedure name in its own right the same test is 813 patients at 3.61. Both figures are correct and they answer different questions: ordering the test deliberately is not the same event as receiving it inside a panel, and a substring match pools them.
+
+**One column reconstructs the label on its own.** `visits_count_pre_dx` counts a patient's visits up to the diagnosis, and for a patient without one it equals the lifetime count. The inequality between the two columns is therefore the label: 35,793 patients have a shorter pre-diagnosis count and 35,793 of them are labelled, against 114 of the 214,795 others. That is 100.0% precision at 99.7% recall from a single comparison of two delivered columns. 5.8 makes the point about counts measured to an index date; this is the same asymmetry shipped as a column, and no model given the augmented patient table can avoid it.
+
+**`visits_count_pre_dx` against `visits_count`**
+
+| patients where | patients | carry the label | share |
+| --- | --- | --- | --- |
+| pre-diagnosis count is shorter than the lifetime count | 35,793 | 35,793 | 100.00% |
+| the two counts are equal | 214,795 | 114 | 0.05% |
+
+**The shortcut set belongs to the label, not to the extract.** The same features scored against the alternative index reorder completely. An endocrinology referral lifts 2.36 against the code and 16.15 against the workup, so 5.12's advice to use it as a cohort filter selects on the outcome under 5.10's recommended design; and the growth-hormone and IGF-1 records that 5.10 screens as leaking features are that design's definition of the label rather than features at all. Nothing here is transferable between the two.
+
+**Named candidates against both labels**
+
+| feature | patients | carry the code label | lift, code label | lift, workup index |
+| --- | --- | --- | --- | --- |
+| endocrinology referral (5.12) | 5,790 | 33.8% | 2.36x | 16.15x |
+| growth hormone prescription (5.10) | 237 | 72.6% | 5.06x | — |
+| stunting flag ever set (5.9) | 17,889 | 43.8% | 3.05x | 5.94x |
+| failure to thrive or short stature in the child, R62.5x | 41,628 | 22.0% | 1.53x | 5.39x |
+| pediatric BMI-percentile code, Z68.5x | 64,467 | 10.6% | 0.74x | 0.96x |
+| any encounter converted from the legacy system | 137,210 | 9.3% | 0.65x | 1.42x |
+| no converted encounter: recorded natively throughout | 113,378 | 20.4% | 1.43x | 0.50x |
+
+Three rows deserve a second look. The pediatric BMI-percentile codes are the growth chart written into the diagnosis field and they carry no lift at all, because the label is perinatal rather than anthropometric — an obvious candidate that a screen clears and an argument would not. And the last two rows separate patients by nothing clinical at all: a record kept natively throughout lifts 1.43 against 0.65 for one carrying any encounter converted from the practice network's previous system, a 2.2-fold spread on a provenance field. 3.7 measures that field's effect on diagnosis completeness; this is what the same effect does to a label.
+
+One bound on all of this comes from 1.4. The cohort excluded every code, medication and procedure seen fewer than 11 times along with the patients carrying them, and 5.10 measures how much of the laboratory vocabulary that removed. The rarest and most specific markers are the most likely to be gone, so a screen on this extract under-detects exactly the shortcuts it most wants to find.
+
+**Implications for analysis.** Screen rather than enumerate: run this against your own label and index before building a feature set, and re-run it after any change to either. Exclude the fields that reconstruct the label — the raw diagnosis slots and the problem list, `visits_count_pre_dx`, and the treatment records of 5.10 — and remember that a field carrying no clinical meaning can still discriminate. A lift measured here is an upper bound on what a temporally honest feature could contribute, not an estimate of it: everything above is scored without a cut, so a value that only ever appears alongside the diagnosis scores as high as one that precedes it.
+
 ## 6. Field index
 
 Every column, with its population, range, and the findings that govern it.
@@ -1626,7 +1711,7 @@ One row per known artifact, with its scale and whether it can be repaired.
 
 ### 7.1 Every artifact this report measured
 
-One row per artifact, gathered from the findings that measured them. The class says who produced the artifact, which decides whether it can be repaired: a derivation artifact can be recomputed without touching the clinical record, a capture artifact cannot, a selection artifact is outside the extract entirely. 20 artifacts across 4 classes (capture, derivation, linkage, selection).
+One row per artifact, gathered from the findings that measured them. The class says who produced the artifact, which decides whether it can be repaired: a derivation artifact can be recomputed without touching the clinical record, a capture artifact cannot, a selection artifact is outside the extract entirely. 21 artifacts across 4 classes (capture, derivation, linkage, selection).
 
 **Artifact catalogue**
 
@@ -1652,6 +1737,7 @@ One row per artifact, gathered from the findings that measured them. The class s
 | Treatment and workup records reveal the diagnosis, and date it a decade later than the code | capture | growth hormone is 5.1 times enriched for the label; its median order age is 10.8 years against 0.027 for the code | Yes — exclude them as features, or index on them instead | 5.10 |
 | A diagnosis code's resource coverage depends on the code | capture | 36% of patient-code pairs appear only in encounter diagnoses and 14% only in the problem list | Yes — take the union of both resources, as the derived columns do | 5.11 |
 | A growth diagnosis recorded at the referral rather than before it | capture | 36% of endocrinology-referred labelled patients carry the code within 30 days of the referral | No — but the subgroup it marks is the usable one | 5.12 |
+| A derived column that is a function of the label | derivation | `visits_count_pre_dx` recovers `growth_dx_flag` at 100.0% precision and 99.7% recall | No — the column cannot be made label-free; exclude it | 5.13 |
 
 ## 8. Methods and limitations
 

@@ -96,6 +96,12 @@ Do this before opening any tables.
 
 ---
 
+## 9. Label / Leakage Checks (if the export will be used to model an outcome)
+
+- [ ] **Shortcut screen against the label**: score *every* value of each categorical field — diagnoses, medications, orders, referrals, encounter types — and every derived column against the outcome you intend to model, rather than a curated list of the clinically obvious candidates; the fields that reconstruct a label are routinely the ones nobody thought to exclude, and treatment or care-process records can encode it as completely as the diagnosis does. The answer belongs to the label rather than to the export, so re-run the screen whenever the outcome definition or the index date changes
+
+---
+
 ## Suggested First Pass
 
-Run **Sections 1–3** (structural, temporal, missingness) fully before touching anything downstream — most EHR analysis errors trace back to one of those three. Sections 4–8 are where you'd focus once basic integrity is confirmed.
+Run **Sections 1–3** (structural, temporal, missingness) fully before touching anything downstream — most EHR analysis errors trace back to one of those three. Sections 4–9 are where you'd focus once basic integrity is confirmed.

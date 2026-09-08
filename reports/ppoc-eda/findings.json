@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-06T16:12:07Z",
+  "generated_at": "2026-09-08T16:26:48Z",
   "parts": [
     {
       "findings": [
@@ -800,6 +800,12 @@
                   "note": "The Epic against converted contrast only",
                   "section": "8 Longitudinal",
                   "status": "partial"
+                },
+                {
+                  "item": "Shortcut screen against the label",
+                  "note": "Every value of five fields and the derived patient columns, scored again under a second index — 5.13",
+                  "section": "9 Label",
+                  "status": "covered"
                 }
               ]
             },
@@ -870,10 +876,10 @@
           ],
           "title": "The checklist, item by item",
           "values": {
-            "covered": 31,
+            "covered": 32,
             "na": 9,
             "partial": 4,
-            "total": 44
+            "total": 45
           }
         }
       ],
@@ -6963,6 +6969,401 @@
             "rest_ge2": 21.466462,
             "rest_none": 52.201462
           }
+        },
+        {
+          "artifact": {
+            "kind": "derivation",
+            "name": "A derived column that is a function of the label",
+            "recoverable": "No — the column cannot be made label-free; exclude it",
+            "scale": "`visits_count_pre_dx` recovers `growth_dx_flag` at 100.0% precision and 99.7% recall"
+          },
+          "id": "shortcuts.audit",
+          "part": "5.13",
+          "tables": [
+            {
+              "caption": "Diagnosis codes with the highest lift, excluding the tracked panel and its descendants",
+              "columns": [
+                "value",
+                "descr",
+                "patients",
+                "share",
+                "lift",
+                "workup_lift"
+              ],
+              "id": "t-shortcut-codes",
+              "rows": [
+                {
+                  "descr": "Retinopathy of prematurity, unspecified, bilateral",
+                  "flagged": 237,
+                  "is_label": false,
+                  "lift": 6.7785947,
+                  "patients": 244,
+                  "share": 97.131148,
+                  "value": "H35.103",
+                  "workup_lift": null
+                },
+                {
+                  "descr": "Bronchopulmonary dysplasia originating in the perinatal period",
+                  "flagged": 257,
+                  "is_label": false,
+                  "lift": 6.6923628,
+                  "patients": 268,
+                  "share": 95.895522,
+                  "value": "P27.1",
+                  "workup_lift": null
+                },
+                {
+                  "descr": "Retinopathy of prematurity, unspecified, unspecified eye",
+                  "flagged": 237,
+                  "is_label": false,
+                  "lift": 6.5895502,
+                  "patients": 251,
+                  "share": 94.422311,
+                  "value": "H35.109",
+                  "workup_lift": null
+                },
+                {
+                  "descr": "Other apnea of newborn",
+                  "flagged": 432,
+                  "is_label": false,
+                  "lift": 6.5397925,
+                  "patients": 461,
+                  "share": 93.709328,
+                  "value": "P28.49",
+                  "workup_lift": null
+                },
+                {
+                  "descr": "Anemia of prematurity",
+                  "flagged": 700,
+                  "is_label": false,
+                  "lift": 6.5048794,
+                  "patients": 751,
+                  "share": 93.209055,
+                  "value": "P61.2",
+                  "workup_lift": 3.3130597
+                }
+              ]
+            },
+            {
+              "caption": "The top of the lift distribution in the other four fields",
+              "columns": [
+                "field",
+                "value",
+                "patients",
+                "share",
+                "lift",
+                "workup_lift"
+              ],
+              "id": "t-shortcut-fields",
+              "rows": [
+                {
+                  "field": "medication",
+                  "flagged": 214,
+                  "lift": 6.9788064,
+                  "patients": 214,
+                  "share": 100.0,
+                  "value": "Insulin Disposable Pump",
+                  "workup_lift": null
+                },
+                {
+                  "field": "medication",
+                  "flagged": 322,
+                  "lift": 6.8720968,
+                  "patients": 327,
+                  "share": 98.470948,
+                  "value": "Insulin Glargine",
+                  "workup_lift": null
+                },
+                {
+                  "field": "medication",
+                  "flagged": 231,
+                  "lift": 6.8600182,
+                  "patients": 235,
+                  "share": 98.297872,
+                  "value": "Continuous Glucose Transmitter",
+                  "workup_lift": null
+                },
+                {
+                  "field": "medication",
+                  "flagged": 298,
+                  "lift": 6.7963539,
+                  "patients": 306,
+                  "share": 97.385621,
+                  "value": "Continuous Glucose Sensor",
+                  "workup_lift": null
+                },
+                {
+                  "field": "medication",
+                  "flagged": 354,
+                  "lift": 6.7870809,
+                  "patients": 364,
+                  "share": 97.252747,
+                  "value": "Glucagon",
+                  "workup_lift": null
+                },
+                {
+                  "field": "lab procedure",
+                  "flagged": 421,
+                  "lift": 3.6138714,
+                  "patients": 813,
+                  "share": 51.783518,
+                  "value": "ALKALINE PHOSPHATASE",
+                  "workup_lift": 6.5580069
+                },
+                {
+                  "field": "lab procedure",
+                  "flagged": 98,
+                  "lift": 3.1229362,
+                  "patients": 219,
+                  "share": 44.748858,
+                  "value": "RSV AG EIA",
+                  "workup_lift": null
+                },
+                {
+                  "field": "lab procedure",
+                  "flagged": 95,
+                  "lift": 2.9466071,
+                  "patients": 225,
+                  "share": 42.222222,
+                  "value": "ANDROSTENEDIONE",
+                  "workup_lift": null
+                },
+                {
+                  "field": "lab procedure",
+                  "flagged": 99,
+                  "lift": 2.4852584,
+                  "patients": 278,
+                  "share": 35.611511,
+                  "value": "IGF BINDING PROTEIN 1(IGFBP-1)",
+                  "workup_lift": null
+                },
+                {
+                  "field": "lab procedure",
+                  "flagged": 161,
+                  "lift": 2.3310951,
+                  "patients": 482,
+                  "share": 33.40249,
+                  "value": "ALK PHOS",
+                  "workup_lift": null
+                },
+                {
+                  "field": "referral specialty",
+                  "flagged": 88,
+                  "lift": 3.0252954,
+                  "patients": 203,
+                  "share": 43.349754,
+                  "value": "Radiology",
+                  "workup_lift": null
+                },
+                {
+                  "field": "referral specialty",
+                  "flagged": 130,
+                  "lift": 2.774449,
+                  "patients": 327,
+                  "share": 39.755352,
+                  "value": "Pediatric Gastroenterology",
+                  "workup_lift": null
+                },
+                {
+                  "field": "referral specialty",
+                  "flagged": 113,
+                  "lift": 2.7573606,
+                  "patients": 286,
+                  "share": 39.51049,
+                  "value": "Pediatric Ophthalmology",
+                  "workup_lift": null
+                },
+                {
+                  "field": "referral specialty",
+                  "flagged": 89,
+                  "lift": 2.6657243,
+                  "patients": 233,
+                  "share": 38.197425,
+                  "value": "Pediatric Endocrinology",
+                  "workup_lift": 16.017861
+                },
+                {
+                  "field": "referral specialty",
+                  "flagged": 1882,
+                  "lift": 2.352519,
+                  "patients": 5583,
+                  "share": 33.709475,
+                  "value": "Endocrinology",
+                  "workup_lift": 16.171014
+                },
+                {
+                  "field": "encounter type",
+                  "flagged": 2891,
+                  "lift": 1.8333239,
+                  "patients": 11005,
+                  "share": 26.269877,
+                  "value": "Clinical Support",
+                  "workup_lift": 1.0658474
+                },
+                {
+                  "field": "encounter type",
+                  "flagged": 1451,
+                  "lift": 1.2086713,
+                  "patients": 8378,
+                  "share": 17.319169,
+                  "value": "Immunization",
+                  "workup_lift": 1.9728031
+                },
+                {
+                  "field": "encounter type",
+                  "flagged": 89,
+                  "lift": 1.187598,
+                  "patients": 523,
+                  "share": 17.017208,
+                  "value": "Lactation Encounter",
+                  "workup_lift": null
+                },
+                {
+                  "field": "encounter type",
+                  "flagged": 203,
+                  "lift": 1.1650474,
+                  "patients": 1216,
+                  "share": 16.694079,
+                  "value": "Lab",
+                  "workup_lift": 1.7538354
+                },
+                {
+                  "field": "encounter type",
+                  "flagged": 3551,
+                  "lift": 1.0810391,
+                  "patients": 22924,
+                  "share": 15.490316,
+                  "value": "Newborn",
+                  "workup_lift": 1.0853724
+                }
+              ]
+            },
+            {
+              "caption": "`visits_count_pre_dx` against `visits_count`",
+              "columns": [
+                "group",
+                "patients",
+                "flagged",
+                "share"
+              ],
+              "id": "t-shortcut-predx",
+              "rows": [
+                {
+                  "flagged": 35793,
+                  "group": "pre-diagnosis count is shorter than the lifetime count",
+                  "patients": 35793,
+                  "share": 100.0
+                },
+                {
+                  "flagged": 114,
+                  "group": "the two counts are equal",
+                  "patients": 214795,
+                  "share": 0.053073861
+                }
+              ]
+            },
+            {
+              "caption": "Named candidates against both labels",
+              "columns": [
+                "feature",
+                "patients",
+                "share",
+                "lift",
+                "workup_lift"
+              ],
+              "id": "t-shortcut-index",
+              "rows": [
+                {
+                  "feature": "endocrinology referral (5.12)",
+                  "lift": 2.3600178,
+                  "patients": 5790,
+                  "share": 33.816926,
+                  "workup_lift": 16.145382
+                },
+                {
+                  "feature": "growth hormone prescription (5.10)",
+                  "lift": 5.0647877,
+                  "patients": 237,
+                  "share": 72.57384,
+                  "workup_lift": null
+                },
+                {
+                  "feature": "stunting flag ever set (5.9)",
+                  "lift": 3.0538373,
+                  "patients": 17889,
+                  "share": 43.758734,
+                  "workup_lift": 5.9409552
+                },
+                {
+                  "feature": "failure to thrive or short stature in the child, R62.5x",
+                  "lift": 1.534137,
+                  "patients": 41628,
+                  "share": 21.9828,
+                  "workup_lift": 5.3878434
+                },
+                {
+                  "feature": "pediatric BMI-percentile code, Z68.5x",
+                  "lift": 0.73677627,
+                  "patients": 64467,
+                  "share": 10.557339,
+                  "workup_lift": 0.96211974
+                },
+                {
+                  "feature": "any encounter converted from the legacy system",
+                  "lift": 0.64803565,
+                  "patients": 137210,
+                  "share": 9.2857663,
+                  "workup_lift": 1.4170093
+                },
+                {
+                  "feature": "no converted encounter: recorded natively throughout",
+                  "lift": 1.4259471,
+                  "patients": 113378,
+                  "share": 20.432535,
+                  "workup_lift": 0.49533549
+                }
+              ]
+            }
+          ],
+          "title": "A shortcut audit: which fields encode the label",
+          "values": {
+            "base": 14.329098,
+            "code_shown": 5,
+            "code_untracked": 1578,
+            "conv_lift": 0.64803565,
+            "conv_ratio": 2.2004146,
+            "dil_lift": 3.6138714,
+            "dil_n": 813,
+            "dil_value": "ALKALINE PHOSPHATASE",
+            "distinct": 13944,
+            "enc_named": "the weight check at 0.98, the nutrition visit at 1.02",
+            "enc_top": "Clinical Support",
+            "enc_top_lift": 1.8333239,
+            "endo_lift": 2.3600178,
+            "endo_workup": 16.145382,
+            "gh_lift": 5.0647877,
+            "label_codes": 26,
+            "max_lift": 6.9788064,
+            "med_examples": "`Insulin Disposable Pump`, `Insulin Glargine`, `Continuous Glucose Transmitter`, `Continuous Glucose Sensor`",
+            "med_high": 16,
+            "med_screened": 330,
+            "n_fields": 5,
+            "native_lift": 1.4259471,
+            "no_hit": 114,
+            "no_n": 214795,
+            "panel_lift": 1.0112765,
+            "panel_n": 26555,
+            "perfect": 26,
+            "precision": 100.0,
+            "recall": 99.682513,
+            "screened": 2638,
+            "support": 200,
+            "suppress": 10,
+            "w_base": 0.56267658,
+            "w_n": 1410,
+            "yes_hit": 35793,
+            "yes_n": 35793
+          }
         }
       ],
       "number": "5",
@@ -8739,6 +9140,13 @@
                   "recoverable": "No — but the subgroup it marks is the usable one",
                   "scale": "36% of endocrinology-referred labelled patients carry the code within 30 days of the referral",
                   "where": "5.12"
+                },
+                {
+                  "artifact": "A derived column that is a function of the label",
+                  "class": "derivation",
+                  "recoverable": "No — the column cannot be made label-free; exclude it",
+                  "scale": "`visits_count_pre_dx` recovers `growth_dx_flag` at 100.0% precision and 99.7% recall",
+                  "where": "5.13"
                 }
               ]
             }
@@ -8747,7 +9155,7 @@
           "values": {
             "kindlist": "capture, derivation, linkage, selection",
             "kinds": 4,
-            "n": 20
+            "n": 21
           }
         }
       ],
