@@ -79,6 +79,8 @@ Both commands use this repository's `datapackage.json` by default, validate all 
 
 [`reports/ppoc-eda/`](reports/ppoc-eda/) profiles this snapshot: what it holds, which fields can be trusted, and which standard checks it cannot support at all. **Read part 1.4 before designing a study** — how the cohort was built forecloses whole classes of question, and no field reveals it. Part 0 says where to start.
 
+**If a label is involved, read 5.13 and 5.14 as well.** They screen every categorical field, every numeric column of the derived patient layer, and a set of constructed features against the growth-diagnosis label, and report what encodes it. What reconstructs that label is mostly not what an exclusion list would think to name, and one delivered column is the label outright.
+
 [PDF](reports/ppoc-eda/ppoc-eda.pdf) (GitHub renders it) · [HTML](reports/ppoc-eda/index.html) · [Markdown](reports/ppoc-eda/ppoc-eda.md) · [`findings.json`](reports/ppoc-eda/findings.json)
 
 ```sh
