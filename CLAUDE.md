@@ -37,6 +37,17 @@ which appeared in roughly one build in six.
   byte-identical** and pinned by SHA-256 in `data/augment-runtime-manifest.json`.
   Any edit, down to a trailing comment, fails `tests/test_augment_import.py`.
   Their lint findings are exempted in `pyproject.toml` for the same reason.
+- **The shortcut audit is coupled to 5.10's definitions.**
+  `reports/ppoc_eda/probes/shortcuts.py` carries two sections: 5.13, a lift
+  screen over every value of seven categorical fields, and 5.14, a rank screen
+  over every numeric column of the augmented patient layer and eleven
+  constructed features. It imports `WORKUP_INDEX` from `joint.py`, so changing
+  what 5.10 counts as the first growth workup rewrites both sections silently.
+  `INDEX_TERMS` in the same file withholds a workup lift from the values that
+  *are* that index; edit the two together, or a row reports the maximum the base
+  rate allows as though it had measured something. Both screens add the kind of
+  aggregate the drift note above is about — a group mean per value of a field,
+  and rank sums — so raise `AUDIT_RUNS` when you touch them.
 - **Inode numbers are recycled on Linux and not on macOS.** The quarantine
   cleanup in `src/synthetic/native/counterfactual.py` identifies a file by
   `(st_dev, st_ino)`, so a test that unlinks a file and then creates its
