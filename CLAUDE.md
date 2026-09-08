@@ -43,4 +43,11 @@ which appeared in roughly one build in six.
   "replacement" gets the freed inode back on ext4 and tmpfs, and the replacement
   is indistinguishable from the owner. Allocate the replacement *before* freeing
   the owner; `tests/synthetic/test_counterfactual_manifest.py` does this and
-  asserts the two identities differ.
+  asserts the two identities differ. For the same reason that identity is only
+  meaningful while something holds the inode open, cleanup refuses an identity
+  passed without its still-open `owner_descriptor`. Do not add a caller that
+  supplies one without the other, and note that a failing `close` still releases
+  the descriptor, so pin the inode with `os.dup` before closing. The descriptor
+  is necessary but not sufficient: one that yields no usable identity still
+  falls through to the fail-closed branch, which quarantines the name whatever
+  it now holds.

@@ -291,14 +291,19 @@ def test_truth_manifest_cleanup_uses_random_parent_quarantine_entry(
     destination = tmp_path / "truth.json"
     destination.write_bytes(b"created by this invocation")
     parent_descriptor = os.open(tmp_path, os.O_RDONLY)
+    owner_descriptor = os.open(destination, os.O_RDONLY)
     try:
         metadata = os.stat(destination, follow_symlinks=False)
         identity = counterfactual_module._truth_manifest_identity(metadata)
         with pytest.raises(ValueError, match="owner retained"):
             counterfactual_module._remove_truth_manifest_entry_if_owned(
-                parent_descriptor, destination.name, identity
+                parent_descriptor,
+                destination.name,
+                identity,
+                owner_descriptor=owner_descriptor,
             )
     finally:
+        os.close(owner_descriptor)
         os.close(parent_descriptor)
 
     assert not destination.exists()
@@ -322,11 +327,11 @@ def _assert_replacement_is_a_different_inode(path: Path, owner_identity: tuple[i
     Two inodes that coexist on one device cannot share a number, so each caller
     allocates its replacement while the owner is still linked.  That is an
     invariant rather than a probability: there is no flake window here and no
-    retry belongs in these tests.  The sibling tests that pass an owner
-    descriptor need no such care -- an open descriptor pins the inode across the
-    unlink, which is what makes their identity stable and this helper redundant
-    there.  Asserting the two identities differ keeps a regression failing on
-    the premise rather than on a confusing message mismatch.
+    retry belongs in these tests.  Holding the owner descriptor across the swap
+    pins the inode and rules the collision out a second time, which is what
+    cleanup itself now requires of its callers.  Asserting the two identities
+    differ keeps a regression failing on the premise rather than on a confusing
+    message mismatch.
     """
     replacement_identity = counterfactual_module._truth_manifest_identity(
         os.stat(path, follow_symlinks=False)
@@ -343,6 +348,7 @@ def test_truth_manifest_cleanup_leaves_replacement_seen_before_first_stat(
     destination = tmp_path / "truth.json"
     destination.write_bytes(b"created by this invocation")
     _absolute_parent, parent_descriptor = counterfactual_module._open_regular_parent(tmp_path)
+    owner_descriptor = os.open(destination, os.O_RDONLY)
     metadata = os.stat(destination, follow_symlinks=False)
     identity = counterfactual_module._truth_manifest_identity(metadata)
     replacement = tmp_path / "replacement-before-first-stat"
@@ -373,9 +379,13 @@ def test_truth_manifest_cleanup_leaves_replacement_seen_before_first_stat(
     )
     try:
         counterfactual_module._remove_truth_manifest_entry_if_owned(
-            parent_descriptor, destination.name, identity
+            parent_descriptor,
+            destination.name,
+            identity,
+            owner_descriptor=owner_descriptor,
         )
     finally:
+        os.close(owner_descriptor)
         os.close(parent_descriptor)
 
     assert swapped
@@ -464,6 +474,7 @@ def test_truth_manifest_cleanup_never_unlinks_post_restore_replacement(
     destination = tmp_path / "truth.json"
     destination.write_bytes(b"created by this invocation")
     _absolute_parent, parent_descriptor = counterfactual_module._open_regular_parent(tmp_path)
+    owner_descriptor = os.open(destination, os.O_RDONLY)
     try:
         metadata = os.stat(destination, follow_symlinks=False)
         identity = counterfactual_module._truth_manifest_identity(metadata)
@@ -537,9 +548,13 @@ def test_truth_manifest_cleanup_never_unlinks_post_restore_replacement(
 
         with pytest.raises(ValueError, match="replacement retained"):
             counterfactual_module._remove_truth_manifest_entry_if_owned(
-                parent_descriptor, destination.name, identity
+                parent_descriptor,
+                destination.name,
+                identity,
+                owner_descriptor=owner_descriptor,
             )
     finally:
+        os.close(owner_descriptor)
         os.close(parent_descriptor)
 
     assert ownership_swapped
@@ -556,6 +571,7 @@ def test_truth_manifest_cleanup_quarantines_nonlinkable_directory_replacement(
     destination = tmp_path / "truth.json"
     destination.write_bytes(b"created by this invocation")
     _absolute_parent, parent_descriptor = counterfactual_module._open_regular_parent(tmp_path)
+    owner_descriptor = os.open(destination, os.O_RDONLY)
     try:
         metadata = os.stat(destination, follow_symlinks=False)
         identity = counterfactual_module._truth_manifest_identity(metadata)
@@ -587,15 +603,122 @@ def test_truth_manifest_cleanup_quarantines_nonlinkable_directory_replacement(
 
         with pytest.raises(ValueError, match="replacement retained"):
             counterfactual_module._remove_truth_manifest_entry_if_owned(
-                parent_descriptor, destination.name, identity
+                parent_descriptor,
+                destination.name,
+                identity,
+                owner_descriptor=owner_descriptor,
             )
     finally:
+        os.close(owner_descriptor)
         os.close(parent_descriptor)
 
     assert swapped
     assert not destination.exists()
     quarantine = next(tmp_path.glob(".counterfactual-truth-cleanup-*"))
     assert (quarantine / "sentinel").read_bytes() == b"directory replacement"
+
+
+def test_truth_manifest_cleanup_refuses_an_unpinned_identity(tmp_path: Path) -> None:
+    """An identity with nothing holding the inode open is not an ownership check.
+
+    Once the owner is unlinked its inode number can be handed to the next file
+    created, so a recorded identity that no descriptor pins can match a file
+    this invocation never wrote.  Cleanup must refuse rather than quarantine on
+    that evidence, and must leave the entry alone when it does.
+    """
+
+    destination = tmp_path / "truth.json"
+    destination.write_bytes(b"created by this invocation")
+    parent_descriptor = os.open(tmp_path, os.O_RDONLY)
+    try:
+        identity = counterfactual_module._truth_manifest_identity(
+            os.stat(destination, follow_symlinks=False)
+        )
+        with pytest.raises(ValueError, match="requires the owner descriptor"):
+            counterfactual_module._remove_truth_manifest_entry_if_owned(
+                parent_descriptor, destination.name, identity
+            )
+    finally:
+        os.close(parent_descriptor)
+
+    assert destination.read_bytes() == b"created by this invocation"
+    assert not list(tmp_path.glob(".counterfactual-truth-cleanup-*"))
+
+
+def test_truth_manifest_close_failure_cleans_up_against_a_pinned_owner(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A close that fails still releases the descriptor; cleanup needs a pin.
+
+    ``close`` reporting an error does not keep the descriptor open, so the owner
+    inode stops being pinned at exactly the moment cleanup has to establish
+    ownership.  A duplicate taken before the close carries the pin across it,
+    and this asserts cleanup is handed that live descriptor rather than a bare
+    identity whose meaning has expired.
+    """
+
+    pair, report = _validated_pair()
+    destination = tmp_path / "truth.json"
+    real_close = counterfactual_module.os.close
+    real_exclusive = counterfactual_module._write_truth_manifest_exclusive
+    real_cleanup = counterfactual_module._remove_truth_manifest_entry_if_owned
+    child_descriptors: list[int] = []
+    pinned_identities: list[tuple[int, int]] = []
+    already_failed = False
+
+    def recording_exclusive(
+        parent_descriptor: int, name: str, payload: bytes
+    ) -> tuple[int, tuple[int, int]]:
+        descriptor, identity = real_exclusive(parent_descriptor, name, payload)
+        child_descriptors.append(descriptor)
+        return descriptor, identity
+
+    def failing_close(descriptor: int) -> None:
+        # Release the descriptor and then report failure, which is what a
+        # failing close does: the caller may not reuse the descriptor number.
+        # Fail once only.  The duplicate is taken while the child is still open
+        # so it cannot share that number, but firing a second time would let
+        # this test pass on a swallowed error rather than on the pin.
+        nonlocal already_failed
+        real_close(descriptor)
+        if descriptor in child_descriptors and not already_failed:
+            already_failed = True
+            raise OSError("close reported an error after releasing the descriptor")
+
+    def recording_cleanup(
+        parent_descriptor: int,
+        name: str,
+        identity: tuple[int, int] | None,
+        *,
+        owner_descriptor: int | None = None,
+    ) -> None:
+        assert owner_descriptor is not None, "cleanup ran against an unpinned identity"
+        # fstat succeeding proves the duplicate is still open, so the inode is
+        # still referenced and its number cannot have been reused under name.
+        pinned_identities.append(
+            counterfactual_module._truth_manifest_identity(os.fstat(owner_descriptor))
+        )
+        real_cleanup(parent_descriptor, name, identity, owner_descriptor=owner_descriptor)
+
+    monkeypatch.setattr(
+        counterfactual_module, "_write_truth_manifest_exclusive", recording_exclusive
+    )
+    monkeypatch.setattr(
+        counterfactual_module, "_remove_truth_manifest_entry_if_owned", recording_cleanup
+    )
+    monkeypatch.setattr(counterfactual_module.os, "close", failing_close)
+
+    with pytest.raises(ValueError):
+        write_truth_manifest(pair, report, destination)
+
+    assert already_failed
+    assert len(pinned_identities) == 1
+    assert not destination.exists()
+    quarantine = next(tmp_path.glob(".counterfactual-truth-cleanup-*"))
+    assert counterfactual_module._truth_manifest_identity(
+        os.stat(quarantine, follow_symlinks=False)
+    ) == pinned_identities[0]
 
 
 @pytest.mark.parametrize("destination", ["truth.json", Path("a") / ".." / "truth.json"])

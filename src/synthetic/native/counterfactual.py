@@ -1856,7 +1856,23 @@ def _remove_truth_manifest_entry_if_owned(
     replacement remains in private quarantine and cleanup reports an explicit
     error.  Keeping the quarantine entry in the pinned parent avoids a
     mkdir/open/rmdir namespace race.
+
+    ``identity`` is sound only because every caller that supplies one also
+    keeps ``owner_descriptor`` open across the operation.  An inode number is
+    reusable the moment its last reference goes away, so an identity recorded
+    by ``stat`` and then left unpinned can name a file created by somebody
+    else.  Supplying an identity without the descriptor is refused.
     """
+
+    if identity is not None and owner_descriptor is None:
+        # ``(st_dev, st_ino)`` names an inode only while something holds that
+        # inode open.  Once the owner is unlinked the number is free for reuse,
+        # and ext4 and tmpfs reuse it immediately, so a bare identity can match
+        # a file this invocation never created -- which would quarantine an
+        # unrelated file.  Callers must keep the owner descriptor open across
+        # anything that could free the inode; refuse rather than act on an
+        # identity whose meaning has already expired.
+        raise ValueError("truth manifest cleanup requires the owner descriptor")
 
     owner_identity = identity
     if owner_descriptor is not None:
@@ -2118,23 +2134,45 @@ def write_truth_manifest(
                 )
             except ValueError as error:
                 cleanup_error = error
+        # ``os.close`` releases the descriptor even when it reports an error,
+        # so the owner inode would stop being pinned and its number could be
+        # recycled before the cleanup below checks ownership.  A duplicate taken
+        # beforehand keeps that inode alive across the close, so the check still
+        # means what it says.  When the duplicate cannot be taken the cleanup is
+        # refused rather than performed against an expired identity.  It is
+        # taken unconditionally because whether the close fails is not knowable
+        # in advance; moving it under the cleanup branch would restore the hole
+        # on exactly the path where verification has already succeeded.
+        close_pin: int | None
         try:
-            os.close(child_descriptor)
+            close_pin = os.dup(child_descriptor)
         except OSError:
-            if verification_error is None:
-                verification_error = ValueError(
-                    "truth manifest output could not be verified"
-                )
-            if not cleanup_attempted:
-                cleanup_attempted = True
-                try:
-                    _remove_truth_manifest_entry_if_owned(
-                        parent_descriptor,
-                        output.name,
-                        child_identity,
+            close_pin = None
+        try:
+            try:
+                os.close(child_descriptor)
+            except OSError:
+                if verification_error is None:
+                    verification_error = ValueError(
+                        "truth manifest output could not be verified"
                     )
-                except ValueError as error:
-                    cleanup_error = error
+                if not cleanup_attempted:
+                    cleanup_attempted = True
+                    try:
+                        _remove_truth_manifest_entry_if_owned(
+                            parent_descriptor,
+                            output.name,
+                            child_identity,
+                            owner_descriptor=close_pin,
+                        )
+                    except ValueError as error:
+                        cleanup_error = error
+        finally:
+            if close_pin is not None:
+                try:
+                    os.close(close_pin)
+                except OSError:
+                    pass
         child_descriptor = None
         if cleanup_error is not None:
             if verification_error is not None:
