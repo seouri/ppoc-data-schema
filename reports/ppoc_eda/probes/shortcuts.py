@@ -14,7 +14,7 @@ from __future__ import annotations
 from ..context import SUPPRESS_BELOW, Context
 from ..findings import Artifact, Finding, Para, Table, probe
 from ..findings import Column as C
-from .growth import ICD_LOOKUP
+from .growth import ICD_LOOKUP, PANEL_SPLIT_YEARS
 from .icd import patient_codes
 from .joint import WORKUP_INDEX
 
@@ -84,6 +84,24 @@ LABEL_TABLE = "_shortcut_label"
 #: unbacked one is. `%IGF%` catches the binding protein as well as IGF-1, which
 #: is a property of the index definition in 5.11 and not of this screen.
 INDEX_TERMS = ("SOMATROPIN", "IGF", "GROWTH HORMONE")
+
+
+def _perinatal_share(ctx: Context) -> dict:
+    """How much of the label's positive class is the earlier-diagnosed stratum.
+
+    Both screens score against the pooled `growth_dx_flag`, so whatever that
+    class is mostly made of is what a lift or a rank statistic here describes.
+    5.9 splits it at `PANEL_SPLIT_YEARS`; this is the same split counted, so the
+    screens can state their own denominator instead of implying it is uniform.
+    """
+    aged, early = ctx.one(
+        "SELECT count(*), sum(CASE WHEN dx_age_years <= "
+        f"{PANEL_SPLIT_YEARS} THEN 1 ELSE 0 END) "
+        "FROM patients_augmented "
+        "WHERE growth_dx_flag = 1 AND dx_age_years IS NOT NULL")
+    return {"label_aged": aged, "label_early": early,
+            "label_early_share": 100.0 * early / aged if aged else 0.0,
+            "split": PANEL_SPLIT_YEARS}
 
 
 def _defines_index(value: object) -> bool:
@@ -238,6 +256,7 @@ def audit(ctx: Context) -> list[Finding]:
         id="shortcuts.audit", part="5.14",
         title="A shortcut audit: which fields encode the label",
         values={
+            **_perinatal_share(ctx),
             "support": SUPPORT, "screened": screened, "n_other": len(SOURCES),
             "distinct": sum(distinct.values()), "base": dx_base,
             "w_base": w_base, "w_n": w_n, "suppress": SUPPRESS_BELOW,
@@ -278,6 +297,19 @@ def audit(ctx: Context) -> list[Finding]:
              "clear that floor, out of {distinct:,} distinct ones. Lift is the share "
              "of patients carrying a value who also carry `growth_dx_flag`, over the "
              "cohort's {base:.2f}% base rate; a lift of 1 is no information."),
+        Para("**What the positive class is made of bounds what every lift here "
+             "means.** Of the {label_aged:,} labelled patients with a diagnosis "
+             "age, {label_early:,} ({label_early_share:.1f}%) are diagnosed at or "
+             "before age {split:.0f} — 5.9's earlier stratum, the one with no "
+             "measurement history before the code. A lift in this table is "
+             "therefore mostly a statement about what co-occurs with perinatal "
+             "coding, not about what precedes a growth problem. That does not make "
+             "a leaking field safe to keep: a shortcut that works because the "
+             "label is perinatal still works. It does mean a field that screens "
+             "clean here has not been cleared for the later-diagnosed stratum, "
+             "where the base rate, the timing and the available history are all "
+             "different, and re-screening against a stratified label is the check "
+             "this section does not perform.", role="warning"),
         Para("A value counts once per patient, ever, with no temporal cut — which is "
              "what an unrestricted feature build sees, and it mixes leakage with "
              "concurrency: a code recorded at the same encounter as the diagnosis "
@@ -596,6 +628,7 @@ def numbers(ctx: Context) -> list[Finding]:
         title="The same screen over the numbers: derived columns and constructed "
               "features",
         values={
+            **_perinatal_share(ctx),
             "delivered": len(delivered), "dx_cols": len(dx_cols),
             "shown": len(top), "flat": len(flat), "neutral": NEUTRAL,
             "built": len(built), "restrict_years": RESTRICT_DAYS / 365.25,
@@ -631,6 +664,13 @@ def numbers(ctx: Context) -> list[Finding]:
              "means the labelled patients rank lower, which is a direction rather "
              "than an absence, so the tables sort on distance from {neutral} and "
              "carry it as its own column."),
+        Para("The same caveat as 5.14 applies to every figure below, and for the "
+             "same reason: {label_early_share:.1f}% of the labelled patients with "
+             "a diagnosis age are diagnosed at or before age {split:.0f}, so a "
+             "rank statistic here mostly separates the perinatal stratum of 5.9 "
+             "from everyone else. A column that separates the pooled label may "
+             "separate the later-diagnosed stratum better, worse, or not at all.",
+             role="warning"),
         Para("Every numeric column of the augmented patient layer is screened — "
              "{delivered} of them, after setting aside the label and the "
              "{dx_cols} `dx_age_years` columns that carry its age. Beside each is "
@@ -683,7 +723,11 @@ def numbers(ctx: Context) -> list[Finding]:
              "{long_base:.1f}%, and their median age at diagnosis is still "
              "{long_dx_age:.3f} years. The perinatal concentration survives the cut, "
              "so a separation that holds under it is bounded above by what an "
-             "age-matched design would find, not established by it.", role="warning"),
+             "age-matched design would find, not established by it. Restricting on "
+             "record length is the wrong axis for that: 5.9 splits the labelled "
+             "class on age at diagnosis instead, and it is that split rather than "
+             "this one which separates the patients who have a history before the "
+             "label from the ones who do not.", role="warning"),
         Para("**The problem-list count shows what contamination costs.** Counting "
              "every entry gives {prob_all:.3f}; counting only entries outside the "
              "tracked panel gives {prob_clean:.3f}. The tracked codes reach the "

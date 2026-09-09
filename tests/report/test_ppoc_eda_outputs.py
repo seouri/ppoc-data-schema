@@ -178,3 +178,27 @@ def test_frequency_orderings_carry_a_tiebreak() -> None:
             if re.search(r"ORDER BY .*\bDESC\b", line) and "DESC," not in line:
                 offenders.append(f"{path.name}:{n}: {line.strip()}")
     assert not offenders, "frequency ordering without a tiebreak:\n" + "\n".join(offenders)
+
+def test_no_probe_writes_a_measured_figure_into_prose() -> None:
+    """Numbers reach an output through `values`, never as a literal in a sentence.
+
+    The rule is what stops prose and `findings.json` disagreeing, and it had
+    been broken once: 5.11 carried 5.9's "24.1%" and "50.6%" pasted into a
+    sentence, correct when written and with nothing to keep them correct.
+
+    A decimal percentage is the detectable form. `{x:.1f}%` does not match this
+    pattern because the format spec breaks the digit run, so a hit is a literal.
+    Integer percentages are left alone: they are usually a logical bound such as
+    "will read as 100%" rather than a measurement.
+    """
+    probes = Path(__file__).resolve().parents[2] / "reports" / "ppoc_eda" / "probes"
+    literal = re.compile(r"\d+\.\d+%")
+    offenders = []
+    for path in sorted(probes.glob("*.py")):
+        for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if literal.search(line):
+                offenders.append(f"{path.name}:{n}: {line.strip()}")
+    assert not offenders, (
+        "a measured figure is written into prose instead of passing through "
+        "values:\n" + "\n".join(offenders)
+    )

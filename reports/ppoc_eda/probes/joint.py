@@ -480,6 +480,23 @@ def treatment(ctx: Context) -> list[Finding]:
     w_ge2 = ctx.scalar("SELECT count(*) FROM _workup_pre WHERE n_before >= 2")
     w_zero = ctx.scalar("SELECT count(*) FROM _workup_pre WHERE n_before = 0")
     w_med_h = ctx.scalar("SELECT quantile_cont(n_before, 0.5) FROM _workup_pre")
+    # The same two shares under the code index, so the comparison below is
+    # measured here instead of quoting 5.9. Two sections computing this from the
+    # same rule is the cost of the no-literals-in-prose rule; a stale literal is
+    # what it buys against.
+    ctx.con.execute("""
+        CREATE TEMP TABLE _code_pre AS
+        WITH flagged AS (
+            SELECT patient_id, dx_age_years AS idx FROM patients_augmented
+            WHERE growth_dx_flag = 1 AND dx_age_years IS NOT NULL)
+        SELECT c.patient_id, count(v.height_cm) AS n_before
+        FROM flagged c LEFT JOIN visits_augmented v
+          ON v.patient_id = c.patient_id AND v.height_cm IS NOT NULL
+         AND v.age_in_years < c.idx
+        GROUP BY 1""")
+    c_total = ctx.scalar("SELECT count(*) FROM _code_pre")
+    c_ge2 = ctx.scalar("SELECT count(*) FROM _code_pre WHERE n_before >= 2")
+    c_zero = ctx.scalar("SELECT count(*) FROM _code_pre WHERE n_before = 0")
 
     gh = next(r for r in rows if r["marker"] == "growth hormone")
     igf = next(r for r in labs if r["marker"] == "IGF-1")
@@ -498,6 +515,9 @@ def treatment(ctx: Context) -> list[Finding]:
             "w_total": w_total, "w_med_age": w_med_age,
             "w_ge2": w_ge2, "w_ge2_share": 100.0 * w_ge2 / w_total,
             "w_zero_share": 100.0 * w_zero / w_total, "w_med_h": w_med_h,
+            "c_ge2_share": 100.0 * c_ge2 / c_total if c_total else 0.0,
+            "c_zero_share": 100.0 * c_zero / c_total if c_total else 0.0,
+            "split": PANEL_SPLIT_YEARS,
             "top_lab": top_lab["marker"], "top_lift": top_lab["lift"],
             "tsh_n": tsh["n"], "tsh_lift": tsh["lift"],
             "n_flat": len(flat), "flat_patients": flat_patients,
@@ -581,8 +601,12 @@ def treatment(ctx: Context) -> list[Finding]:
              "first growth workup or treatment as the index event instead of the "
              "code gives {w_total:,} patients, of whom **{w_ge2_share:.1f}% have at "
              "least two prior heights** and the median has {w_med_h:.0f}. Only "
-             "{w_zero_share:.1f}% have none. Against the code label's 24.1% and "
-             "50.6% respectively, that is a reversal."),
+             "{w_zero_share:.1f}% have none. Against the code label's "
+             "{c_ge2_share:.1f}% and {c_zero_share:.1f}% respectively, that is a "
+             "reversal. The index is also on the far side of the "
+             "{split:.0f}-year line 5.9 splits on: at a median of {w_med_age:.1f} "
+             "years it lands squarely in that section's later-diagnosed part, "
+             "which is the same population reached from the other direction."),
         Para("**Implications for analysis.** If the diagnosis code is the label, "
              "treatment and workup records have to be excluded from the features or "
              "the model will read the answer off them; excluding them is easy "

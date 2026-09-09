@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-09T20:27:44Z",
+  "generated_at": "2026-09-09T20:56:31Z",
   "parts": [
     {
       "findings": [
@@ -6899,6 +6899,8 @@
           "title": "Treatment and workup: better timing than the label, and leakage",
           "values": {
             "base": 14.329098,
+            "c_ge2_share": 24.073558,
+            "c_zero_share": 50.590694,
             "flat_patients": 195193,
             "gh_age": 10.819986,
             "gh_lift": 5.0647877,
@@ -6911,6 +6913,7 @@
             "karyo_n": 20,
             "n_flat": 8,
             "n_labs": 20,
+            "split": 2.0,
             "top_lab": "karyotype",
             "top_lift": 3.4894032,
             "tsh_lift": 1.0010876,
@@ -7827,7 +7830,10 @@
             "ext_lift": 1.0859745,
             "gh_lift": 5.0647877,
             "int_lift": 1.0211765,
+            "label_aged": 35890,
             "label_codes": 26,
+            "label_early": 29738,
+            "label_early_share": 82.858735,
             "max_lift": 6.9788064,
             "med_examples": "`Insulin Disposable Pump`, `Insulin Glargine`, `Continuous Glucose Transmitter`, `Continuous Glucose Sensor`",
             "med_high": 16,
@@ -7845,6 +7851,7 @@
             "precision": 100.0,
             "recall": 99.682513,
             "screened": 2652,
+            "split": 2.0,
             "support": 200,
             "suppress": 10,
             "w_base": 0.56267658,
@@ -8041,6 +8048,9 @@
             "gap_auc": 0.33696944,
             "gap_long": 0.37922206,
             "hc_count_auc": 0.60513617,
+            "label_aged": 35890,
+            "label_early": 29738,
+            "label_early_share": 82.858735,
             "long_base": 10.392637,
             "long_dx_age": 0.077,
             "max_age_auc": 0.33888429,
@@ -8059,6 +8069,7 @@
             "same_day_auc": 0.49887143,
             "shown": 10,
             "span_auc": 0.36479341,
+            "split": 2.0,
             "stunting_auc": 0.58557137,
             "visits_auc": 0.48816378
           }
