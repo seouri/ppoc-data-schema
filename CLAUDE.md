@@ -57,6 +57,14 @@ which appeared in roughly one build in six.
   how the age is derived makes that paragraph wrong rather than merely stale.
   Its four statistics per code are the aggregates the drift note above is
   about; raise `AUDIT_RUNS` when you touch them.
+- **One constant splits two sections.** `PANEL_SPLIT_YEARS` in
+  `growth.py` is 5.8's cutoff between codes recorded at the birth episode
+  and codes recorded later, and `joint.py` imports it to stratify 5.9's
+  labelled cohort by each patient's own diagnosis age. Changing the number
+  therefore rewrites both sections, including 5.9's three-row utilization
+  table and every share in its two panels. It is justified in 5.8's prose
+  from the WHO/CDC reference boundary and the age-2 BMI floor of 1.3, so a
+  new value needs that paragraph rewritten too, not just the constant.
 - **The shortcut audit is coupled to 5.11's definitions.**
   `reports/ppoc_eda/probes/shortcuts.py` carries two sections: 5.14, a lift
   screen over every value of seven categorical fields, and 5.15, a rank screen

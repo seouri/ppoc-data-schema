@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-09T19:45:18Z",
+  "generated_at": "2026-09-09T20:27:44Z",
   "parts": [
     {
       "findings": [
@@ -6247,7 +6247,7 @@
           },
           "figures": [
             {
-              "caption": "Height observations recorded before the growth diagnosis",
+              "caption": "Height observations recorded before the growth diagnosis, by stratum",
               "data": {
                 "categories": [
                   "0",
@@ -6257,17 +6257,28 @@
                   "5-9",
                   "10 or more"
                 ],
-                "height": 260,
+                "height": 300,
                 "series": [
                   {
-                    "name": "share of labelled patients",
+                    "name": "diagnosed at or before 2",
                     "values": [
-                      50.59,
-                      25.34,
-                      4.66,
-                      4.15,
-                      5.7,
-                      9.56
+                      59.51,
+                      29.71,
+                      4.92,
+                      3.32,
+                      2.33,
+                      0.2
+                    ]
+                  },
+                  {
+                    "name": "diagnosed after 2",
+                    "values": [
+                      7.46,
+                      4.18,
+                      3.41,
+                      8.16,
+                      22.01,
+                      54.78
                     ]
                   }
                 ],
@@ -6275,50 +6286,91 @@
                 "title": "Prior heights at the time of diagnosis"
               },
               "id": "fig-pre-heights",
-              "kind": "bar"
+              "kind": "grouped_bar"
             }
           ],
           "id": "joint.label",
           "part": "5.9",
           "tables": [
             {
-              "caption": "Heights available before the diagnosis",
+              "caption": "Part one: heights available before the diagnosis, patients diagnosed at or before age {split:.0f}",
               "columns": [
                 "band",
                 "patients",
                 "share"
               ],
-              "id": "t-pre-heights",
+              "id": "t-pre-heights-early",
               "rows": [
                 {
                   "band": "0",
-                  "patients": 18157,
-                  "share": 50.590694
+                  "patients": 17698,
+                  "share": 59.513081
                 },
                 {
                   "band": "1",
-                  "patients": 9093,
-                  "share": 25.335748
+                  "patients": 8836,
+                  "share": 29.712825
                 },
                 {
                   "band": "2",
-                  "patients": 1674,
-                  "share": 4.6642519
+                  "patients": 1464,
+                  "share": 4.9229941
                 },
                 {
                   "band": "3-4",
-                  "patients": 1489,
-                  "share": 4.148788
+                  "patients": 987,
+                  "share": 3.3189858
                 },
                 {
                   "band": "5-9",
-                  "patients": 2047,
-                  "share": 5.7035386
+                  "patients": 693,
+                  "share": 2.3303517
                 },
                 {
                   "band": "10 or more",
-                  "patients": 3430,
-                  "share": 9.5569797
+                  "patients": 60,
+                  "share": 0.20176206
+                }
+              ]
+            },
+            {
+              "caption": "Part two: heights available before the diagnosis, patients diagnosed after age {split:.0f}",
+              "columns": [
+                "band",
+                "patients",
+                "share"
+              ],
+              "id": "t-pre-heights-late",
+              "rows": [
+                {
+                  "band": "0",
+                  "patients": 459,
+                  "share": 7.4609883
+                },
+                {
+                  "band": "1",
+                  "patients": 257,
+                  "share": 4.1775033
+                },
+                {
+                  "band": "2",
+                  "patients": 210,
+                  "share": 3.4135241
+                },
+                {
+                  "band": "3-4",
+                  "patients": 502,
+                  "share": 8.159948
+                },
+                {
+                  "band": "5-9",
+                  "patients": 1354,
+                  "share": 22.009103
+                },
+                {
+                  "band": "10 or more",
+                  "patients": 3370,
+                  "share": 54.778934
                 }
               ]
             },
@@ -6343,12 +6395,20 @@
                   "patients": 214681
                 },
                 {
-                  "group": "growth diagnosis",
-                  "mean_life": 25.323447,
-                  "mean_pre": 4.569304,
-                  "med_life": 22.0,
-                  "med_pre": 1.0,
-                  "patients": 35907
+                  "group": "diagnosed at or before age 2",
+                  "mean_life": 23.634777,
+                  "mean_pre": 1.1672607,
+                  "med_life": 21.0,
+                  "med_pre": 0.0,
+                  "patients": 29738
+                },
+                {
+                  "group": "diagnosed after age 2",
+                  "mean_life": 33.468628,
+                  "mean_pre": 20.939369,
+                  "med_life": 30.0,
+                  "med_pre": 19.0,
+                  "patients": 6152
                 }
               ]
             }
@@ -6357,13 +6417,28 @@
           "values": {
             "dx_infant": 81.114517,
             "dx_med": 0.027,
-            "life_flag": 25.323447,
+            "early_med": 0.019,
+            "early_n": 29738,
+            "early_share": 82.858735,
+            "early_traj": 3204,
+            "early_traj_share": 10.774094,
+            "early_zero_share": 59.513081,
+            "late_med": 8.235,
+            "late_n": 6152,
+            "late_share": 17.141265,
+            "late_traj": 5436,
+            "late_traj_share": 88.361508,
+            "late_zero_share": 7.4609883,
+            "life_early": 23.634777,
+            "life_late": 33.468628,
             "life_no": 26.016201,
-            "pre_flag": 4.569304,
-            "pre_med_flag": 1.0,
-            "pre_med_no": 23.0,
+            "no_age": 17,
+            "pre_early": 1.1672607,
+            "pre_late": 20.939369,
             "pre_no": 26.016201,
+            "split": 2.0,
             "total": 35890,
+            "traj_in_late": 62.916667,
             "with_traj": 8640,
             "with_traj_share": 24.073558,
             "zero": 18157,

@@ -1,5 +1,10 @@
 """Part 5.9 — joint distributions across resources.
 
+5.9 stratifies the labelled cohort by each patient's own age at first growth
+diagnosis, using `PANEL_SPLIT_YEARS` from `growth.py` — the same cutoff 5.8
+applies to the codes. The two sections therefore cut at one number, and moving
+it moves both.
+
 The extract was assembled to support identifying abnormal growth patterns early
 (1.4). Whether that is learnable from it is not a property of any one resource:
 it depends on how the label, the measurement history, and the care-process
@@ -12,6 +17,7 @@ from __future__ import annotations
 from ..context import Context
 from ..findings import Artifact, Figure, Finding, Para, Table, probe
 from ..findings import Column as C
+from .growth import PANEL_SPLIT_YEARS
 
 BEFORE_BANDS = [(0, 0, "0"), (1, 1, "1"), (2, 2, "2"), (3, 4, "3-4"),
                 (5, 9, "5-9"), (10, 1 << 30, "10 or more")]
@@ -41,32 +47,69 @@ def label(ctx: Context) -> list[Finding]:
          AND v.age_in_years < f.dx_age_years
         GROUP BY 1, 2
     """)
-    total = ctx.scalar("SELECT count(*) FROM _prehist")
-    before_rows, cats, vals = [], [], []
-    for lo, hi, lab in BEFORE_BANDS:
-        n = ctx.scalar(f"SELECT count(*) FROM _prehist WHERE n_before BETWEEN {lo} AND {hi}")
-        before_rows.append({"band": lab, "patients": n, "share": 100.0 * n / total})
-        cats.append(lab)
-        vals.append(round(100.0 * n / total, 2))
-    zero = before_rows[0]["patients"]
-    zero_or_one = zero + before_rows[1]["patients"]
-    # A trajectory needs at least two points to have a direction.
-    with_traj = total - zero_or_one
+
+    def stratum(where: str) -> dict:
+        """The prior-height distribution for one slice of the labelled cohort."""
+        n = ctx.scalar(f"SELECT count(*) FROM _prehist WHERE {where}")
+        rows = []
+        for lo, hi, lab in BEFORE_BANDS:
+            k = ctx.scalar(f"SELECT count(*) FROM _prehist WHERE {where} "
+                           f"AND n_before BETWEEN {lo} AND {hi}")
+            rows.append({"band": lab, "patients": k,
+                         "share": 100.0 * k / n if n else 0.0})
+        zero = rows[0]["patients"]
+        zero_or_one = zero + rows[1]["patients"]
+        # A trajectory needs at least two points to have a direction.
+        return {
+            "n": n, "rows": rows, "zero": zero, "zero_or_one": zero_or_one,
+            "zero_share": 100.0 * zero / n if n else 0.0,
+            "zero_or_one_share": 100.0 * zero_or_one / n if n else 0.0,
+            "traj": n - zero_or_one,
+            "traj_share": 100.0 * (n - zero_or_one) / n if n else 0.0,
+            "med": ctx.scalar("SELECT quantile_cont(dx_age_years, 0.5) "
+                              f"FROM _prehist WHERE {where}"),
+        }
+
+    # 5.8 splits the tracked codes by their median age at first record. The same
+    # cutoff applied to each patient's own age splits the labelled cohort, and
+    # the two halves turn out to be different analytical objects.
+    EARLY = f"dx_age_years <= {PANEL_SPLIT_YEARS}"
+    LATE = f"dx_age_years > {PANEL_SPLIT_YEARS}"
+    whole, early, late = stratum("TRUE"), stratum(EARLY), stratum(LATE)
+    total, before_rows = whole["n"], whole["rows"]
+    zero, zero_or_one = whole["zero"], whole["zero_or_one"]
+    with_traj = whole["traj"]
 
     dx_infant = ctx.scalar(
         "SELECT 100.0 * sum(CASE WHEN dx_age_years < 1 THEN 1 ELSE 0 END) "
         "/ count(*) FROM _prehist")
-    dx_med = ctx.scalar("SELECT quantile_cont(dx_age_years, 0.5) FROM _prehist")
+    dx_med = whole["med"]
+    cats = [r["band"] for r in before_rows]
 
-    util = ctx.q("""
-        SELECT growth_dx_flag, count(*),
-               quantile_cont(visits_count, 0.5), avg(visits_count),
-               quantile_cont(visits_count_pre_dx, 0.5), avg(visits_count_pre_dx)
-        FROM patients_augmented GROUP BY 1 ORDER BY 1""")
-    util_rows = [{"group": "no growth diagnosis" if f == 0 else "growth diagnosis",
-                  "patients": n, "med_life": ml, "mean_life": al,
-                  "med_pre": mp, "mean_pre": ap}
-                 for f, n, ml, al, mp, ap in util]
+    # The labelled group is split the same way, against the shared unlabelled
+    # reference group. Three rows in one table rather than two tables, because
+    # splitting would duplicate the reference row in both.
+    util_groups = [
+        ("no growth diagnosis", "growth_dx_flag = 0"),
+        (f"diagnosed at or before age {PANEL_SPLIT_YEARS:.0f}",
+         f"growth_dx_flag = 1 AND {EARLY}"),
+        (f"diagnosed after age {PANEL_SPLIT_YEARS:.0f}",
+         f"growth_dx_flag = 1 AND {LATE}"),
+    ]
+    util_rows = []
+    for group, where in util_groups:
+        n, ml, al, mp, ap = ctx.one(f"""
+            SELECT count(*), quantile_cont(visits_count, 0.5), avg(visits_count),
+                   quantile_cont(visits_count_pre_dx, 0.5),
+                   avg(visits_count_pre_dx)
+            FROM patients_augmented WHERE {where}""")
+        util_rows.append({"group": group, "patients": n, "med_life": ml,
+                          "mean_life": al, "med_pre": mp, "mean_pre": ap})
+    # Flagged patients whose diagnosis age is null belong to neither stratum, so
+    # the three rows do not sum to the cohort. The note says so rather than
+    # letting them disappear.
+    no_age = ctx.scalar("SELECT count(*) FROM patients_augmented "
+                        "WHERE growth_dx_flag = 1 AND dx_age_years IS NULL")
 
     f = Finding(
         id="joint.label", part="5.9",
@@ -78,9 +121,21 @@ def label(ctx: Context) -> list[Finding]:
             "with_traj": with_traj,
             "with_traj_share": 100.0 * with_traj / total,
             "dx_infant": dx_infant, "dx_med": dx_med,
-            "life_flag": util_rows[1]["mean_life"], "life_no": util_rows[0]["mean_life"],
-            "pre_flag": util_rows[1]["mean_pre"], "pre_no": util_rows[0]["mean_pre"],
-            "pre_med_flag": util_rows[1]["med_pre"], "pre_med_no": util_rows[0]["med_pre"],
+            "split": PANEL_SPLIT_YEARS, "no_age": no_age,
+            "early_n": early["n"], "early_share": 100.0 * early["n"] / total,
+            "early_med": early["med"], "early_zero_share": early["zero_share"],
+            "early_traj": early["traj"], "early_traj_share": early["traj_share"],
+            "late_n": late["n"], "late_share": 100.0 * late["n"] / total,
+            "late_med": late["med"], "late_zero_share": late["zero_share"],
+            "late_traj": late["traj"], "late_traj_share": late["traj_share"],
+            # Of the patients who have a trajectory at all, the share sitting in
+            # the later stratum: the split is not a random quarter of the cohort.
+            "traj_in_late": 100.0 * late["traj"] / with_traj if with_traj else 0.0,
+            "life_no": util_rows[0]["mean_life"], "pre_no": util_rows[0]["mean_pre"],
+            "life_early": util_rows[1]["mean_life"],
+            "pre_early": util_rows[1]["mean_pre"],
+            "life_late": util_rows[2]["mean_life"],
+            "pre_late": util_rows[2]["mean_pre"],
         },
         artifact=Artifact(
             name="Diagnosis label precedes the growth trajectory it would be "
@@ -100,27 +155,61 @@ def label(ctx: Context) -> list[Finding]:
         Para("**The label mostly arrives before the trajectory does.** Of "
              "{total:,} patients carrying a growth diagnosis with a recorded age, "
              "{dx_infant:.1f}% receive it before their first birthday, at a median "
-             "age of {dx_med:.3f} years. 5.7 shows why: the tracked panel is "
-             "dominated by perinatal codes recorded within days of birth."),
-        Figure("fig-pre-heights",
-               "Height observations recorded before the growth diagnosis",
-               "bar",
-               {"categories": cats,
-                "series": [{"name": "share of labelled patients", "values": vals}],
-                "suffix": "%", "height": 260,
-                "title": "Prior heights at the time of diagnosis"},
-               alt="Half of labelled patients have no height before their diagnosis."),
-        Table("t-pre-heights", "Heights available before the diagnosis",
+             "age of {dx_med:.3f} years. **{zero:,} of them ({zero_share:.1f}%) "
+             "have no height recorded at all before their diagnosis, and "
+             "{zero_or_one_share:.1f}% have at most one.** 5.8 shows why: the "
+             "tracked panel is dominated by codes first recorded within days of "
+             "birth."),
+        Para("**That aggregate hides two different cohorts, so the rest of this "
+             "section analyses them apart.** Splitting on each patient's own age "
+             "at first growth diagnosis at the {split:.0f}-year line 5.8 draws "
+             "over the codes, {early_n:,} patients ({early_share:.1f}%) are "
+             "diagnosed at or before age {split:.0f} at a median of "
+             "{early_med:.3f} years, and {late_n:,} ({late_share:.1f}%) after it "
+             "at a median of {late_med:.3f}. The prior-height distribution is not "
+             "a matter of degree between them — it inverts."),
+        Table("t-pre-heights-early",
+              "Part one: heights available before the diagnosis, patients "
+              "diagnosed at or before age {split:.0f}",
               [C("band", "heights recorded first"),
                C("patients", "patients", ",", align="right"),
-               C("share", "share", ".1f", "%", align="right")], before_rows),
-        Para("**{zero:,} of those patients ({zero_share:.1f}%) have no height "
-             "recorded at all before their diagnosis, and {zero_or_one_share:.1f}% "
-             "have at most one.** There is no trajectory to detect anything from: "
-             "for most of the labelled population the code is not an outcome a "
-             "growth curve could have anticipated, it is a fact recorded at or "
-             "near birth. Any evaluation that scores prediction of this label "
-             "across the whole labelled set is measuring something else."),
+               C("share", "share of this stratum", ".1f", "%", align="right")],
+              early["rows"],
+              note="{early_zero_share:.1f}% have no prior height and only "
+                   "{early_traj_share:.1f}% have the two a trajectory needs."),
+        Table("t-pre-heights-late",
+              "Part two: heights available before the diagnosis, patients "
+              "diagnosed after age {split:.0f}",
+              [C("band", "heights recorded first"),
+               C("patients", "patients", ",", align="right"),
+               C("share", "share of this stratum", ".1f", "%", align="right")],
+              late["rows"],
+              note="{late_zero_share:.1f}% have no prior height and "
+                   "{late_traj_share:.1f}% have two or more."),
+        Figure("fig-pre-heights",
+               "Height observations recorded before the growth diagnosis, by "
+               "stratum", "grouped_bar",
+               {"categories": cats,
+                "series": [
+                    {"name": f"diagnosed at or before {PANEL_SPLIT_YEARS:.0f}",
+                     "values": [round(r["share"], 2) for r in early["rows"]]},
+                    {"name": f"diagnosed after {PANEL_SPLIT_YEARS:.0f}",
+                     "values": [round(r["share"], 2) for r in late["rows"]]}],
+                "suffix": "%", "height": 300,
+                "title": "Prior heights at the time of diagnosis"},
+               alt="The earlier-diagnosed stratum piles up at zero prior heights; "
+                   "the later-diagnosed stratum piles up at ten or more."),
+        Para("**Part one has no trajectory to detect anything from.** For those "
+             "{early_n:,} patients the code is not an outcome a growth curve "
+             "could have anticipated, it is a fact recorded at or near birth, and "
+             "only {early_traj_share:.1f}% carry the two prior heights a "
+             "trajectory needs. **Part two is the opposite:** "
+             "{late_traj_share:.1f}% of its {late_n:,} patients have two or more, "
+             "and most have ten or more. So the {with_traj:,} labelled patients "
+             "with a usable history are not a random {with_traj_share:.0f}% of "
+             "the cohort — {traj_in_late:.0f}% of them sit in part two. The "
+             "{split:.0f}-year cutoff is what separates a label that cannot be "
+             "predicted from one that might be."),
         Table("t-util", "Visit counts, lifetime and before the diagnosis",
               [C("group", "group"), C("patients", "patients", ",", align="right"),
                C("med_life", "median lifetime visits", ",.0f", align="right"),
@@ -130,28 +219,45 @@ def label(ctx: Context) -> list[Finding]:
               util_rows,
               note="Patients with no growth diagnosis have no index date, so their "
                    "before-diagnosis count is their lifetime count. That is exactly "
-                   "the asymmetry the note below describes."),
-        Para("**Utilization separates the groups, but only because the index date "
-             "does.** Over a lifetime the two groups are barely distinguishable — "
-             "{life_flag:.2f} visits on average against {life_no:.2f}. Counted up "
-             "to the diagnosis they are worlds apart, {pre_flag:.2f} against "
-             "{pre_no:.2f}, because an undiagnosed patient has no index date and "
-             "so contributes their whole record. A feature built from "
-             "\"observations before the index\" therefore encodes which group a "
-             "patient is in rather than anything about their growth, and it does "
-             "so in the counter-intuitive direction: the labelled group has "
-             "*fewer* prior visits, not more."),
-        Para("**Implications for analysis.** Fixing this needs a common index date "
-             "for both groups, chosen without reference to the label — a fixed age, "
-             "a matched visit number, or a sampled pseudo-index for unlabelled "
-             "patients. Only {with_traj:,} labelled patients "
-             "({with_traj_share:.1f}%) have two or more prior heights, which is "
-             "the most a trajectory-based model could train on; restricting to "
-             "them changes the population being studied and should be reported "
-             "rather than done silently. And a model evaluated on "
-             "this label at all is being scored against recorded coding practice, "
-             "not against an adjudicated growth assessment; 5.6 makes the same "
-             "point about the flag itself.", role="implication"),
+                   "the asymmetry the note below describes. The rows do not sum to "
+                   "the cohort: {no_age:,} flagged patients have no diagnosis age "
+                   "and so fall in neither stratum."),
+        Para("**Utilization separates the groups, but the separation is almost "
+             "entirely part one.** Over a lifetime the three groups are close — "
+             "{life_no:.2f} visits on average with no diagnosis, {life_early:.2f} "
+             "in part one, {life_late:.2f} in part two. Counted up to the "
+             "diagnosis they diverge, and unevenly: part one averages "
+             "{pre_early:.2f} prior visits against {pre_no:.2f} for a patient with "
+             "no index date at all, while part two averages {pre_late:.2f} — "
+             "close enough to the undiagnosed group that the asymmetry is a "
+             "second-order problem there rather than the whole story. An "
+             "undiagnosed patient has no index date and so contributes their "
+             "whole record, which is what produces the gap."),
+        Para("A feature built from \"observations before the index\" therefore "
+             "encodes which group a patient is in rather than anything about their "
+             "growth, and for part one it does so in the counter-intuitive "
+             "direction: those patients have *fewer* prior visits, not more. Note "
+             "also that part two has the heaviest record of the three over a "
+             "lifetime ({life_late:.2f} visits), so its patients are not merely "
+             "diagnosed later — they are seen more."),
+        Para("**Implications for analysis.** The two parts are different studies "
+             "and should not be pooled. Part one cannot support early "
+             "identification at all: there is no history before the label, so any "
+             "score against it measures coding practice rather than growth. Part "
+             "two can, and it is the population a trajectory-based model would "
+             "actually train on — {late_n:,} patients, {late_traj_share:.1f}% of "
+             "them with two or more prior heights. Report which part a result "
+             "comes from; a metric computed over the pooled cohort is dominated by "
+             "part one, which is {early_share:.0f}% of it. Restricting to part two "
+             "is defensible and should be stated rather than done silently, "
+             "because it changes the population and it selects on the label's own "
+             "timing. Fixing the utilization asymmetry still needs a common index "
+             "date chosen without reference to the label — a fixed age, a matched "
+             "visit number, or a sampled pseudo-index for unlabelled patients — "
+             "and that is needed in part two as well, where it is smaller but not "
+             "absent. And whichever part is used, the label is recorded coding "
+             "practice and not an adjudicated growth assessment; 5.6 makes the "
+             "same point about the flag itself.", role="implication"),
     ]
     return [f]
 
@@ -410,7 +516,9 @@ def treatment(ctx: Context) -> list[Finding]:
     )
     f.blocks = [
         Para("5.9 shows the diagnosis code arrives too early to be predicted from a "
-             "growth curve. The medication and laboratory resources carry a second "
+             "growth curve for most of the labelled cohort, and identifies the "
+             "later-diagnosed minority where it does not. The medication and "
+             "laboratory resources carry a second "
              "set of growth signals, and they behave in the opposite way. Both "
              "matter: as features they leak, and as index events they are far "
              "better dated than the code."),

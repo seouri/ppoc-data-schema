@@ -1289,35 +1289,55 @@ Across the whole panel, `dx_age_years` — the age at which any tracked code was
 
 A model that identifies abnormal growth early needs three things to line up: a label, a measurement history that precedes it, and a care-process record that does not simply give the answer away. In this extract none of the three lines up with the others, and the mismatches are large enough to decide a study design.
 
-**The label mostly arrives before the trajectory does.** Of 35,890 patients carrying a growth diagnosis with a recorded age, 81.1% receive it before their first birthday, at a median age of 0.027 years. 5.7 shows why: the tracked panel is dominated by perinatal codes recorded within days of birth.
+**The label mostly arrives before the trajectory does.** Of 35,890 patients carrying a growth diagnosis with a recorded age, 81.1% receive it before their first birthday, at a median age of 0.027 years. **18,157 of them (50.6%) have no height recorded at all before their diagnosis, and 75.9% have at most one.** 5.8 shows why: the tracked panel is dominated by codes first recorded within days of birth.
 
-*Figure — Height observations recorded before the growth diagnosis. Rendered in `index.html` at `#fig-pre-heights`.*
+**That aggregate hides two different cohorts, so the rest of this section analyses them apart.** Splitting on each patient's own age at first growth diagnosis at the 2-year line 5.8 draws over the codes, 29,738 patients (82.9%) are diagnosed at or before age 2 at a median of 0.019 years, and 6,152 (17.1%) after it at a median of 8.235. The prior-height distribution is not a matter of degree between them — it inverts.
 
-**Heights available before the diagnosis**
+**Part one: heights available before the diagnosis, patients diagnosed at or before age 2**
 
-| heights recorded first | patients | share |
+| heights recorded first | patients | share of this stratum |
 | --- | --- | --- |
-| 0 | 18,157 | 50.6% |
-| 1 | 9,093 | 25.3% |
-| 2 | 1,674 | 4.7% |
-| 3-4 | 1,489 | 4.1% |
-| 5-9 | 2,047 | 5.7% |
-| 10 or more | 3,430 | 9.6% |
+| 0 | 17,698 | 59.5% |
+| 1 | 8,836 | 29.7% |
+| 2 | 1,464 | 4.9% |
+| 3-4 | 987 | 3.3% |
+| 5-9 | 693 | 2.3% |
+| 10 or more | 60 | 0.2% |
 
-**18,157 of those patients (50.6%) have no height recorded at all before their diagnosis, and 75.9% have at most one.** There is no trajectory to detect anything from: for most of the labelled population the code is not an outcome a growth curve could have anticipated, it is a fact recorded at or near birth. Any evaluation that scores prediction of this label across the whole labelled set is measuring something else.
+59.5% have no prior height and only 10.8% have the two a trajectory needs.
+
+**Part two: heights available before the diagnosis, patients diagnosed after age 2**
+
+| heights recorded first | patients | share of this stratum |
+| --- | --- | --- |
+| 0 | 459 | 7.5% |
+| 1 | 257 | 4.2% |
+| 2 | 210 | 3.4% |
+| 3-4 | 502 | 8.2% |
+| 5-9 | 1,354 | 22.0% |
+| 10 or more | 3,370 | 54.8% |
+
+7.5% have no prior height and 88.4% have two or more.
+
+*Figure — Height observations recorded before the growth diagnosis, by stratum. Rendered in `index.html` at `#fig-pre-heights`.*
+
+**Part one has no trajectory to detect anything from.** For those 29,738 patients the code is not an outcome a growth curve could have anticipated, it is a fact recorded at or near birth, and only 10.8% carry the two prior heights a trajectory needs. **Part two is the opposite:** 88.4% of its 6,152 patients have two or more, and most have ten or more. So the 8,640 labelled patients with a usable history are not a random 24% of the cohort — 63% of them sit in part two. The 2-year cutoff is what separates a label that cannot be predicted from one that might be.
 
 **Visit counts, lifetime and before the diagnosis**
 
 | group | patients | median lifetime visits | mean lifetime | median before diagnosis | mean before diagnosis |
 | --- | --- | --- | --- | --- | --- |
 | no growth diagnosis | 214,681 | 23 | 26.02 | 23 | 26.02 |
-| growth diagnosis | 35,907 | 22 | 25.32 | 1 | 4.57 |
+| diagnosed at or before age 2 | 29,738 | 21 | 23.63 | 0 | 1.17 |
+| diagnosed after age 2 | 6,152 | 30 | 33.47 | 19 | 20.94 |
 
-Patients with no growth diagnosis have no index date, so their before-diagnosis count is their lifetime count. That is exactly the asymmetry the note below describes.
+Patients with no growth diagnosis have no index date, so their before-diagnosis count is their lifetime count. That is exactly the asymmetry the note below describes. The rows do not sum to the cohort: 17 flagged patients have no diagnosis age and so fall in neither stratum.
 
-**Utilization separates the groups, but only because the index date does.** Over a lifetime the two groups are barely distinguishable — 25.32 visits on average against 26.02. Counted up to the diagnosis they are worlds apart, 4.57 against 26.02, because an undiagnosed patient has no index date and so contributes their whole record. A feature built from "observations before the index" therefore encodes which group a patient is in rather than anything about their growth, and it does so in the counter-intuitive direction: the labelled group has *fewer* prior visits, not more.
+**Utilization separates the groups, but the separation is almost entirely part one.** Over a lifetime the three groups are close — 26.02 visits on average with no diagnosis, 23.63 in part one, 33.47 in part two. Counted up to the diagnosis they diverge, and unevenly: part one averages 1.17 prior visits against 26.02 for a patient with no index date at all, while part two averages 20.94 — close enough to the undiagnosed group that the asymmetry is a second-order problem there rather than the whole story. An undiagnosed patient has no index date and so contributes their whole record, which is what produces the gap.
 
-**Implications for analysis.** Fixing this needs a common index date for both groups, chosen without reference to the label — a fixed age, a matched visit number, or a sampled pseudo-index for unlabelled patients. Only 8,640 labelled patients (24.1%) have two or more prior heights, which is the most a trajectory-based model could train on; restricting to them changes the population being studied and should be reported rather than done silently. And a model evaluated on this label at all is being scored against recorded coding practice, not against an adjudicated growth assessment; 5.6 makes the same point about the flag itself.
+A feature built from "observations before the index" therefore encodes which group a patient is in rather than anything about their growth, and for part one it does so in the counter-intuitive direction: those patients have *fewer* prior visits, not more. Note also that part two has the heaviest record of the three over a lifetime (33.47 visits), so its patients are not merely diagnosed later — they are seen more.
+
+**Implications for analysis.** The two parts are different studies and should not be pooled. Part one cannot support early identification at all: there is no history before the label, so any score against it measures coding practice rather than growth. Part two can, and it is the population a trajectory-based model would actually train on — 6,152 patients, 88.4% of them with two or more prior heights. Report which part a result comes from; a metric computed over the pooled cohort is dominated by part one, which is 83% of it. Restricting to part two is defensible and should be stated rather than done silently, because it changes the population and it selects on the label's own timing. Fixing the utilization asymmetry still needs a common index date chosen without reference to the label — a fixed age, a matched visit number, or a sampled pseudo-index for unlabelled patients — and that is needed in part two as well, where it is smaller but not absent. And whichever part is used, the label is recorded coding practice and not an adjudicated growth assessment; 5.6 makes the same point about the flag itself.
 
 ### 5.10 What a feature vector actually contains
 
@@ -1359,7 +1379,7 @@ Two rows here matter for anyone assembling a training set. `healthy_flag` is set
 
 ### 5.11 Treatment and workup: better timing than the label, and leakage
 
-5.9 shows the diagnosis code arrives too early to be predicted from a growth curve. The medication and laboratory resources carry a second set of growth signals, and they behave in the opposite way. Both matter: as features they leak, and as index events they are far better dated than the code.
+5.9 shows the diagnosis code arrives too early to be predicted from a growth curve for most of the labelled cohort, and identifies the later-diagnosed minority where it does not. The medication and laboratory resources carry a second set of growth signals, and they behave in the opposite way. Both matter: as features they leak, and as index events they are far better dated than the code.
 
 **Growth and endocrine treatment and workup markers**
 
