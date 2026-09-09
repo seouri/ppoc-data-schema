@@ -24,7 +24,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "reports"))
 
 from ppoc_eda.context import SUPPRESS_BELOW, Context
-from ppoc_eda.probes.growth import tracked_codes
+from ppoc_eda.probes.growth import PANEL_SPLIT_YEARS, tracked_codes
 
 OUT = Path(__file__).resolve().parents[2] / "reports" / "ppoc-eda"
 
@@ -46,6 +46,19 @@ def test_the_panel_is_read_from_the_code_columns_only() -> None:
         "2 AS dx_age_years_e10, 3 AS dx_age_years_q87_1, 4 AS visits_count")
     assert tracked_codes(ctx) == [
         ("dx_age_years_e10", "E10"), ("dx_age_years_q87_1", "Q87.1")]
+
+
+BIRTH = "t-growth-ages-birth"
+CHILDHOOD = "t-growth-ages-childhood"
+
+
+def _finding() -> dict | None:
+    path = OUT / "findings.json"
+    if not path.is_file():
+        return None
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return next((f for part in data["parts"] for f in part["findings"]
+                 if f["id"] == "growth.ages"), None)
 
 
 def _rows() -> list[tuple[str, dict]]:
@@ -109,3 +122,48 @@ def test_the_aged_count_never_exceeds_the_subtree_count() -> None:
                  and isinstance(row.get("patients"), int)
                  and row["aged"] > row["patients"]]
     assert not offenders, f"more patients with an age than carrying the code: {offenders}"
+
+
+def _panel(table_id: str) -> list[dict]:
+    return [row for table, row in _rows() if table == table_id]
+
+
+def test_the_two_panels_are_disjoint_and_ordered_by_median() -> None:
+    """The split is the section's whole claim, so it is checked, not trusted.
+
+    Disjoint and exhaustive against the split, and each panel ordered by the
+    statistic that assigned it — a table ordered some other way makes the
+    prose's "no code sits near the line" impossible to see.
+    """
+    if _finding() is None:
+        pytest.skip("report has not been built, or 5.15 is absent")
+    birth, childhood = _panel(BIRTH), _panel(CHILDHOOD)
+    assert birth and childhood, "one of the two panels is empty"
+    for row in birth:
+        assert row["median"] < PANEL_SPLIT_YEARS, f"{row['code']} is in the wrong panel"
+    for row in childhood:
+        assert row["median"] >= PANEL_SPLIT_YEARS, f"{row['code']} is in the wrong panel"
+    for panel, name in ((birth, BIRTH), (childhood, CHILDHOOD)):
+        medians = [r["median"] for r in panel]
+        assert medians == sorted(medians), f"{name} is not ordered by median"
+    codes = [r["code"] for r in birth + childhood]
+    assert len(codes) == len(set(codes)), "a code appears in both panels"
+
+
+def test_the_published_band_around_the_split_is_empty() -> None:
+    """5.15 claims any boundary inside the band gives these same two panels.
+
+    That is only true if no code's median lies inside it, and the two published
+    edges are the real ones. Both halves are asserted here because the claim is
+    what justifies splitting the table at all.
+    """
+    f = _finding()
+    if f is None:
+        pytest.skip("report has not been built, or 5.15 is absent")
+    lo, hi = f["values"]["band_lo"], f["values"]["band_hi"]
+    assert lo == max(r["median"] for r in _panel(BIRTH))
+    assert hi == min(r["median"] for r in _panel(CHILDHOOD))
+    assert lo < PANEL_SPLIT_YEARS <= hi, "the split does not sit inside its own band"
+    inside = [r["code"] for _, r in _rows()
+              if r.get("median") is not None and lo < r["median"] < hi]
+    assert not inside, f"codes sit inside the band the section calls empty: {inside}"

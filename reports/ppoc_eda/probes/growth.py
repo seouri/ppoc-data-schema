@@ -257,9 +257,20 @@ def codes(ctx: Context) -> list[Finding]:
     return [f]
 
 
-#: A code whose median age at first record falls inside this window is being
-#: recorded at birth rather than observed over a trajectory.
-NEONATAL_YEARS = 1.0 / 12
+#: Where 5.15 splits the tracked panel. A code whose median age at first record
+#: falls below this was attached to the birth episode; one above it was recorded
+#: when a child was seen and worked up, which is the only case where an age at
+#: first record approximates an age at onset. The line is a stated choice rather
+#: than a measured boundary, but it is not a fragile one: no tracked code has a
+#: median anywhere near it, and the section publishes the empty band around it
+#: so a reader can see that moving the line inside that band changes nothing.
+PANEL_SPLIT_YEARS = 1.0
+
+#: ICD-10 prefixes 5.15 uses to make its membership point: a karyotype is
+#: established in the nursery, so these land in the birth panel, while the
+#: malformation syndromes were equally present at birth and land in the other.
+CHROMOSOMAL = ("Q90", "Q96", "Q98")
+MALFORMATION = ("Q77", "Q78", "Q87")
 
 
 @probe("growth.ages", "5.15")
@@ -300,8 +311,27 @@ def ages(ctx: Context) -> list[Finding]:
     shown = [r for r in rows if r["patients"] is not None]
 
     dated = [r for r in shown if r["median"] is not None]
-    neonatal = [r for r in dated if r["median"] < NEONATAL_YEARS]
-    childhood = [r for r in dated if r["median"] >= 1.0]
+    # Each panel is ordered by the statistic that assigned it, so a reader can
+    # see the split and the empty band around it without recomputing anything.
+    dated.sort(key=lambda r: (r["median"], r["code"]))
+    birth = [r for r in dated if r["median"] < PANEL_SPLIT_YEARS]
+    childhood = [r for r in dated if r["median"] >= PANEL_SPLIT_YEARS]
+    # A row whose age statistics were withheld has no median to classify, so it
+    # belongs to neither table. None occurs in this snapshot; the alternative to
+    # carrying them separately is dropping them from the section silently.
+    unclassified = [r for r in shown if r["median"] is None]
+    # The empty band the split sits inside: the nearest median below the line and
+    # the nearest above it. Any boundary between the two yields these same tables.
+    band_lo = max(r["median"] for r in birth) if birth else 0.0
+    band_hi = min(r["median"] for r in childhood) if childhood else 0.0
+    # The membership claim the prose makes: chromosomal syndromes land in the
+    # birth panel because a karyotype is established in the nursery, congenital
+    # malformation syndromes in the childhood panel because the coding lags. Both
+    # are picked by patient count so the example is the best-supported one.
+    chrom = max((r for r in birth if r["code"].startswith(CHROMOSOMAL)),
+                key=lambda r: (r["patients"] or 0, r["code"]), default=None)
+    late_cong = max((r for r in childhood if r["code"].startswith(MALFORMATION)),
+                    key=lambda r: (r["patients"] or 0, r["code"]), default=None)
     negative = [r for r in dated if r["min"] < 0]
     worst = min(negative, key=lambda r: (r["min"], r["code"])) if negative else None
     # The widest gap between mean and median: where a perinatal code also gets
@@ -317,8 +347,10 @@ def ages(ctx: Context) -> list[Finding]:
         title="Age at first record for each growth-relevant diagnosis code",
         values={
             "n_codes": len(tracked), "n_shown": len(shown),
-            "neonatal": len(neonatal), "childhood": len(childhood),
-            "between": len(dated) - len(neonatal) - len(childhood),
+            "n_birth": len(birth), "n_child": len(childhood),
+            "split": PANEL_SPLIT_YEARS,
+            "band_lo": band_lo, "band_hi": band_hi,
+            "band_width": band_hi - band_lo,
             "n_negative": len(negative),
             "worst_code": worst["code"] if worst else "none",
             "worst_min": worst["min"] if worst else 0.0,
@@ -328,10 +360,39 @@ def ages(ctx: Context) -> list[Finding]:
             "any_mean": any_mean, "any_max": any_max,
         },
     )
+    # A code with a patient total but no median cannot be assigned to either
+    # panel, so it gets its own table rather than vanishing from the section.
+    orphans = None
+    if unclassified:
+        orphans = Table(
+            "t-growth-ages-unclassified",
+            "Codes carried by enough patients to show a total, but too few with "
+            "an age to show a distribution",
+            [C("code", "ICD-10"), C("descr", "description"),
+             C("patients", "patients, code and descendants", ",", align="right"),
+             C("aged", "with an age", ",", align="right")], unclassified,
+            note="These cannot be assigned to either panel above: the split is by "
+                 "median age at first record, and these codes have no median to "
+                 "place.")
+    membership = None
+    if chrom and late_cong:
+        f.values |= {"chrom_code": chrom["code"],
+                     "late_cong_code": late_cong["code"],
+                     "late_cong_med": late_cong["median"]}
+        membership = Para(
+            "The membership is not what a reader would guess from the code "
+            "chapters. The perinatal codes are in the first table as expected, and "
+            "so are the chromosomal syndromes — `{chrom_code}` among them — "
+            "because a karyotype is usually established in the nursery. The "
+            "congenital *malformation* syndromes are not: they sit in the second "
+            "table at medians of years, `{late_cong_code}` at {late_cong_med:.3f}. "
+            "A malformation is present at birth by definition, so that figure "
+            "dates the moment the coding caught up and nothing about the child. "
+            "It is recording lag, measured.")
     f.blocks = [
         Para("5.7 says which codes the tracked panel carries and how many patients "
              "carry each. This section says when. For every one of the {n_codes} "
-             "tracked codes, the table below gives the age at which the code was "
+             "tracked codes, the tables below give the age at which the code was "
              "first recorded — its smallest, median, mean and largest value across "
              "the patients who carry it — beside the patient total counted over the "
              "code and all of its descendants."),
@@ -347,30 +408,59 @@ def ages(ctx: Context) -> list[Finding]:
              "a patient whose only entry for the code is an undated problem-list "
              "row has no age at all, which is why the patient total and the aged "
              "count differ (5.7).", role="method"),
-        Table("t-growth-ages",
-              "Age at first record, in years, for each tracked growth-relevant code",
+        Para("**Why this is two tables and not one.** The {n_shown} codes shown "
+             "split into two groups that answer different questions, and averaging "
+             "across them describes neither. In the first, the median age at first "
+             "record falls inside the first year and for most of them within days "
+             "of birth: the code was attached to "
+             "the birth episode, so its age says when the child was born and not "
+             "when anything about growth was observed. In the second, the median "
+             "falls in childhood: the code was recorded when a child was brought "
+             "in, measured and worked up, which is the only case where an age at "
+             "first record approximates an age at onset. One table sorted by "
+             "patient count interleaves the two and invites a reader to compare a "
+             "birth-episode code against a worked-up one as though the two ages "
+             "meant the same thing."),
+        Para("The line is drawn at {split:.0f} year, and no tracked code sits near "
+             "it. The highest median below the line is {band_lo:.3f} years and the "
+             "lowest above it is {band_hi:.3f}, leaving an empty band "
+             "{band_width:.3f} years wide: **any boundary chosen inside that band "
+             "produces exactly these two tables.** So the split is a real feature "
+             "of the panel rather than an artifact of where the line was put — "
+             "which is the check worth making before believing any threshold in a "
+             "descriptive table. {n_birth} codes fall below and {n_child} above.",
+             role="method"),
+        Table("t-growth-ages-birth",
+              "Panel one: codes recorded at the birth episode, age at first "
+              "record in years",
               [C("code", "ICD-10"), C("descr", "description"),
                C("patients", "patients, code and descendants", ",", align="right"),
                C("aged", "with an age", ",", align="right"),
                C("min", "min", ".3f", align="right"),
                C("median", "median", ".3f", align="right"),
                C("mean", "mean", ".3f", align="right"),
-               C("max", "max", ".3f", align="right")], shown,
-              note="Codes carried by fewer patients than the suppression threshold "
-                   "are omitted, and a code whose aged count falls below it keeps "
-                   "its patient total but not its four statistics. Counts are "
-                   "recorded frequencies inside a cohort that excluded every patient "
-                   "with a code seen fewer than 11 times (1.4), so this panel cannot "
-                   "be read as prevalence."),
-        Para("**The panel is two panels.** Of the {n_shown} codes shown, "
-             "{neonatal} have a median age at first record inside the first month "
-             "of life, {childhood} have one at or above a year, and {between} sit "
-             "between the two. The first group is perinatal coding attached to a "
-             "birth episode; the second is "
-             "recorded when a child was seen, measured and worked up. A question "
-             "about growth over time is answerable for the second group and mostly "
-             "not for the first, and no column in the extract distinguishes them — "
-             "the median in this table does."),
+               C("max", "max", ".3f", align="right")], birth,
+              note="Median age at first record below {split:.0f} year, ordered by that median. Codes carried by "
+                   "fewer patients than the suppression threshold are omitted, and "
+                   "a code whose aged count falls below it keeps its patient total "
+                   "but not its four statistics. Counts are recorded frequencies "
+                   "inside a cohort that excluded every patient with a code seen "
+                   "fewer than 11 times (1.4), so this panel cannot be read as "
+                   "prevalence."),
+        membership,
+        Table("t-growth-ages-childhood",
+              "Panel two: codes recorded when a child was seen and worked up, "
+              "age at first record in years",
+              [C("code", "ICD-10"), C("descr", "description"),
+               C("patients", "patients, code and descendants", ",", align="right"),
+               C("aged", "with an age", ",", align="right"),
+               C("min", "min", ".3f", align="right"),
+               C("median", "median", ".3f", align="right"),
+               C("mean", "mean", ".3f", align="right"),
+               C("max", "max", ".3f", align="right")], childhood,
+              note="Median age at first record at or above {split:.0f} year, ordered by that median. The same "
+                   "suppression and cohort caveats apply as in the table above."),
+        orphans,
         Para("**The mean and the median disagree by design, and the extremes are "
              "not clean.** `{skew_code}` is the clearest case: a median of "
              "{skew_med:.3f} years against a mean of {skew_mean:.3f} and a maximum "
@@ -398,4 +488,5 @@ def ages(ctx: Context) -> list[Finding]:
              "undated patients belong in the denominator before computing a rate "
              "over them.", role="implication"),
     ]
+    f.blocks = [b for b in f.blocks if b is not None]
     return [f]

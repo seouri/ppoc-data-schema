@@ -1582,46 +1582,57 @@ Several results are negative, and they are worth recording as such. Days carryin
 
 ### 5.15 Age at first record for each growth-relevant diagnosis code
 
-5.7 says which codes the tracked panel carries and how many patients carry each. This section says when. For every one of the 33 tracked codes, the table below gives the age at which the code was first recorded — its smallest, median, mean and largest value across the patients who carry it — beside the patient total counted over the code and all of its descendants.
+5.7 says which codes the tracked panel carries and how many patients carry each. This section says when. For every one of the 33 tracked codes, the tables below give the age at which the code was first recorded — its smallest, median, mean and largest value across the patients who carry it — beside the patient total counted over the code and all of its descendants.
 
 Age here is the augmented layer's `dx_age_years_` column for the code, and that column was checked rather than assumed. For all 33 tracked codes, patient for patient, it reproduces exactly the earliest age at which the code or any of its descendants appears on either diagnosis resource: the minimum of `age_in_days` over prefix-matched encounter diagnoses and `noted_date_age_in_days` over prefix-matched problem-list entries, divided by 365.25 and rounded to three decimals. So the ages are already descendant-inclusive, and they are ages at first **record** — a patient whose only entry for the code is an undated problem-list row has no age at all, which is why the patient total and the aged count differ (5.7).
 
-**Age at first record, in years, for each tracked growth-relevant code**
+**Why this is two tables and not one.** The 28 codes shown split into two groups that answer different questions, and averaging across them describes neither. In the first, the median age at first record falls inside the first year and for most of them within days of birth: the code was attached to the birth episode, so its age says when the child was born and not when anything about growth was observed. In the second, the median falls in childhood: the code was recorded when a child was brought in, measured and worked up, which is the only case where an age at first record approximates an age at onset. One table sorted by patient count interleaves the two and invites a reader to compare a birth-episode code against a worked-up one as though the two ages meant the same thing.
+
+The line is drawn at 1 year, and no tracked code sits near it. The highest median below the line is 0.498 years and the lowest above it is 1.633, leaving an empty band 1.135 years wide: **any boundary chosen inside that band produces exactly these two tables.** So the split is a real feature of the panel rather than an artifact of where the line was put — which is the check worth making before believing any threshold in a descriptive table. 10 codes fall below and 18 above.
+
+**Panel one: codes recorded at the birth episode, age at first record in years**
 
 | ICD-10 | description | patients, code and descendants | with an age | min | median | mean | max |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| P70 | Transitory disorders of carbohydrate metabolism specific to newborn | 3,354 | 3,353 | -0.003 | 0.003 | 0.026 | 7.162 |
+| P05 | Disorders of newborn related to slow fetal growth and fetal malnutrition | 4,074 | 4,069 | 0.000 | 0.011 | 0.355 | 14.757 |
+| Q98.5 | Karyotype 47, XYY | 17 | 17 | 0.000 | 0.014 | 0.896 | 5.971 |
+| Q98.0 | Klinefelter syndrome karyotype 47, XXY | 26 | 26 | 0.000 | 0.018 | 2.109 | 13.530 |
+| Q98.4 | Klinefelter syndrome, unspecified | 42 | 42 | 0.000 | 0.021 | 2.470 | 15.704 |
 | P92.6 | Failure to thrive in newborn | 14,428 | 14,428 | -0.120 | 0.025 | 0.049 | 11.910 |
 | P07 | Disorders of newborn related to short gestation and low birth weight, not elsewhere classified | 11,029 | 11,014 | -114.667 | 0.030 | 0.376 | 16.569 |
-| P05 | Disorders of newborn related to slow fetal growth and fetal malnutrition | 4,074 | 4,069 | 0.000 | 0.011 | 0.355 | 14.757 |
-| E30.1 | Precocious puberty | 3,406 | 3,405 | 0.016 | 7.871 | 7.002 | 17.046 |
-| P70 | Transitory disorders of carbohydrate metabolism specific to newborn | 3,354 | 3,353 | -0.003 | 0.003 | 0.026 | 7.162 |
-| K90.0 | Celiac disease | 898 | 898 | 0.027 | 7.199 | 7.630 | 17.462 |
-| E10 | Type 1 diabetes mellitus | 491 | 491 | 0.873 | 7.858 | 7.876 | 16.553 |
-| E34.3 | Short stature due to endocrine disorder | 447 | 447 | 0.019 | 10.387 | 9.618 | 16.780 |
-| E30.0 | Delayed puberty | 419 | 419 | 6.075 | 13.637 | 13.480 | 17.035 |
-| E03.9 | Hypothyroidism, unspecified | 309 | 309 | 0.008 | 6.004 | 5.876 | 16.920 |
 | Q90 | Down syndrome | 205 | 205 | 0.000 | 0.049 | 1.478 | 14.300 |
-| E23.0 | Hypopituitarism | 150 | 150 | 0.036 | 9.027 | 8.792 | 16.047 |
-| K50 | Crohn's disease [regional enteritis] | 113 | 113 | 0.679 | 11.064 | 10.813 | 17.268 |
+| Q96 | Turner's syndrome | 36 | 36 | 0.000 | 0.145 | 3.950 | 15.485 |
+| P04.3 | Newborn affected by maternal use of alcohol | 53 | 53 | 0.000 | 0.498 | 2.498 | 11.387 |
+
+Median age at first record below 1 year, ordered by that median. Codes carried by fewer patients than the suppression threshold are omitted, and a code whose aged count falls below it keeps its patient total but not its four statistics. Counts are recorded frequencies inside a cohort that excluded every patient with a code seen fewer than 11 times (1.4), so this panel cannot be read as prevalence.
+
+The membership is not what a reader would guess from the code chapters. The perinatal codes are in the first table as expected, and so are the chromosomal syndromes — `Q90` among them — because a karyotype is usually established in the nursery. The congenital *malformation* syndromes are not: they sit in the second table at medians of years, `Q87.1` at 3.261. A malformation is present at birth by definition, so that figure dates the moment the coding caught up and nothing about the child. It is recording lag, measured.
+
+**Panel two: codes recorded when a child was seen and worked up, age at first record in years**
+
+| ICD-10 | description | patients, code and descendants | with an age | min | median | mean | max |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Q78.0 | Osteogenesis imperfecta | 10 | 10 | 0.008 | 1.633 | 2.483 | 10.119 |
+| Q87.3 | Congenital malformation syndromes involving early overgrowth | 46 | 46 | 0.038 | 1.763 | 2.730 | 11.967 |
+| Q87.2 | Congenital malformation syndromes predominantly involving limbs | 32 | 32 | 0.000 | 1.798 | 3.917 | 12.947 |
+| Q87.1 | Congenital malformation syndromes predominantly associated with short stature | 58 | 58 | 0.000 | 3.261 | 4.085 | 15.329 |
 | E34.4 | Constitutional tall stature | 83 | 83 | 0.088 | 4.047 | 4.836 | 14.891 |
 | N18 | Chronic kidney disease (CKD) | 70 | 70 | 0.025 | 4.535 | 5.857 | 16.334 |
-| K51 | Ulcerative colitis | 62 | 62 | 0.096 | 11.950 | 10.731 | 16.389 |
-| Q87.1 | Congenital malformation syndromes predominantly associated with short stature | 58 | 58 | 0.000 | 3.261 | 4.085 | 15.329 |
-| P04.3 | Newborn affected by maternal use of alcohol | 53 | 53 | 0.000 | 0.498 | 2.498 | 11.387 |
-| Q87.3 | Congenital malformation syndromes involving early overgrowth | 46 | 46 | 0.038 | 1.763 | 2.730 | 11.967 |
-| Q98.4 | Klinefelter syndrome, unspecified | 42 | 42 | 0.000 | 0.021 | 2.470 | 15.704 |
-| Q96 | Turner's syndrome | 36 | 36 | 0.000 | 0.145 | 3.950 | 15.485 |
-| Q87.2 | Congenital malformation syndromes predominantly involving limbs | 32 | 32 | 0.000 | 1.798 | 3.917 | 12.947 |
-| E23.6 | Other disorders of pituitary gland | 31 | 31 | 0.022 | 8.285 | 8.064 | 17.421 |
-| Q98.0 | Klinefelter syndrome karyotype 47, XXY | 26 | 26 | 0.000 | 0.018 | 2.109 | 13.530 |
-| Q87.4 | Marfan syndrome | 17 | 17 | 0.011 | 5.624 | 5.897 | 15.981 |
-| Q98.5 | Karyotype 47, XYY | 17 | 17 | 0.000 | 0.014 | 0.896 | 5.971 |
 | Q77 | Osteochondrodysplasia with defects of growth of tubular bones and spine | 15 | 15 | 0.014 | 5.131 | 4.672 | 12.553 |
-| Q78.0 | Osteogenesis imperfecta | 10 | 10 | 0.008 | 1.633 | 2.483 | 10.119 |
+| Q87.4 | Marfan syndrome | 17 | 17 | 0.011 | 5.624 | 5.897 | 15.981 |
+| E03.9 | Hypothyroidism, unspecified | 309 | 309 | 0.008 | 6.004 | 5.876 | 16.920 |
+| K90.0 | Celiac disease | 898 | 898 | 0.027 | 7.199 | 7.630 | 17.462 |
+| E10 | Type 1 diabetes mellitus | 491 | 491 | 0.873 | 7.858 | 7.876 | 16.553 |
+| E30.1 | Precocious puberty | 3,406 | 3,405 | 0.016 | 7.871 | 7.002 | 17.046 |
+| E23.6 | Other disorders of pituitary gland | 31 | 31 | 0.022 | 8.285 | 8.064 | 17.421 |
+| E23.0 | Hypopituitarism | 150 | 150 | 0.036 | 9.027 | 8.792 | 16.047 |
+| E34.3 | Short stature due to endocrine disorder | 447 | 447 | 0.019 | 10.387 | 9.618 | 16.780 |
+| K50 | Crohn's disease [regional enteritis] | 113 | 113 | 0.679 | 11.064 | 10.813 | 17.268 |
+| K51 | Ulcerative colitis | 62 | 62 | 0.096 | 11.950 | 10.731 | 16.389 |
+| E30.0 | Delayed puberty | 419 | 419 | 6.075 | 13.637 | 13.480 | 17.035 |
 
-Codes carried by fewer patients than the suppression threshold are omitted, and a code whose aged count falls below it keeps its patient total but not its four statistics. Counts are recorded frequencies inside a cohort that excluded every patient with a code seen fewer than 11 times (1.4), so this panel cannot be read as prevalence.
-
-**The panel is two panels.** Of the 28 codes shown, 8 have a median age at first record inside the first month of life, 18 have one at or above a year, and 2 sit between the two. The first group is perinatal coding attached to a birth episode; the second is recorded when a child was seen, measured and worked up. A question about growth over time is answerable for the second group and mostly not for the first, and no column in the extract distinguishes them — the median in this table does.
+Median age at first record at or above 1 year, ordered by that median. The same suppression and cohort caveats apply as in the table above.
 
 **The mean and the median disagree by design, and the extremes are not clean.** `Q96` is the clearest case: a median of 0.145 years against a mean of 3.950 and a maximum of 15.485, because the same code is also recorded for older children, and one late record moves a mean that the median does not feel. The minimum is the more fragile column: it is one patient's value, and 3 codes have a negative one. `P07` reaches -114.667 years, which is a record dated before the child was born rather than a diagnosis age — 3.3 counts those directly. Read the median and the mean together; read the minimum as a data-quality probe.
 
