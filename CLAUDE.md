@@ -50,7 +50,6 @@ which appeared in roughly one build in six.
   how the age is derived makes that paragraph wrong rather than merely stale.
   Its four statistics per code are the aggregates the drift note above is
   about; raise `AUDIT_RUNS` when you touch them.
-
 - **The shortcut audit is coupled to 5.10's definitions.**
   `reports/ppoc_eda/probes/shortcuts.py` carries two sections: 5.13, a lift
   screen over every value of seven categorical fields, and 5.14, a rank screen
