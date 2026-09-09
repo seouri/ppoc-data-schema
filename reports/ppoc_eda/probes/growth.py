@@ -257,14 +257,15 @@ def codes(ctx: Context) -> list[Finding]:
     return [f]
 
 
-#: Where 5.8 splits the tracked panel. A code whose median age at first record
-#: falls below this was attached to the birth episode; one above it was recorded
-#: when a child was seen and worked up, which is the only case where an age at
-#: first record approximates an age at onset. The line is a stated choice rather
-#: than a measured boundary, but it is not a fragile one: no tracked code has a
-#: median anywhere near it, and the section publishes the empty band around it
-#: so a reader can see that moving the line inside that band changes nothing.
-PANEL_SPLIT_YEARS = 1.0
+#: Where 5.8 splits the tracked panel, chosen on external grounds rather than
+#: from this distribution: two years is where the growth reference standard
+#: changes (WHO to 24 months, CDC from 2 years), a boundary this extract already
+#: carries in the age-2 BMI floor of 1.3, and it is the convention by which
+#: catch-up growth in infants born small for gestational age is expected to be
+#: complete. It is also one subtraction on a recorded age rather than a rule
+#: needing interpretation. The section publishes the empty band around it so a
+#: reader can see that moving the line inside that band changes nothing.
+PANEL_SPLIT_YEARS = 2.0
 
 #: ICD-10 prefixes 5.8 uses to make its membership point: a karyotype is
 #: established in the nursery, so these land in the birth panel, while the
@@ -314,8 +315,8 @@ def ages(ctx: Context) -> list[Finding]:
     # Each panel is ordered by the statistic that assigned it, so a reader can
     # see the split and the empty band around it without recomputing anything.
     dated.sort(key=lambda r: (r["median"], r["code"]))
-    birth = [r for r in dated if r["median"] < PANEL_SPLIT_YEARS]
-    childhood = [r for r in dated if r["median"] >= PANEL_SPLIT_YEARS]
+    birth = [r for r in dated if r["median"] <= PANEL_SPLIT_YEARS]
+    childhood = [r for r in dated if r["median"] > PANEL_SPLIT_YEARS]
     # A row whose age statistics were withheld has no median to classify, so it
     # belongs to neither table. None occurs in this snapshot; the alternative to
     # carrying them separately is dropping them from the section silently.
@@ -349,8 +350,11 @@ def ages(ctx: Context) -> list[Finding]:
             "n_codes": len(tracked), "n_shown": len(shown),
             "n_birth": len(birth), "n_child": len(childhood),
             "split": PANEL_SPLIT_YEARS,
+            "malf_birth": sum(1 for r in birth
+                              if r["code"].startswith(MALFORMATION)),
+            "malf_child": sum(1 for r in childhood
+                              if r["code"].startswith(MALFORMATION)),
             "band_lo": band_lo, "band_hi": band_hi,
-            "band_width": band_hi - band_lo,
             "n_negative": len(negative),
             "worst_code": worst["code"] if worst else "none",
             "worst_min": worst["min"] if worst else 0.0,
@@ -384,11 +388,13 @@ def ages(ctx: Context) -> list[Finding]:
             "chapters. The perinatal codes are in the first table as expected, and "
             "so are the chromosomal syndromes — `{chrom_code}` among them — "
             "because a karyotype is usually established in the nursery. The "
-            "congenital *malformation* syndromes are not: they sit in the second "
-            "table at medians of years, `{late_cong_code}` at {late_cong_med:.3f}. "
-            "A malformation is present at birth by definition, so that figure "
-            "dates the moment the coding caught up and nothing about the child. "
-            "It is recording lag, measured.")
+            "congenital *malformation* syndromes split down the middle: "
+            "{malf_birth} of them fall on or below the line and {malf_child} "
+            "above it, `{late_cong_code}` as late as {late_cong_med:.3f} years. A "
+            "malformation is present at birth by definition, so none of that "
+            "spread is about onset — it dates when the coding caught up, and the "
+            "spread says the lag varies widely inside a single ICD-10 chapter. It "
+            "is recording lag, measured.")
     f.blocks = [
         Para("5.7 says which codes the tracked panel carries and how many patients "
              "carry each. This section says when. For every one of the {n_codes} "
@@ -411,28 +417,43 @@ def ages(ctx: Context) -> list[Finding]:
         Para("**Why this is two tables and not one.** The {n_shown} codes shown "
              "split into two groups that answer different questions, and averaging "
              "across them describes neither. In the first, the median age at first "
-             "record falls inside the first year and for most of them within days "
-             "of birth: the code was attached to "
-             "the birth episode, so its age says when the child was born and not "
-             "when anything about growth was observed. In the second, the median "
-             "falls in childhood: the code was recorded when a child was brought "
-             "in, measured and worked up, which is the only case where an age at "
-             "first record approximates an age at onset. One table sorted by "
-             "patient count interleaves the two and invites a reader to compare a "
-             "birth-episode code against a worked-up one as though the two ages "
-             "meant the same thing."),
-        Para("The line is drawn at {split:.0f} year, and no tracked code sits near "
-             "it. The highest median below the line is {band_lo:.3f} years and the "
-             "lowest above it is {band_hi:.3f}, leaving an empty band "
-             "{band_width:.3f} years wide: **any boundary chosen inside that band "
-             "produces exactly these two tables.** So the split is a real feature "
-             "of the panel rather than an artifact of where the line was put — "
-             "which is the check worth making before believing any threshold in a "
-             "descriptive table. {n_birth} codes fall below and {n_child} above.",
+             "record falls at or before age {split:.0f}, and for most of them within "
+             "days of birth — there the code documents a perinatal event and its "
+             "age says when the child was born rather than when anything about "
+             "growth was observed. In the second, the median falls later in "
+             "childhood: the "
+             "code was recorded when a child was brought in, measured and worked "
+             "up, which is the only case where an age at first record approximates "
+             "an age at onset. One table sorted by patient count interleaves the "
+             "two and invites a reader to compare a perinatal code against a "
+             "worked-up one as though the two ages meant the same thing."),
+        Para("**Why the line is at {split:.0f} years.** The cutoff comes from "
+             "outside this distribution rather than from it. Two years is where "
+             "the growth reference standard itself changes — a WHO chart covers "
+             "birth to 24 months and a CDC chart 2 to 20 years — and this extract "
+             "already carries that boundary: the augmented layer withholds BMI "
+             "below age 2, where a CDC BMI-for-age reference does not apply (1.3). "
+             "It is also the convention by which catch-up growth in infants born "
+             "small for gestational age is expected to be complete, so a code "
+             "first recorded after it is unlikely to be documenting a birth event. "
+             "And it is one subtraction on a recorded age, not a rule that needs "
+             "interpreting. One caveat on that alignment: the ages here are "
+             "diagnosis recording dates, not growth-chart crossings, so the "
+             "reference boundary is what makes {split:.0f} years a meaningful line "
+             "in this extract — it is not the mechanism that produced these "
+             "numbers.", role="method"),
+        Para("The cut is also robust. The highest median at or below the line is "
+             "{band_lo:.3f} years and the lowest above it is {band_hi:.3f}, and "
+             "nothing lies between: **any boundary chosen in that gap produces "
+             "exactly these two tables.** "
+             "{n_birth} codes fall on or below the line and {n_child} above. That "
+             "check is worth making before believing any threshold in a "
+             "descriptive table, and it is the difference between a cutoff that "
+             "sorts the panel and one that merely cuts it somewhere.",
              role="method"),
         Table("t-growth-ages-birth",
-              "Panel one: codes recorded at the birth episode, age at first "
-              "record in years",
+              "Panel one: perinatal-onset pattern — codes first recorded at or "
+              "before age {split:.0f}, in years",
               [C("code", "ICD-10"), C("descr", "description"),
                C("patients", "patients, code and descendants", ",", align="right"),
                C("aged", "with an age", ",", align="right"),
@@ -440,7 +461,7 @@ def ages(ctx: Context) -> list[Finding]:
                C("median", "median", ".3f", align="right"),
                C("mean", "mean", ".3f", align="right"),
                C("max", "max", ".3f", align="right")], birth,
-              note="Median age at first record below {split:.0f} year, ordered by that median. Codes carried by "
+              note="Median age at first record at or below {split:.0f} years, ordered by that median. Codes carried by "
                    "fewer patients than the suppression threshold are omitted, and "
                    "a code whose aged count falls below it keeps its patient total "
                    "but not its four statistics. Counts are recorded frequencies "
@@ -449,8 +470,8 @@ def ages(ctx: Context) -> list[Finding]:
                    "prevalence."),
         membership,
         Table("t-growth-ages-childhood",
-              "Panel two: codes recorded when a child was seen and worked up, "
-              "age at first record in years",
+              "Panel two: later-onset pattern — codes first recorded after age "
+              "{split:.0f}, in years",
               [C("code", "ICD-10"), C("descr", "description"),
                C("patients", "patients, code and descendants", ",", align="right"),
                C("aged", "with an age", ",", align="right"),
@@ -458,7 +479,7 @@ def ages(ctx: Context) -> list[Finding]:
                C("median", "median", ".3f", align="right"),
                C("mean", "mean", ".3f", align="right"),
                C("max", "max", ".3f", align="right")], childhood,
-              note="Median age at first record at or above {split:.0f} year, ordered by that median. The same "
+              note="Median age at first record above {split:.0f} years, ordered by that median. The same "
                    "suppression and cohort caveats apply as in the table above."),
         orphans,
         Para("**The mean and the median disagree by design, and the extremes are "

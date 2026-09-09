@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-09T19:24:54Z",
+  "generated_at": "2026-09-09T19:45:18Z",
   "parts": [
     {
       "findings": [
@@ -5898,7 +5898,7 @@
           "part": "5.8",
           "tables": [
             {
-              "caption": "Panel one: codes recorded at the birth episode, age at first record in years",
+              "caption": "Panel one: perinatal-onset pattern — codes first recorded at or before age {split:.0f}, in years",
               "columns": [
                 "code",
                 "descr",
@@ -6010,23 +6010,7 @@
                   "median": 0.498,
                   "min": 0.0,
                   "patients": 53
-                }
-              ]
-            },
-            {
-              "caption": "Panel two: codes recorded when a child was seen and worked up, age at first record in years",
-              "columns": [
-                "code",
-                "descr",
-                "patients",
-                "aged",
-                "min",
-                "median",
-                "mean",
-                "max"
-              ],
-              "id": "t-growth-ages-childhood",
-              "rows": [
+                },
                 {
                   "aged": 10,
                   "code": "Q78.0",
@@ -6056,7 +6040,23 @@
                   "median": 1.7985,
                   "min": 0.0,
                   "patients": 32
-                },
+                }
+              ]
+            },
+            {
+              "caption": "Panel two: later-onset pattern — codes first recorded after age {split:.0f}, in years",
+              "columns": [
+                "code",
+                "descr",
+                "patients",
+                "aged",
+                "min",
+                "median",
+                "mean",
+                "max"
+              ],
+              "id": "t-growth-ages-childhood",
+              "rows": [
                 {
                   "aged": 58,
                   "code": "Q87.1",
@@ -6217,14 +6217,15 @@
             "any_med": 0.027,
             "any_min": -114.667,
             "any_n": 35890,
-            "band_hi": 1.6335,
-            "band_lo": 0.498,
-            "band_width": 1.1355,
+            "band_hi": 3.261,
+            "band_lo": 1.7985,
             "chrom_code": "Q90",
             "late_cong_code": "Q87.1",
             "late_cong_med": 3.261,
-            "n_birth": 10,
-            "n_child": 18,
+            "malf_birth": 3,
+            "malf_child": 3,
+            "n_birth": 13,
+            "n_child": 15,
             "n_codes": 33,
             "n_negative": 3,
             "n_shown": 28,
@@ -6232,7 +6233,7 @@
             "skew_max": 15.485,
             "skew_mean": 3.9496111,
             "skew_med": 0.145,
-            "split": 1.0,
+            "split": 2.0,
             "worst_code": "P07",
             "worst_min": -114.667
           }

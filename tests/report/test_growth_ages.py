@@ -140,9 +140,9 @@ def test_the_two_panels_are_disjoint_and_ordered_by_median() -> None:
     birth, childhood = _panel(BIRTH), _panel(CHILDHOOD)
     assert birth and childhood, "one of the two panels is empty"
     for row in birth:
-        assert row["median"] < PANEL_SPLIT_YEARS, f"{row['code']} is in the wrong panel"
+        assert row["median"] <= PANEL_SPLIT_YEARS, f"{row['code']} is in the wrong panel"
     for row in childhood:
-        assert row["median"] >= PANEL_SPLIT_YEARS, f"{row['code']} is in the wrong panel"
+        assert row["median"] > PANEL_SPLIT_YEARS, f"{row['code']} is in the wrong panel"
     for panel, name in ((birth, BIRTH), (childhood, CHILDHOOD)):
         medians = [r["median"] for r in panel]
         assert medians == sorted(medians), f"{name} is not ordered by median"
@@ -163,7 +163,7 @@ def test_the_published_band_around_the_split_is_empty() -> None:
     lo, hi = f["values"]["band_lo"], f["values"]["band_hi"]
     assert lo == max(r["median"] for r in _panel(BIRTH))
     assert hi == min(r["median"] for r in _panel(CHILDHOOD))
-    assert lo < PANEL_SPLIT_YEARS <= hi, "the split does not sit inside its own band"
+    assert lo <= PANEL_SPLIT_YEARS < hi, "the split does not sit inside its own band"
     inside = [r["code"] for _, r in _rows()
               if r.get("median") is not None and lo < r["median"] < hi]
     assert not inside, f"codes sit inside the band the section calls empty: {inside}"

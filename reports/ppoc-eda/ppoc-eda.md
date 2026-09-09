@@ -1229,11 +1229,13 @@ The referral resource shows the same orientation from the action side. Grouping 
 
 Age here is the augmented layer's `dx_age_years_` column for the code, and that column was checked rather than assumed. For all 33 tracked codes, patient for patient, it reproduces exactly the earliest age at which the code or any of its descendants appears on either diagnosis resource: the minimum of `age_in_days` over prefix-matched encounter diagnoses and `noted_date_age_in_days` over prefix-matched problem-list entries, divided by 365.25 and rounded to three decimals. So the ages are already descendant-inclusive, and they are ages at first **record** — a patient whose only entry for the code is an undated problem-list row has no age at all, which is why the patient total and the aged count differ (5.7).
 
-**Why this is two tables and not one.** The 28 codes shown split into two groups that answer different questions, and averaging across them describes neither. In the first, the median age at first record falls inside the first year and for most of them within days of birth: the code was attached to the birth episode, so its age says when the child was born and not when anything about growth was observed. In the second, the median falls in childhood: the code was recorded when a child was brought in, measured and worked up, which is the only case where an age at first record approximates an age at onset. One table sorted by patient count interleaves the two and invites a reader to compare a birth-episode code against a worked-up one as though the two ages meant the same thing.
+**Why this is two tables and not one.** The 28 codes shown split into two groups that answer different questions, and averaging across them describes neither. In the first, the median age at first record falls at or before age 2, and for most of them within days of birth — there the code documents a perinatal event and its age says when the child was born rather than when anything about growth was observed. In the second, the median falls later in childhood: the code was recorded when a child was brought in, measured and worked up, which is the only case where an age at first record approximates an age at onset. One table sorted by patient count interleaves the two and invites a reader to compare a perinatal code against a worked-up one as though the two ages meant the same thing.
 
-The line is drawn at 1 year, and no tracked code sits near it. The highest median below the line is 0.498 years and the lowest above it is 1.633, leaving an empty band 1.135 years wide: **any boundary chosen inside that band produces exactly these two tables.** So the split is a real feature of the panel rather than an artifact of where the line was put — which is the check worth making before believing any threshold in a descriptive table. 10 codes fall below and 18 above.
+**Why the line is at 2 years.** The cutoff comes from outside this distribution rather than from it. Two years is where the growth reference standard itself changes — a WHO chart covers birth to 24 months and a CDC chart 2 to 20 years — and this extract already carries that boundary: the augmented layer withholds BMI below age 2, where a CDC BMI-for-age reference does not apply (1.3). It is also the convention by which catch-up growth in infants born small for gestational age is expected to be complete, so a code first recorded after it is unlikely to be documenting a birth event. And it is one subtraction on a recorded age, not a rule that needs interpreting. One caveat on that alignment: the ages here are diagnosis recording dates, not growth-chart crossings, so the reference boundary is what makes 2 years a meaningful line in this extract — it is not the mechanism that produced these numbers.
 
-**Panel one: codes recorded at the birth episode, age at first record in years**
+The cut is also robust. The highest median at or below the line is 1.798 years and the lowest above it is 3.261, and nothing lies between: **any boundary chosen in that gap produces exactly these two tables.** 13 codes fall on or below the line and 15 above. That check is worth making before believing any threshold in a descriptive table, and it is the difference between a cutoff that sorts the panel and one that merely cuts it somewhere.
+
+**Panel one: perinatal-onset pattern — codes first recorded at or before age 2, in years**
 
 | ICD-10 | description | patients, code and descendants | with an age | min | median | mean | max |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -1247,18 +1249,18 @@ The line is drawn at 1 year, and no tracked code sits near it. The highest media
 | Q90 | Down syndrome | 205 | 205 | 0.000 | 0.049 | 1.478 | 14.300 |
 | Q96 | Turner's syndrome | 36 | 36 | 0.000 | 0.145 | 3.950 | 15.485 |
 | P04.3 | Newborn affected by maternal use of alcohol | 53 | 53 | 0.000 | 0.498 | 2.498 | 11.387 |
-
-Median age at first record below 1 year, ordered by that median. Codes carried by fewer patients than the suppression threshold are omitted, and a code whose aged count falls below it keeps its patient total but not its four statistics. Counts are recorded frequencies inside a cohort that excluded every patient with a code seen fewer than 11 times (1.4), so this panel cannot be read as prevalence.
-
-The membership is not what a reader would guess from the code chapters. The perinatal codes are in the first table as expected, and so are the chromosomal syndromes — `Q90` among them — because a karyotype is usually established in the nursery. The congenital *malformation* syndromes are not: they sit in the second table at medians of years, `Q87.1` at 3.261. A malformation is present at birth by definition, so that figure dates the moment the coding caught up and nothing about the child. It is recording lag, measured.
-
-**Panel two: codes recorded when a child was seen and worked up, age at first record in years**
-
-| ICD-10 | description | patients, code and descendants | with an age | min | median | mean | max |
-| --- | --- | --- | --- | --- | --- | --- | --- |
 | Q78.0 | Osteogenesis imperfecta | 10 | 10 | 0.008 | 1.633 | 2.483 | 10.119 |
 | Q87.3 | Congenital malformation syndromes involving early overgrowth | 46 | 46 | 0.038 | 1.763 | 2.730 | 11.967 |
 | Q87.2 | Congenital malformation syndromes predominantly involving limbs | 32 | 32 | 0.000 | 1.798 | 3.917 | 12.947 |
+
+Median age at first record at or below 2 years, ordered by that median. Codes carried by fewer patients than the suppression threshold are omitted, and a code whose aged count falls below it keeps its patient total but not its four statistics. Counts are recorded frequencies inside a cohort that excluded every patient with a code seen fewer than 11 times (1.4), so this panel cannot be read as prevalence.
+
+The membership is not what a reader would guess from the code chapters. The perinatal codes are in the first table as expected, and so are the chromosomal syndromes — `Q90` among them — because a karyotype is usually established in the nursery. The congenital *malformation* syndromes split down the middle: 3 of them fall on or below the line and 3 above it, `Q87.1` as late as 3.261 years. A malformation is present at birth by definition, so none of that spread is about onset — it dates when the coding caught up, and the spread says the lag varies widely inside a single ICD-10 chapter. It is recording lag, measured.
+
+**Panel two: later-onset pattern — codes first recorded after age 2, in years**
+
+| ICD-10 | description | patients, code and descendants | with an age | min | median | mean | max |
+| --- | --- | --- | --- | --- | --- | --- | --- |
 | Q87.1 | Congenital malformation syndromes predominantly associated with short stature | 58 | 58 | 0.000 | 3.261 | 4.085 | 15.329 |
 | E34.4 | Constitutional tall stature | 83 | 83 | 0.088 | 4.047 | 4.836 | 14.891 |
 | N18 | Chronic kidney disease (CKD) | 70 | 70 | 0.025 | 4.535 | 5.857 | 16.334 |
@@ -1275,7 +1277,7 @@ The membership is not what a reader would guess from the code chapters. The peri
 | K51 | Ulcerative colitis | 62 | 62 | 0.096 | 11.950 | 10.731 | 16.389 |
 | E30.0 | Delayed puberty | 419 | 419 | 6.075 | 13.637 | 13.480 | 17.035 |
 
-Median age at first record at or above 1 year, ordered by that median. The same suppression and cohort caveats apply as in the table above.
+Median age at first record above 2 years, ordered by that median. The same suppression and cohort caveats apply as in the table above.
 
 **The mean and the median disagree by design, and the extremes are not clean.** `Q96` is the clearest case: a median of 0.145 years against a mean of 3.950 and a maximum of 15.485, because the same code is also recorded for older children, and one late record moves a mean that the median does not feel. The minimum is the more fragile column: it is one patient's value, and 3 codes have a negative one. `P07` reaches -114.667 years, which is a record dated before the child was born rather than a diagnosis age — 3.3 counts those directly. Read the median and the mean together; read the minimum as a data-quality probe.
 
