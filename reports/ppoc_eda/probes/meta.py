@@ -14,6 +14,9 @@ ENTRY_POINTS = [
                                              "before assuming a bug in your code.")),
     ("Planning a study", ("Part 1.4 first. The cohort selection invalidates several "
                          "whole classes of question, and it is not visible in any field.")),
+    ("Building features or a model", ("5.9 for whether the label can be predicted at "
+                                     "all, then the shortcut screens in 5.14 and 5.15 "
+                                     "before you fix a feature set.")),
 ]
 
 
@@ -26,16 +29,22 @@ def howto(ctx: Context) -> list[Finding]:
     )
     f.blocks = [
         Para("This report describes one snapshot of one pediatric primary-care EHR "
-             "extract. It belongs to no project: it states what the data are, what "
-             "they support, and what they cannot answer, and it leaves the research "
-             "question to you."),
+             "extract. Through Part 4 it belongs to no project: it states what the "
+             "data are, what they support, and what they cannot answer, and it "
+             "leaves the research question to you. From 5.9 it stops being neutral "
+             "on purpose. The extract was assembled upstream around one question — "
+             "identifying abnormal growth early — and those sections work that "
+             "question through, because the label it implies is already shipped in "
+             "the data as `growth_dx_flag` and its shortcuts are not visible from a "
+             "field-by-field description. Read them as a worked example of auditing "
+             "a label, not as the report choosing your outcome."),
         Table("t-entry", "Where to start",
               [Column("if you are", "if you are"), Column("start", "start here")],
               [{"if you are": a, "start": b} for a, b in ENTRY_POINTS]),
         Para("Every number here was measured from the delivered bundle for snapshot "
              "`{snapshot}`; none is copied from another document without being "
-             "recomputed. The cohort is pinned to {cohort_as_of} and the extract was "
-             "cut on {extract_date}."),
+             "recomputed. The cohort date and the extract cut are stated once, in "
+             "1.4, and referenced from everywhere else that needs them."),
         Para("**What this report is not.** It is not a clinical validation, not a "
              "registered analysis, and not a statement about any individual child. "
              "Every figure is an aggregate, and any cell resting on fewer than "

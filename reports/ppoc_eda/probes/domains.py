@@ -391,7 +391,10 @@ def identity(ctx: Context) -> list[Finding]:
              "median patient's last recorded visit is at age {last:.1f} years."),
         Para("**Implications for analysis.** Identity non-response is large enough "
              "to change a subgroup contrast on its own, so report it as its own "
-             "category rather than dropping it. And because entry to this cohort "
+             "category rather than dropping it — which requires the delivered "
+             "`patients` table, because the augmented layer has already folded every "
+             "non-response category into a null (1.3). And because entry to this "
+             "cohort "
              "required both a measurement history and a recent visit, the visit "
              "distribution describes the selection as much as the care; it is a "
              "feasibility figure, not an estimate of pediatric utilisation.",

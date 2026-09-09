@@ -26,6 +26,11 @@ SHARED = [("height_in", "height_in"), ("weight_oz", "weight_oz"),
           ("head_circ_cm", "head_circ_cm"), ("encounter_type", "encounter_type"),
           ("age_in_days", "age_in_days"), ("BMI", "bmi")]
 
+# The same question on the patient layer. `race_1` stands for the eight race
+# slots, which are cleaned identically. Checking only the visit layer left the
+# larger divergence unmeasured: Part 5 works in the augmented patient table.
+SHARED_PATIENT = ["sex", "ethnicity", "race_1"]
+
 
 @probe("layers.resources", "1.2")
 def resources(ctx: Context) -> list[Finding]:
@@ -92,11 +97,42 @@ def agreement(ctx: Context) -> list[Finding]:
         "JOIN visits_augmented a USING (visit_id) "
         "WHERE v.BMI IS NOT NULL AND a.bmi IS NULL")
 
+    p_total = ctx.scalar("SELECT count(*) FROM patients p "
+                         "JOIN patients_augmented g USING (patient_id)")
+    p_rows = []
+    for col in SHARED_PATIENT:
+        diff, lost, raw_n, aug_n = ctx.one(
+            f"SELECT sum(CASE WHEN p.\"{col}\" IS DISTINCT FROM g.\"{col}\" "
+            f"                THEN 1 ELSE 0 END), "
+            f"       sum(CASE WHEN p.\"{col}\" IS NOT NULL "
+            f"                AND g.\"{col}\" IS NULL THEN 1 ELSE 0 END), "
+            f'       count(p."{col}"), count(g."{col}") '
+            "FROM patients p JOIN patients_augmented g USING (patient_id)")
+        p_rows.append({
+            "field": col, "differs": diff, "share": 100.0 * diff / p_total,
+            "lost": lost,
+            "raw_distinct": ctx.scalar(f'SELECT count(DISTINCT "{col}") FROM patients'),
+            "aug_distinct": ctx.scalar(
+                f'SELECT count(DISTINCT "{col}") FROM patients_augmented'),
+            "raw_n": raw_n, "aug_n": aug_n,
+        })
+    p_worst = max(p_rows, key=lambda r: r["differs"])
+    dropped = ctx.q(
+        "SELECT DISTINCT ethnicity FROM patients WHERE ethnicity IS NOT NULL "
+        "AND ethnicity NOT IN (SELECT ethnicity FROM patients_augmented "
+        "                      WHERE ethnicity IS NOT NULL) ORDER BY 1")
+
     f = Finding(
         id="layers.agreement", part="1.3",
         title="Two layers with different provenance",
         values={"total": total, "raw_only": raw_only, "aug_only": aug_only,
                 "both_differ": both_differ, "med_age": med_age,
+                "p_total": p_total, "p_field": p_worst["field"],
+                "p_differs": p_worst["differs"], "p_lost": p_worst["lost"],
+                "p_raw_distinct": p_worst["raw_distinct"],
+                "p_aug_distinct": p_worst["aug_distinct"],
+                "n_dropped": len(dropped),
+                "dropped": ", ".join(f'"{r[0]}"' for r in dropped),
                 "delivered": len(VENDOR_RESOURCES),
                 "generated": len(RESOURCES) - len(VENDOR_RESOURCES),
                 "resources": len(RESOURCES)},
@@ -127,7 +163,7 @@ def agreement(ctx: Context) -> list[Finding]:
              "the data PPOC sent."),
         Para("Because the augmented layer is derived from the delivered one, the "
              "fields they share should agree exactly. Across all {total:,} joined "
-             "visit rows, five of the six do."),
+             "visit rows, five of the six do."),  # patient layer follows below
         Table("t-layers", "Shared visit fields, raw against augmented",
               [Column("field", "field"), Column("differs", "rows differing", ",", align="right"),
                Column("share", "share", ".2f", "%", align="right")], rows),
@@ -138,13 +174,41 @@ def agreement(ctx: Context) -> list[Finding]:
              "apply, while the raw value is computed inside the source EHR at every "
              "age. A further {aug_only:,} rows go the other way, and {both_differ:,} "
              "carry both values differing by more than 0.01."),
+        Para("**The patient layer diverges further, and Part 5 works in it.** "
+             "`patients` and `patients_augmented` also share `sex`, `ethnicity` and "
+             "the race slots, over {p_total:,} joined patient rows. Sex agrees "
+             "exactly; the other two do not, and the disagreement is a great deal "
+             "larger than BMI's in relative terms.", role="warning"),
+        Table("t-layers-patients", "Shared patient fields, raw against augmented",
+              [Column("field", "field"),
+               Column("raw_n", "populated, raw", ",", align="right"),
+               Column("aug_n", "populated, augmented", ",", align="right"),
+               Column("differs", "rows differing", ",", align="right"),
+               Column("share", "share", ".2f", "%", align="right"),
+               Column("raw_distinct", "distinct, raw", ",", align="right"),
+               Column("aug_distinct", "distinct, augmented", ",", align="right")],
+              p_rows,
+              note="`race_1` stands for the eight race slots, which are cleaned "
+                   "the same way."),
+        Para("This is a documented transformation rather than a defect: "
+             "`docs/patients_augmented.md` records that the augmented layer converts "
+             "non-informative responses in `ethnicity` and `race_*` to null. On "
+             "`{p_field}` it moves {p_lost:,} patients from a recorded value to a "
+             "null and collapses the vocabulary from {p_raw_distinct} categories to "
+             "{p_aug_distinct}. The {n_dropped} values that go are {dropped} — every "
+             "recorded form of non-response, and nothing else."),
         Para("**Implications for analysis.** Reading `visits.BMI` silently yields "
              "infant BMI values that the augmented layer deliberately suppresses, "
              "and the two layers will not reproduce each other's descriptive "
              "statistics. Choose a layer for a stated reason and record which; do "
              "not mix them within one analysis. The {both_differ:,} rows where both "
-             "are present and disagree are small enough to screen individually.",
-             role="implication"),
+             "are present and disagree are small enough to screen individually. On "
+             "the patient layer the consequence is sharper: 5.5 reports identity "
+             "non-response as its own category and advises keeping it that way, "
+             "which is only possible against the delivered `patients` table. In the "
+             "augmented layer a declined answer and a question never asked are the "
+             "same null, so take identity from `patients` whenever the distinction "
+             "carries any weight.", role="implication"),
     ]
     return [f]
 
@@ -178,8 +242,8 @@ def deident(ctx: Context) -> list[Finding]:
               [Column("check", "standard check"), Column("why", "why it cannot be run")],
               [{"check": c, "why": w} for c, w in checks]),
         Para("One qualification, because \"no calendar axis\" is easy to overstate: "
-             "the cohort itself is pinned to {cohort_as_of} and the extract was cut "
-             "shortly after. Ages are relative to each child's birth, but the "
+             "the cohort itself is pinned to a fixed date and the extract was cut "
+             "shortly after it, both given in 1.4. Ages are relative to each child's birth, but the "
              "*window* is fixed and known, which is what makes the recency criterion "
              "in 1.4 a right-censoring rule rather than an unknown.", role="method"),
     ]

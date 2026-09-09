@@ -10,8 +10,12 @@ from ..context import RESOURCES, Context
 from ..findings import Column, Figure, Finding, Para, Table, probe
 from ..listing import listing, note
 
-#: Repeated column families are collapsed to a single indexed row.
-FAMILIES = (("enc_diag_", "enc_diag_1..33"), ("race_", "race_1..8"))
+#: Prefixes of repeated column families. The label is built per resource from
+#: the members actually present, because the same prefix spans a different
+#: number of slots in different resources: `patients` carries eight race
+#: columns and `visits_augmented` carries one. A prefix with a single member is
+#: not a family and keeps its own name.
+FAMILY_PREFIXES = ("enc_diag_", "race_")
 
 #: Visit fields whose availability by age is worth a picture.
 HEATMAP_FIELDS = [
@@ -23,12 +27,26 @@ HEATMAP_FIELDS = [
 AGE_BANDS = [(0, 1, "0-1"), (1, 2, "1-2"), (2, 5, "2-5"), (5, 10, "5-10"),
              (10, 15, "10-15"), (15, 19, "15-18")]
 
+#: The one `result_flag` value the data dictionary defines as normal.
+NORMAL_FLAG = "(NONE)"
 
-def _family(name: str) -> str | None:
-    for prefix, label in FAMILIES:
-        if name.startswith(prefix) and name[len(prefix):].isdigit():
-            return label
-    return None
+
+def _members(cols: list[str], prefix: str) -> list[int]:
+    return sorted(int(c[len(prefix):]) for c in cols
+                  if c.startswith(prefix) and c[len(prefix):].isdigit())
+
+
+def _families(cols: list[str]) -> dict[str, str]:
+    """Map each column of one resource to its family label, where it has one."""
+    out: dict[str, str] = {}
+    for prefix in FAMILY_PREFIXES:
+        members = _members(cols, prefix)
+        if len(members) < 2:
+            continue
+        label = f"{prefix}{members[0]}..{members[-1]}"
+        for i in members:
+            out[f"{prefix}{i}"] = label
+    return out
 
 
 def scan(ctx: Context) -> list[dict]:
@@ -43,9 +61,10 @@ def scan(ctx: Context) -> list[dict]:
             for i, c in enumerate(cols)
         )
         row = ctx.one(f"SELECT {selects} FROM {table}")
+        families = _families(cols)
         seen = set()
         for i, c in enumerate(cols):
-            fam = _family(c)
+            fam = families.get(c)
             if fam:
                 if fam in seen:
                     continue
@@ -143,11 +162,17 @@ def sentinels(ctx: Context) -> list[Finding]:
         "SELECT count(*) FROM (SELECT result_flag FROM labs GROUP BY 1)",
         "SELECT result_flag, count(*) AS n FROM labs "
         "GROUP BY 1 ORDER BY n DESC, result_flag {limit}")
+    # The dictionary's rule is `(NONE)` normal, everything else abnormal, and the
+    # null inherits `(NONE)`'s meaning because it *is* `(NONE)`, lost in delivery.
+    # Deriving the column from `v is None` alone made the literal `(NONE)` row read
+    # "abnormal" two lines above the paragraph that defines it as normal.
     flag_rows = [
         {"value": v if v is not None else "null", "rows": ctx.suppress(n),
-         "meaning": "normal result" if v is None else "abnormal"}
+         "meaning": "normal result" if v is None or v == NORMAL_FLAG
+                    else "abnormal by the dictionary rule"}
         for v, n in flag_raw
     ]
+    flag_values = ctx.scalar("SELECT count(DISTINCT result_flag) FROM labs")
     flag_null = ctx.scalar("SELECT count(*) FROM labs WHERE result_flag IS NULL")
     flag_none = ctx.scalar("SELECT count(*) FROM labs WHERE result_flag = '(NONE)'")
     pl_null = ctx.scalar(
@@ -158,6 +183,7 @@ def sentinels(ctx: Context) -> list[Finding]:
         id="fields.sentinels", part="3.5",
         title="Nulls that are not missing, and sentinels that are not data",
         values={"flag_null": flag_null, "flag_none": flag_none,
+                "flag_groups": flag_distinct, "flag_values": flag_values,
                 "flag_share": 100.0 * flag_null / ctx.scalar("SELECT count(*) FROM labs"),
                 "pl_null": pl_null, "pl_total": pl_total,
                 "pl_share": 100.0 * pl_null / pl_total},
@@ -169,13 +195,22 @@ def sentinels(ctx: Context) -> list[Finding]:
         Table("t-flags", "Laboratory result flags",
               [Column("value", "result_flag"), Column("rows", "rows", ",", align="right"),
                Column("meaning", "meaning")], flag_rows,
-              note=note(flag_distinct, flag_complete)),
+              note=note(flag_distinct, flag_complete) + (
+                  " The null is one of them; 6.1 reports {flag_values} for this "
+                  "column because `count(DISTINCT)` drops it.")),
         Para("The data dictionary defines `result_flag` as an HL7 abnormality "
              "category in which the value `(NONE)` means a normal result and "
              "anything else means abnormal. This extract contains {flag_none:,} "
              "literal `(NONE)` values and {flag_null:,} nulls — {flag_share:.1f}% of "
              "all lab rows. The sentinel became a null somewhere between the source "
-             "system and delivery, so **a null flag means normal, not unknown**."),
+             "system and delivery, so **a null flag means normal, not unknown**. "
+             "The meaning column above applies that rule and nothing else: the null "
+             "and the literal `(NONE)` are the normal ones, and every other value is "
+             "abnormal *by the dictionary's definition* — including the literal "
+             "`Normal` and `Negative`, which are result text the HL7 category does "
+             "not exempt. Where that reading matters, treat those rows as an "
+             "unresolved conflict between the value and its category rather than as "
+             "settled either way."),
         Para("`problem_list.resolved_date_age_in_days` behaves the same way: the "
              "dictionary defines null as \"problem currently active\". {pl_null:,} "
              "of {pl_total:,} entries ({pl_share:.1f}%) are null, which is a "
@@ -204,9 +239,18 @@ def index(ctx: Context) -> list[Finding]:
     )
     f.blocks = [
         Para("All {n} distinct columns across the {n_res} resources, with how much "
-             "of each is populated and how many values it takes. Repeated families "
-             "— the 33 encounter-diagnosis slots and the 8 race slots — appear once "
-             "each, summarised on their first member."),
+             "of each is populated and how many values it takes. A repeated family "
+             "— the encounter-diagnosis slots, the race slots — appears once, named "
+             "for the span it covers in that resource and summarised on its first "
+             "member. The span differs between resources: `patients` and "
+             "`patients_augmented` carry eight race columns, `visits_augmented` "
+             "carries one, so a row reading `race_1` is the whole of that "
+             "resource's race detail and not the first of eight."),
+        Para("Two sections read this index rather than describe it. 3.4 takes the "
+             "least-populated columns from it, and 5.15 scores every numeric column "
+             "of the augmented patient layer here against the growth label, which is "
+             "where to look before treating any of them as a feature.",
+             role="method"),
         Table("t-fieldindex", "Field index",
               [Column("resource", "resource"), Column("field", "field"),
                Column("type", "type"),

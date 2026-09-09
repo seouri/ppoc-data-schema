@@ -177,6 +177,7 @@ def distributions(ctx: Context) -> list[Finding]:
             f"WHERE {col} IS NOT NULL AND ({col} < {lo} OR {col} > {hi})")
         rows.append({"channel": label, "unit": unit, "n": n, "min": mn, "p1": p1,
                      "median": p50, "p99": p99, "max": mx,
+                     "range": f"{lo:g} to {hi:g}",
                      "outside": ctx.suppress(outside)})
         edges = [lo + (hi - lo) * i / 40 for i in range(41)]
         counts = [ctx.scalar(
@@ -195,9 +196,10 @@ def distributions(ctx: Context) -> list[Finding]:
     )
     f.blocks = [
         Para("The four measurement channels, summarised on the derived metric "
-             "columns. The final column counts values outside a conventional review "
-             "range; those are reported, not removed, because the decision to "
-             "exclude belongs to the analysis rather than to this report."),
+             "columns. The final two columns give the screening range each channel "
+             "is checked against and how many values fall outside it; those are "
+             "reported, not removed, because the decision to exclude belongs to the "
+             "analysis rather than to this report."),
         Table("t-dist", "Measurement channels",
               [Column("channel", "channel"), Column("unit", "unit"),
                Column("n", "values", ",", align="right"),
@@ -206,10 +208,17 @@ def distributions(ctx: Context) -> list[Finding]:
                Column("median", "median", ",.2f", align="right"),
                Column("p99", "99th pct", ",.2f", align="right"),
                Column("max", "max", ",.2f", align="right"),
-               Column("outside", "outside review range", ",", align="right")], rows),
+               Column("range", "review range"),
+               Column("outside", "outside review range", ",", align="right")], rows,
+              note="The review range is a wide screening band, chosen to catch "
+                   "values no measurement could produce. It is not the tighter "
+                   "clinical band a channel may also have: 4.7 screens head "
+                   "circumference against 25 to 65 cm and counts more values "
+                   "outside it than this column does."),
         *figures,
         Para("**Implications for analysis.** Head circumference is the channel whose "
-             "tails are worst, and 4.4 shows why. For the others the extremes are "
+             "tails are worst, and 4.7 shows why — an arithmetic defect, not a "
+             "measurement one. For the others the extremes are "
              "sparse but the bulk is clinically ordinary. Bound the raw imperial "
              "columns rather than the derived metric ones when screening, since a "
              "wrong unit survives an exact conversion unchanged.",

@@ -35,14 +35,19 @@ def profile(ctx: Context) -> list[Finding]:
         title="Age- and sex-stratified growth profile",
         values={"n_bands": len(BANDS),
                 "worst_z": min(r["height_z"] for r in rows),
-                "best_z": max(r["height_z"] for r in rows)},
+                "best_z": max(r["height_z"] for r in rows),
+                "worst_wz": min(r["weight_z"] for r in rows),
+                "best_wz": max(r["weight_z"] for r in rows)},
     )
     f.blocks = [
         Para("A reference table for anyone who needs to know what ordinary looks "
-             "like in this extract before deciding what is unusual. Mean z-scores "
-             "run from {worst_z:.2f} to {best_z:.2f} across the age and sex cells, "
-             "so the cohort sits close to the reference population on average even "
-             "though it is not a sample of one."),
+             "like in this extract before deciding what is unusual. Mean height "
+             "z-scores run from {worst_z:.2f} to {best_z:.2f} across the age and sex "
+             "cells and mean weight z-scores from {worst_wz:.2f} to {best_wz:.2f}, "
+             "so the cohort sits close to the reference population on average — a "
+             "little heavier for its age than it is tall, and further from the "
+             "reference on weight than on height — even though it is not a sample of "
+             "one."),
         Table("t-profile", "Measurements and derived z-scores by age band and sex",
               [C("band", "age band (years)"), C("sex", "sex"),
                C("visits", "visits", ",", align="right"),

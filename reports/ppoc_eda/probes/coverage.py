@@ -16,7 +16,8 @@ ITEMS = [
     ("0 Provenance", "Vendor, version, migration events", COVERED,
      "Epic against converted legacy records — 3.7"),
     ("0 Provenance", "Data dictionary present", COVERED,
-     "Committed under docs/, reconciled field by field — 1.1"),
+     ("Committed under docs/; counts reconciled against it — 1.1, and every "
+      "column listed against it — 6.1")),
     ("0 Provenance", "Raw vs CDM vs custom extract", COVERED,
      "A custom extract plus a derived augmentation layer — 1.3"),
     ("1 Structural", "Row and table counts", COVERED,
@@ -26,7 +27,8 @@ ITEMS = [
     ("1 Structural", "Duplicate patient detection", NA,
      "No name, birth date, or linkage key survives de-identification — 1.5"),
     ("1 Structural", "Schema drift", COVERED,
-     "Live schema against the dictionary; three documented fields absent — 1.1"),
+     ("Live schema against the dictionary — 1.1; three documented medication "
+      "classification fields absent — 5.3")),
     ("1 Structural", "Grain per table", COVERED,
      "Including that patient and age is not unique in visits — 3.1"),
     ("2 Temporal", "Timestamp semantics", COVERED, "3.3"),
@@ -38,7 +40,9 @@ ITEMS = [
      "Epic against converted is computable; ICD-9 to ICD-10 is not, without dates"),
     ("2 Temporal", "Age sanity", COVERED, "3.3"),
     ("3 Missingness", "Missingness per field", COVERED, "3.4 and the field index"),
-    ("3 Missingness", "Missingness pattern", COVERED, "By age, sex, and encounter — 3.4"),
+    ("3 Missingness", "Missingness pattern", COVERED,
+     ("By age — 3.4; by encounter type — 3.7. Not by sex: no channel is "
+      "measured that way")),
     ("3 Missingness", "Sentinel values", COVERED, "3.5"),
     ("3 Missingness", "Not measured vs measured negative", COVERED,
      "Two fields whose nulls carry meaning — 3.5"),

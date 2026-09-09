@@ -194,6 +194,10 @@ def codes(ctx: Context) -> list[Finding]:
                 "ref_total": ref_total, "matched": matched,
                 "matched_share": 100.0 * matched / ref_total,
                 "zero_exact": len(zero_exact), "has_desc": len(has_desc),
+                "desc_shown": sum(1 for r in has_desc
+                                  if r["code"] in {x["code"] for x in shown}),
+                "desc_hidden": sum(1 for r in has_desc
+                                   if r["code"] not in {x["code"] for x in shown}),
                 "no_desc": len(no_desc), "hierarchical": hierarchical,
                 "flat_evidence": flat_evidence, "short": len(short),
                 "short_codes": ", ".join(f"`{r['code']}`" for r in short)},
@@ -227,7 +231,10 @@ def codes(ctx: Context) -> list[Finding]:
              "starkest because **all {zero_exact} of those codes never appear as a "
              "literal string at all**: an exact-match query returns zero patients "
              "for `E10`, `P07`, `K50` and the rest, while the derived column "
-             "correctly reports hundreds or thousands."),
+             "correctly reports hundreds or thousands. {desc_shown} of the "
+             "{has_desc} are visible in the table above and {desc_hidden} sits below "
+             "the suppression threshold, so the check is stated over the whole panel "
+             "and can be repeated over most of it."),
         Para("{short} codes ({short_codes}) sit slightly below their subtree count. "
              "The shortfall is explained rather than unexplained: those patients "
              "carry the code only on a problem-list entry with no noted date, so no "

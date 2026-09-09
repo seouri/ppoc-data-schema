@@ -9,8 +9,15 @@ GRID_CM = 2.54 / 4
 GAPS = [(0, 7, "up to 7 days"), (8, 30, "8 to 30 days"), (31, 90, "31 to 90 days"),
         (91, 180, "91 to 180 days"), (181, 365, "181 to 365 days"),
         (366, 1 << 30, "over 365 days")]
-MONTH_BANDS = [(18, 24), (24, 30), (30, 36), (36, 42), (48, 60), (60, 84),
-               (84, 120), (120, 144), (144, 168), (168, 192), (192, 216)]
+MONTH_BANDS = [(18, 24), (24, 30), (30, 36), (36, 42), (42, 48), (48, 60),
+               (60, 84), (84, 120), (120, 144), (144, 168), (168, 192), (192, 216)]
+#: The bands the two mechanisms below are read off. The spike band is named
+#: here rather than in prose so the sentence describing it cannot drift from
+#: the number it cites.
+SPIKE_BAND, BEFORE_SPIKE, AFTER_SPIKE = (30, 36), (24, 30), (36, 42)
+#: A band this thin cannot carry a rate. Bands dropped for it are named in the
+#: table's note rather than left as a silent gap in the age axis.
+MIN_BAND_PAIRS = 50
 SEX_BANDS = [(144, 168), (168, 192), (192, 216)]
 
 VIEW = """
@@ -43,15 +50,18 @@ def repeat(ctx: Context) -> list[Finding]:
         by_gap.append({"gap": label, "pairs": n, "zero": 100.0 * zero / n,
                        "decrease": 100.0 * dec / n, "median": med})
 
-    bands, rates, medians = [], [], []
+    bands, rates, medians, thin = [], [], [], []
+    band_rate = {}
     for lo, hi in MONTH_BANDS:
         where = (f"gap BETWEEN 181 AND 365 AND ap >= {lo * 30.4375} "
                  f"AND ap < {hi * 30.4375}")
         n = ctx.scalar(f"SELECT count(*) FROM _pairs WHERE {where}")
-        if n < 50:
+        if n < MIN_BAND_PAIRS:
+            thin.append(f"{lo}-{hi}")
             continue
         dec = ctx.scalar(f"SELECT count(*) FROM _pairs WHERE {where} AND chg < 0")
         bands.append(f"{lo}-{hi}")
+        band_rate[(lo, hi)] = 100.0 * dec / n
         rates.append(round(100.0 * dec / n, 2))
         medians.append({"band": f"{lo}-{hi}", "pairs": n, "rate": 100.0 * dec / n,
                         "median": ctx.scalar(f"SELECT quantile_cont(-chg, 0.5) "
@@ -97,6 +107,19 @@ def repeat(ctx: Context) -> list[Finding]:
             "back_share": 100.0 * p_back / p_tot,
             "persist_share": 100.0 * (p_tot - p_back) / p_tot,
             "grid_cm": GRID_CM,
+            "spike_band": f"{SPIKE_BAND[0]} to {SPIKE_BAND[1]}",
+            "spike_rate": band_rate[SPIKE_BAND],
+            "spike_before": band_rate[BEFORE_SPIKE],
+            "spike_after": band_rate[AFTER_SPIKE],
+            "spike_median": next(r["median"] for r in medians
+                                 if r["band"] == f"{SPIKE_BAND[0]}-{SPIKE_BAND[1]}"),
+            "after_median": next(r["median"] for r in medians
+                                 if r["band"] == f"{AFTER_SPIKE[0]}-{AFTER_SPIKE[1]}"),
+            # Reads badly when nothing was dropped, which is the usual case.
+            "thin": (f"and {len(thin)} band" + ("s " if len(thin) > 1 else " ")
+                     + f"fall below it: {', '.join(thin)}"
+                     if thin else "and no band falls below it here"),
+            "min_pairs": MIN_BAND_PAIRS,
         },
         artifact=Artifact(
             name="Apparent height loss from the recording grid on a flat trajectory",
@@ -134,13 +157,23 @@ def repeat(ctx: Context) -> list[Finding]:
                Column("rate", "any decrease", ".2f", "%", align="right"),
                Column("median", "median loss", ".2f", " cm", align="right"),
                Column("mean_change", "mean change", ".2f", " cm", align="right")],
-              medians),
-        Para("Two separate excesses, with different signatures. The first is a narrow "
-             "spike at 30 to 36 months carrying a median loss of over a centimetre "
-             "— the age at which recumbent length gives way to standing height, and "
-             "a standing height genuinely is shorter than a recumbent length for the "
-             "same child. It is a change of measurement protocol recorded in a field "
-             "that does not name the protocol."),
+              medians,
+              note="Interval held to 181-365 days throughout. This table drops the "
+                   "age-2 floor the interval table above applies, deliberately: the "
+                   "first mechanism sits on the boundary itself, so the bands either "
+                   "side of it have to be visible. Bands carrying fewer than "
+                   "{min_pairs} pairs are omitted, {thin}."),
+        Para("Two separate excesses, with different signatures. The first is a "
+             "narrow spike at {spike_band} months, and it is the *rate* that marks "
+             "it: {spike_rate:.2f}% of pairs decrease there, against "
+             "{spike_before:.2f}% in the band before and {spike_after:.2f}% in the "
+             "band after. The median loss does not mark it at all — {spike_median:.2f} "
+             "cm in the spike against {after_median:.2f} cm immediately after it, and "
+             "larger still through mid-childhood — so a reader scanning that column "
+             "would miss the excess entirely. It is the age at which recumbent length "
+             "gives way to standing height, and a standing height genuinely is shorter "
+             "than a recumbent length for the same child: a change of measurement "
+             "protocol recorded in a field that does not name the protocol."),
         Figure("fig-loss-sex", "Apparent loss in adolescence, by sex", "grouped_bar",
                {"categories": sex_bands,
                 "series": [{"name": "female", "values": f_rates},

@@ -2,13 +2,70 @@
 
 A project-neutral reference for anyone analysing this extract. Every figure is measured from the delivered bundle; the report states what the data support, what they do not, and which checks this extract cannot answer at all.
 
+## Contents
+
+- [0. How to use this report](#0-how-to-use-this-report)
+  - [0.1 Three ways in](#01-three-ways-in)
+- [1. The snapshot](#1-the-snapshot)
+  - [1.1 Package identity and integrity](#11-package-identity-and-integrity)
+  - [1.2 Resource map, grain, and keys](#12-resource-map-grain-and-keys)
+  - [1.3 Two layers with different provenance](#13-two-layers-with-different-provenance)
+  - [1.4 How this cohort was built](#14-how-this-cohort-was-built)
+  - [1.5 The de-identification envelope](#15-the-de-identification-envelope)
+- [2. Checklist coverage](#2-checklist-coverage)
+  - [2.1 The checklist, item by item](#21-the-checklist-item-by-item)
+- [3. Integrity](#3-integrity)
+  - [3.1 Keys, grain, and uniqueness](#31-keys-grain-and-uniqueness)
+  - [3.2 Referential integrity and cross-resource linkage](#32-referential-integrity-and-cross-resource-linkage)
+  - [3.3 Age-axis consistency and impossible sequences](#33-age-axis-consistency-and-impossible-sequences)
+  - [3.4 Missingness, by field and by age](#34-missingness-by-field-and-by-age)
+  - [3.5 Nulls that are not missing, and sentinels that are not data](#35-nulls-that-are-not-missing-and-sentinels-that-are-not-data)
+  - [3.6 Code systems, free text, and categorical hygiene](#36-code-systems-free-text-and-categorical-hygiene)
+  - [3.7 Capture: measurement presence is not measurement occurrence](#37-capture-measurement-presence-is-not-measurement-occurrence)
+  - [3.8 Same-day measurements that disagree](#38-same-day-measurements-that-disagree)
+  - [3.9 Counting diagnosis codes: ICD-10 is a hierarchy](#39-counting-diagnosis-codes-icd-10-is-a-hierarchy)
+- [4. Anthropometrics](#4-anthropometrics)
+  - [4.1 Trajectory supply: how many heights each child has](#41-trajectory-supply-how-many-heights-each-child-has)
+  - [4.2 Recording units and the measurement grid](#42-recording-units-and-the-measurement-grid)
+  - [4.3 Distributions and plausibility bounds](#43-distributions-and-plausibility-bounds)
+  - [4.4 Transcription-error signatures in the typed fields](#44-transcription-error-signatures-in-the-typed-fields)
+  - [4.5 Repeated measurements: zero growth and apparent height loss](#45-repeated-measurements-zero-growth-and-apparent-height-loss)
+  - [4.6 Derived z-scores and percentiles: bounds and saturation](#46-derived-z-scores-and-percentiles-bounds-and-saturation)
+  - [4.7 Head circumference: a recoverable conversion defect](#47-head-circumference-a-recoverable-conversion-defect)
+  - [4.8 The distributed delta and velocity fields](#48-the-distributed-delta-and-velocity-fields)
+  - [4.9 Age- and sex-stratified growth profile](#49-age--and-sex-stratified-growth-profile)
+  - [4.10 Within-child dependence in the height channel](#410-within-child-dependence-in-the-height-channel)
+  - [4.11 BMI: recomputation and recorded categories](#411-bmi-recomputation-and-recorded-categories)
+- [5. Clinical domains and cross-resource structure](#5-clinical-domains-and-cross-resource-structure)
+  - [5.1 Diagnoses](#51-diagnoses)
+  - [5.2 Laboratory results](#52-laboratory-results)
+  - [5.3 Medications](#53-medications)
+  - [5.4 Referrals](#54-referrals)
+  - [5.5 Recorded identity and patient-level observation](#55-recorded-identity-and-patient-level-observation)
+  - [5.6 Patient-level derived flags and summaries](#56-patient-level-derived-flags-and-summaries)
+  - [5.7 The extract's growth orientation: tracked codes and referral pathways](#57-the-extracts-growth-orientation-tracked-codes-and-referral-pathways)
+  - [5.8 Age at first record for each growth-relevant diagnosis code](#58-age-at-first-record-for-each-growth-relevant-diagnosis-code)
+  - [5.9 Label, trajectory, and utilization do not line up](#59-label-trajectory-and-utilization-do-not-line-up)
+  - [5.10 What a feature vector actually contains](#510-what-a-feature-vector-actually-contains)
+  - [5.11 Treatment and workup: better timing than the label, and leakage](#511-treatment-and-workup-better-timing-than-the-label-and-leakage)
+  - [5.12 The same code in two resources: encounter diagnoses against the problem list](#512-the-same-code-in-two-resources-encounter-diagnoses-against-the-problem-list)
+  - [5.13 Referral timing against the diagnosis, and the subgroup it finds](#513-referral-timing-against-the-diagnosis-and-the-subgroup-it-finds)
+  - [5.14 A shortcut audit: which fields encode the label](#514-a-shortcut-audit-which-fields-encode-the-label)
+  - [5.15 The same screen over the numbers: derived columns and constructed features](#515-the-same-screen-over-the-numbers-derived-columns-and-constructed-features)
+- [6. Field index](#6-field-index)
+  - [6.1 Every column in the extract](#61-every-column-in-the-extract)
+- [7. Artifact catalogue](#7-artifact-catalogue)
+  - [7.1 Every artifact this report measured](#71-every-artifact-this-report-measured)
+- [8. Methods and limitations](#8-methods-and-limitations)
+  - [8.1 Methods, determinism, and limitations](#81-methods-determinism-and-limitations)
+
 ## 0. How to use this report
 
 Three ways in, depending on what you came for.
 
 ### 0.1 Three ways in
 
-This report describes one snapshot of one pediatric primary-care EHR extract. It belongs to no project: it states what the data are, what they support, and what they cannot answer, and it leaves the research question to you.
+This report describes one snapshot of one pediatric primary-care EHR extract. Through Part 4 it belongs to no project: it states what the data are, what they support, and what they cannot answer, and it leaves the research question to you. From 5.9 it stops being neutral on purpose. The extract was assembled upstream around one question — identifying abnormal growth early — and those sections work that question through, because the label it implies is already shipped in the data as `growth_dx_flag` and its shortcuts are not visible from a field-by-field description. Read them as a worked example of auditing a label, not as the report choosing your outcome.
 
 **Where to start**
 
@@ -18,8 +75,9 @@ This report describes one snapshot of one pediatric primary-care EHR extract. It
 | About to use a specific field | Find it in the Part 6 field index, then follow the finding it links to. |
 | Explaining a number that looks wrong | Check the Part 7 artifact catalogue before assuming a bug in your code. |
 | Planning a study | Part 1.4 first. The cohort selection invalidates several whole classes of question, and it is not visible in any field. |
+| Building features or a model | 5.9 for whether the label can be predicted at all, then the shortcut screens in 5.14 and 5.15 before you fix a feature set. |
 
-Every number here was measured from the delivered bundle for snapshot `2026-08-24`; none is copied from another document without being recomputed. The cohort is pinned to 31 Dec 2024 and the extract was cut on 03 Feb 2025.
+Every number here was measured from the delivered bundle for snapshot `2026-08-24`; none is copied from another document without being recomputed. The cohort date and the extract cut are stated once, in 1.4, and referenced from everywhere else that needs them.
 
 **What this report is not.** It is not a clinical validation, not a registered analysis, and not a statement about any individual child. Every figure is an aggregate, and any cell resting on fewer than 10 records is suppressed.
 
@@ -29,7 +87,7 @@ What this extract contains, how it was built, and what its construction foreclos
 
 ### 1.1 Package identity and integrity
 
-Everything in this report was computed from the typed DuckDB bundle of package `ppoc-pediatric-ehr` 1.0.0, snapshot `2026-08-24`, sha256 `425c6f873cefc149344570561a03b33c69a6a6af7fa18bc777c0429579507116`. The bundle is opened read-only and is never copied into this repository.
+Everything in this report was computed from the typed DuckDB bundle of package `ppoc-pediatric-ehr` 1.0.0, snapshot `2026-08-24`, sha256 `425c6f873cefc149344570561a03b33c69a6a6af7fa18bc777c0429579507116`. The bundle is opened read-only and is never copied into this repository. That snapshot label dates the bundle build, not the clinical window — it sits well after the extract was cut, and 1.4 gives the two dates that bound the data.
 
 Three independent sources state how large this extract should be: the bundle manifest, the PPOC delivery documents committed under `docs/`, and the data itself. They are reconciled here before any other figure is computed, so that a bundle drawn from a different extract would be visible rather than silently profiled.
 
@@ -102,7 +160,21 @@ Because the augmented layer is derived from the delivered one, the fields they s
 
 BMI is the exception, and the disagreement is structured rather than noisy. 1,703,005 visits carry a raw `BMI` where the augmented `bmi` is null, at a median age of 0.51 years; the augmented layer withholds BMI below age 2, where a CDC BMI-for-age reference does not apply, while the raw value is computed inside the source EHR at every age. A further 41 rows go the other way, and 536 carry both values differing by more than 0.01.
 
-**Implications for analysis.** Reading `visits.BMI` silently yields infant BMI values that the augmented layer deliberately suppresses, and the two layers will not reproduce each other's descriptive statistics. Choose a layer for a stated reason and record which; do not mix them within one analysis. The 536 rows where both are present and disagree are small enough to screen individually.
+**The patient layer diverges further, and Part 5 works in it.** `patients` and `patients_augmented` also share `sex`, `ethnicity` and the race slots, over 250,588 joined patient rows. Sex agrees exactly; the other two do not, and the disagreement is a great deal larger than BMI's in relative terms.
+
+**Shared patient fields, raw against augmented**
+
+| field | populated, raw | populated, augmented | rows differing | share | distinct, raw | distinct, augmented |
+| --- | --- | --- | --- | --- | --- | --- |
+| sex | 250,588 | 250,588 | 0 | 0.00% | 3 | 3 |
+| ethnicity | 245,124 | 199,143 | 45,981 | 18.35% | 6 | 2 |
+| race_1 | 241,770 | 200,533 | 41,237 | 16.46% | 11 | 7 |
+
+`race_1` stands for the eight race slots, which are cleaned the same way.
+
+This is a documented transformation rather than a defect: `docs/patients_augmented.md` records that the augmented layer converts non-informative responses in `ethnicity` and `race_*` to null. On `ethnicity` it moves 45,981 patients from a recorded value to a null and collapses the vocabulary from 6 categories to 2. The 4 values that go are "Choose not to Answer", "Patient does not know", "Unable to collect", "Unknown" — every recorded form of non-response, and nothing else.
+
+**Implications for analysis.** Reading `visits.BMI` silently yields infant BMI values that the augmented layer deliberately suppresses, and the two layers will not reproduce each other's descriptive statistics. Choose a layer for a stated reason and record which; do not mix them within one analysis. The 536 rows where both are present and disagree are small enough to screen individually. On the patient layer the consequence is sharper: 5.5 reports identity non-response as its own category and advises keeping it that way, which is only possible against the delivered `patients` table. In the augmented layer a declined answer and a question never asked are the same null, so take identity from `patients` whenever the distinction carries any weight.
 
 ### 1.4 How this cohort was built
 
@@ -152,7 +224,7 @@ Two ambiguities in the source documents are recorded rather than silently resolv
 | Copy-forward of note text | no note text is included |
 | Documentation timing | no timestamps |
 
-One qualification, because "no calendar axis" is easy to overstate: the cohort itself is pinned to 31 Dec 2024 and the extract was cut shortly after. Ages are relative to each child's birth, but the *window* is fixed and known, which is what makes the recency criterion in 1.4 a right-censoring rule rather than an unknown.
+One qualification, because "no calendar axis" is easy to overstate: the cohort itself is pinned to a fixed date and the extract was cut shortly after it, both given in 1.4. Ages are relative to each child's birth, but the *window* is fixed and known, which is what makes the recency criterion in 1.4 a right-censoring rule rather than an unknown.
 
 ## 2. Checklist coverage
 
@@ -169,13 +241,13 @@ This part exists so that nobody has to wonder whether a standard check was skipp
 | 0 Provenance | Extraction window | covered | Cohort and extract dates recovered from the delivery documents — 1.4 |
 | 0 Provenance | Inclusion/exclusion logic | covered | The full four-step funnel — 1.4 |
 | 0 Provenance | Vendor, version, migration events | covered | Epic against converted legacy records — 3.7 |
-| 0 Provenance | Data dictionary present | covered | Committed under docs/, reconciled field by field — 1.1 |
+| 0 Provenance | Data dictionary present | covered | Committed under docs/; counts reconciled against it — 1.1, and every column listed against it — 6.1 |
 | 0 Provenance | Raw vs CDM vs custom extract | covered | A custom extract plus a derived augmentation layer — 1.3 |
 | 1 Structural | Row and table counts | covered | Against the manifest and the vendor's own counts — 1.1 |
 | 1 Structural | Primary key uniqueness | covered | All eight resources — 3.1 |
 | 1 Structural | Referential integrity | covered | 3.2 |
 | 1 Structural | Duplicate patient detection | not applicable | No name, birth date, or linkage key survives de-identification — 1.5 |
-| 1 Structural | Schema drift | covered | Live schema against the dictionary; three documented fields absent — 1.1 |
+| 1 Structural | Schema drift | covered | Live schema against the dictionary — 1.1; three documented medication classification fields absent — 5.3 |
 | 1 Structural | Grain per table | covered | Including that patient and age is not unique in visits — 3.1 |
 | 2 Temporal | Timestamp semantics | covered | 3.3 |
 | 2 Temporal | Impossible sequences | covered | 3.3 |
@@ -184,7 +256,7 @@ This part exists so that nobody has to wonder whether a standard check was skipp
 | 2 Temporal | Coding or vendor transition | partial | Epic against converted is computable; ICD-9 to ICD-10 is not, without dates |
 | 2 Temporal | Age sanity | covered | 3.3 |
 | 3 Missingness | Missingness per field | covered | 3.4 and the field index |
-| 3 Missingness | Missingness pattern | covered | By age, sex, and encounter — 3.4 |
+| 3 Missingness | Missingness pattern | covered | By age — 3.4; by encounter type — 3.7. Not by sex: no channel is measured that way |
 | 3 Missingness | Sentinel values | covered | 3.5 |
 | 3 Missingness | Not measured vs measured negative | covered | Two fields whose nulls carry meaning — 3.5 |
 | 3 Missingness | Missingness by site or provider | not applicable | No site, department, or provider column exists — 1.5 |
@@ -334,45 +406,45 @@ Two of the largest null populations in this extract are not missing data at all,
 | result_flag | rows | meaning |
 | --- | --- | --- |
 | null | 15,550,985 | normal result |
-| Abnormal | 704,327 | abnormal |
-| High | 513,650 | abnormal |
-| Low | 361,300 | abnormal |
-| Sensitive | 62,794 | abnormal |
-| Resistant | 10,278 | abnormal |
-| High Panic | 9,744 | abnormal |
-| (NONE) | 5,881 | abnormal |
-| Normal | 4,273 | abnormal |
-| Panic | 3,056 | abnormal |
-| Intermediate | 1,704 | abnormal |
-| Low Panic | 1,406 | abnormal |
-| Critical | 373 | abnormal |
-| Negative | 188 | abnormal |
-| High Off-Scale | 134 | abnormal |
-| Susceptible-Dose Dependent | 123 | abnormal |
-| Abnormal High | 99 | abnormal |
-| Abnormal Low | 92 | abnormal |
-| Invalid High | 84 | abnormal |
-| Sig Change Up | 68 | abnormal |
-| Positive | 35 | abnormal |
-| Critical High | 23 | abnormal |
-| Low Off-Scale | 17 | abnormal |
-| Critical Low | 13 | abnormal |
-| Class 0: Absent Allergen Specific IgE | — | abnormal |
-| Delta Abnormal High | — | abnormal |
-| Invalid Low | — | abnormal |
-| Better | — | abnormal |
-| Class 2: Moderate Level Allergen Specific IgE | — | abnormal |
-| Delta Critical High | — | abnormal |
-| In Process | — | abnormal |
-| Class 3: High Level Allergen Specific IgE | — | abnormal |
-| Sig Change Down | — | abnormal |
-| Delta Abnormal Low | — | abnormal |
-| Moderately Sensitive | — | abnormal |
-| Worse | — | abnormal |
+| Abnormal | 704,327 | abnormal by the dictionary rule |
+| High | 513,650 | abnormal by the dictionary rule |
+| Low | 361,300 | abnormal by the dictionary rule |
+| Sensitive | 62,794 | abnormal by the dictionary rule |
+| Resistant | 10,278 | abnormal by the dictionary rule |
+| High Panic | 9,744 | abnormal by the dictionary rule |
+| (NONE) | 5,881 | normal result |
+| Normal | 4,273 | abnormal by the dictionary rule |
+| Panic | 3,056 | abnormal by the dictionary rule |
+| Intermediate | 1,704 | abnormal by the dictionary rule |
+| Low Panic | 1,406 | abnormal by the dictionary rule |
+| Critical | 373 | abnormal by the dictionary rule |
+| Negative | 188 | abnormal by the dictionary rule |
+| High Off-Scale | 134 | abnormal by the dictionary rule |
+| Susceptible-Dose Dependent | 123 | abnormal by the dictionary rule |
+| Abnormal High | 99 | abnormal by the dictionary rule |
+| Abnormal Low | 92 | abnormal by the dictionary rule |
+| Invalid High | 84 | abnormal by the dictionary rule |
+| Sig Change Up | 68 | abnormal by the dictionary rule |
+| Positive | 35 | abnormal by the dictionary rule |
+| Critical High | 23 | abnormal by the dictionary rule |
+| Low Off-Scale | 17 | abnormal by the dictionary rule |
+| Critical Low | 13 | abnormal by the dictionary rule |
+| Class 0: Absent Allergen Specific IgE | — | abnormal by the dictionary rule |
+| Delta Abnormal High | — | abnormal by the dictionary rule |
+| Invalid Low | — | abnormal by the dictionary rule |
+| Better | — | abnormal by the dictionary rule |
+| Class 2: Moderate Level Allergen Specific IgE | — | abnormal by the dictionary rule |
+| Delta Critical High | — | abnormal by the dictionary rule |
+| In Process | — | abnormal by the dictionary rule |
+| Class 3: High Level Allergen Specific IgE | — | abnormal by the dictionary rule |
+| Sig Change Down | — | abnormal by the dictionary rule |
+| Delta Abnormal Low | — | abnormal by the dictionary rule |
+| Moderately Sensitive | — | abnormal by the dictionary rule |
+| Worse | — | abnormal by the dictionary rule |
 
-All 36 distinct values are listed.
+All 36 distinct values are listed. The null is one of them; 6.1 reports 35 for this column because `count(DISTINCT)` drops it.
 
-The data dictionary defines `result_flag` as an HL7 abnormality category in which the value `(NONE)` means a normal result and anything else means abnormal. This extract contains 5,881 literal `(NONE)` values and 15,550,985 nulls — 90.3% of all lab rows. The sentinel became a null somewhere between the source system and delivery, so **a null flag means normal, not unknown**.
+The data dictionary defines `result_flag` as an HL7 abnormality category in which the value `(NONE)` means a normal result and anything else means abnormal. This extract contains 5,881 literal `(NONE)` values and 15,550,985 nulls — 90.3% of all lab rows. The sentinel became a null somewhere between the source system and delivery, so **a null flag means normal, not unknown**. The meaning column above applies that rule and nothing else: the null and the literal `(NONE)` are the normal ones, and every other value is abnormal *by the dictionary's definition* — including the literal `Normal` and `Negative`, which are result text the HL7 category does not exempt. Where that reading matters, treat those rows as an unresolved conflict between the value and its category rather than as settled either way.
 
 `problem_list.resolved_date_age_in_days` behaves the same way: the dictionary defines null as "problem currently active". 951,677 of 1,709,584 entries (55.7%) are null, which is a statement about 56% of problems being open, not about missing dates.
 
@@ -578,16 +650,18 @@ The two channels age in opposite directions. Height stays on its quarter-inch gr
 
 ### 4.3 Distributions and plausibility bounds
 
-The four measurement channels, summarised on the derived metric columns. The final column counts values outside a conventional review range; those are reported, not removed, because the decision to exclude belongs to the analysis rather than to this report.
+The four measurement channels, summarised on the derived metric columns. The final two columns give the screening range each channel is checked against and how many values fall outside it; those are reported, not removed, because the decision to exclude belongs to the analysis rather than to this report.
 
 **Measurement channels**
 
-| channel | unit | values | min | 1st pct | median | 99th pct | max | outside review range |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| height | cm | 3,491,662 | 37.47 | 48.26 | 92.71 | 173.41 | 196.60 | 0 |
-| weight | kg | 6,483,007 | 0.01 | 2.81 | 14.52 | 78.65 | 513.92 | 217 |
-| BMI | kg/m^2 | 1,955,339 | 8.12 | 13.29 | 16.70 | 32.42 | 219.51 | 44 |
-| head circumference | cm | 1,635,690 | 0.00 | 33.00 | 44.00 | 53.00 | 505.46 | 13,742 |
+| channel | unit | values | min | 1st pct | median | 99th pct | max | review range | outside review range |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| height | cm | 3,491,662 | 37.47 | 48.26 | 92.71 | 173.41 | 196.60 | 30 to 200 | 0 |
+| weight | kg | 6,483,007 | 0.01 | 2.81 | 14.52 | 78.65 | 513.92 | 0 to 160 | 217 |
+| BMI | kg/m^2 | 1,955,339 | 8.12 | 13.29 | 16.70 | 32.42 | 219.51 | 5 to 60 | 44 |
+| head circumference | cm | 1,635,690 | 0.00 | 33.00 | 44.00 | 53.00 | 505.46 | 0 to 80 | 13,742 |
+
+The review range is a wide screening band, chosen to catch values no measurement could produce. It is not the tighter clinical band a channel may also have: 4.7 screens head circumference against 25 to 65 cm and counts more values outside it than this column does.
 
 *Figure — Distribution of height (cm). Rendered in `index.html` at `#fig-dist-height_cm`.*
 
@@ -597,7 +671,7 @@ The four measurement channels, summarised on the derived metric columns. The fin
 
 *Figure — Distribution of head circumference (cm). Rendered in `index.html` at `#fig-dist-head_circ_cm`.*
 
-**Implications for analysis.** Head circumference is the channel whose tails are worst, and 4.4 shows why. For the others the extremes are sparse but the bulk is clinically ordinary. Bound the raw imperial columns rather than the derived metric ones when screening, since a wrong unit survives an exact conversion unchanged.
+**Implications for analysis.** Head circumference is the channel whose tails are worst, and 4.7 shows why — an arithmetic defect, not a measurement one. For the others the extremes are sparse but the bulk is clinically ordinary. Bound the raw imperial columns rather than the derived metric ones when screening, since a wrong unit survives an exact conversion unchanged.
 
 ### 4.4 Transcription-error signatures in the typed fields
 
@@ -686,6 +760,7 @@ Holding the interval fixed and varying age identifies the mechanisms directly.
 | 24-30 | 52,826 | 1.21% | 0.99 cm | 5.20 cm |
 | 30-36 | 19,242 | 3.65% | 1.25 cm | 3.75 cm |
 | 36-42 | 32,650 | 0.44% | 1.63 cm | 6.19 cm |
+| 42-48 | 4,512 | 0.64% | 1.27 cm | 4.90 cm |
 | 48-60 | 37,302 | 0.37% | 1.91 cm | 5.68 cm |
 | 60-84 | 64,090 | 0.33% | 1.92 cm | 5.14 cm |
 | 84-120 | 76,194 | 0.36% | 1.60 cm | 4.70 cm |
@@ -694,7 +769,9 @@ Holding the interval fixed and varying age identifies the mechanisms directly.
 | 168-192 | 14,518 | 11.39% | 0.64 cm | 1.79 cm |
 | 192-216 | 2,566 | 23.69% | 0.64 cm | 0.54 cm |
 
-Two separate excesses, with different signatures. The first is a narrow spike at 30 to 36 months carrying a median loss of over a centimetre — the age at which recumbent length gives way to standing height, and a standing height genuinely is shorter than a recumbent length for the same child. It is a change of measurement protocol recorded in a field that does not name the protocol.
+Interval held to 181-365 days throughout. This table drops the age-2 floor the interval table above applies, deliberately: the first mechanism sits on the boundary itself, so the bands either side of it have to be visible. Bands carrying fewer than 50 pairs are omitted, and no band falls below it here.
+
+Two separate excesses, with different signatures. The first is a narrow spike at 30 to 36 months, and it is the *rate* that marks it: 3.65% of pairs decrease there, against 1.21% in the band before and 0.44% in the band after. The median loss does not mark it at all — 1.25 cm in the spike against 1.63 cm immediately after it, and larger still through mid-childhood — so a reader scanning that column would miss the excess entirely. It is the age at which recumbent length gives way to standing height, and a standing height genuinely is shorter than a recumbent length for the same child: a change of measurement protocol recorded in a field that does not name the protocol.
 
 *Figure — Apparent loss in adolescence, by sex. Rendered in `index.html` at `#fig-loss-sex`.*
 
@@ -788,7 +865,7 @@ Two residuals are worth recording. 372,482 rows differ by exactly one hundredth 
 
 ### 4.9 Age- and sex-stratified growth profile
 
-A reference table for anyone who needs to know what ordinary looks like in this extract before deciding what is unusual. Mean z-scores run from -0.00 to 0.36 across the age and sex cells, so the cohort sits close to the reference population on average even though it is not a sample of one.
+A reference table for anyone who needs to know what ordinary looks like in this extract before deciding what is unusual. Mean height z-scores run from -0.00 to 0.36 across the age and sex cells and mean weight z-scores from -0.17 to 0.65, so the cohort sits close to the reference population on average — a little heavier for its age than it is tall, and further from the reference on weight than on height — even though it is not a sample of one.
 
 **Measurements and derived z-scores by age band and sex**
 
@@ -847,7 +924,7 @@ The category is present only where a BMI percentile is, which 1.3 and 3.4 show m
 
 ## 5. Clinical domains and cross-resource structure
 
-Diagnoses, laboratory results, medications, referrals, and demographics, then how they line up against each other.
+Diagnoses, laboratory results, medications, referrals, and demographics, then how they line up against each other. From 5.9 the part turns to the question the extract was built around — identifying abnormal growth early — and audits the label that question implies. 0.1 says why a project-neutral report works one question through.
 
 ### 5.1 Diagnoses
 
@@ -1131,7 +1208,7 @@ Race is a multi-select of up to eight slots; only the first is shown. 13,191 pat
 
 Observation per patient is dense, as the cohort rule in 1.4 requires. The median patient has 23 visits (quartiles 15 and 34, 95th percentile 56, maximum 244), spanning a median of 7.0 years (quartiles 3.3 and 10.9). The median patient's last recorded visit is at age 8.3 years.
 
-**Implications for analysis.** Identity non-response is large enough to change a subgroup contrast on its own, so report it as its own category rather than dropping it. And because entry to this cohort required both a measurement history and a recent visit, the visit distribution describes the selection as much as the care; it is a feasibility figure, not an estimate of pediatric utilisation.
+**Implications for analysis.** Identity non-response is large enough to change a subgroup contrast on its own, so report it as its own category rather than dropping it — which requires the delivered `patients` table, because the augmented layer has already folded every non-response category into a null (1.3). And because entry to this cohort required both a measurement history and a recent visit, the visit distribution describes the selection as much as the care; it is a feasibility figure, not an estimate of pediatric utilisation.
 
 ### 5.6 Patient-level derived flags and summaries
 
@@ -1204,7 +1281,7 @@ Because ICD-10 is a hierarchy (3.9), each code is counted here twice: as a liter
 
 Codes carried by fewer patients than the suppression threshold are omitted. Counts are recorded frequencies inside a cohort that excluded every patient with a code seen fewer than 11 times (1.4), so this panel cannot be read as prevalence.
 
-**The upstream derivation is hierarchical, and the two count columns verify it.** 14 of the 33 tracked codes have descendants in this extract; the other 19 have none, so both readings coincide and they cannot distinguish the two rules. Of the 14 that can, **0 match the literal count** — in every case the derived column follows the subtree. The evidence is starkest because **all 14 of those codes never appear as a literal string at all**: an exact-match query returns zero patients for `E10`, `P07`, `K50` and the rest, while the derived column correctly reports hundreds or thousands.
+**The upstream derivation is hierarchical, and the two count columns verify it.** 14 of the 33 tracked codes have descendants in this extract; the other 19 have none, so both readings coincide and they cannot distinguish the two rules. Of the 14 that can, **0 match the literal count** — in every case the derived column follows the subtree. The evidence is starkest because **all 14 of those codes never appear as a literal string at all**: an exact-match query returns zero patients for `E10`, `P07`, `K50` and the rest, while the derived column correctly reports hundreds or thousands. 13 of the 14 are visible in the table above and 1 sits below the suppression threshold, so the check is stated over the whole panel and can be repeated over most of it.
 
 4 codes (`P07`, `P05`, `E30.1`, `P70`) sit slightly below their subtree count. The shortfall is explained rather than unexplained: those patients carry the code only on a problem-list entry with no noted date, so no age could be determined. The derived column therefore means *the patient carries the code or one of its descendants **and** an age for it can be established* — not simply that the patient carries it.
 
@@ -1516,13 +1593,13 @@ That difference decides whether the label is learnable. Of the 1,958 labelled pa
 
 ### 5.14 A shortcut audit: which fields encode the label
 
-5.11 and 5.13 measure the leakage in a list of candidates chosen for being clinically obvious. This section runs the search those sections imply: every value of 7 categorical fields that 200 or more patients carry, scored against the label. 2,652 values clear that floor, out of 13,981 distinct ones. Lift is the share of patients carrying a value who also carry `growth_dx_flag`, over the cohort's 14.33% base rate; a lift of 1 is no information.
+5.11 and 5.13 measure the leakage in a list of candidates chosen for being clinically obvious. This section runs the search those sections imply: every value of 7 categorical fields that 200 or more patients carry, scored against the label. 2,652 values meet that floor, out of 13,981 distinct ones. Lift is the share of patients carrying a value who also carry `growth_dx_flag`, over the cohort's 14.33% base rate; a lift of 1 is no information.
 
 **What the positive class is made of bounds what every lift here means.** Of the 35,890 labelled patients with a diagnosis age, 29,738 (82.9%) are diagnosed at or before age 2 — 5.9's earlier stratum, the one with no measurement history before the code. A lift in this table is therefore mostly a statement about what co-occurs with perinatal coding, not about what precedes a growth problem. That does not make a leaking field safe to keep: a shortcut that works because the label is perinatal still works. It does mean a field that screens clean here has not been cleared for the later-diagnosed stratum, where the base rate, the timing and the available history are all different, and re-screening against a stratified label is the check this section does not perform.
 
 A value counts once per patient, ever, with no temporal cut — which is what an unrestricted feature build sees, and it mixes leakage with concurrency: a code recorded at the same encounter as the diagnosis scores as high as one recorded years before it. Beside each lift is the same figure against the alternative index of 5.11, the first growth workup or treatment, which 1,410 patients carry at a base rate of 0.56%. It is suppressed where fewer than 10 patients back it, and where the value is itself part of the index definition — the somatropin, growth hormone and IGF records — since those score the index's maximum by construction rather than by discrimination.
 
-**The raw diagnosis fields carry the label verbatim.** 26 screened codes are one of the tracked panel or a descendant of one (3.9, 5.7), and 26 of those are carried by no unlabelled patient at all — a lift of 6.98, the maximum the base rate allows. Dropping the `dx_age_years_*` columns therefore does not take the label out of a feature set: `enc_diag_*` and `pl_diag` reconstruct it exactly. The table below excludes that group and shows what is left.
+**The raw diagnosis fields carry the label verbatim.** 26 screened codes are one of the tracked panel or a descendant of one (3.9, 5.7), and 26 of them are carried by no unlabelled patient at all, which is every code in that group — a lift of 6.98, the maximum the base rate allows. Dropping the `dx_age_years_*` columns therefore does not take the label out of a feature set: `enc_diag_*` and `pl_diag` reconstruct it exactly. The table below excludes that group and shows what is left.
 
 **Diagnosis codes with the highest lift, excluding the tracked panel and its descendants**
 
@@ -1536,7 +1613,7 @@ A value counts once per patient, ever, with no temporal cut — which is what an
 
 Top 5 by lift among codes carried by 200 or more patients.
 
-What sits below the panel is the neighbourhood of a label 5.9 shows to be overwhelmingly perinatal: prematurity, its complications, and newborn morbidity. None is a growth code and none is tracked, but a patient carrying one was in the neonatal course that produced the label, and the screen clears 1,578 untracked codes in all. That is the kind of shortcut a curated exclusion list does not reach: it is built by naming the condition, and none of these names the condition.
+What sits below the panel is the neighbourhood of a label 5.9 shows to be overwhelmingly perinatal: prematurity, its complications, and newborn morbidity. None is a growth code and none is tracked, but a patient carrying one was in the neonatal course that produced the label, and the screen reaches 1,578 untracked codes in all. That is the kind of shortcut a curated exclusion list does not reach: it is built by naming the condition, and none of these names the condition.
 
 **The top of the lift distribution in the other 6 fields**
 
@@ -1636,7 +1713,7 @@ Of 41 columns screened, 12 sit within 0.05 of 0.5 and carry almost nothing on th
 
 **After the column that is the label, growth and bookkeeping are interleaved.** `visits_count_pre_dx` leads at 0.075 because 5.14 shows it to be the label written as a count. Then the lowest weight z-score a child ever recorded at 0.305 — and immediately behind it the age at the last visit at 0.339, the number of BMI values at 0.359, and the span of the record at 0.365. **The shape of a patient's record separates this label about as well as the child's growth does**, because a labelled patient is younger and less observed when the label is perinatal (5.9).
 
-Two rows are worth putting side by side. The count of head circumference measurements separates at 0.605 and the stunting flag at 0.586: **how often a child was measured carries more about this label than whether the measurement was low.** Meanwhile `visits_count` itself is 0.488, which is nothing — lifetime volume does not discriminate, and the rate at which that volume accumulates does.
+Two columns further down the same screen are worth putting side by side; neither reaches the ten shown above. The count of head circumference measurements separates at 0.605 and the stunting flag at 0.586: **how often a child was measured carries more about this label than whether the measurement was low.** Meanwhile `visits_count` itself is 0.488, which is nothing — lifetime volume does not discriminate, and the rate at which that volume accumulates does.
 
 **Constructed features, scored the same way**
 
@@ -1672,7 +1749,9 @@ Every column, with its population, range, and the findings that govern it.
 
 ### 6.1 Every column in the extract
 
-All 176 distinct columns across the 8 resources, with how much of each is populated and how many values it takes. Repeated families — the 33 encounter-diagnosis slots and the 8 race slots — appear once each, summarised on their first member.
+All 176 distinct columns across the 8 resources, with how much of each is populated and how many values it takes. A repeated family — the encounter-diagnosis slots, the race slots — appears once, named for the span it covers in that resource and summarised on its first member. The span differs between resources: `patients` and `patients_augmented` carry eight race columns, `visits_augmented` carries one, so a row reading `race_1` is the whole of that resource's race detail and not the first of eight.
+
+Two sections read this index rather than describe it. 3.4 takes the least-populated columns from it, and 5.15 scores every numeric column of the augmented patient layer here against the growth label, which is where to look before treating any of them as a feature.
 
 **Field index**
 
@@ -1777,7 +1856,7 @@ All 176 distinct columns across the 8 resources, with how much of each is popula
 | visits_augmented | visit_id | VARCHAR | 6,494,473 | 0.0% | 6,494,473 |
 | visits_augmented | sex | VARCHAR | 6,494,473 | 0.0% | 3 |
 | visits_augmented | ethnicity | VARCHAR | 5,401,217 | 16.8% | 2 |
-| visits_augmented | race_1..8 | VARCHAR | 5,423,318 | 16.5% | 7 |
+| visits_augmented | race_1 | VARCHAR | 5,423,318 | 16.5% | 7 |
 | visits_augmented | age_in_days | BIGINT | 6,494,473 | 0.0% | 6,563 |
 | visits_augmented | age_in_months | DOUBLE | 6,494,473 | 0.0% | 6,563 |
 | visits_augmented | age_in_years | DOUBLE | 6,494,473 | 0.0% | 6,563 |
@@ -1861,7 +1940,7 @@ One row per known artifact, with its scale and whether it can be repaired.
 
 ### 7.1 Every artifact this report measured
 
-One row per artifact, gathered from the findings that measured them. The class says who produced the artifact, which decides whether it can be repaired: a derivation artifact can be recomputed without touching the clinical record, a capture artifact cannot, a selection artifact is outside the extract entirely. 21 artifacts across 4 classes (capture, derivation, linkage, selection).
+One row per artifact, gathered from the findings that measured them. The class says who produced the artifact, which decides whether it can be repaired: a derivation artifact can be recomputed without touching the clinical record, a capture artifact cannot, a selection artifact is outside the extract entirely. 22 artifacts across 4 classes (capture, derivation, linkage, selection).
 
 **Artifact catalogue**
 
@@ -1888,6 +1967,7 @@ One row per artifact, gathered from the findings that measured them. The class s
 | A diagnosis code's resource coverage depends on the code | capture | 36% of patient-code pairs appear only in encounter diagnoses and 14% only in the problem list | Yes — take the union of both resources, as the derived columns do | 5.12 |
 | A growth diagnosis recorded at the referral rather than before it | capture | 36% of endocrinology-referred labelled patients carry the code within 30 days of the referral | No — but the subgroup it marks is the usable one | 5.13 |
 | A derived column that is a function of the label | derivation | `visits_count_pre_dx` recovers `growth_dx_flag` at 100.0% precision and 99.7% recall | No — the column cannot be made label-free; exclude it | 5.14 |
+| Contact intensity separates the label without measuring the child | derivation | visits per year of record ranks a labelled patient above an unlabelled one 0.664 of the time, against 0.488 for lifetime visit count | Yes — fix a common index date and observation window, or exclude the record-shape columns | 5.15 |
 
 ## 8. Methods and limitations
 

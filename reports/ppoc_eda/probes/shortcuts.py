@@ -262,6 +262,9 @@ def audit(ctx: Context) -> list[Finding]:
             "w_base": w_base, "w_n": w_n, "suppress": SUPPRESS_BELOW,
             "n_fields": len(SOURCES) + 1,
             "label_codes": len(label_codes), "perfect": len(perfect),
+            # Reads as a subset when the two counts coincide, which they do here.
+            "perfect_all": (", which is every code in that group"
+                            if len(perfect) == len(label_codes) else ""),
             "max_lift": 100.0 / dx_base,
             "code_shown": len(other_codes), "code_untracked": len(untracked),
             "med_high": len(med_high), "med_screened": len(meds),
@@ -294,7 +297,7 @@ def audit(ctx: Context) -> list[Finding]:
              "being clinically obvious. This section runs the search those sections "
              "imply: every value of {n_fields} categorical fields that {support:,} "
              "or more patients carry, scored against the label. {screened:,} values "
-             "clear that floor, out of {distinct:,} distinct ones. Lift is the share "
+             "meet that floor, out of {distinct:,} distinct ones. Lift is the share "
              "of patients carrying a value who also carry `growth_dx_flag`, over the "
              "cohort's {base:.2f}% base rate; a lift of 1 is no information."),
         Para("**What the positive class is made of bounds what every lift here "
@@ -323,9 +326,9 @@ def audit(ctx: Context) -> list[Finding]:
              "discrimination.", role="method"),
         Para("**The raw diagnosis fields carry the label verbatim.** {label_codes} "
              "screened codes are one of the tracked panel or a descendant of one "
-             "(3.9, 5.7), and {perfect} of those are carried by no unlabelled "
-             "patient at all — a lift of {max_lift:.2f}, the maximum the base rate "
-             "allows. Dropping the `dx_age_years_*` columns therefore does not take "
+             "(3.9, 5.7), and {perfect} of them are carried by no unlabelled "
+             "patient at all{perfect_all} — a lift of {max_lift:.2f}, the maximum "
+             "the base rate allows. Dropping the `dx_age_years_*` columns therefore does not take "
              "the label out of a feature set: `enc_diag_*` and `pl_diag` "
              "reconstruct it exactly. The table below excludes that group and shows "
              "what is left."),
@@ -344,7 +347,7 @@ def audit(ctx: Context) -> list[Finding]:
              "be overwhelmingly perinatal: prematurity, its complications, and "
              "newborn morbidity. None is a growth code and none is tracked, but a "
              "patient carrying one was in the neonatal course that produced the "
-             "label, and the screen clears {code_untracked:,} untracked codes in "
+             "label, and the screen reaches {code_untracked:,} untracked codes in "
              "all. That is the kind of shortcut a curated exclusion list does not "
              "reach: it is built by naming the condition, and none of these names "
              "the condition."),
@@ -654,6 +657,15 @@ def numbers(ctx: Context) -> list[Finding]:
             "procs_long": by_key["distinct laboratory procedures"]["long_auc"],
             "order_auc": by_key["position in the delivered patient file"]["auc"],
         },
+        artifact=Artifact(
+            name="Contact intensity separates the label without measuring the child",
+            kind="derivation",
+            scale="visits per year of record ranks a labelled patient above an "
+                  "unlabelled one {rate_auc:.3f} of the time, against "
+                  "{visits_auc:.3f} for lifetime visit count",
+            recoverable="Yes — fix a common index date and observation window, or "
+                        "exclude the record-shape columns",
+        ),
     )
     f.blocks = [
         Para("5.14 screens categorical fields, where a lift answers the question. A "
@@ -696,7 +708,8 @@ def numbers(ctx: Context) -> list[Finding]:
              "this label about as well as the child's growth does**, because a "
              "labelled patient is younger and less observed when the label is "
              "perinatal (5.9)."),
-        Para("Two rows are worth putting side by side. The count of head "
+        Para("Two columns further down the same screen are worth putting side by "
+             "side; neither reaches the ten shown above. The count of head "
              "circumference measurements separates at {hc_count_auc:.3f} and the "
              "stunting flag at {stunting_auc:.3f}: **how often a child was measured "
              "carries more about this label than whether the measurement was low.** "

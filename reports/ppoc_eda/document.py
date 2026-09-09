@@ -33,7 +33,10 @@ PARTS: list[tuple[str, str, str]] = [
      "The richest and most artifact-prone measurements in the extract."),
     ("5", "Clinical domains and cross-resource structure",
      ("Diagnoses, laboratory results, medications, referrals, and demographics, "
-      "then how they line up against each other.")),
+      "then how they line up against each other. From 5.9 the part turns to the "
+      "question the extract was built around — identifying abnormal growth early "
+      "— and audits the label that question implies. 0.1 says why a "
+      "project-neutral report works one question through.")),
     ("6", "Field index",
      "Every column, with its population, range, and the findings that govern it."),
     ("7", "Artifact catalogue",

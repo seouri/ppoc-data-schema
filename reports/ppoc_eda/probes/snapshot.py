@@ -86,7 +86,9 @@ def identity(ctx: Context) -> list[Finding]:
         Para("Everything in this report was computed from the typed DuckDB bundle of "
              "package `{package}` {version}, snapshot `{snapshot}`, sha256 "
              "`{digest}`. The bundle is opened read-only and is never copied into "
-             "this repository."),
+             "this repository. That snapshot label dates the bundle build, not the "
+             "clinical window — it sits well after the extract was cut, and 1.4 "
+             "gives the two dates that bound the data."),
         Para("Three independent sources state how large this extract should be: the "
              "bundle manifest, the PPOC delivery documents committed under `docs/`, "
              "and the data itself. They are reconciled here before any other figure "

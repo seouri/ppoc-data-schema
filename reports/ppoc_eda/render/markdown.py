@@ -2,7 +2,26 @@
 
 from __future__ import annotations
 
+import re
+
 from ..findings import Code, Figure, Finding, Para, Table
+
+
+def _slug(heading: str) -> str:
+    """The anchor a Markdown viewer derives from a heading, GitHub's rules."""
+    return re.sub(r"[^a-z0-9 -]", "", heading.lower()).replace(" ", "-")
+
+
+def _contents(doc) -> list[str]:
+    """A way into the mirror. The HTML has a sticky nav; this file had none."""
+    out = ["## Contents", ""]
+    for part in doc.parts:
+        head = f"{part.number}. {part.title}"
+        out.append(f"- [{head}](#{_slug(head)})")
+        for f in part.findings:
+            sub = f"{f.part} {f.title}"
+            out.append(f"  - [{sub}](#{_slug(sub)})")
+    return out + [""]
 
 
 def _table(f: Finding, block: Table) -> list[str]:
@@ -19,7 +38,7 @@ def _table(f: Finding, block: Table) -> list[str]:
 
 
 def render(doc) -> str:
-    lines = [f"# {doc.title}", "", doc.subtitle, ""]
+    lines = [f"# {doc.title}", "", doc.subtitle, ""] + _contents(doc)
     for part in doc.parts:
         lines += [f"## {part.number}. {part.title}", ""]
         if part.lede:
