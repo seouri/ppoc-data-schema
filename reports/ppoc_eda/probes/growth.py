@@ -1,9 +1,13 @@
-"""Part 5.6-5.7 — the derived patient layer, and the extract's growth orientation.
+"""Parts 5.6, 5.7 and 5.15 — the derived patient layer and the growth panel.
 
 This extract was assembled around growth: cohort entry required a growth
 measurement history (1.4), and the augmentation layer carries patient-level
 growth flags and a fixed panel of growth-relevant diagnosis codes. Documenting
 that orientation is a description of the data, not of any downstream question.
+
+5.7 says which codes the panel tracks and how many patients carry each; 5.15
+says when those codes were first recorded. Both read the panel from
+`tracked_codes`, so neither can drift from the other's idea of what is tracked.
 """
 
 from __future__ import annotations
@@ -35,6 +39,21 @@ FAMILIES = [
     ("Nephrology", "%nephrolog%"),
     ("Genetics", "%genetic%"),
 ]
+
+
+def tracked_codes(ctx: Context) -> list[tuple[str, str]]:
+    """The tracked growth-relevant panel, as (column, ICD-10 code) pairs.
+
+    The panel is not written down anywhere in the extract; it is recoverable
+    only from the augmented layer's column names, and 5.7 and 5.15 both need
+    it. The trailing underscore in the prefix is what keeps `dx_age_years` — the
+    panel-wide age at first diagnosis, not a code — out of the panel, where it
+    would appear as an ICD-10 code named after the column.
+    """
+    cols = [c for c in ctx.columns("patients_augmented")
+            if c.startswith("dx_age_years_")]
+    return [(c, c.replace("dx_age_years_", "").upper().replace("_", "."))
+            for c in cols]
 
 
 @probe("growth.flags", "5.6")
@@ -114,13 +133,7 @@ def flags(ctx: Context) -> list[Finding]:
 @probe("growth.codes", "5.7")
 def codes(ctx: Context) -> list[Finding]:
     pc = patient_codes(ctx)
-    dx_cols = [c for c in ctx.columns("patients_augmented")
-               if c.startswith("dx_age_years_")]
-
-    def to_icd(col: str) -> str:
-        return col.replace("dx_age_years_", "").upper().replace("_", ".")
-
-    tracked = [(c, to_icd(c)) for c in dx_cols]
+    tracked = tracked_codes(ctx)
     values = ", ".join(f"('{icd}')" for _, icd in tracked)
     # Literal and subtree patient counts for every tracked code, in one pass.
     counted = dict(ctx.q(f"""
@@ -177,7 +190,7 @@ def codes(ctx: Context) -> list[Finding]:
     f = Finding(
         id="growth.codes", part="5.7",
         title="The extract's growth orientation: tracked codes and referral pathways",
-        values={"n_codes": len(dx_cols), "n_shown": len(shown),
+        values={"n_codes": len(tracked), "n_shown": len(shown),
                 "ref_total": ref_total, "matched": matched,
                 "matched_share": 100.0 * matched / ref_total,
                 "zero_exact": len(zero_exact), "has_desc": len(has_desc),
@@ -240,5 +253,148 @@ def codes(ctx: Context) -> list[Finding]:
              "from the panel may still be present in 5.1, and a specialty family "
              "here is a string match on a free-text field rather than a clinical "
              "taxonomy.", role="implication"),
+    ]
+    return [f]
+
+
+#: A code whose median age at first record falls inside this window is being
+#: recorded at birth rather than observed over a trajectory.
+NEONATAL_YEARS = 1.0 / 12
+
+
+@probe("growth.ages", "5.15")
+def ages(ctx: Context) -> list[Finding]:
+    pc = patient_codes(ctx)
+    tracked = tracked_codes(ctx)
+    values = ", ".join(f"('{icd}')" for _, icd in tracked)
+
+    # One branch per code, each reading a single column of the augmented layer.
+    quartets = dict(ctx.q(" UNION ALL ".join(
+        f"SELECT '{icd}' AS code, list_value(count(a), min(a), "
+        f"quantile_cont(a, 0.5), avg(a), max(a)) "
+        f"FROM (SELECT {col} AS a FROM patients_augmented)"
+        for col, icd in tracked)))
+    # The patient total over the code and every descendant, as 5.7 counts it.
+    tree = dict(ctx.q(f"""
+        WITH t(code) AS (VALUES {values})
+        SELECT t.code, count(DISTINCT pc.patient_id)
+        FROM t LEFT JOIN {pc} pc ON starts_with(pc.code, t.code)
+        GROUP BY t.code"""))
+    lookup = dict(ctx.q(f"""
+        WITH t(code) AS (VALUES {values}), l AS ({ICD_LOOKUP})
+        SELECT t.code, coalesce(l.descr, '[not in the ICD-10 lookup]')
+        FROM t LEFT JOIN l ON replace(t.code, '.', '') = l.code"""))
+
+    rows = []
+    for _, icd in tracked:
+        n, lo, med, mean, hi = quartets[icd]
+        aged = ctx.suppress(int(n))
+        # The four statistics describe the patients `aged` counts, so they are
+        # withheld with it rather than published over a handful of children.
+        stats = (lo, med, mean, hi) if aged else (None, None, None, None)
+        rows.append({"code": icd, "descr": lookup[icd],
+                     "patients": ctx.suppress(tree[icd]), "aged": aged,
+                     "min": stats[0], "median": stats[1],
+                     "mean": stats[2], "max": stats[3]})
+    rows.sort(key=lambda r: (-tree[r["code"]], r["code"]))
+    shown = [r for r in rows if r["patients"] is not None]
+
+    dated = [r for r in shown if r["median"] is not None]
+    neonatal = [r for r in dated if r["median"] < NEONATAL_YEARS]
+    childhood = [r for r in dated if r["median"] >= 1.0]
+    negative = [r for r in dated if r["min"] < 0]
+    worst = min(negative, key=lambda r: (r["min"], r["code"])) if negative else None
+    # The widest gap between mean and median: where a perinatal code also gets
+    # recorded years later, the mean moves and the median does not.
+    skewed = max(dated, key=lambda r: (r["mean"] - r["median"], r["code"]))
+    any_n, any_min, any_med, any_mean, any_max = ctx.one(
+        "SELECT count(dx_age_years), min(dx_age_years), "
+        "quantile_cont(dx_age_years, 0.5), avg(dx_age_years), max(dx_age_years) "
+        "FROM patients_augmented")
+
+    f = Finding(
+        id="growth.ages", part="5.15",
+        title="Age at first record for each growth-relevant diagnosis code",
+        values={
+            "n_codes": len(tracked), "n_shown": len(shown),
+            "neonatal": len(neonatal), "childhood": len(childhood),
+            "between": len(dated) - len(neonatal) - len(childhood),
+            "n_negative": len(negative),
+            "worst_code": worst["code"] if worst else "none",
+            "worst_min": worst["min"] if worst else 0.0,
+            "skew_code": skewed["code"], "skew_med": skewed["median"],
+            "skew_mean": skewed["mean"], "skew_max": skewed["max"],
+            "any_n": any_n, "any_min": any_min, "any_med": any_med,
+            "any_mean": any_mean, "any_max": any_max,
+        },
+    )
+    f.blocks = [
+        Para("5.7 says which codes the tracked panel carries and how many patients "
+             "carry each. This section says when. For every one of the {n_codes} "
+             "tracked codes, the table below gives the age at which the code was "
+             "first recorded — its smallest, median, mean and largest value across "
+             "the patients who carry it — beside the patient total counted over the "
+             "code and all of its descendants."),
+        Para("Age here is the augmented layer's `dx_age_years_` column for the code, "
+             "and that column was checked rather than assumed. For every code "
+             "tested it reproduces exactly the earliest age at which the code or any "
+             "of its descendants appears on either diagnosis resource: the minimum "
+             "of `age_in_days` over prefix-matched encounter diagnoses and "
+             "`noted_date_age_in_days` over prefix-matched problem-list entries, "
+             "divided by 365.25 and rounded to three decimals. So the ages are "
+             "already descendant-inclusive, and they are ages at first **record** — "
+             "a patient whose only entry for the code is an undated problem-list "
+             "row has no age at all, which is why the patient total and the aged "
+             "count differ (5.7).", role="method"),
+        Table("t-growth-ages",
+              "Age at first record, in years, for each tracked growth-relevant code",
+              [C("code", "ICD-10"), C("descr", "description"),
+               C("patients", "patients, code and descendants", ",", align="right"),
+               C("aged", "with an age", ",", align="right"),
+               C("min", "min", ".3f", align="right"),
+               C("median", "median", ".3f", align="right"),
+               C("mean", "mean", ".3f", align="right"),
+               C("max", "max", ".3f", align="right")], shown,
+              note="Codes carried by fewer patients than the suppression threshold "
+                   "are omitted, and a code whose aged count falls below it keeps "
+                   "its patient total but not its four statistics. Counts are "
+                   "recorded frequencies inside a cohort that excluded every patient "
+                   "with a code seen fewer than 11 times (1.4), so this panel cannot "
+                   "be read as prevalence."),
+        Para("**The panel is two panels.** Of the {n_shown} codes shown, "
+             "{neonatal} have a median age at first record inside the first month "
+             "of life, {childhood} have one at or above a year, and {between} sit "
+             "between the two. The first group is perinatal coding attached to a "
+             "birth episode; the second is "
+             "recorded when a child was seen, measured and worked up. A question "
+             "about growth over time is answerable for the second group and mostly "
+             "not for the first, and no column in the extract distinguishes them — "
+             "the median in this table does."),
+        Para("**The mean and the median disagree by design, and the extremes are "
+             "not clean.** `{skew_code}` is the clearest case: a median of "
+             "{skew_med:.3f} years against a mean of {skew_mean:.3f} and a maximum "
+             "of {skew_max:.3f}, because the same code is also recorded for older "
+             "children, and one late record moves a mean that the median does not "
+             "feel. The minimum is the more fragile column: it is one patient's "
+             "value, and {n_negative} codes have a negative one. `{worst_code}` "
+             "reaches {worst_min:.3f} years, which is a record dated before the "
+             "child was born rather than a diagnosis age — 3.3 counts those "
+             "directly. Read the median and the mean together; read the minimum as "
+             "a data-quality probe."),
+        Para("Across the whole panel, `dx_age_years` — the age at which any tracked "
+             "code was first recorded — is populated for {any_n:,} patients, with a "
+             "median of {any_med:.3f} years against a mean of {any_mean:.3f}, a "
+             "minimum of {any_min:.3f} and a maximum of {any_max:.3f}. The gap "
+             "between that median and that mean is the two panels above, summed."),
+        Para("**Implications for analysis.** These are ages at first record, so they "
+             "date a coding event and not an onset; the difference matters most "
+             "exactly where the median is smallest. If a design needs an index date "
+             "per patient, take it from this column only for codes whose median "
+             "puts the record after the birth episode, and state the choice. If a "
+             "design needs age at onset, this extract does not carry it. Filter "
+             "negative values explicitly rather than trusting a minimum, and where "
+             "a code's aged count sits below its patient total, decide whether the "
+             "undated patients belong in the denominator before computing a rate "
+             "over them.", role="implication"),
     ]
     return [f]

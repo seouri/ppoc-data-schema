@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-08T17:32:26Z",
+  "generated_at": "2026-09-09T17:22:25Z",
   "parts": [
     {
       "findings": [
@@ -7641,6 +7641,328 @@
             "span_auc": 0.36479341,
             "stunting_auc": 0.58557137,
             "visits_auc": 0.48816378
+          }
+        },
+        {
+          "id": "growth.ages",
+          "part": "5.15",
+          "tables": [
+            {
+              "caption": "Age at first record, in years, for each tracked growth-relevant code",
+              "columns": [
+                "code",
+                "descr",
+                "patients",
+                "aged",
+                "min",
+                "median",
+                "mean",
+                "max"
+              ],
+              "id": "t-growth-ages",
+              "rows": [
+                {
+                  "aged": 14428,
+                  "code": "P92.6",
+                  "descr": "Failure to thrive in newborn",
+                  "max": 11.91,
+                  "mean": 0.049233989,
+                  "median": 0.025,
+                  "min": -0.12,
+                  "patients": 14428
+                },
+                {
+                  "aged": 11014,
+                  "code": "P07",
+                  "descr": "Disorders of newborn related to short gestation and low birth weight, not elsewhere classified",
+                  "max": 16.569,
+                  "mean": 0.37607908,
+                  "median": 0.03,
+                  "min": -114.667,
+                  "patients": 11029
+                },
+                {
+                  "aged": 4069,
+                  "code": "P05",
+                  "descr": "Disorders of newborn related to slow fetal growth and fetal malnutrition",
+                  "max": 14.757,
+                  "mean": 0.35521406,
+                  "median": 0.011,
+                  "min": 0.0,
+                  "patients": 4074
+                },
+                {
+                  "aged": 3405,
+                  "code": "E30.1",
+                  "descr": "Precocious puberty",
+                  "max": 17.046,
+                  "mean": 7.0018558,
+                  "median": 7.871,
+                  "min": 0.016,
+                  "patients": 3406
+                },
+                {
+                  "aged": 3353,
+                  "code": "P70",
+                  "descr": "Transitory disorders of carbohydrate metabolism specific to newborn",
+                  "max": 7.162,
+                  "mean": 0.026002982,
+                  "median": 0.003,
+                  "min": -0.003,
+                  "patients": 3354
+                },
+                {
+                  "aged": 898,
+                  "code": "K90.0",
+                  "descr": "Celiac disease",
+                  "max": 17.462,
+                  "mean": 7.6301047,
+                  "median": 7.199,
+                  "min": 0.027,
+                  "patients": 898
+                },
+                {
+                  "aged": 491,
+                  "code": "E10",
+                  "descr": "Type 1 diabetes mellitus",
+                  "max": 16.553,
+                  "mean": 7.8763035,
+                  "median": 7.858,
+                  "min": 0.873,
+                  "patients": 491
+                },
+                {
+                  "aged": 447,
+                  "code": "E34.3",
+                  "descr": "Short stature due to endocrine disorder",
+                  "max": 16.78,
+                  "mean": 9.618387,
+                  "median": 10.387,
+                  "min": 0.019,
+                  "patients": 447
+                },
+                {
+                  "aged": 419,
+                  "code": "E30.0",
+                  "descr": "Delayed puberty",
+                  "max": 17.035,
+                  "mean": 13.479831,
+                  "median": 13.637,
+                  "min": 6.075,
+                  "patients": 419
+                },
+                {
+                  "aged": 309,
+                  "code": "E03.9",
+                  "descr": "Hypothyroidism, unspecified",
+                  "max": 16.92,
+                  "mean": 5.8759385,
+                  "median": 6.004,
+                  "min": 0.008,
+                  "patients": 309
+                },
+                {
+                  "aged": 205,
+                  "code": "Q90",
+                  "descr": "Down syndrome",
+                  "max": 14.3,
+                  "mean": 1.4780927,
+                  "median": 0.049,
+                  "min": 0.0,
+                  "patients": 205
+                },
+                {
+                  "aged": 150,
+                  "code": "E23.0",
+                  "descr": "Hypopituitarism",
+                  "max": 16.047,
+                  "mean": 8.7923533,
+                  "median": 9.0265,
+                  "min": 0.036,
+                  "patients": 150
+                },
+                {
+                  "aged": 113,
+                  "code": "K50",
+                  "descr": "Crohn's disease [regional enteritis]",
+                  "max": 17.268,
+                  "mean": 10.813133,
+                  "median": 11.064,
+                  "min": 0.679,
+                  "patients": 113
+                },
+                {
+                  "aged": 83,
+                  "code": "E34.4",
+                  "descr": "Constitutional tall stature",
+                  "max": 14.891,
+                  "mean": 4.8359398,
+                  "median": 4.047,
+                  "min": 0.088,
+                  "patients": 83
+                },
+                {
+                  "aged": 70,
+                  "code": "N18",
+                  "descr": "Chronic kidney disease (CKD)",
+                  "max": 16.334,
+                  "mean": 5.8566429,
+                  "median": 4.5355,
+                  "min": 0.025,
+                  "patients": 70
+                },
+                {
+                  "aged": 62,
+                  "code": "K51",
+                  "descr": "Ulcerative colitis",
+                  "max": 16.389,
+                  "mean": 10.730806,
+                  "median": 11.9505,
+                  "min": 0.096,
+                  "patients": 62
+                },
+                {
+                  "aged": 58,
+                  "code": "Q87.1",
+                  "descr": "Congenital malformation syndromes predominantly associated with short stature",
+                  "max": 15.329,
+                  "mean": 4.0852241,
+                  "median": 3.261,
+                  "min": 0.0,
+                  "patients": 58
+                },
+                {
+                  "aged": 53,
+                  "code": "P04.3",
+                  "descr": "Newborn affected by maternal use of alcohol",
+                  "max": 11.387,
+                  "mean": 2.4979623,
+                  "median": 0.498,
+                  "min": 0.0,
+                  "patients": 53
+                },
+                {
+                  "aged": 46,
+                  "code": "Q87.3",
+                  "descr": "Congenital malformation syndromes involving early overgrowth",
+                  "max": 11.967,
+                  "mean": 2.7296957,
+                  "median": 1.763,
+                  "min": 0.038,
+                  "patients": 46
+                },
+                {
+                  "aged": 42,
+                  "code": "Q98.4",
+                  "descr": "Klinefelter syndrome, unspecified",
+                  "max": 15.704,
+                  "mean": 2.4697381,
+                  "median": 0.0205,
+                  "min": 0.0,
+                  "patients": 42
+                },
+                {
+                  "aged": 36,
+                  "code": "Q96",
+                  "descr": "Turner's syndrome",
+                  "max": 15.485,
+                  "mean": 3.9496111,
+                  "median": 0.145,
+                  "min": 0.0,
+                  "patients": 36
+                },
+                {
+                  "aged": 32,
+                  "code": "Q87.2",
+                  "descr": "Congenital malformation syndromes predominantly involving limbs",
+                  "max": 12.947,
+                  "mean": 3.9169062,
+                  "median": 1.7985,
+                  "min": 0.0,
+                  "patients": 32
+                },
+                {
+                  "aged": 31,
+                  "code": "E23.6",
+                  "descr": "Other disorders of pituitary gland",
+                  "max": 17.421,
+                  "mean": 8.0637742,
+                  "median": 8.285,
+                  "min": 0.022,
+                  "patients": 31
+                },
+                {
+                  "aged": 26,
+                  "code": "Q98.0",
+                  "descr": "Klinefelter syndrome karyotype 47, XXY",
+                  "max": 13.53,
+                  "mean": 2.109,
+                  "median": 0.018,
+                  "min": 0.0,
+                  "patients": 26
+                },
+                {
+                  "aged": 17,
+                  "code": "Q87.4",
+                  "descr": "Marfan syndrome",
+                  "max": 15.981,
+                  "mean": 5.8972353,
+                  "median": 5.624,
+                  "min": 0.011,
+                  "patients": 17
+                },
+                {
+                  "aged": 17,
+                  "code": "Q98.5",
+                  "descr": "Karyotype 47, XYY",
+                  "max": 5.971,
+                  "mean": 0.89605882,
+                  "median": 0.014,
+                  "min": 0.0,
+                  "patients": 17
+                },
+                {
+                  "aged": 15,
+                  "code": "Q77",
+                  "descr": "Osteochondrodysplasia with defects of growth of tubular bones and spine",
+                  "max": 12.553,
+                  "mean": 4.6722667,
+                  "median": 5.131,
+                  "min": 0.014,
+                  "patients": 15
+                },
+                {
+                  "aged": 10,
+                  "code": "Q78.0",
+                  "descr": "Osteogenesis imperfecta",
+                  "max": 10.119,
+                  "mean": 2.4835,
+                  "median": 1.6335,
+                  "min": 0.008,
+                  "patients": 10
+                }
+              ]
+            }
+          ],
+          "title": "Age at first record for each growth-relevant diagnosis code",
+          "values": {
+            "any_max": 17.462,
+            "any_mean": 1.4879955,
+            "any_med": 0.027,
+            "any_min": -114.667,
+            "any_n": 35890,
+            "between": 2,
+            "childhood": 18,
+            "n_codes": 33,
+            "n_negative": 3,
+            "n_shown": 28,
+            "neonatal": 8,
+            "skew_code": "Q96",
+            "skew_max": 15.485,
+            "skew_mean": 3.9496111,
+            "skew_med": 0.145,
+            "worst_code": "P07",
+            "worst_min": -114.667
           }
         }
       ],
