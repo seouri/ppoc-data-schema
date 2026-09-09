@@ -1,4 +1,4 @@
-"""5.15 publishes a distribution per tracked code, so it answers to two rules.
+"""5.7.1 publishes a distribution per tracked code, so it answers to two rules.
 
 The small-cell rule reaches it twice: once for the patient counts, and once for
 the four age statistics, which describe the same patients and must disappear
@@ -6,7 +6,7 @@ with them. The other rule is arithmetic — a min above a median, or a mean
 outside the range, means the row's columns came from different populations,
 which is what a mismatched panel or a stale column filter looks like.
 
-The panel itself is checked here too. 5.7 and 5.15 read it from the augmented
+The panel itself is checked here too. 5.7 and 5.7.1 read it from the augmented
 layer's column names, and `dx_age_years` without a trailing underscore is the
 panel-wide age rather than a code; picking it up would invent an ICD-10 code
 named for the column.
@@ -75,7 +75,7 @@ def _rows() -> list[tuple[str, dict]]:
 def test_no_row_carries_a_count_below_the_threshold() -> None:
     rows = _rows()
     if not rows:
-        pytest.skip("report has not been built, or 5.15 is absent")
+        pytest.skip("report has not been built, or 5.7.1 is absent")
     assert len(rows) > 10, f"only {len(rows)} rows found; the section shrank"
     offenders = [(table, key, row[key]) for table, row in rows for key in COUNT_KEYS
                  if isinstance(row.get(key), int) and 0 < row[key] < SUPPRESS_BELOW]
@@ -86,7 +86,7 @@ def test_an_age_statistic_is_withheld_whenever_its_count_is() -> None:
     """The four statistics describe the patients `aged` counts, so they share its fate."""
     rows = _rows()
     if not rows:
-        pytest.skip("report has not been built, or 5.15 is absent")
+        pytest.skip("report has not been built, or 5.7.1 is absent")
     offenders = [(table, key) for table, row in rows for key in AGE_KEYS
                  if row.get("aged") is None and row.get(key) is not None]
     assert not offenders, f"age statistics published without their count: {offenders}"
@@ -100,7 +100,7 @@ def test_every_row_is_internally_consistent() -> None:
     """
     rows = _rows()
     if not rows:
-        pytest.skip("report has not been built, or 5.15 is absent")
+        pytest.skip("report has not been built, or 5.7.1 is absent")
     checked = 0
     for table, row in rows:
         if any(row.get(k) is None for k in AGE_KEYS):
@@ -116,7 +116,7 @@ def test_the_aged_count_never_exceeds_the_subtree_count() -> None:
     """An age is established for a subset of the patients carrying the code."""
     rows = _rows()
     if not rows:
-        pytest.skip("report has not been built, or 5.15 is absent")
+        pytest.skip("report has not been built, or 5.7.1 is absent")
     offenders = [(row["code"], row["aged"], row["patients"]) for _, row in rows
                  if isinstance(row.get("aged"), int)
                  and isinstance(row.get("patients"), int)
@@ -136,7 +136,7 @@ def test_the_two_panels_are_disjoint_and_ordered_by_median() -> None:
     prose's "no code sits near the line" impossible to see.
     """
     if _finding() is None:
-        pytest.skip("report has not been built, or 5.15 is absent")
+        pytest.skip("report has not been built, or 5.7.1 is absent")
     birth, childhood = _panel(BIRTH), _panel(CHILDHOOD)
     assert birth and childhood, "one of the two panels is empty"
     for row in birth:
@@ -151,7 +151,7 @@ def test_the_two_panels_are_disjoint_and_ordered_by_median() -> None:
 
 
 def test_the_published_band_around_the_split_is_empty() -> None:
-    """5.15 claims any boundary inside the band gives these same two panels.
+    """5.7.1 claims any boundary inside the band gives these same two panels.
 
     That is only true if no code's median lies inside it, and the two published
     edges are the real ones. Both halves are asserted here because the claim is
@@ -159,7 +159,7 @@ def test_the_published_band_around_the_split_is_empty() -> None:
     """
     f = _finding()
     if f is None:
-        pytest.skip("report has not been built, or 5.15 is absent")
+        pytest.skip("report has not been built, or 5.7.1 is absent")
     lo, hi = f["values"]["band_lo"], f["values"]["band_hi"]
     assert lo == max(r["median"] for r in _panel(BIRTH))
     assert hi == min(r["median"] for r in _panel(CHILDHOOD))

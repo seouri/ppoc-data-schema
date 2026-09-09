@@ -1,11 +1,11 @@
-"""Parts 5.6, 5.7 and 5.15 — the derived patient layer and the growth panel.
+"""Parts 5.6, 5.7 and 5.7.1 — the derived patient layer and the growth panel.
 
 This extract was assembled around growth: cohort entry required a growth
 measurement history (1.4), and the augmentation layer carries patient-level
 growth flags and a fixed panel of growth-relevant diagnosis codes. Documenting
 that orientation is a description of the data, not of any downstream question.
 
-5.7 says which codes the panel tracks and how many patients carry each; 5.15
+5.7 says which codes the panel tracks and how many patients carry each; 5.7.1
 says when those codes were first recorded. Both read the panel from
 `tracked_codes`, so neither can drift from the other's idea of what is tracked.
 """
@@ -45,7 +45,7 @@ def tracked_codes(ctx: Context) -> list[tuple[str, str]]:
     """The tracked growth-relevant panel, as (column, ICD-10 code) pairs.
 
     The panel is not written down anywhere in the extract; it is recoverable
-    only from the augmented layer's column names, and 5.7 and 5.15 both need
+    only from the augmented layer's column names, and 5.7 and 5.7.1 both need
     it. The trailing underscore in the prefix is what keeps `dx_age_years` — the
     panel-wide age at first diagnosis, not a code — out of the panel, where it
     would appear as an ICD-10 code named after the column.
@@ -257,7 +257,7 @@ def codes(ctx: Context) -> list[Finding]:
     return [f]
 
 
-#: Where 5.15 splits the tracked panel. A code whose median age at first record
+#: Where 5.7.1 splits the tracked panel. A code whose median age at first record
 #: falls below this was attached to the birth episode; one above it was recorded
 #: when a child was seen and worked up, which is the only case where an age at
 #: first record approximates an age at onset. The line is a stated choice rather
@@ -266,14 +266,14 @@ def codes(ctx: Context) -> list[Finding]:
 #: so a reader can see that moving the line inside that band changes nothing.
 PANEL_SPLIT_YEARS = 1.0
 
-#: ICD-10 prefixes 5.15 uses to make its membership point: a karyotype is
+#: ICD-10 prefixes 5.7.1 uses to make its membership point: a karyotype is
 #: established in the nursery, so these land in the birth panel, while the
 #: malformation syndromes were equally present at birth and land in the other.
 CHROMOSOMAL = ("Q90", "Q96", "Q98")
 MALFORMATION = ("Q77", "Q78", "Q87")
 
 
-@probe("growth.ages", "5.15")
+@probe("growth.ages", "5.7.1")
 def ages(ctx: Context) -> list[Finding]:
     pc = patient_codes(ctx)
     tracked = tracked_codes(ctx)
@@ -343,7 +343,7 @@ def ages(ctx: Context) -> list[Finding]:
         "FROM patients_augmented")
 
     f = Finding(
-        id="growth.ages", part="5.15",
+        id="growth.ages", part="5.7.1",
         title="Age at first record for each growth-relevant diagnosis code",
         values={
             "n_codes": len(tracked), "n_shown": len(shown),
