@@ -336,8 +336,9 @@ def ages(ctx: Context) -> list[Finding]:
              "the patients who carry it — beside the patient total counted over the "
              "code and all of its descendants."),
         Para("Age here is the augmented layer's `dx_age_years_` column for the code, "
-             "and that column was checked rather than assumed. For every code "
-             "tested it reproduces exactly the earliest age at which the code or any "
+             "and that column was checked rather than assumed. For all {n_codes} "
+             "tracked codes, patient for patient, it reproduces exactly the earliest "
+             "age at which the code or any "
              "of its descendants appears on either diagnosis resource: the minimum "
              "of `age_in_days` over prefix-matched encounter diagnoses and "
              "`noted_date_age_in_days` over prefix-matched problem-list entries, "

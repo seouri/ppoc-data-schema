@@ -30,6 +30,13 @@ which appeared in roughly one build in six.
   Change a probe under `reports/ppoc_eda/` and rebuild with
   `reports/build_ppoc_eda.py`, which rewrites them only when the findings
   change.
+- **A prose-only change needs `--force`.** `findings.json` carries values,
+  tables and figures, not paragraphs, so editing a sentence in a probe leaves
+  the comparison in `build.py` equal and the build reports "findings unchanged"
+  while the committed HTML, markdown and PDF keep the old sentence. Rebuild
+  with `reports/build_ppoc_eda.py --force` after any wording change. Step 3 of
+  the audit catches the omission, because it force-rebuilds and compares bytes
+  against what is committed.
 - **Numbers live in `findings.json`, not in prose.** A probe supplies values and
   a template; there is no code path that writes a literal figure into a
   sentence. Keep it that way.
