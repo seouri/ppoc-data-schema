@@ -1,4 +1,4 @@
-"""Part 5.8 — joint distributions across resources.
+"""Part 5.9 — joint distributions across resources.
 
 The extract was assembled to support identifying abnormal growth patterns early
 (1.4). Whether that is learnable from it is not a property of any one resource:
@@ -25,7 +25,7 @@ CO_FLAGS = [("ever_stunting_flag", "height below the stunting threshold"),
             ("healthy_flag", "carries none of the tracked conditions")]
 
 
-@probe("joint.label", "5.8")
+@probe("joint.label", "5.9")
 def label(ctx: Context) -> list[Finding]:
     ctx.con.execute("""
         CREATE TEMP TABLE _prehist AS
@@ -69,7 +69,7 @@ def label(ctx: Context) -> list[Finding]:
                  for f, n, ml, al, mp, ap in util]
 
     f = Finding(
-        id="joint.label", part="5.8",
+        id="joint.label", part="5.9",
         title="Label, trajectory, and utilization do not line up",
         values={
             "total": total, "zero": zero, "zero_share": 100.0 * zero / total,
@@ -156,7 +156,7 @@ def label(ctx: Context) -> list[Finding]:
     return [f]
 
 
-@probe("joint.features", "5.9")
+@probe("joint.features", "5.10")
 def features(ctx: Context) -> list[Finding]:
     rows = []
     for lo, hi, lab in AGE_BANDS:
@@ -202,7 +202,7 @@ def features(ctx: Context) -> list[Finding]:
     worst = min(rows, key=lambda r: r["both"])
 
     f = Finding(
-        id="joint.features", part="5.9",
+        id="joint.features", part="5.10",
         title="What a feature vector actually contains",
         values={"worst_band": worst["band"], "worst_both": worst["both"],
                 "worst_gap": worst["gap"],
@@ -335,7 +335,7 @@ WORKUP_INDEX = """
 """
 
 
-@probe("joint.treatment", "5.10")
+@probe("joint.treatment", "5.11")
 def treatment(ctx: Context) -> list[Finding]:
     base = ctx.scalar("SELECT 100.0 * sum(CASE WHEN growth_dx_flag = 1 THEN 1 ELSE 0 END)"
                       " / count(*) FROM patients_augmented")
@@ -382,7 +382,7 @@ def treatment(ctx: Context) -> list[Finding]:
                if r["marker"] == "thyroid stimulating hormone")
 
     f = Finding(
-        id="joint.treatment", part="5.10",
+        id="joint.treatment", part="5.11",
         title="Treatment and workup: better timing than the label, and leakage",
         values={
             "base": base, "gh_n": gh["patients"], "gh_share": gh["share"],
@@ -409,7 +409,7 @@ def treatment(ctx: Context) -> list[Finding]:
         ),
     )
     f.blocks = [
-        Para("5.8 shows the diagnosis code arrives too early to be predicted from a "
+        Para("5.9 shows the diagnosis code arrives too early to be predicted from a "
              "growth curve. The medication and laboratory resources carry a second "
              "set of growth signals, and they behave in the opposite way. Both "
              "matter: as features they leak, and as index events they are far "
@@ -466,7 +466,7 @@ def treatment(ctx: Context) -> list[Finding]:
              "with one are substantially different populations here, which bounds "
              "how well any model scored against the code can do."),
         Para("**The timing is the useful part.** The diagnosis code has a median "
-             "age of 0.027 years (5.8). Growth hormone is first ordered at a median "
+             "age of 0.027 years (5.9). Growth hormone is first ordered at a median "
              "of {gh_age:.1f} years, and the first growth workup or treatment of "
              "any kind at a median of {w_med_age:.1f} — roughly a decade later, "
              "and at an age where a trajectory exists. Taking the "
@@ -498,7 +498,7 @@ PLAUSIBLE_AGE = "BETWEEN 0 AND 18.5"
 SAME_DAY = 0.01  # years, about three and a half days
 
 
-@probe("joint.sources", "5.11")
+@probe("joint.sources", "5.12")
 def sources(ctx: Context) -> list[Finding]:
     dx_cols = [c for c in ctx.columns("patients_augmented")
                if c.startswith("dx_age_years_")]
@@ -568,7 +568,7 @@ def sources(ctx: Context) -> list[Finding]:
     worst_pl = min(per_code, key=lambda r: r["pl_share"])
 
     f = Finding(
-        id="joint.sources", part="5.11",
+        id="joint.sources", part="5.12",
         title="The same code in two resources: encounter diagnoses against the "
               "problem list",
         values={
@@ -661,7 +661,7 @@ REFERRAL_FAMILIES = [
 NEAR_DAYS = 30
 
 
-@probe("joint.referrals", "5.12")
+@probe("joint.referrals", "5.13")
 def referrals(ctx: Context) -> list[Finding]:
     base = ctx.scalar("SELECT 100.0 * sum(CASE WHEN growth_dx_flag = 1 THEN 1 ELSE 0 END)"
                       " / count(*) FROM patients_augmented")
@@ -723,7 +723,7 @@ def referrals(ctx: Context) -> list[Finding]:
     nutri = next(r for r in rows if r["family"] == "Nutrition and dietetics")
 
     f = Finding(
-        id="joint.referrals", part="5.12",
+        id="joint.referrals", part="5.13",
         title="Referral timing against the diagnosis, and the subgroup it finds",
         values={
             "base": base, "endo_n": endo["patients"], "endo_lift": endo["lift"],
@@ -770,11 +770,11 @@ def referrals(ctx: Context) -> list[Finding]:
              "has a positive median lag, and only {endo_first:.1f}% of "
              "endocrinology pairs have the referral first. A referral is therefore "
              "not an earlier index event than the diagnosis in the way the "
-             "laboratory workup of 5.10 is."),
+             "laboratory workup of 5.11 is."),
         Para("**But endocrinology selects a different population, and that is the "
              "useful part.** Among labelled patients referred to endocrinology the "
              "median diagnosis age is {endo_dx:.2f} years, against 0.027 for the "
-             "labelled cohort as a whole (5.8), and {endo_near:.1f}% carry the code "
+             "labelled cohort as a whole (5.9), and {endo_near:.1f}% carry the code "
              "within {near_days} days of the referral. These are not the perinatal "
              "codes that dominate the label; they are diagnoses recorded in "
              "childhood, at the moment a referral was made."),
@@ -788,7 +788,7 @@ def referrals(ctx: Context) -> list[Finding]:
              "{endo_pre_n:,} labelled patients with an endocrinology referral, "
              "{endo_ge2:.1f}% have at least two prior heights and the median has "
              "{endo_med:.0f}; for everyone else those figures are {rest_ge2:.1f}% "
-             "and zero. 5.8's finding — that half the labelled population has no "
+             "and zero. 5.9's finding — that half the labelled population has no "
              "trajectory before the code — is really a statement about the "
              "perinatal majority, and it inverts inside this subgroup."),
         Para("**Implications for analysis.** Do not use a referral as an early "

@@ -44,25 +44,25 @@ which appeared in roughly one build in six.
   byte-identical** and pinned by SHA-256 in `data/augment-runtime-manifest.json`.
   Any edit, down to a trailing comment, fails `tests/test_augment_import.py`.
   Their lint findings are exempted in `pyproject.toml` for the same reason.
-- **5.7 and 5.7.1 share one definition of the tracked growth panel.**
+- **5.7 and 5.8 share one definition of the tracked growth panel.**
   Neither the extract nor its manifest writes that panel down; it is recoverable
   only from the `dx_age_years_*` column names of `patients_augmented`, and
   `tracked_codes` in `reports/ppoc_eda/probes/growth.py` is the single place
   that reads them. The trailing underscore is load-bearing: drop it and bare
   `dx_age_years`, the panel-wide age at first diagnosis, joins the panel as an
-  ICD-10 code named after its own column. 5.7.1 also reverse-engineered what
+  ICD-10 code named after its own column. 5.8 also reverse-engineered what
   those columns measure — the earliest age at which the code *or any
   descendant* appears on either diagnosis resource, at 365.25 days to the year,
   rounded to three decimals — and its prose says so, so a change upstream to
   how the age is derived makes that paragraph wrong rather than merely stale.
   Its four statistics per code are the aggregates the drift note above is
   about; raise `AUDIT_RUNS` when you touch them.
-- **The shortcut audit is coupled to 5.10's definitions.**
-  `reports/ppoc_eda/probes/shortcuts.py` carries two sections: 5.13, a lift
-  screen over every value of seven categorical fields, and 5.14, a rank screen
+- **The shortcut audit is coupled to 5.11's definitions.**
+  `reports/ppoc_eda/probes/shortcuts.py` carries two sections: 5.14, a lift
+  screen over every value of seven categorical fields, and 5.15, a rank screen
   over every numeric column of the augmented patient layer and eleven
   constructed features. It imports `WORKUP_INDEX` from `joint.py`, so changing
-  what 5.10 counts as the first growth workup rewrites both sections silently.
+  what 5.11 counts as the first growth workup rewrites both sections silently.
   `INDEX_TERMS` in the same file withholds a workup lift from the values that
   *are* that index; edit the two together, or a row reports the maximum the base
   rate allows as though it had measured something. Both screens add the kind of

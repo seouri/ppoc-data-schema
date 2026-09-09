@@ -19,7 +19,7 @@ This dataset contains de-identified electronic health record (EHR) data for 250,
 - **ICD-10 is a hierarchy; do not match codes exactly.** `E10` is type 1 diabetes and `E10.9` is type 1 diabetes without complications. Matching a code exactly counts one node of the tree, not the condition. In this extract 1,204 of the 1,327 three-character categories **never appear as a bare code**, so an exact-match query for them returns zero while the condition is present. Match on a prefix (`code LIKE 'E10%'`) or roll up to the level you mean, and say which level that is.
 - **Not every null means missing.** A null `result_flag` means a *normal* result; a null `resolved_date_age_in_days` means a problem that is *currently active*. Treating either as missing discards the signal.
 - **This is a selected cohort, not a primary-care population.** Every patient met a growth-measurement requirement and carries no rare diagnosis, medication, or lab. Do not read any frequency here as a population rate.
-- **If you train a model, screen your features against your label before you build them.** The raw diagnosis slots reconstruct the tracked growth-diagnosis panel exactly, `visits_count_pre_dx` recovers that flag at 99.7% recall on its own, and the medication records leak through supplies no growth-oriented exclusion list would name. Sections 5.13 and 5.14 of the exploratory analysis screen every field and every derived column against that label and report what encodes it.
+- **If you train a model, screen your features against your label before you build them.** The raw diagnosis slots reconstruct the tracked growth-diagnosis panel exactly, `visits_count_pre_dx` recovers that flag at 99.7% recall on its own, and the medication records leak through supplies no growth-oriented exclusion list would name. Sections 5.14 and 5.15 of the exploratory analysis screen every field and every derived column against that label and report what encodes it.
 - ICD-10 codes follow standard medical conventions; validate formats.
 - Augmented files require CDC reference data for calculations; ensure compatibility.
 
@@ -94,7 +94,7 @@ Patients (patient_id)
 - **Key Additions:** Visit counts, growth flags (stunting, wasting, obesity), diagnosis ages, Z-score summaries (weight, height, BMI, etc.)
 - **Highlights:** Patient-level summaries from visits; flags for malnutrition/healthy status; ICD-10-specific diagnosis ages.
 - **LLM Uses:** Identify at-risk patients; feature engineering for ML (e.g., predict chronic conditions); longitudinal summaries without visit-level data.
-- **Caution:** `visits_count_pre_dx` equals `visits_count` for a patient with no diagnosis, so the inequality between the two columns recovers `growth_dx_flag` at 99.7% recall. Exclude it from any feature set built against that label (5.13).
+- **Caution:** `visits_count_pre_dx` equals `visits_count` for a patient with no diagnosis, so the inequality between the two columns recovers `growth_dx_flag` at 99.7% recall. Exclude it from any feature set built against that label (5.14).
 
 ### [Visits (`visits.csv`)](visits.md)
 - **Rows:** 6,494,473 (one per visit)
@@ -146,7 +146,7 @@ When using this dataset in prompts:
 
 ## Important Considerations
 - **Diagnosis counting:** ICD-10 is hierarchical. Count a code together with its descendants, not as a literal string; see the exploratory analysis at section 3.9 for the size of the effect and section 5.7 for a worked verification against the derived columns.
-- **Label leakage:** The fields that encode a label are mostly not the ones an exclusion list would name. Sections 5.13 and 5.14 screen every categorical field, every numeric column of the augmented patient layer, and a set of constructed features against the growth-diagnosis flag; 5.14 finds that how often a child was measured separates that label better than whether the measurement was low.
+- **Label leakage:** The fields that encode a label are mostly not the ones an exclusion list would name. Sections 5.14 and 5.15 screen every categorical field, every numeric column of the augmented patient layer, and a set of constructed features against the growth-diagnosis flag; 5.15 finds that how often a child was measured separates that label better than whether the measurement was low.
 - **Selection:** The cohort is heavily selected (see *Cohort Construction*). Rare conditions, deceased patients, and two practices are absent by construction; frequencies are not prevalences.
 - **Data Quality:** Outliers in measurements; non-response in demographics; BIV-filtered values in augmented files. Null does not always mean missing — see the notes on `result_flag` and `resolved_date_age_in_days`.
 - **Privacy:** De-identified; avoid re-identification.

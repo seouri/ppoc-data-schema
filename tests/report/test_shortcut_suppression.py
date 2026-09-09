@@ -1,6 +1,6 @@
 """The shortcut sections emit counts, so they answer to the small-cell rule.
 
-`context.suppress` is the single place the rule lives, and 5.13 and 5.14 reach
+`context.suppress` is the single place the rule lives, and 5.14 and 5.15 reach
 it by two different routes: a screen whose support floor keeps every value well
 above the threshold, and named cohorts and columns whose counts are suppressed
 one at a time. Both routes are exercised here against an in-memory fixture, and
@@ -52,7 +52,7 @@ def _numeric_rows(n: int) -> str:
 
 
 def test_the_screen_floor_sits_above_the_suppression_threshold() -> None:
-    """5.13's screened values need no suppression because of this inequality.
+    """5.14's screened values need no suppression because of this inequality.
 
     Lower `SUPPORT` under the threshold and the screen starts emitting counts
     the rule forbids, with nothing in the screen itself to catch it.
@@ -62,7 +62,7 @@ def test_the_screen_floor_sits_above_the_suppression_threshold() -> None:
 
 @pytest.mark.parametrize("n,expected", [(SMALL, None), (LARGE, LARGE)])
 def test_a_named_cohort_suppresses_its_patient_count(n: int, expected: int | None) -> None:
-    """5.13's named candidates are not screened, so each is suppressed itself."""
+    """5.14's named candidates are not screened, so each is suppressed itself."""
     ctx = _context(_label_rows(n))
     row = shortcuts._cohort(
         ctx, f"SELECT patient_id FROM {shortcuts.LABEL_TABLE}", 14.0, 0.5, "test")
@@ -71,7 +71,7 @@ def test_a_named_cohort_suppresses_its_patient_count(n: int, expected: int | Non
 
 @pytest.mark.parametrize("n,expected", [(SMALL, None), (LARGE, LARGE)])
 def test_a_numeric_column_suppresses_its_patient_count(n: int, expected: int | None) -> None:
-    """5.14 scores whole columns, and reports how many patients backed each."""
+    """5.15 scores whole columns, and reports how many patients backed each."""
     ctx = _context(_numeric_rows(n))
     row = shortcuts._score(ctx, "value", "`value`")
     assert row is not None and row["patients"] == expected
@@ -81,7 +81,7 @@ def test_the_built_report_carries_no_small_count_in_these_sections() -> None:
     """Including counts `findings.json` serializes without displaying them.
 
     A table row reaches the JSON whole, so a key that no column renders is
-    published all the same. `flagged` is one: 5.13 keeps it to compute a share.
+    published all the same. `flagged` is one: 5.14 keeps it to compute a share.
     """
     path = OUT / "findings.json"
     if not path.is_file():

@@ -103,10 +103,10 @@ QUOTED_FIGURES = [
     ("99.99", "4.8", "velocity reproduction under the interval rule"),
     ("43.7", "4.8", "velocity reproduction under a naive lag"),
     ("335", "4.8", "longest minimum interval in the velocity rule"),
-    ("99.7", "5.13", "recall of growth_dx_flag from visits_count_pre_dx"),
-    ("0.664", "5.14", "visits per year, rank statistic against the label"),
-    ("0.605", "5.14", "head-circumference measurement count, same statistic"),
-    ("0.586", "5.14", "ever_stunting_flag, same statistic"),
+    ("99.7", "5.14", "recall of growth_dx_flag from visits_count_pre_dx"),
+    ("0.664", "5.15", "visits per year, rank statistic against the label"),
+    ("0.605", "5.15", "head-circumference measurement count, same statistic"),
+    ("0.586", "5.15", "ever_stunting_flag, same statistic"),
     # docs/data_description.md. The README used to quote these too; it now links
     # the report instead of summarising it, so nothing there needs checking.
     ("250,588", "1.4", "patients after the four cohort exclusions"),

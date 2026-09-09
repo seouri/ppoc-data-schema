@@ -210,7 +210,7 @@ This part exists so that nobody has to wonder whether a standard check was skipp
 | 8 Longitudinal | Calendar trend breaks | not applicable | No calendar axis. Age-axis profiles are reported instead and are not the same thing — 1.5 |
 | 8 Longitudinal | Guideline or policy shift | not applicable | Requires calendar time — 1.5 |
 | 8 Longitudinal | Vendor changeover effects | partial | The Epic against converted contrast only |
-| 9 Label | Shortcut screen against the label | covered | Every value of seven categorical fields, scored again under a second index — 5.13; every numeric and constructed feature — 5.14 |
+| 9 Label | Shortcut screen against the label | covered | Every value of seven categorical fields, scored again under a second index — 5.14; every numeric and constructed feature — 5.15 |
 
 The not-applicable list is the part worth reading before you start. Every entry is a consequence of de-identification or of what the extract simply does not carry, and no amount of analysis recovers any of them.
 
@@ -1223,7 +1223,7 @@ The referral resource shows the same orientation from the action side. Grouping 
 
 **Implications for analysis.** Use the derived columns when you want an age at first record and are content with the panel upstream chose; go to the raw diagnosis resources for anything else, and match by prefix when you do. These tables describe what the pipeline tracks, not what is clinically relevant to growth in general: a code absent from the panel may still be present in 5.1, and a specialty family here is a string match on a free-text field rather than a clinical taxonomy.
 
-### 5.7.1 Age at first record for each growth-relevant diagnosis code
+### 5.8 Age at first record for each growth-relevant diagnosis code
 
 5.7 says which codes the tracked panel carries and how many patients carry each. This section says when. For every one of the 33 tracked codes, the tables below give the age at which the code was first recorded — its smallest, median, mean and largest value across the patients who carry it — beside the patient total counted over the code and all of its descendants.
 
@@ -1283,7 +1283,7 @@ Across the whole panel, `dx_age_years` — the age at which any tracked code was
 
 **Implications for analysis.** These are ages at first record, so they date a coding event and not an onset; the difference matters most exactly where the median is smallest. If a design needs an index date per patient, take it from this column only for codes whose median puts the record after the birth episode, and state the choice. If a design needs age at onset, this extract does not carry it. Filter negative values explicitly rather than trusting a minimum, and where a code's aged count sits below its patient total, decide whether the undated patients belong in the denominator before computing a rate over them.
 
-### 5.8 Label, trajectory, and utilization do not line up
+### 5.9 Label, trajectory, and utilization do not line up
 
 A model that identifies abnormal growth early needs three things to line up: a label, a measurement history that precedes it, and a care-process record that does not simply give the answer away. In this extract none of the three lines up with the others, and the mismatches are large enough to decide a study design.
 
@@ -1317,7 +1317,7 @@ Patients with no growth diagnosis have no index date, so their before-diagnosis 
 
 **Implications for analysis.** Fixing this needs a common index date for both groups, chosen without reference to the label — a fixed age, a matched visit number, or a sampled pseudo-index for unlabelled patients. Only 8,640 labelled patients (24.1%) have two or more prior heights, which is the most a trajectory-based model could train on; restricting to them changes the population being studied and should be reported rather than done silently. And a model evaluated on this label at all is being scored against recorded coding practice, not against an adjudicated growth assessment; 5.6 makes the same point about the flag itself.
 
-### 5.9 What a feature vector actually contains
+### 5.10 What a feature vector actually contains
 
 Height and weight are the two measurements a growth model needs together, and 3.4 gives each one's availability separately. Jointly is what matters, because a visit missing either contributes no complete observation.
 
@@ -1355,9 +1355,9 @@ Two rows here matter for anyone assembling a training set. `healthy_flag` is set
 
 **Implications for analysis.** Count complete observations, not visits: the usable input rate is the joint column, not the weight column, and it varies by more than ten points across childhood so a cohort defined by complete rows is age-selected. Never use `healthy_flag` as the negative class for a growth-diagnosis model. The cross-resource footprint is a weak discriminator — a referral is present for 61.9% of labelled against 54.0% of unlabelled patients — which is reassuring for leakage but means these resources add little on their own.
 
-### 5.10 Treatment and workup: better timing than the label, and leakage
+### 5.11 Treatment and workup: better timing than the label, and leakage
 
-5.8 shows the diagnosis code arrives too early to be predicted from a growth curve. The medication and laboratory resources carry a second set of growth signals, and they behave in the opposite way. Both matter: as features they leak, and as index events they are far better dated than the code.
+5.9 shows the diagnosis code arrives too early to be predicted from a growth curve. The medication and laboratory resources carry a second set of growth signals, and they behave in the opposite way. Both matter: as features they leak, and as index events they are far better dated than the code.
 
 **Growth and endocrine treatment and workup markers**
 
@@ -1406,11 +1406,11 @@ One bound on this table comes from 1.4. The cohort excluded every patient carryi
 
 **And the label misses cases they identify.** 65 of those growth-hormone patients carry no growth diagnosis in the tracked panel at all, as do 850 of the 1,151 with an IGF-1 test. Being treated for a growth disorder and being labelled with one are substantially different populations here, which bounds how well any model scored against the code can do.
 
-**The timing is the useful part.** The diagnosis code has a median age of 0.027 years (5.8). Growth hormone is first ordered at a median of 10.8 years, and the first growth workup or treatment of any kind at a median of 9.1 — roughly a decade later, and at an age where a trajectory exists. Taking the first growth workup or treatment as the index event instead of the code gives 1,410 patients, of whom **98.1% have at least two prior heights** and the median has 13. Only 0.6% have none. Against the code label's 24.1% and 50.6% respectively, that is a reversal.
+**The timing is the useful part.** The diagnosis code has a median age of 0.027 years (5.9). Growth hormone is first ordered at a median of 10.8 years, and the first growth workup or treatment of any kind at a median of 9.1 — roughly a decade later, and at an age where a trajectory exists. Taking the first growth workup or treatment as the index event instead of the code gives 1,410 patients, of whom **98.1% have at least two prior heights** and the median has 13. Only 0.6% have none. Against the code label's 24.1% and 50.6% respectively, that is a reversal.
 
 **Implications for analysis.** If the diagnosis code is the label, treatment and workup records have to be excluded from the features or the model will read the answer off them; excluding them is easy because they are identifiable by name. The more useful move is to treat the first growth workup as the index event: it marks when a clinician became concerned, it is dated when a trajectory exists, and predicting it is the question an early-detection model is actually being asked. The cost is population size, 1,410 against 237 on treatment alone and 35,890 on the code, and the caveat is that a workup is an action rather than an adjudicated outcome — 5.4 makes the same point about referrals.
 
-### 5.11 The same code in two resources: encounter diagnoses against the problem list
+### 5.12 The same code in two resources: encounter diagnoses against the problem list
 
 A growth code can reach the record two ways: coded at an encounter, or noted on the problem list. 5.7 established that the derived `dx_age_years_*` columns take the earliest of both. This asks what would be lost by taking only one, and whether the two agree on when the diagnosis happened.
 
@@ -1459,7 +1459,7 @@ This comparison is restricted to ages between 0 and 18.5 years. The problem list
 
 **Implications for analysis.** Take the union of both resources for any cohort definition or index date, and take the earliest record as the derived columns do. If you must use one resource, measure what it costs for your specific codes rather than assuming a uniform rate. And treat the 2,241 pairs where the problem list lags as a documentation delay rather than a later onset — the encounter had already coded it.
 
-### 5.12 Referral timing against the diagnosis, and the subgroup it finds
+### 5.13 Referral timing against the diagnosis, and the subgroup it finds
 
 5.7 gives the referral volume by specialty family. This asks the question that volume cannot: for a patient who has both, does the referral come before the diagnosis or after it, and does the answer identify a different kind of patient.
 
@@ -1477,9 +1477,9 @@ Lift is against a base labelled rate of 14.3%. A negative lag would mean the ref
 
 Two tiers again, as in the laboratory panel. Endocrinology carries the signal at 2.36 times the base rate across 5,790 referred patients, while nutrition and dietetics — the family a growth question might reach for first — sits at 1.01 across 8,912, which is no signal at all.
 
-**Referrals follow the code, not the other way round.** Every family has a positive median lag, and only 24.2% of endocrinology pairs have the referral first. A referral is therefore not an earlier index event than the diagnosis in the way the laboratory workup of 5.10 is.
+**Referrals follow the code, not the other way round.** Every family has a positive median lag, and only 24.2% of endocrinology pairs have the referral first. A referral is therefore not an earlier index event than the diagnosis in the way the laboratory workup of 5.11 is.
 
-**But endocrinology selects a different population, and that is the useful part.** Among labelled patients referred to endocrinology the median diagnosis age is 7.14 years, against 0.027 for the labelled cohort as a whole (5.8), and 36.0% carry the code within 30 days of the referral. These are not the perinatal codes that dominate the label; they are diagnoses recorded in childhood, at the moment a referral was made.
+**But endocrinology selects a different population, and that is the useful part.** Among labelled patients referred to endocrinology the median diagnosis age is 7.14 years, against 0.027 for the labelled cohort as a whole (5.9), and 36.0% carry the code within 30 days of the referral. These are not the perinatal codes that dominate the label; they are diagnoses recorded in childhood, at the moment a referral was made.
 
 **Heights recorded before the diagnosis, by referral**
 
@@ -1488,15 +1488,15 @@ Two tiers again, as in the laboratory panel. Endocrinology carries the signal at
 | with an endocrinology referral | 1,958 | 22.7% | 69.3% | 7 |
 | without one | 33,932 | 52.2% | 21.5% | 0 |
 
-That difference decides whether the label is learnable. Of the 1,958 labelled patients with an endocrinology referral, 69.3% have at least two prior heights and the median has 7; for everyone else those figures are 21.5% and zero. 5.8's finding — that half the labelled population has no trajectory before the code — is really a statement about the perinatal majority, and it inverts inside this subgroup.
+That difference decides whether the label is learnable. Of the 1,958 labelled patients with an endocrinology referral, 69.3% have at least two prior heights and the median has 7; for everyone else those figures are 21.5% and zero. 5.9's finding — that half the labelled population has no trajectory before the code — is really a statement about the perinatal majority, and it inverts inside this subgroup.
 
 **Implications for analysis.** Do not use a referral as an early index event; it lags the code in every family measured. Do use it as a cohort filter: an endocrinology referral marks the patients whose growth diagnosis was made in childhood with a measurement history behind it, which is the population an early-detection question is actually about. The cost is size, 1,958 against 35,890, and the caveat from 5.4 stands — a referral is a recorded action, and its absence is not evidence that none was warranted.
 
-### 5.13 A shortcut audit: which fields encode the label
+### 5.14 A shortcut audit: which fields encode the label
 
-5.10 and 5.12 measure the leakage in a list of candidates chosen for being clinically obvious. This section runs the search those sections imply: every value of 7 categorical fields that 200 or more patients carry, scored against the label. 2,652 values clear that floor, out of 13,981 distinct ones. Lift is the share of patients carrying a value who also carry `growth_dx_flag`, over the cohort's 14.33% base rate; a lift of 1 is no information.
+5.11 and 5.13 measure the leakage in a list of candidates chosen for being clinically obvious. This section runs the search those sections imply: every value of 7 categorical fields that 200 or more patients carry, scored against the label. 2,652 values clear that floor, out of 13,981 distinct ones. Lift is the share of patients carrying a value who also carry `growth_dx_flag`, over the cohort's 14.33% base rate; a lift of 1 is no information.
 
-A value counts once per patient, ever, with no temporal cut — which is what an unrestricted feature build sees, and it mixes leakage with concurrency: a code recorded at the same encounter as the diagnosis scores as high as one recorded years before it. Beside each lift is the same figure against the alternative index of 5.10, the first growth workup or treatment, which 1,410 patients carry at a base rate of 0.56%. It is suppressed where fewer than 10 patients back it, and where the value is itself part of the index definition — the somatropin, growth hormone and IGF records — since those score the index's maximum by construction rather than by discrimination.
+A value counts once per patient, ever, with no temporal cut — which is what an unrestricted feature build sees, and it mixes leakage with concurrency: a code recorded at the same encounter as the diagnosis scores as high as one recorded years before it. Beside each lift is the same figure against the alternative index of 5.11, the first growth workup or treatment, which 1,410 patients carry at a base rate of 0.56%. It is suppressed where fewer than 10 patients back it, and where the value is itself part of the index definition — the somatropin, growth hormone and IGF records — since those score the index's maximum by construction rather than by discrimination.
 
 **The raw diagnosis fields carry the label verbatim.** 26 screened codes are one of the tracked panel or a descendant of one (3.9, 5.7), and 26 of those are carried by no unlabelled patient at all — a lift of 6.98, the maximum the base rate allows. Dropping the `dx_age_years_*` columns therefore does not take the label out of a feature set: `enc_diag_*` and `pl_diag` reconstruct it exactly. The table below excludes that group and shows what is left.
 
@@ -1512,7 +1512,7 @@ A value counts once per patient, ever, with no temporal cut — which is what an
 
 Top 5 by lift among codes carried by 200 or more patients.
 
-What sits below the panel is the neighbourhood of a label 5.8 shows to be overwhelmingly perinatal: prematurity, its complications, and newborn morbidity. None is a growth code and none is tracked, but a patient carrying one was in the neonatal course that produced the label, and the screen clears 1,578 untracked codes in all. That is the kind of shortcut a curated exclusion list does not reach: it is built by naming the condition, and none of these names the condition.
+What sits below the panel is the neighbourhood of a label 5.9 shows to be overwhelmingly perinatal: prematurity, its complications, and newborn morbidity. None is a growth code and none is tracked, but a patient carrying one was in the neonatal course that produced the label, and the screen clears 1,578 untracked codes in all. That is the kind of shortcut a curated exclusion list does not reach: it is built by naming the condition, and none of these names the condition.
 
 **The top of the lift distribution in the other 6 fields**
 
@@ -1552,11 +1552,11 @@ Encounter type is the field the screen clears, and a measured null is as useful 
 
 The two fields added last behave differently from each other and neither carries much. Medication record type is flat — 1.09 for a patient with any external record against 1.02 for an internal one. The laboratory result flag is flat too, apart from one value: its most enriched is the literal `(NONE)` at 2.88 across 3,696 patients, which 3.5 shows is the string meaning *normal* and which became a null on nine rows in ten. A flag value asserting that nothing was abnormal is the one that discriminates, which is more plausibly a fact about which records still carry the sentinel than about the children carrying them.
 
-**The medication screen finds what a curated list could not.** 16 of the 330 screened generic names lift higher than the 5.06 that 5.10 measures for growth hormone, and none of them is a growth treatment: `Insulin Disposable Pump`, `Insulin Glargine`, `Continuous Glucose Transmitter`, `Continuous Glucose Sensor`. Type 1 diabetes is in the tracked panel (5.7), so every product dispensed to a child who carries that code — consumables included — reconstructs part of the label. An exclusion list built by naming growth treatments does not catch a box of lancets.
+**The medication screen finds what a curated list could not.** 16 of the 330 screened generic names lift higher than the 5.06 that 5.11 measures for growth hormone, and none of them is a growth treatment: `Insulin Disposable Pump`, `Insulin Glargine`, `Continuous Glucose Transmitter`, `Continuous Glucose Sensor`. Type 1 diabetes is in the tracked panel (5.7), so every product dispensed to a child who carries that code — consumables included — reconstructs part of the label. An exclusion list built by naming growth treatments does not catch a box of lancets.
 
-**The unit of the screen decides the answer.** 5.10 matches `ALKALINE PHOSPHATASE` as a substring across the procedure name and the result component, finds 26,555 patients at a lift of 1.01, and reads it as a general screen carrying no information. Screened as a procedure name in its own right the same test is 813 patients at 3.61. Both figures are correct and they answer different questions: ordering the test deliberately is not the same event as receiving it inside a panel, and a substring match pools them.
+**The unit of the screen decides the answer.** 5.11 matches `ALKALINE PHOSPHATASE` as a substring across the procedure name and the result component, finds 26,555 patients at a lift of 1.01, and reads it as a general screen carrying no information. Screened as a procedure name in its own right the same test is 813 patients at 3.61. Both figures are correct and they answer different questions: ordering the test deliberately is not the same event as receiving it inside a panel, and a substring match pools them.
 
-**One column reconstructs the label on its own.** `visits_count_pre_dx` counts a patient's visits up to the diagnosis, and for a patient without one it equals the lifetime count. The inequality between the two columns is therefore the label: 35,793 patients have a shorter pre-diagnosis count and 35,793 of them are labelled, against 114 of the 214,795 others. That is 100.0% precision at 99.7% recall from a single comparison of two delivered columns. 5.8 makes the point about counts measured to an index date; this is the same asymmetry shipped as a column, and no model given the augmented patient table can avoid it.
+**One column reconstructs the label on its own.** `visits_count_pre_dx` counts a patient's visits up to the diagnosis, and for a patient without one it equals the lifetime count. The inequality between the two columns is therefore the label: 35,793 patients have a shorter pre-diagnosis count and 35,793 of them are labelled, against 114 of the 214,795 others. That is 100.0% precision at 99.7% recall from a single comparison of two delivered columns. 5.9 makes the point about counts measured to an index date; this is the same asymmetry shipped as a column, and no model given the augmented patient table can avoid it.
 
 **`visits_count_pre_dx` against `visits_count`**
 
@@ -1565,15 +1565,15 @@ The two fields added last behave differently from each other and neither carries
 | pre-diagnosis count is shorter than the lifetime count | 35,793 | 35,793 | 100.00% |
 | the two counts are equal | 214,795 | 114 | 0.05% |
 
-**The shortcut set belongs to the label, not to the extract.** The same features scored against the alternative index reorder completely. An endocrinology referral lifts 2.36 against the code and 16.15 against the workup, so 5.12's advice to use it as a cohort filter selects on the outcome under 5.10's recommended design; and the growth-hormone and IGF-1 records that 5.10 screens as leaking features are that design's definition of the label rather than features at all. Nothing here is transferable between the two.
+**The shortcut set belongs to the label, not to the extract.** The same features scored against the alternative index reorder completely. An endocrinology referral lifts 2.36 against the code and 16.15 against the workup, so 5.13's advice to use it as a cohort filter selects on the outcome under 5.11's recommended design; and the growth-hormone and IGF-1 records that 5.11 screens as leaking features are that design's definition of the label rather than features at all. Nothing here is transferable between the two.
 
 **Named candidates against both labels**
 
 | feature | patients | carry the code label | lift, code label | lift, workup index |
 | --- | --- | --- | --- | --- |
-| endocrinology referral (5.12) | 5,790 | 33.8% | 2.36x | 16.15x |
-| growth hormone prescription (5.10) | 237 | 72.6% | 5.06x | — |
-| stunting flag ever set (5.9) | 17,889 | 43.8% | 3.05x | 5.94x |
+| endocrinology referral (5.13) | 5,790 | 33.8% | 2.36x | 16.15x |
+| growth hormone prescription (5.11) | 237 | 72.6% | 5.06x | — |
+| stunting flag ever set (5.10) | 17,889 | 43.8% | 3.05x | 5.94x |
 | failure to thrive or short stature in the child, R62.5x | 41,628 | 22.0% | 1.53x | 5.39x |
 | pediatric BMI-percentile code, Z68.5x | 64,467 | 10.6% | 0.74x | 0.96x |
 | any encounter converted from the legacy system | 137,210 | 9.3% | 0.65x | 1.42x |
@@ -1581,13 +1581,13 @@ The two fields added last behave differently from each other and neither carries
 
 Three rows deserve a second look. The pediatric BMI-percentile codes are the growth chart written into the diagnosis field and they carry no lift at all, because the label is perinatal rather than anthropometric — an obvious candidate that a screen clears and an argument would not. And the last two rows separate patients by nothing clinical at all: a record kept natively throughout lifts 1.43 against 0.65 for one carrying any encounter converted from the practice network's previous system, a 2.2-fold spread on a provenance field. 3.7 measures that field's effect on diagnosis completeness; this is what the same effect does to a label.
 
-One bound on all of this comes from 1.4. The cohort excluded every code, medication and procedure seen fewer than 11 times along with the patients carrying them, and 5.10 measures how much of the laboratory vocabulary that removed. The rarest and most specific markers are the most likely to be gone, so a screen on this extract under-detects exactly the shortcuts it most wants to find.
+One bound on all of this comes from 1.4. The cohort excluded every code, medication and procedure seen fewer than 11 times along with the patients carrying them, and 5.11 measures how much of the laboratory vocabulary that removed. The rarest and most specific markers are the most likely to be gone, so a screen on this extract under-detects exactly the shortcuts it most wants to find.
 
-**Implications for analysis.** Screen rather than enumerate: run this against your own label and index before building a feature set, and re-run it after any change to either. Exclude the fields that reconstruct the label — the raw diagnosis slots and the problem list, `visits_count_pre_dx`, and the treatment records of 5.10 — and remember that a field carrying no clinical meaning can still discriminate. A lift measured here is an upper bound on what a temporally honest feature could contribute, not an estimate of it: everything above is scored without a cut, so a value that only ever appears alongside the diagnosis scores as high as one that precedes it.
+**Implications for analysis.** Screen rather than enumerate: run this against your own label and index before building a feature set, and re-run it after any change to either. Exclude the fields that reconstruct the label — the raw diagnosis slots and the problem list, `visits_count_pre_dx`, and the treatment records of 5.11 — and remember that a field carrying no clinical meaning can still discriminate. A lift measured here is an upper bound on what a temporally honest feature could contribute, not an estimate of it: everything above is scored without a cut, so a value that only ever appears alongside the diagnosis scores as high as one that precedes it.
 
-### 5.14 The same screen over the numbers: derived columns and constructed features
+### 5.15 The same screen over the numbers: derived columns and constructed features
 
-5.13 screens categorical fields, where a lift answers the question. A continuous column needs a statistic that does not depend on where a threshold is put, so this section uses the rank statistic: the probability that a labelled patient ranks above an unlabelled one, with ties at their mid-rank. 0.5 is no separation. Below it means the labelled patients rank lower, which is a direction rather than an absence, so the tables sort on distance from 0.5 and carry it as its own column.
+5.14 screens categorical fields, where a lift answers the question. A continuous column needs a statistic that does not depend on where a threshold is put, so this section uses the rank statistic: the probability that a labelled patient ranks above an unlabelled one, with ties at their mid-rank. 0.5 is no separation. Below it means the labelled patients rank lower, which is a direction rather than an absence, so the tables sort on distance from 0.5 and carry it as its own column.
 
 Every numeric column of the augmented patient layer is screened — 41 of them, after setting aside the label and the 34 `dx_age_years` columns that carry its age. Beside each is the same statistic among patients whose record reaches 5 years of age and spans 5 years, which is a coarse control for how much record exists rather than a matched design.
 
@@ -1608,7 +1608,7 @@ Every numeric column of the augmented patient layer is screened — 41 of them, 
 
 Of 41 columns screened, 12 sit within 0.05 of 0.5 and carry almost nothing on their own.
 
-**After the column that is the label, growth and bookkeeping are interleaved.** `visits_count_pre_dx` leads at 0.075 because 5.13 shows it to be the label written as a count. Then the lowest weight z-score a child ever recorded at 0.305 — and immediately behind it the age at the last visit at 0.339, the number of BMI values at 0.359, and the span of the record at 0.365. **The shape of a patient's record separates this label about as well as the child's growth does**, because a labelled patient is younger and less observed when the label is perinatal (5.8).
+**After the column that is the label, growth and bookkeeping are interleaved.** `visits_count_pre_dx` leads at 0.075 because 5.14 shows it to be the label written as a count. Then the lowest weight z-score a child ever recorded at 0.305 — and immediately behind it the age at the last visit at 0.339, the number of BMI values at 0.359, and the span of the record at 0.365. **The shape of a patient's record separates this label about as well as the child's growth does**, because a labelled patient is younger and less observed when the label is perinatal (5.9).
 
 Two rows are worth putting side by side. The count of head circumference measurements separates at 0.605 and the stunting flag at 0.586: **how often a child was measured carries more about this label than whether the measurement was low.** Meanwhile `visits_count` itself is 0.488, which is nothing — lifetime volume does not discriminate, and the rate at which that volume accumulates does.
 
@@ -1634,11 +1634,11 @@ Features a modeller would build rather than find, each computed over the whole r
 
 The restriction controls the observation window and nothing else. Inside it 161,778 patients remain at a labelled rate of 10.4%, and their median age at diagnosis is still 0.077 years. The perinatal concentration survives the cut, so a separation that holds under it is bounded above by what an age-matched design would find, not established by it.
 
-**The problem-list count shows what contamination costs.** Counting every entry gives 0.633; counting only entries outside the tracked panel gives 0.592. The tracked codes reach the problem list (5.11), so the first number is part label and part utilisation, and only the second is a feature. A count over a diagnosis resource needs the label's own codes taken out of it before it means anything.
+**The problem-list count shows what contamination costs.** Counting every entry gives 0.633; counting only entries outside the tracked panel gives 0.592. The tracked codes reach the problem list (5.12), so the first number is part label and part utilisation, and only the second is a feature. A count over a diagnosis resource needs the label's own codes taken out of it before it means anything.
 
 Several results are negative, and they are worth recording as such. Days carrying two or more heights — the same-day disagreement of 3.8, read as a sign of a clinician re-measuring — sit at 0.499. A patient's position in the delivered file is 0.501: the delivery is not ordered by anything related to the label, which is the one shortcut that would have been invisible in every other check in this report. The breadth of the laboratory workup is 0.497 across the whole cohort but 0.574 among long records, which is the pattern to expect when a flat result is itself an artifact of the age mix rather than a finding: a null measured over this cohort is not a null.
 
-**Implications for analysis.** Screen continuous features the same way you screen categorical ones, and screen the ones you build as well as the ones you were given — the highest-ranking features here are a count of measurements and a rate of contact, neither of which looks like a leak in a feature list. Where a column describes the record rather than the child, either exclude it or make the observation window an explicit part of the design; 5.8's common index date is the same remedy arrived at from the other direction.
+**Implications for analysis.** Screen continuous features the same way you screen categorical ones, and screen the ones you build as well as the ones you were given — the highest-ranking features here are a count of measurements and a rate of contact, neither of which looks like a leak in a feature list. Where a column describes the record rather than the child, either exclude it or make the observation window an explicit part of the design; 5.9's common index date is the same remedy arrived at from the other direction.
 
 ## 6. Field index
 
@@ -1856,12 +1856,12 @@ One row per artifact, gathered from the findings that measured them. The class s
 | Height z-score truncated above at +3 while the lower tail runs to -5 | derivation | 21 visits at or above +3 where roughly 15,800 would be expected | Yes — recompute from the retained raw height | 4.6 |
 | Head circumference passed through an inch-to-centimetre conversion a second time | derivation | 13,467 visits, 90% of all out-of-range values | Yes — divide by 2.54 before applying a plausible range, rather than deleting | 4.7 |
 | Velocity computed over an age-dependent minimum interval, not between adjacent visits | derivation | 99.99% reproduced under the interval rule against 43.7% under a naive lag | Not a defect — carry the interval rule alongside the field | 4.8 |
-| Diagnosis label precedes the growth trajectory it would be predicted from | selection | 51% of labelled patients have no height recorded before their diagnosis | No — use a different label or a different index date | 5.8 |
-| A derived flag that is disjoint from the diagnosis flag by construction | derivation | healthy_flag is set for 0.0% of growth-diagnosed patients | Yes — define the negative class explicitly instead | 5.9 |
-| Treatment and workup records reveal the diagnosis, and date it a decade later than the code | capture | growth hormone is 5.1 times enriched for the label; its median order age is 10.8 years against 0.027 for the code | Yes — exclude them as features, or index on them instead | 5.10 |
-| A diagnosis code's resource coverage depends on the code | capture | 36% of patient-code pairs appear only in encounter diagnoses and 14% only in the problem list | Yes — take the union of both resources, as the derived columns do | 5.11 |
-| A growth diagnosis recorded at the referral rather than before it | capture | 36% of endocrinology-referred labelled patients carry the code within 30 days of the referral | No — but the subgroup it marks is the usable one | 5.12 |
-| A derived column that is a function of the label | derivation | `visits_count_pre_dx` recovers `growth_dx_flag` at 100.0% precision and 99.7% recall | No — the column cannot be made label-free; exclude it | 5.13 |
+| Diagnosis label precedes the growth trajectory it would be predicted from | selection | 51% of labelled patients have no height recorded before their diagnosis | No — use a different label or a different index date | 5.9 |
+| A derived flag that is disjoint from the diagnosis flag by construction | derivation | healthy_flag is set for 0.0% of growth-diagnosed patients | Yes — define the negative class explicitly instead | 5.10 |
+| Treatment and workup records reveal the diagnosis, and date it a decade later than the code | capture | growth hormone is 5.1 times enriched for the label; its median order age is 10.8 years against 0.027 for the code | Yes — exclude them as features, or index on them instead | 5.11 |
+| A diagnosis code's resource coverage depends on the code | capture | 36% of patient-code pairs appear only in encounter diagnoses and 14% only in the problem list | Yes — take the union of both resources, as the derived columns do | 5.12 |
+| A growth diagnosis recorded at the referral rather than before it | capture | 36% of endocrinology-referred labelled patients carry the code within 30 days of the referral | No — but the subgroup it marks is the usable one | 5.13 |
+| A derived column that is a function of the label | derivation | `visits_count_pre_dx` recovers `growth_dx_flag` at 100.0% precision and 99.7% recall | No — the column cannot be made label-free; exclude it | 5.14 |
 
 ## 8. Methods and limitations
 

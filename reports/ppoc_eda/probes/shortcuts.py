@@ -1,11 +1,11 @@
-"""Part 5.13 — an exhaustive screen for fields that encode the label.
+"""Part 5.14 — an exhaustive screen for fields that encode the label.
 
-5.10 and 5.12 test a hand-curated list of clinically obvious candidates. That is
+5.11 and 5.13 test a hand-curated list of clinically obvious candidates. That is
 a hypothesis test rather than a search: it can confirm that growth hormone leaks
 and it cannot discover the leak nobody thought to name. This probe screens every
 value of five categorical fields against the label, reports the top of the lift
 distribution instead of a chosen subset, and repeats the screen under the
-alternative index event 5.10 recommends — because the shortcut set is a property
+alternative index event 5.11 recommends — because the shortcut set is a property
 of the label, not of the extract.
 """
 
@@ -48,16 +48,16 @@ SOURCES = [
 
 #: Candidates carried forward from the curated sections, plus the two the screen
 #: adds, scored against both labels. Fixed rather than data-driven so the
-#: comparison is the same one 5.10 and 5.12 make.
+#: comparison is the same one 5.11 and 5.13 make.
 def candidates(pc: str) -> list[tuple[str, str]]:
     return [
-        ("endocrinology referral (5.12)",
+        ("endocrinology referral (5.13)",
          ("SELECT patient_id FROM referrals "
           "WHERE lower(requested_specialty) LIKE '%endocrin%'")),
-        ("growth hormone prescription (5.10)",
+        ("growth hormone prescription (5.11)",
          ("SELECT patient_id FROM medications "
           "WHERE lower(med_simple_generic_name) LIKE '%somatropin%'")),
-        ("stunting flag ever set (5.9)",
+        ("stunting flag ever set (5.10)",
          "SELECT patient_id FROM patients_augmented WHERE ever_stunting_flag = 1"),
         ("failure to thrive or short stature in the child, R62.5x",
          f"SELECT patient_id FROM {pc} WHERE starts_with(code, 'R62.5')"),
@@ -70,7 +70,7 @@ def candidates(pc: str) -> list[tuple[str, str]]:
           "max(CASE WHEN orig_enc_source_Epic_yn <> 'Y' THEN 1 ELSE 0 END) = 0")),
     ]
 
-#: 5.10 matches this substring across the procedure name and the result
+#: 5.11 matches this substring across the procedure name and the result
 #: component and reports no signal. The screen ranks procedure names, which is a
 #: different unit; both numbers are computed here so the gap is measured rather
 #: than argued.
@@ -82,7 +82,7 @@ LABEL_TABLE = "_shortcut_label"
 #: one of these scores the index's maximum against it by construction rather
 #: than by discrimination, so its workup lift is withheld the same way an
 #: unbacked one is. `%IGF%` catches the binding protein as well as IGF-1, which
-#: is a property of the index definition in 5.10 and not of this screen.
+#: is a property of the index definition in 5.11 and not of this screen.
 INDEX_TERMS = ("SOMATROPIN", "IGF", "GROWTH HORMONE")
 
 
@@ -153,7 +153,7 @@ def _cohort(ctx: Context, sql: str, dx_base: float, w_base: float,
                            else None}
 
 
-@probe("shortcuts.audit", "5.13")
+@probe("shortcuts.audit", "5.14")
 def audit(ctx: Context) -> list[Finding]:
     pc = patient_codes(ctx)
     dx_base, w_base, w_n = _labels(ctx)
@@ -192,15 +192,15 @@ def audit(ctx: Context) -> list[Finding]:
     cand_rows = [dict(_cohort(ctx, sql, dx_base, w_base, name), feature=name)
                  for name, sql in candidates(pc)]
     by_name = {r["feature"]: r for r in cand_rows}
-    endo = by_name["endocrinology referral (5.12)"]
+    endo = by_name["endocrinology referral (5.13)"]
     conv = by_name["any encounter converted from the legacy system"]
     native = by_name["no converted encounter: recorded natively throughout"]
 
     # --- the medication result, which is what the curated panel could not find.
-    # The cut is 5.10's own growth-hormone figure, so the two sections compare
+    # The cut is 5.11's own growth-hormone figure, so the two sections compare
     # the same population rather than two spellings of somatropin.
     meds = screens["medication"]
-    med_cut = by_name["growth hormone prescription (5.10)"]["lift"]
+    med_cut = by_name["growth hormone prescription (5.11)"]["lift"]
     med_high = [r for r in meds if r["lift"] > med_cut]
     med_examples = ", ".join(f"`{r['value']}`" for r in med_high[:4])
 
@@ -212,7 +212,7 @@ def audit(ctx: Context) -> list[Finding]:
     enc_shown = [(label, enc[key]["lift"]) for key, label in enc_named if key in enc]
     enc_top = str(screens["encounter type"][0]["value"])
 
-    # --- the same substring, screened as a procedure name and as 5.10 matches it
+    # --- the same substring, screened as a procedure name and as 5.11 matches it
     diluted = [r for r in screens["lab procedure"]
                if DILUTED.strip("%") in str(r["value"]).upper()]
     panel = _cohort(ctx, f"""
@@ -235,7 +235,7 @@ def audit(ctx: Context) -> list[Finding]:
     ]
 
     f = Finding(
-        id="shortcuts.audit", part="5.13",
+        id="shortcuts.audit", part="5.14",
         title="A shortcut audit: which fields encode the label",
         values={
             "support": SUPPORT, "screened": screened, "n_other": len(SOURCES),
@@ -271,7 +271,7 @@ def audit(ctx: Context) -> list[Finding]:
     )
 
     blocks = [
-        Para("5.10 and 5.12 measure the leakage in a list of candidates chosen for "
+        Para("5.11 and 5.13 measure the leakage in a list of candidates chosen for "
              "being clinically obvious. This section runs the search those sections "
              "imply: every value of {n_fields} categorical fields that {support:,} "
              "or more patients carry, scored against the label. {screened:,} values "
@@ -282,7 +282,7 @@ def audit(ctx: Context) -> list[Finding]:
              "what an unrestricted feature build sees, and it mixes leakage with "
              "concurrency: a code recorded at the same encounter as the diagnosis "
              "scores as high as one recorded years before it. Beside each lift is "
-             "the same figure against the alternative index of 5.10, the first "
+             "the same figure against the alternative index of 5.11, the first "
              "growth workup or treatment, which {w_n:,} patients carry at a base "
              "rate of {w_base:.2f}%. It is suppressed where fewer than {suppress} "
              "patients back it, and where the value is itself part of the index "
@@ -308,7 +308,7 @@ def audit(ctx: Context) -> list[Finding]:
               other_codes,
               note="Top {code_shown} by lift among codes carried by {support:,} or "
                    "more patients."),
-        Para("What sits below the panel is the neighbourhood of a label 5.8 shows to "
+        Para("What sits below the panel is the neighbourhood of a label 5.9 shows to "
              "be overwhelmingly perinatal: prematurity, its complications, and "
              "newborn morbidity. None is a growth code and none is tracked, but a "
              "patient carrying one was in the neonatal course that produced the "
@@ -344,7 +344,7 @@ def audit(ctx: Context) -> list[Finding]:
              "sentinel than about the children carrying them."),
         Para("**The medication screen finds what a curated list could not.** "
              "{med_high} of the {med_screened} screened generic names lift higher "
-             "than the {gh_lift:.2f} that 5.10 measures for growth hormone, and "
+             "than the {gh_lift:.2f} that 5.11 measures for growth hormone, and "
              "none of them is a growth treatment: {med_examples}. Type 1 diabetes is in the tracked panel "
              "(5.7), so every product dispensed to a child who carries that code — "
              "consumables included — reconstructs part of the label. An exclusion "
@@ -357,7 +357,7 @@ def audit(ctx: Context) -> list[Finding]:
                          "dil_lift": top["lift"], "panel_n": panel["patients"],
                          "panel_lift": panel["lift"]})
         blocks.append(
-            Para("**The unit of the screen decides the answer.** 5.10 matches "
+            Para("**The unit of the screen decides the answer.** 5.11 matches "
                  "`{dil_value}` as a substring across the procedure name and the "
                  "result component, finds {panel_n:,} patients at a lift of "
                  "{panel_lift:.2f}, and reads it as a general screen carrying no "
@@ -374,7 +374,7 @@ def audit(ctx: Context) -> list[Finding]:
              "{yes_n:,} patients have a shorter pre-diagnosis count and {yes_hit:,} "
              "of them are labelled, against {no_hit:,} of the {no_n:,} others. That "
              "is {precision:.1f}% precision at {recall:.1f}% recall from a single "
-             "comparison of two delivered columns. 5.8 makes the point about counts "
+             "comparison of two delivered columns. 5.9 makes the point about counts "
              "measured to an index date; this is the same asymmetry shipped as a "
              "column, and no model given the augmented patient table can avoid it."),
         Table("t-shortcut-predx",
@@ -386,10 +386,10 @@ def audit(ctx: Context) -> list[Finding]:
         Para("**The shortcut set belongs to the label, not to the extract.** The "
              "same features scored against the alternative index reorder "
              "completely. An endocrinology referral lifts {endo_lift:.2f} against "
-             "the code and {endo_workup:.2f} against the workup, so 5.12's advice "
-             "to use it as a cohort filter selects on the outcome under 5.10's "
+             "the code and {endo_workup:.2f} against the workup, so 5.13's advice "
+             "to use it as a cohort filter selects on the outcome under 5.11's "
              "recommended design; and the growth-hormone and IGF-1 records that "
-             "5.10 screens as leaking features are that design's definition of the "
+             "5.11 screens as leaking features are that design's definition of the "
              "label rather than features at all. Nothing here is transferable "
              "between the two."),
         Table("t-shortcut-index",
@@ -413,7 +413,7 @@ def audit(ctx: Context) -> list[Finding]:
              "does to a label."),
         Para("One bound on all of this comes from 1.4. The cohort excluded every "
              "code, medication and procedure seen fewer than 11 times along with "
-             "the patients carrying them, and 5.10 measures how much of the "
+             "the patients carrying them, and 5.11 measures how much of the "
              "laboratory vocabulary that removed. The rarest and most specific "
              "markers are the most likely to be gone, so a screen on this extract "
              "under-detects exactly the shortcuts it most wants to find.",
@@ -422,7 +422,7 @@ def audit(ctx: Context) -> list[Finding]:
              "against your own label and index before building a feature set, and "
              "re-run it after any change to either. Exclude the fields that "
              "reconstruct the label — the raw diagnosis slots and the problem list, "
-             "`visits_count_pre_dx`, and the treatment records of 5.10 — and "
+             "`visits_count_pre_dx`, and the treatment records of 5.11 — and "
              "remember that a field carrying no clinical meaning can still "
              "discriminate. A lift measured here is an upper bound on what a "
              "temporally honest feature could contribute, not an estimate of it: "
@@ -435,7 +435,7 @@ def audit(ctx: Context) -> list[Finding]:
 
 
 # ---------------------------------------------------------------------------
-# 5.14 — the same question asked of the numbers
+# 5.15 — the same question asked of the numbers
 # ---------------------------------------------------------------------------
 
 #: A lift needs a category. A continuous column needs a statistic that does not
@@ -446,14 +446,14 @@ def audit(ctx: Context) -> list[Finding]:
 NEUTRAL = 0.5
 
 #: The observation-window control: a record running to at least this age and
-#: spanning at least this long. Coarse rather than matched, and 5.14 says so.
+#: spanning at least this long. Coarse rather than matched, and 5.15 says so.
 RESTRICT_DAYS = 1826
 
 NUMERIC_TABLE = "_shortcut_numeric"
 
 #: Features a modeller would build rather than find. Each is (key, label,
 #: expression over the assembled table). The pair of problem-list counts is
-#: deliberate: the tracked panel reaches the problem list (5.11), so the total
+#: deliberate: the tracked panel reaches the problem list (5.12), so the total
 #: is contaminated by the label and the difference between the two rows is how
 #: much.
 CONSTRUCTED = [
@@ -567,7 +567,7 @@ def _score(ctx: Context, column: str, label: str) -> dict | None:
             "long_auc": long_record[0] if long_record else None}
 
 
-@probe("shortcuts.numbers", "5.14")
+@probe("shortcuts.numbers", "5.15")
 def numbers(ctx: Context) -> list[Finding]:
     _labels(ctx)
     _build_numeric(ctx)
@@ -592,7 +592,7 @@ def numbers(ctx: Context) -> list[Finding]:
         FROM {NUMERIC_TABLE} WHERE long_record = 1""")
 
     f = Finding(
-        id="shortcuts.numbers", part="5.14",
+        id="shortcuts.numbers", part="5.15",
         title="The same screen over the numbers: derived columns and constructed "
               "features",
         values={
@@ -623,7 +623,7 @@ def numbers(ctx: Context) -> list[Finding]:
         },
     )
     f.blocks = [
-        Para("5.13 screens categorical fields, where a lift answers the question. A "
+        Para("5.14 screens categorical fields, where a lift answers the question. A "
              "continuous column needs a statistic that does not depend on where a "
              "threshold is put, so this section uses the rank statistic: the "
              "probability that a labelled patient ranks above an unlabelled one, "
@@ -648,14 +648,14 @@ def numbers(ctx: Context) -> list[Finding]:
                    "{neutral} and carry almost nothing on their own."),
         Para("**After the column that is the label, growth and bookkeeping are "
              "interleaved.** `visits_count_pre_dx` leads at {pre_dx_auc:.3f} because "
-             "5.13 shows it to be the label written as a count. Then the lowest "
+             "5.14 shows it to be the label written as a count. Then the lowest "
              "weight z-score a child ever recorded at {min_weight_auc:.3f} — and "
              "immediately behind it the age at the last visit at {max_age_auc:.3f}, "
              "the number of BMI values at {bmi_count_auc:.3f}, and the span of the "
              "record at {span_auc:.3f}. **The shape of a patient's record separates "
              "this label about as well as the child's growth does**, because a "
              "labelled patient is younger and less observed when the label is "
-             "perinatal (5.8)."),
+             "perinatal (5.9)."),
         Para("Two rows are worth putting side by side. The count of head "
              "circumference measurements separates at {hc_count_auc:.3f} and the "
              "stunting flag at {stunting_auc:.3f}: **how often a child was measured "
@@ -687,7 +687,7 @@ def numbers(ctx: Context) -> list[Finding]:
         Para("**The problem-list count shows what contamination costs.** Counting "
              "every entry gives {prob_all:.3f}; counting only entries outside the "
              "tracked panel gives {prob_clean:.3f}. The tracked codes reach the "
-             "problem list (5.11), so the first number is part label and part "
+             "problem list (5.12), so the first number is part label and part "
              "utilisation, and only the second is a feature. A count over a "
              "diagnosis resource needs the label's own codes taken out of it before "
              "it means anything."),
@@ -708,7 +708,7 @@ def numbers(ctx: Context) -> list[Finding]:
              "count of measurements and a rate of contact, neither of which looks "
              "like a leak in a feature list. Where a column describes the record "
              "rather than the child, either exclude it or make the observation "
-             "window an explicit part of the design; 5.8's common index date is the "
+             "window an explicit part of the design; 5.9's common index date is the "
              "same remedy arrived at from the other direction.", role="implication"),
     ]
     return [f]

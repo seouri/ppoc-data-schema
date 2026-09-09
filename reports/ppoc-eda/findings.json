@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-09T19:17:31Z",
+  "generated_at": "2026-09-09T19:24:54Z",
   "parts": [
     {
       "findings": [
@@ -803,7 +803,7 @@
                 },
                 {
                   "item": "Shortcut screen against the label",
-                  "note": "Every value of seven categorical fields, scored again under a second index — 5.13; every numeric and constructed feature — 5.14",
+                  "note": "Every value of seven categorical fields, scored again under a second index — 5.14; every numeric and constructed feature — 5.15",
                   "section": "9 Label",
                   "status": "covered"
                 }
@@ -5895,7 +5895,7 @@
         },
         {
           "id": "growth.ages",
-          "part": "5.7.1",
+          "part": "5.8",
           "tables": [
             {
               "caption": "Panel one: codes recorded at the birth episode, age at first record in years",
@@ -6278,7 +6278,7 @@
             }
           ],
           "id": "joint.label",
-          "part": "5.8",
+          "part": "5.9",
           "tables": [
             {
               "caption": "Heights available before the diagnosis",
@@ -6379,7 +6379,7 @@
             "scale": "healthy_flag is set for 0.0% of growth-diagnosed patients"
           },
           "id": "joint.features",
-          "part": "5.9",
+          "part": "5.10",
           "tables": [
             {
               "caption": "Visits carrying height, weight, and both",
@@ -6539,7 +6539,7 @@
             "scale": "growth hormone is 5.1 times enriched for the label; its median order age is 10.8 years against 0.027 for the code"
           },
           "id": "joint.treatment",
-          "part": "5.10",
+          "part": "5.11",
           "tables": [
             {
               "caption": "Growth and endocrine treatment and workup markers",
@@ -6855,7 +6855,7 @@
             "scale": "36% of patient-code pairs appear only in encounter diagnoses and 14% only in the problem list"
           },
           "id": "joint.sources",
-          "part": "5.11",
+          "part": "5.12",
           "tables": [
             {
               "caption": "Where each tracked code appears",
@@ -7187,7 +7187,7 @@
             "scale": "36% of endocrinology-referred labelled patients carry the code within 30 days of the referral"
           },
           "id": "joint.referrals",
-          "part": "5.12",
+          "part": "5.13",
           "tables": [
             {
               "caption": "Referral families against the growth diagnosis",
@@ -7322,7 +7322,7 @@
             "scale": "`visits_count_pre_dx` recovers `growth_dx_flag` at 100.0% precision and 99.7% recall"
           },
           "id": "shortcuts.audit",
-          "part": "5.13",
+          "part": "5.14",
           "tables": [
             {
               "caption": "Diagnosis codes with the highest lift, excluding the tracked panel and its descendants",
@@ -7681,21 +7681,21 @@
               "id": "t-shortcut-index",
               "rows": [
                 {
-                  "feature": "endocrinology referral (5.12)",
+                  "feature": "endocrinology referral (5.13)",
                   "lift": 2.3600178,
                   "patients": 5790,
                   "share": 33.816926,
                   "workup_lift": 16.145382
                 },
                 {
-                  "feature": "growth hormone prescription (5.10)",
+                  "feature": "growth hormone prescription (5.11)",
                   "lift": 5.0647877,
                   "patients": 237,
                   "share": 72.57384,
                   "workup_lift": null
                 },
                 {
-                  "feature": "stunting flag ever set (5.9)",
+                  "feature": "stunting flag ever set (5.10)",
                   "lift": 3.0538373,
                   "patients": 17889,
                   "share": 43.758734,
@@ -7779,7 +7779,7 @@
         },
         {
           "id": "shortcuts.numbers",
-          "part": "5.14",
+          "part": "5.15",
           "tables": [
             {
               "caption": "The {shown} delivered patient columns that separate the label most",
@@ -9733,42 +9733,42 @@
                   "class": "selection",
                   "recoverable": "No — use a different label or a different index date",
                   "scale": "51% of labelled patients have no height recorded before their diagnosis",
-                  "where": "5.8"
+                  "where": "5.9"
                 },
                 {
                   "artifact": "A derived flag that is disjoint from the diagnosis flag by construction",
                   "class": "derivation",
                   "recoverable": "Yes — define the negative class explicitly instead",
                   "scale": "healthy_flag is set for 0.0% of growth-diagnosed patients",
-                  "where": "5.9"
+                  "where": "5.10"
                 },
                 {
                   "artifact": "Treatment and workup records reveal the diagnosis, and date it a decade later than the code",
                   "class": "capture",
                   "recoverable": "Yes — exclude them as features, or index on them instead",
                   "scale": "growth hormone is 5.1 times enriched for the label; its median order age is 10.8 years against 0.027 for the code",
-                  "where": "5.10"
+                  "where": "5.11"
                 },
                 {
                   "artifact": "A diagnosis code's resource coverage depends on the code",
                   "class": "capture",
                   "recoverable": "Yes — take the union of both resources, as the derived columns do",
                   "scale": "36% of patient-code pairs appear only in encounter diagnoses and 14% only in the problem list",
-                  "where": "5.11"
+                  "where": "5.12"
                 },
                 {
                   "artifact": "A growth diagnosis recorded at the referral rather than before it",
                   "class": "capture",
                   "recoverable": "No — but the subgroup it marks is the usable one",
                   "scale": "36% of endocrinology-referred labelled patients carry the code within 30 days of the referral",
-                  "where": "5.12"
+                  "where": "5.13"
                 },
                 {
                   "artifact": "A derived column that is a function of the label",
                   "class": "derivation",
                   "recoverable": "No — the column cannot be made label-free; exclude it",
                   "scale": "`visits_count_pre_dx` recovers `growth_dx_flag` at 100.0% precision and 99.7% recall",
-                  "where": "5.13"
+                  "where": "5.14"
                 }
               ]
             }

@@ -99,7 +99,7 @@ print("logical visit links:", referrals.get("x-logicalForeignKeys", []))
 
 For a full resource, omit `nrows`; for a memory-conscious analysis, pass only the fields needed through `usecols`. The package’s `foreignKeys` and `x-logicalForeignKeys` entries identify complete patient joins and incomplete visit-ID relationships, respectively.
 
-The descriptor says what a column is, not what it implies about a label. If you are selecting columns for a model rather than for a description, some of them encode the growth-diagnosis flag instead of describing the child: `visits_count_pre_dx` is a function of it, the `enc_diag_*` slots and `pl_diag` reconstruct the tracked diagnosis panel, and the treatment and workup records identify the treated. Sections 5.13 and 5.14 of the [exploratory analysis](../reports/ppoc-eda/ppoc-eda.md) screen every field and every derived column against that label; drop what they name before you pass `usecols`.
+The descriptor says what a column is, not what it implies about a label. If you are selecting columns for a model rather than for a description, some of them encode the growth-diagnosis flag instead of describing the child: `visits_count_pre_dx` is a function of it, the `enc_diag_*` slots and `pl_diag` reconstruct the tracked diagnosis panel, and the treatment and workup records identify the treated. Sections 5.14 and 5.15 of the [exploratory analysis](../reports/ppoc-eda/ppoc-eda.md) screen every field and every derived column against that label; drop what they name before you pass `usecols`.
 
 ## Typed analytical exports
 

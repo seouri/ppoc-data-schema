@@ -1,6 +1,6 @@
 """The shortcut audit borrows two definitions; these keep the borrowing real.
 
-5.13 and 5.14 are only comparable with 5.10 because they screen against the
+5.14 and 5.15 are only comparable with 5.11 because they screen against the
 same index event. The coupling is a single import, which is exactly the kind of
 thing a later edit dissolves by pasting the SQL where it is used. These tests
 fail when that happens, rather than leaving two sections quietly measuring two
@@ -34,7 +34,7 @@ def _workup_patterns() -> set[str]:
 
 
 def test_shortcuts_imports_the_workup_index_rather_than_restating_it() -> None:
-    """A pasted copy drifts the moment 5.10's definition is edited."""
+    """A pasted copy drifts the moment 5.11's definition is edited."""
     tree = ast.parse((PROBES / "shortcuts.py").read_text(encoding="utf-8"))
     imported = any(
         isinstance(node, ast.ImportFrom)
@@ -49,7 +49,7 @@ def test_shortcuts_imports_the_workup_index_rather_than_restating_it() -> None:
         if isinstance(node, ast.Assign)
         and any(isinstance(t, ast.Name) and t.id == "WORKUP_INDEX" for t in node.targets)
     ]
-    assert not assigned, "shortcuts.py rebinds WORKUP_INDEX, shadowing 5.10's definition"
+    assert not assigned, "shortcuts.py rebinds WORKUP_INDEX, shadowing 5.11's definition"
 
 
 def test_the_two_modules_agree_on_the_index_at_runtime() -> None:
@@ -59,7 +59,7 @@ def test_the_two_modules_agree_on_the_index_at_runtime() -> None:
 def test_every_value_inside_the_index_has_its_workup_lift_withheld() -> None:
     """A value that *is* the index scores the maximum by construction.
 
-    5.13 and 5.14 withhold the workup column for those values instead of
+    5.14 and 5.15 withhold the workup column for those values instead of
     printing a number that measured nothing. The check is behavioural: each
     pattern the index matches on must make `_defines_index` true, so adding a
     marker to WORKUP_INDEX without adding it to INDEX_TERMS fails here.
