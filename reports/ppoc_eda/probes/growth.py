@@ -229,6 +229,10 @@ def codes(ctx: Context) -> list[Finding]:
         matched += n
         fam_rows.append({"family": label, "referrals": n, "patients": pts,
                          "median_age": med, "share": 100.0 * n / ref_total})
+    # The remainder row is a residual, not a group: it has no patient count
+    # because a patient referred to several specialties would be counted once
+    # per family and the total would exceed the cohort. An em dash here would
+    # collide with the suppression convention used everywhere else.
     fam_rows.append({"family": "all other specialties",
                      "referrals": ref_total - matched, "patients": None,
                      "median_age": None,
@@ -261,7 +265,8 @@ def codes(ctx: Context) -> list[Finding]:
              "gap between the two columns is what a flat query would miss."),
         Table("t-growth-codes", "The tracked growth-relevant diagnosis codes",
               [C("code", "ICD-10"), C("descr", "description"),
-               C("derived", "derived column", ",", align="right"),
+               C("derived", "patients with a `dx_age_years_*` value", ",",
+                 align="right"),
                C("exact", "patients, literal code", ",", align="right"),
                C("tree", "patients, code and descendants", ",", align="right"),
                C("extra", "missed by a flat count", ",", align="right")], shown,
@@ -298,7 +303,12 @@ def codes(ctx: Context) -> list[Finding]:
                C("referrals", "referrals", ",", align="right"),
                C("share", "share of all referrals", ".2f", "%", align="right"),
                C("patients", "patients", ",", align="right"),
-               C("median_age", "median age", ".2f", " y", align="right")], fam_rows),
+               C("median_age", "median age", ".2f", " y", align="right")], fam_rows,
+              note="The last row is a residual rather than a family, which is why "
+                   "it carries no patient count: a child referred to two families "
+                   "appears in both of their patient columns, so those columns do "
+                   "not add up and a total would overstate the cohort. The em "
+                   "dashes here mean not applicable, not suppressed."),
         Para("**Implications for analysis.** Use the derived columns when you want "
              "an age at first record and are content with the panel upstream chose; "
              "go to the raw diagnosis resources for anything else, and match by "

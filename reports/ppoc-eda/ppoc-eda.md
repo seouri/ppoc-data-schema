@@ -1349,7 +1349,7 @@ Because ICD-10 is a hierarchy (3.9), each code is counted here twice: as a liter
 
 **The tracked growth-relevant diagnosis codes**
 
-| ICD-10 | description | derived column | patients, literal code | patients, code and descendants | missed by a flat count |
+| ICD-10 | description | patients with a `dx_age_years_*` value | patients, literal code | patients, code and descendants | missed by a flat count |
 | --- | --- | --- | --- | --- | --- |
 | P92.6 | Failure to thrive in newborn | 14,428 | 14,428 | 14,428 | 0 |
 | P07 | Disorders of newborn related to short gestation and low birth weight, not elsewhere classified | 11,014 | 0 | 11,029 | 11,029 |
@@ -1398,6 +1398,8 @@ The referral resource shows the same orientation from the action side. Grouping 
 | Nephrology | 1,087 | 0.31% | 937 | 6.03 y |
 | Genetics | 2,426 | 0.69% | 2,116 | 3.20 y |
 | all other specialties | 313,645 | 89.66% | — | — |
+
+The last row is a residual rather than a family, which is why it carries no patient count: a child referred to two families appears in both of their patient columns, so those columns do not add up and a total would overstate the cohort. The em dashes here mean not applicable, not suppressed.
 
 **Implications for analysis.** Use the derived columns when you want an age at first record and are content with the panel upstream chose; go to the raw diagnosis resources for anything else, and match by prefix when you do. These tables describe what the pipeline tracks, not what is clinically relevant to growth in general: a code absent from the panel may still be present in 5.1, and a specialty family here is a string match on a free-text field rather than a clinical taxonomy.
 
