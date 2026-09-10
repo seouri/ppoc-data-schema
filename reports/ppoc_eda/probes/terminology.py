@@ -136,6 +136,16 @@ def codes(ctx: Context) -> list[Finding]:
     return [f]
 
 
+#: Encounter types at which no one could have put a child on a scale. Naming the
+#: class is what makes the implication's advice actionable: presence does not
+#: discriminate — every one of these carries a weight on nearly every visit.
+NO_CONTACT = ("Telephone", "Telemedicine", "Patient Message", "Letter (Out)",
+              "Scanned Document", "External Contact", "Documentation", "Abstract",
+              "Orders Only", "Refill", "History")
+#: How close another visit has to be to count as the source of a carried value.
+CARRY_DAYS = 7
+
+
 @probe("terminology.capture", "3.7")
 def capture(ctx: Context) -> list[Finding]:
     enc_rows, enc_distinct, enc_complete = listing(ctx,
@@ -166,6 +176,37 @@ def capture(ctx: Context) -> list[Finding]:
                   "visits": n, "height": h, "diag": d} for s, n, h, d in epic]
 
     tele = next((r for r in rows if r["encounter"] == "Telephone"), None)
+
+    # One of the three explanations offered for a weight on a telephone encounter
+    # is testable: if the value was carried from a nearby in-person visit it
+    # should equal that visit's weight. In-person types are the control, because
+    # some coincidence is expected at any encounter.
+    ctx.con.execute("""
+        CREATE OR REPLACE TEMP VIEW _w AS
+        SELECT visit_id, patient_id, age_in_days, encounter_type, weight_oz
+        FROM visits_augmented WHERE weight_oz IS NOT NULL""")
+    quoted = ", ".join(f"'{t}'" for t in NO_CONTACT)
+
+    def carried(kind: str) -> tuple[int, float]:
+        n, m = ctx.one(f"""
+            WITH cand AS (SELECT * FROM _w WHERE encounter_type = '{kind}')
+            SELECT count(*), count(*) FILTER (WHERE EXISTS (
+                SELECT 1 FROM _w o WHERE o.patient_id = cand.patient_id
+                  AND o.visit_id <> cand.visit_id
+                  AND o.encounter_type NOT IN ({quoted})
+                  AND abs(o.age_in_days - cand.age_in_days) <= {CARRY_DAYS}
+                  AND o.weight_oz = cand.weight_oz))
+            FROM cand""")
+        return n, 100.0 * m / n if n else 0.0
+
+    _, tele_carry = carried("Telephone")
+    _, tmed_carry = carried("Telemedicine")
+    ctrl = [carried(k)[1] for k in ("Walk-In", "Weight Check", "Immunization")]
+    ctrl_lo, ctrl_hi = min(ctrl), max(ctrl)
+    contact_rows = [r for r in rows if r["encounter"] in NO_CONTACT
+                    and r["visits"] is not None]
+    contact_visits = sum(r["visits"] for r in contact_rows)
+    contact_weight = min(r["weight"] for r in contact_rows)
     f = Finding(
         id="terminology.capture", part="3.7",
         title="Capture: measurement presence is not measurement occurrence",
@@ -173,7 +214,17 @@ def capture(ctx: Context) -> list[Finding]:
                 "tele_visits": tele["visits"] if tele else 0,
                 "enc_distinct": enc_distinct, "suppressed": suppressed,
                 "conv_diag": min(r["diag"] for r in epic_rows),
-                "n_types": len(rows)},
+                "n_types": len(rows),
+                "tele_carry": tele_carry, "tmed_carry": tmed_carry,
+                "ctrl_lo": ctrl_lo, "ctrl_hi": ctrl_hi, "carry_days": CARRY_DAYS,
+                "n_contact": len(contact_rows), "contact_visits": contact_visits,
+                "contact_weight": contact_weight,
+                "contact_list": ", ".join(f"`{r['encounter']}`"
+                                          for r in contact_rows),
+                "epic_h": next(r["height"] for r in epic_rows
+                               if r["source"] == "Epic"),
+                "conv_h": next(r["height"] for r in epic_rows
+                               if r["source"] != "Epic")},
         artifact=Artifact(
             name="Anthropometrics recorded on encounters with no physical contact",
             kind="capture",
@@ -196,11 +247,23 @@ def capture(ctx: Context) -> list[Finding]:
                    + (f" {suppressed} carry too few visits to show a count."
                       if suppressed else "")),
         Para("Telephone encounters carry a weight on {tele_weight:.1f}% of "
-             "{tele_visits:,} visits. A weight cannot be measured over the "
-             "telephone, so those values were produced some other way — reported by "
-             "a caregiver, carried from a nearby in-person encounter, or attached to "
+             "{tele_visits:,} visits, and they are not alone: {n_contact} encounter "
+             "types at which nobody could have put a child on a scale carry a "
+             "weight on at least {contact_weight:.1f}% of their visits, "
+             "{contact_visits:,} in all — {contact_list}. Presence does not "
+             "discriminate between them and an office visit."),
+        Para("**One of the three explanations for that is testable, and it mostly "
+             "fails.** A weight recorded at a telephone encounter was reported by a "
+             "caregiver, carried from a nearby in-person encounter, or attached to "
              "an encounter whose type label does not describe how the patient was "
-             "seen. Which of those it is cannot be determined from this extract."),
+             "seen. The middle one predicts the value will equal a real one: "
+             "{tele_carry:.1f}% of telephone weights match an in-person weight for "
+             "the same child within {carry_days} days exactly, against "
+             "{ctrl_lo:.1f}% to {ctrl_hi:.1f}% for in-person types where the same "
+             "coincidence is just coincidence. So carrying explains a few points of "
+             "excess and no more; for telemedicine, at {tmed_carry:.1f}%, it "
+             "explains nothing at all. The other two remain, and those this extract "
+             "genuinely cannot separate."),
         Table("t-source", "Recording completeness by source system",
               [C("source", "encounter source"),
                C("visits", "visits", ",", align="right"),
@@ -210,13 +273,17 @@ def capture(ctx: Context) -> list[Finding]:
              "from the practice network's previous EHR carry a first diagnosis on "
              "only {conv_diag:.1f}% of encounters, which the data dictionary "
              "anticipates: converted encounters may be missing diagnosis information "
-             "depending on the quality of the conversion."),
+             "depending on the quality of the conversion. Height runs the other way "
+             "— {conv_h:.1f}% on converted encounters against {epic_h:.1f}% on "
+             "native ones — so the conversion is not uniformly lossy and the "
+             "provenance field cannot be read as a quality score."),
         Para("**Implications for analysis.** A visit-level indicator that a "
              "measurement is present is not evidence that a measurement was taken at "
              "that encounter. If your design counts measurement occasions — visit "
              "density, monitoring intensity, follow-up adherence — restrict to "
              "encounter types where physical measurement is possible rather than "
-             "relying on presence. And any diagnosis-based rate computed across the "
+             "relying on presence, and the {n_contact} types named above are the "
+             "ones to drop first. And any diagnosis-based rate computed across the "
              "whole extract mixes two populations with very different coding "
              "completeness.", role="implication"),
     ]

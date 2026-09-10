@@ -564,7 +564,9 @@ Completeness by age says how often a column is filled. Encounter type says wheth
 
 All 45 distinct values are listed. 9 carry too few visits to show a count.
 
-Telephone encounters carry a weight on 99.3% of 22,053 visits. A weight cannot be measured over the telephone, so those values were produced some other way — reported by a caregiver, carried from a nearby in-person encounter, or attached to an encounter whose type label does not describe how the patient was seen. Which of those it is cannot be determined from this extract.
+Telephone encounters carry a weight on 99.3% of 22,053 visits, and they are not alone: 11 encounter types at which nobody could have put a child on a scale carry a weight on at least 95.7% of their visits, 65,247 in all — `Telemedicine`, `Telephone`, `Documentation`, `Abstract`, `Orders Only`, `External Contact`, `Patient Message`, `Scanned Document`, `Letter (Out)`, `Refill`, `History`. Presence does not discriminate between them and an office visit.
+
+**One of the three explanations for that is testable, and it mostly fails.** A weight recorded at a telephone encounter was reported by a caregiver, carried from a nearby in-person encounter, or attached to an encounter whose type label does not describe how the patient was seen. The middle one predicts the value will equal a real one: 5.8% of telephone weights match an in-person weight for the same child within 7 days exactly, against 2.4% to 2.7% for in-person types where the same coincidence is just coincidence. So carrying explains a few points of excess and no more; for telemedicine, at 1.3%, it explains nothing at all. The other two remain, and those this extract genuinely cannot separate.
 
 **Recording completeness by source system**
 
@@ -573,9 +575,9 @@ Telephone encounters carry a weight on 99.3% of 22,053 visits. A weight cannot b
 | Epic | 4,149,865 | 51.4% | 99.7% |
 | converted from a legacy system | 2,344,608 | 58.7% | 86.1% |
 
-The source-system split is the migration signal. Records converted from the practice network's previous EHR carry a first diagnosis on only 86.1% of encounters, which the data dictionary anticipates: converted encounters may be missing diagnosis information depending on the quality of the conversion.
+The source-system split is the migration signal. Records converted from the practice network's previous EHR carry a first diagnosis on only 86.1% of encounters, which the data dictionary anticipates: converted encounters may be missing diagnosis information depending on the quality of the conversion. Height runs the other way — 58.7% on converted encounters against 51.4% on native ones — so the conversion is not uniformly lossy and the provenance field cannot be read as a quality score.
 
-**Implications for analysis.** A visit-level indicator that a measurement is present is not evidence that a measurement was taken at that encounter. If your design counts measurement occasions — visit density, monitoring intensity, follow-up adherence — restrict to encounter types where physical measurement is possible rather than relying on presence. And any diagnosis-based rate computed across the whole extract mixes two populations with very different coding completeness.
+**Implications for analysis.** A visit-level indicator that a measurement is present is not evidence that a measurement was taken at that encounter. If your design counts measurement occasions — visit density, monitoring intensity, follow-up adherence — restrict to encounter types where physical measurement is possible rather than relying on presence, and the 11 types named above are the ones to drop first. And any diagnosis-based rate computed across the whole extract mixes two populations with very different coding completeness.
 
 ### 3.8 Same-day measurements that disagree
 

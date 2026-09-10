@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-10T14:28:37Z",
+  "generated_at": "2026-09-10T15:00:55Z",
   "parts": [
     {
       "findings": [
@@ -2222,12 +2222,23 @@
           ],
           "title": "Capture: measurement presence is not measurement occurrence",
           "values": {
+            "carry_days": 7,
+            "contact_list": "`Telemedicine`, `Telephone`, `Documentation`, `Abstract`, `Orders Only`, `External Contact`, `Patient Message`, `Scanned Document`, `Letter (Out)`, `Refill`, `History`",
+            "contact_visits": 65247,
+            "contact_weight": 95.69378,
             "conv_diag": 86.10241,
+            "conv_h": 58.709558,
+            "ctrl_hi": 2.7462799,
+            "ctrl_lo": 2.4077145,
             "enc_distinct": 45,
+            "epic_h": 51.40225,
+            "n_contact": 11,
             "n_types": 45,
             "suppressed": 9,
+            "tele_carry": 5.8377489,
             "tele_visits": 22053,
-            "tele_weight": 99.269941
+            "tele_weight": 99.269941,
+            "tmed_carry": 1.2730184
           }
         },
         {
