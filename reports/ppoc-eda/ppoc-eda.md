@@ -256,7 +256,7 @@ This part exists so that nobody has to wonder whether a standard check was skipp
 | 2 Temporal | Coding or vendor transition | partial | Epic against converted is computable; ICD-9 to ICD-10 is not, without dates |
 | 2 Temporal | Age sanity | covered | 3.3 |
 | 3 Missingness | Missingness per field | covered | 3.4 and the field index |
-| 3 Missingness | Missingness pattern | covered | By age — 3.4; by encounter type — 3.7. Not by sex: no channel is measured that way |
+| 3 Missingness | Missingness pattern | covered | By age — 3.4; by encounter type — 3.7 |
 | 3 Missingness | Sentinel values | covered | 3.5 |
 | 3 Missingness | Not measured vs measured negative | covered | Two fields whose nulls carry meaning — 3.5 |
 | 3 Missingness | Missingness by site or provider | not applicable | No site, department, or provider column exists — 1.5 |

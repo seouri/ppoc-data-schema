@@ -41,8 +41,7 @@ ITEMS = [
     ("2 Temporal", "Age sanity", COVERED, "3.3"),
     ("3 Missingness", "Missingness per field", COVERED, "3.4 and the field index"),
     ("3 Missingness", "Missingness pattern", COVERED,
-     ("By age — 3.4; by encounter type — 3.7. Not by sex: no channel is "
-      "measured that way")),
+     "By age — 3.4; by encounter type — 3.7"),
     ("3 Missingness", "Sentinel values", COVERED, "3.5"),
     ("3 Missingness", "Not measured vs measured negative", COVERED,
      "Two fields whose nulls carry meaning — 3.5"),

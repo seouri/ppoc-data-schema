@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-09T22:57:19Z",
+  "generated_at": "2026-09-10T00:13:38Z",
   "parts": [
     {
       "findings": [
@@ -704,7 +704,7 @@
                 },
                 {
                   "item": "Missingness pattern",
-                  "note": "By age — 3.4; by encounter type — 3.7. Not by sex: no channel is measured that way",
+                  "note": "By age — 3.4; by encounter type — 3.7",
                   "section": "3 Missingness",
                   "status": "covered"
                 },
