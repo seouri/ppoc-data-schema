@@ -265,11 +265,35 @@ def medications(ctx: Context) -> list[Finding]:
         FROM medications GROUP BY 1 ORDER BY n DESC, med_record_type""")
     absent = ["med_therapeutic_class", "med_pharmaceutical_class",
               "med_pharmaceutical_subclass"]
+    # Tall-man lettering: a pharmacy convention that capitalises the letters
+    # distinguishing look-alike drug names. It reads as a data defect and is not
+    # one, and normalising it away is the damaging response.
+    tallman, case_variants = ctx.one(r"""
+        SELECT count(DISTINCT med_simple_generic_name) FILTER (
+                   WHERE regexp_matches(med_simple_generic_name, '[a-z][A-Z]{2,}')),
+               (SELECT count(*) FROM (
+                   SELECT lower(med_simple_generic_name) FROM medications
+                   GROUP BY 1 HAVING count(DISTINCT med_simple_generic_name) > 1))
+        FROM medications""")
+    # 3.3 measures how badly the external dates disagree; carry the number here,
+    # where the advice that depends on it lives.
+    ext_bad = ctx.scalar("""
+        SELECT 100.0 * count(*) FILTER (
+                   WHERE med_start_date_age_in_days < med_order_date_age_in_days)
+             / count(*) FROM medications
+        WHERE med_record_type = 'External'
+          AND med_start_date_age_in_days IS NOT NULL
+          AND med_order_date_age_in_days IS NOT NULL""")
 
     f = Finding(
         id="domains.medications", part="5.3", title="Medications",
         values={"rows": rows, "pts": pts, "n_absent": len(absent),
-                "absent": ", ".join(f"`{a}`" for a in absent)},
+                "absent": ", ".join(f"`{a}`" for a in absent),
+                "kind_pts": sum(p for _, _, p, _, _ in kinds),
+                "tallman": tallman,
+                "case_variants": ("no drug appears" if case_variants == 0
+                                  else f"{case_variants:,} drugs appear"),
+                "med_distinct": med_distinct, "ext_bad": ext_bad},
     )
     f.blocks = [
         Para("{rows:,} medication records for {pts:,} patients. A record is an "
@@ -281,7 +305,11 @@ def medications(ctx: Context) -> list[Finding]:
                C("start_pct", "start age present", ".1f", "%", align="right"),
                C("end_pct", "end age present", ".1f", "%", align="right")],
               [{"type": t, "n": n, "pts": p, "start_pct": s, "end_pct": e}
-               for t, n, p, s, e in kinds]),
+               for t, n, p, s, e in kinds],
+              note="The patient column does not partition the cohort: a child with "
+                   "both an outside history and a prescription from the practice is "
+                   "counted in both rows, and the two sum to {kind_pts:,} over the "
+                   "{pts:,} patients who carry any medication record at all."),
         Table("t-med-top", "Most frequently recorded medications",
               [C("name", "generic name"), C("n", "records", ",", align="right"),
                C("pts", "patients", ",", align="right")],
@@ -289,6 +317,15 @@ def medications(ctx: Context) -> list[Finding]:
               note=note(med_distinct, med_complete,
                         100.0 * sum(r[1] for r in top) / rows, "records")
                    + " " + SELECTION_NOTE),
+        Para("**The capitalisation is a convention, not corruption.** "
+             "{tallman} of the {med_distinct:,} generic names carry tall-man "
+             "lettering — `FLUoxetine HCl`, `guanFACINE HCl` — which pharmacy uses "
+             "to make look-alike drug names hard to confuse. It is applied "
+             "consistently: {case_variants} under two capitalisations, "
+             "which is why 3.6 finds this vocabulary collapses by nothing under "
+             "case normalisation. Grouping is therefore safe, and normalising the "
+             "case away is the one thing that would discard information.",
+             role="method"),
         Para("**Three documented fields were never delivered.** The data dictionary "
              "describes {n_absent} medication classification columns — {absent} — "
              "and none is present in the extract. Any analysis by drug class has to "
@@ -296,8 +333,11 @@ def medications(ctx: Context) -> list[Finding]:
         Para("**Implications for analysis.** A record is not an administration and "
              "not evidence the child took the drug. Externally documented records "
              "carry a documentation date in the order-date column and approximate "
-             "start dates, so exposure windows built from them are unreliable; 3.3 "
-             "measures how often the dates contradict each other.", role="implication"),
+             "start dates, so exposure windows built from them are unreliable — "
+             "{ext_bad:.0f}% of the external records that carry both dates have a "
+             "start before their order, which 3.3 measures and attributes. Exclude "
+             "them from any start-to-end calculation rather than treating the "
+             "dates as noisy.", role="implication"),
     ]
     return [f]
 

@@ -1174,6 +1174,8 @@ The 25 most frequent of 3,742 distinct values, covering 75.9% of rows; the remai
 | Internal | 3,250,374 | 229,099 | 98.7% | 91.6% |
 | External | 572,675 | 158,974 | 58.1% | 69.1% |
 
+The patient column does not partition the cohort: a child with both an outside history and a prescription from the practice is counted in both rows, and the two sum to 388,073 over the 236,323 patients who carry any medication record at all.
+
 **Most frequently recorded medications**
 
 | generic name | records | patients |
@@ -1206,9 +1208,11 @@ The 25 most frequent of 3,742 distinct values, covering 75.9% of rows; the remai
 
 The 25 most frequent of 1,073 distinct values, covering 64.0% of records; the remaining 1,048 values hold the rest. Every count here is a recorded frequency within a selected cohort. Patients carrying any code that occurred fewer than 11 times were removed before delivery (1.4), so rare entries are absent by construction and nothing in this table is a population rate.
 
+**The capitalisation is a convention, not corruption.** 93 of the 1,073 generic names carry tall-man lettering — `FLUoxetine HCl`, `guanFACINE HCl` — which pharmacy uses to make look-alike drug names hard to confuse. It is applied consistently: no drug appears under two capitalisations, which is why 3.6 finds this vocabulary collapses by nothing under case normalisation. Grouping is therefore safe, and normalising the case away is the one thing that would discard information.
+
 **Three documented fields were never delivered.** The data dictionary describes 3 medication classification columns — `med_therapeutic_class`, `med_pharmaceutical_class`, `med_pharmaceutical_subclass` — and none is present in the extract. Any analysis by drug class has to map `med_simple_generic_name` itself.
 
-**Implications for analysis.** A record is not an administration and not evidence the child took the drug. Externally documented records carry a documentation date in the order-date column and approximate start dates, so exposure windows built from them are unreliable; 3.3 measures how often the dates contradict each other.
+**Implications for analysis.** A record is not an administration and not evidence the child took the drug. Externally documented records carry a documentation date in the order-date column and approximate start dates, so exposure windows built from them are unreliable — 98% of the external records that carry both dates have a start before their order, which 3.3 measures and attributes. Exclude them from any start-to-end calculation rather than treating the dates as noisy.
 
 ### 5.4 Referrals
 

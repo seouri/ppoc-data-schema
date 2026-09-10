@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-10T16:07:38Z",
+  "generated_at": "2026-09-10T16:43:15Z",
   "parts": [
     {
       "findings": [
@@ -5420,9 +5420,14 @@
           "title": "Medications",
           "values": {
             "absent": "`med_therapeutic_class`, `med_pharmaceutical_class`, `med_pharmaceutical_subclass`",
+            "case_variants": "no drug appears",
+            "ext_bad": 97.851048,
+            "kind_pts": 388073,
+            "med_distinct": 1073,
             "n_absent": 3,
             "pts": 236323,
-            "rows": 3823049
+            "rows": 3823049,
+            "tallman": 93
           }
         },
         {
