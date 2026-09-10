@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 from ..context import Context
 from ..findings import Artifact, Column, Figure, Finding, Para, Table, probe
 
@@ -17,8 +19,13 @@ Z_CHANNELS = [("height_z_score", "height z"), ("weight_z_score", "weight z"),
               ("weight_for_stature_z_score", "weight-for-stature z")]
 PCT_CHANNELS = [("height_percentile", "height"), ("weight_percentile", "weight"),
                 ("bmi_percentile", "BMI"),
+                ("head_circ_percentile", "head circumference"),
                 ("weight_for_length_percentile", "weight-for-length"),
                 ("weight_for_stature_percentile", "weight-for-stature")]
+
+#: The support the z channels are clamped to where they are clamped at all. The
+#: table's own "beyond" column is what shows it: zero on the clamped channels.
+Z_CLAMP = 5.0
 AGE_BANDS = [(0, 2, "0-2"), (2, 5, "2-5"), (5, 10, "5-10"),
              (10, 15, "10-15"), (15, 19, "15-18")]
 
@@ -247,6 +254,11 @@ def derived(ctx: Context) -> list[Finding]:
                        "share0": 100.0 * at0 / n if n else 0.0,
                        "share100": 100.0 * at100 / n if n else 0.0})
 
+    loose = sorted((r for r in z_rows if (r["beyond"] or 0) > 0),
+                   key=lambda r: -r["beyond"])
+    loose_list = ", ".join(
+        f"{r['channel'].removesuffix(' z')} ({r['beyond']:,})" for r in loose)
+
     lower25, lower3, upper25, upper3 = ctx.one(
         "SELECT sum(CASE WHEN height_z_score <= -2.5 THEN 1 ELSE 0 END), "
         "       sum(CASE WHEN height_z_score <= -3 THEN 1 ELSE 0 END), "
@@ -267,7 +279,20 @@ def derived(ctx: Context) -> list[Finding]:
                 "lower_share": 100.0 * lower3 / lower25,
                 "upper_share": 100.0 * upper3 / upper25,
                 "expected": expected,
-                "max_hz": max(r["max"] for r in z_rows if r["channel"] == "height z")},
+                "max_hz": max(r["max"] for r in z_rows if r["channel"] == "height z"),
+                "n_z": len(Z_CHANNELS), "n_pct": len(PCT_CHANNELS),
+                "clamp": Z_CLAMP,
+                "min_hz": next(r["min"] for r in z_rows if r["channel"] == "height z"),
+                "min_wz": next(r["min"] for r in z_rows if r["channel"] == "weight z"),
+                "max_wz": next(r["max"] for r in z_rows if r["channel"] == "weight z"),
+                # z = 3 is this percentile, so a channel bounded there cannot
+                # reach 100 — which is what the percentile table shows.
+                "pct_at_bound": 100.0 * 0.5 * (1.0 + math.erf(3.0 / math.sqrt(2.0))),
+                "n_loose": len(loose), "loose": loose_list,
+                "h_at100": next(r["at100"] for r in p_rows if r["channel"] == "height"),
+                "w_at100": next(r["at100"] for r in p_rows if r["channel"] == "weight"),
+                "n_h": next(r["n"] for r in p_rows if r["channel"] == "height"),
+                "n_other": len(loose) - 1},
         artifact=Artifact(
             name="Height z-score truncated above at +3 while the lower tail runs to -5",
             kind="derivation",
@@ -284,13 +309,20 @@ def derived(ctx: Context) -> list[Finding]:
                Column("min", "minimum", ",.4f", align="right"),
                Column("max", "maximum", ",.4f", align="right"),
                Column("beyond", "beyond |5|", ",", align="right")], z_rows),
-        Para("The height z-score is bounded above at exactly {max_hz:.2f} while its "
-             "lower tail runs past -4.99. The truncation leaves no pile-up at the "
-             "boundary, so it is invisible in a summary: only {upper3:,} visits sit "
-             "at or above +3. The asymmetry is what exposes it. In the lower tail "
-             "{lower_share:.1f}% of the mass beyond |z| = 2.5 continues past 3; if "
-             "the upper tail behaved the same way roughly {expected:,} visits would "
-             "sit above +3."),
+        Para("**Two of these channels are clamped, and one of them twice.** Height "
+             "z and weight z both stop a ten-thousandth short of ±{clamp:.0f} — "
+             "height at {min_hz:.4f}, weight at {min_wz:.4f} and {max_wz:.4f} — and "
+             "the `beyond` column is 0 for each, which is a bound rather than a tail "
+             "that happens to end. Height is then clamped again, far tighter, on one "
+             "side only: at exactly {max_hz:.2f}. So the asymmetry that exposes it is "
+             "between two bounds, not between a bound and a free tail."),
+        Para("The upper truncation leaves no pile-up at the boundary, so it is "
+             "invisible in a summary: only {upper3:,} visits sit at or above +3. The "
+             "tails are what give it away. Below, {lower3:,} of the {lower25:,} "
+             "visits beyond -2.5 continue past -3 — {lower_share:.1f}%. Above, "
+             "{upper25:,} visits sit beyond +2.5, so at the same rate roughly "
+             "{expected:,} of them would carry on past +3 rather than the "
+             "{upper3:,} that do."),
         Figure("fig-hz", "Height z-score, both tails", "hist",
                {"edges": edges, "counts": counts, "height": 260,
                 "marks": [{"at": 3.0, "label": "+3 bound"}],
@@ -302,14 +334,32 @@ def derived(ctx: Context) -> list[Finding]:
                Column("share0", "share", ".3f", "%", align="right"),
                Column("at100", "exactly 100", ",", align="right"),
                Column("share100", "share", ".3f", "%", align="right")], p_rows),
+        Para("The height row is the truncation again, one transform along. A z of "
+             "3 is the {pct_at_bound:.2f}th percentile, so a channel bounded there "
+             "cannot reach 100 — and it does not, on any of its {n_h:,} values, "
+             "against {w_at100:,} for weight. The bound propagates, which is the "
+             "clearest evidence that it is a property of the derivation and not of "
+             "how the z was summarised. Head circumference is listed here for "
+             "completeness; its percentile inherits the defect 4.7 measures in its "
+             "z, so its saturation counts describe that defect rather than the "
+             "children."),
+        Para("**Four channels carry mass the reference cannot produce**, counted in "
+             "the `beyond` column above: {loose}. 4.7 takes up head circumference, "
+             "where the cause is known and most of it is repairable. The other "
+             "{n_other} are not explained anywhere in this report. Their extremes "
+             "are reported so that a model consuming them does so knowingly; no "
+             "mechanism has been established for them here.", role="warning"),
         Para("**Implications for analysis.** The height channel cannot support any "
              "question about tall stature: its upper tail is absent, and a "
              "trajectory approaching the bound from below is distorted too. The "
              "percentile channels carry point masses at exactly 0 and 100 that are "
              "saturated rather than measured, so they are not continuous and should "
-             "not be modelled as such. Because the four z channels do not share a "
+             "not be modelled as such. Because the {n_z} z channels do not share a "
              "support, a model consuming several of them together inherits the "
              "inconsistency silently. Recomputing from the raw measurement against a "
-             "stated reference avoids all of this.", role="implication"),
+             "stated reference avoids most of this — but not for head circumference, "
+             "where 4.7 shows the z transform is defective independently of the "
+             "measurement, so recomputation is necessary there and not sufficient.",
+             role="implication"),
     ]
     return [f]

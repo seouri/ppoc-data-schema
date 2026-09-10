@@ -24,13 +24,24 @@ def _contents(doc) -> list[str]:
     return out + [""]
 
 
+def _cell(text: str) -> str:
+    """A pipe inside a cell ends it. Escape or the row grows extra columns.
+
+    This fired once in the committed report — a `beyond |5|` column label emitted
+    a seven-cell header over a five-cell separator, and the threshold silently
+    vanished from the rendered table while the HTML stayed correct.
+    """
+    return text.replace("|", "\\|")
+
+
 def _table(f: Finding, block: Table) -> list[str]:
-    head = [c.label for c in block.columns]
+    head = [_cell(c.label) for c in block.columns]
     out = [f"**{f.render(block.caption)}**", "",
            "| " + " | ".join(head) + " |",
            "| " + " | ".join("---" for _ in head) + " |"]
     for row in block.rows:
-        out.append("| " + " | ".join(block.cell(row, c) for c in block.columns) + " |")
+        out.append("| " + " | ".join(_cell(block.cell(row, c))
+                                    for c in block.columns) + " |")
     out.append("")
     if block.note:
         out += [f.render(block.note), ""]

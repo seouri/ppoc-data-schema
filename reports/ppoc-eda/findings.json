@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-10T01:06:44Z",
+  "generated_at": "2026-09-10T01:58:23Z",
   "parts": [
     {
       "findings": [
@@ -3556,22 +3556,37 @@
             "all_dec": 5925,
             "all_n": 893691,
             "all_share": 0.66298083,
-            "back_share": 61.026936,
+            "back_share": 57.575758,
+            "days_dropped": 942,
+            "days_dupe": 2016,
+            "days_total": 3488671,
+            "floor_pairs": 50,
             "grid_cm": 0.635,
             "gro_dec": 565,
             "gro_n": 681114,
             "gro_share": 0.08295234,
-            "min_pairs": 50,
-            "p_back": 725,
-            "p_persist": 463,
+            "max_pairs": 76194,
+            "mid_share": 29.040404,
+            "min_pairs": 2566,
+            "p_back": 684,
+            "p_mid": 345,
+            "p_persist": 504,
+            "p_slack": 725,
+            "p_teen": 765,
             "p_tot": 1188,
-            "persist_share": 38.973064,
+            "persist_share": 42.424242,
+            "slack": 0.5,
+            "slack_persist": 38.973064,
             "spike_after": 0.43797856,
             "spike_band": "30 to 36",
             "spike_before": 1.2058456,
             "spike_median": 1.245,
             "spike_rate": 3.6482694,
-            "thin": "and no band falls below it here"
+            "teen_share": 64.393939,
+            "thin": "and no band falls below it here",
+            "thin_band": "192-216",
+            "top_band": "192-216",
+            "top_rate": 23.694466
           }
         },
         {
@@ -3778,6 +3793,14 @@
                   "share100": 0.081315906
                 },
                 {
+                  "at0": 3623,
+                  "at100": 15897,
+                  "channel": "head circumference",
+                  "n": 1635640,
+                  "share0": 0.22150351,
+                  "share100": 0.97191313
+                },
+                {
                   "at0": 6151,
                   "at100": 1203,
                   "channel": "weight-for-length",
@@ -3798,14 +3821,27 @@
           ],
           "title": "Derived z-scores and percentiles: bounds and saturation",
           "values": {
+            "clamp": 5.0,
             "expected": 15800,
+            "h_at100": 0,
+            "loose": "head circ (16,663), weight-for-length (1,123), BMI (400), weight-for-stature (246)",
             "lower25": 21248,
             "lower3": 9637,
             "lower_share": 45.354857,
             "max_hz": 3.0,
+            "max_wz": 4.9995,
+            "min_hz": -4.9992,
+            "min_wz": -4.9991,
+            "n_h": 3491616,
+            "n_loose": 4,
+            "n_other": 3,
+            "n_pct": 6,
+            "n_z": 6,
+            "pct_at_bound": 99.86501,
             "upper25": 34732,
             "upper3": 21,
-            "upper_share": 0.060462974
+            "upper_share": 0.060462974,
+            "w_at100": 5221
           }
         },
         {

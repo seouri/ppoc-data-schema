@@ -739,6 +739,8 @@ Only classes reconciling more than their own null count as explanations here, so
 
 Children do not shrink, so a recorded decrease is recording behaviour rather than physiology. That much is easy. What matters is that the behaviour is not one thing, and the interval between measurements separates the mechanisms.
 
+**What the panel is.** A pair is one child's height on two different days. Of the 3,488,671 patient-days carrying a height, 942 are excluded before any pair is formed, because they carry two heights that disagree and there is no single value to difference — the same days 3.8 measures, and the largest same-day disagreements in the extract. 2,016 days carrying duplicate rows that agree are kept. The exclusion is small but it is not neutral for this section in particular: it removes the days where the record already contradicts itself about a child's height.
+
 **Repeat height pairs at age 2 or later, by interval**
 
 | interval | pairs | exactly zero change | any decrease | median loss |
@@ -758,7 +760,7 @@ Holding the interval fixed and varying age identifies the mechanisms directly.
 
 **Apparent loss by age at the earlier measurement**
 
-| age band (months) | pairs | any decrease | median loss | mean change |
+| age band (months) | pairs | any decrease | median loss, decreasing pairs | mean change, all pairs |
 | --- | --- | --- | --- | --- |
 | 18-24 | 63,685 | 0.53% | 1.27 cm | 5.51 cm |
 | 24-30 | 52,826 | 1.21% | 0.99 cm | 5.20 cm |
@@ -773,7 +775,7 @@ Holding the interval fixed and varying age identifies the mechanisms directly.
 | 168-192 | 14,518 | 11.39% | 0.64 cm | 1.79 cm |
 | 192-216 | 2,566 | 23.69% | 0.64 cm | 0.54 cm |
 
-Interval held to 181-365 days throughout. This table drops the age-2 floor the interval table above applies, deliberately: the first mechanism sits on the boundary itself, so the bands either side of it have to be visible. Bands carrying fewer than 50 pairs are omitted, and no band falls below it here.
+Interval held to 181-365 days throughout. This table drops the age-2 floor the interval table above applies, deliberately: the first mechanism sits on the boundary itself, so the bands either side of it have to be visible. Bands carrying fewer than 50 pairs are omitted, and no band falls below it here. The last two columns have different denominators, as their labels say — a median over the pairs that decreased, a mean over every pair — so they are not two summaries of one distribution. Read the rate column with the pairs column beside it: the supply is uneven, from 76,194 pairs down to 2,566 in the 192-216 band, so the points on that curve are not equally precise.
 
 Two separate excesses, with different signatures. The first is a narrow spike at 30 to 36 months, and it is the *rate* that marks it: 3.65% of pairs decrease there, against 1.21% in the band before and 0.44% in the band after. The median loss does not mark it at all — 1.25 cm in the spike against 1.63 cm immediately after it, and larger still through mid-childhood — so a reader scanning that column would miss the excess entirely. It is the age at which recumbent length gives way to standing height, and a standing height genuinely is shorter than a recumbent length for the same child: a change of measurement protocol recorded in a field that does not name the protocol.
 
@@ -787,11 +789,13 @@ Two separate excesses, with different signatures. The first is a narrow spike at
 | 168-192 | 7,127 | 18.59% | 0.70 cm | 7,391 | 4.45% | 2.83 cm |
 | 192-216 | 1,346 | 28.83% | 0.22 cm | 1,220 | 18.03% | 0.89 cm |
 
-The second excess is the adolescent rise, and the sex split identifies it. Girls reach the high rates about two years before boys, in the same order as growth cessation, while the mean change over the same interval falls towards zero. Once annual growth drops below the recording grid, re-measuring a child who has stopped growing returns a lower value about as often as a higher one. Restricting to ages 2 to 10, where growth is unambiguously ongoing, collapses the long-interval decrease rate from 0.663% to 0.083% — 565 pairs of 681,114.
+The second excess is the adolescent rise, and the sex split identifies it. Girls reach the high rates about two years before boys, in the same order as growth cessation, while the mean change over the same interval falls towards zero. Once annual growth drops below the recording grid, re-measuring a child returns a lower value more and more often — 23.7% by 192-216 months, against a third of a percent in mid-childhood — and would approach one time in two for a child who had stopped growing entirely, which is a limit this panel does not reach. Restricting to ages 2 to 10, where growth is unambiguously ongoing, collapses the long-interval decrease rate from 0.663% to 0.083% — 565 pairs of 681,114.
 
-What survives both explanations divides again. Of 1,188 decreases over a centimetre across more than a year that are followed by a further measurement, 725 (61.0%) are followed by a value back at or above the earlier level, and 463 (39.0%) by one that stays below it. In the first the low value is the suspect; in the second it is corroborated and the earlier, higher measurement is the candidate error.
+A decrease of more than a centimetre over more than a year is larger than one grid step, so it is the part of the panel least easily explained by rounding. It is not a residue, though, and calling it one would overstate it: of the 1,188 such decreases with a further measurement after them, 765 (64%) sit at 144 months or later — inside the adolescent flattening just described — and only 345 (29%) fall in the ages 2 to 10 where growth is unambiguously ongoing. What follows is a statement about large long-interval decreases, not about what the two mechanisms leave behind.
 
-**Implications for analysis.** Most apparent shrinkage here is not error and should not be filtered as an outlier: it is the recording grid acting on a flattened trajectory, plus a protocol change at two to three years. A synthetic or smoothed trajectory that lacks both will not resemble this panel. Where a decrease does need adjudication, 39% of long-interval losses persist into the next measurement, so a rule that always discards the lower value is wrong on that share.
+They divide anyway. 684 (57.6%) are followed by a value back at or above the earlier level and 504 (42.4%) by one that stays below it. In the first the low value is the suspect; in the second it is corroborated and the earlier, higher measurement is the candidate error. Allowing 0.5 cm of slack below the earlier level — less than one grid step, so it is a choice rather than a rounding allowance — raises the first group to 725 and drops the persisting share to 39.0%.
+
+**Implications for analysis.** Most apparent shrinkage here is not error and should not be filtered as an outlier: it is the recording grid acting on a flattened trajectory, plus a protocol change at two to three years. A synthetic or smoothed trajectory that lacks both will not resemble this panel. Where a decrease does need adjudication, 42% of long-interval losses over a centimetre persist into the next measurement, so a rule that always discards the lower value is wrong on that share.
 
 ### 4.6 Derived z-scores and percentiles: bounds and saturation
 
@@ -799,7 +803,7 @@ The derived channels are not a neutral restatement of the measurements. Each car
 
 **Z-score channels**
 
-| channel | values | minimum | maximum | beyond |5| |
+| channel | values | minimum | maximum | beyond \|5\| |
 | --- | --- | --- | --- | --- |
 | height z | 3,491,616 | -4.9992 | 3.0000 | 0 |
 | weight z | 6,482,932 | -4.9991 | 4.9995 | 0 |
@@ -808,7 +812,9 @@ The derived channels are not a neutral restatement of the measurements. Each car
 | weight-for-length z | 2,027,317 | -145.6016 | 7.6285 | 1,123 |
 | weight-for-stature z | 1,371,347 | -14.3445 | 7.4762 | 246 |
 
-The height z-score is bounded above at exactly 3.00 while its lower tail runs past -4.99. The truncation leaves no pile-up at the boundary, so it is invisible in a summary: only 21 visits sit at or above +3. The asymmetry is what exposes it. In the lower tail 45.4% of the mass beyond |z| = 2.5 continues past 3; if the upper tail behaved the same way roughly 15,800 visits would sit above +3.
+**Two of these channels are clamped, and one of them twice.** Height z and weight z both stop a ten-thousandth short of ±5 — height at -4.9992, weight at -4.9991 and 4.9995 — and the `beyond` column is 0 for each, which is a bound rather than a tail that happens to end. Height is then clamped again, far tighter, on one side only: at exactly 3.00. So the asymmetry that exposes it is between two bounds, not between a bound and a free tail.
+
+The upper truncation leaves no pile-up at the boundary, so it is invisible in a summary: only 21 visits sit at or above +3. The tails are what give it away. Below, 9,637 of the 21,248 visits beyond -2.5 continue past -3 — 45.4%. Above, 34,732 visits sit beyond +2.5, so at the same rate roughly 15,800 of them would carry on past +3 rather than the 21 that do.
 
 *Figure — Height z-score, both tails. Rendered in `index.html` at `#fig-hz`.*
 
@@ -819,10 +825,15 @@ The height z-score is bounded above at exactly 3.00 while its lower tail runs pa
 | height | 3,491,616 | 2,801 | 0.080% | 0 | 0.000% |
 | weight | 6,482,932 | 3,584 | 0.055% | 5,221 | 0.081% |
 | BMI | 1,955,337 | 1,599 | 0.082% | 1,590 | 0.081% |
+| head circumference | 1,635,640 | 3,623 | 0.222% | 15,897 | 0.972% |
 | weight-for-length | 2,027,317 | 6,151 | 0.303% | 1,203 | 0.059% |
 | weight-for-stature | 1,371,347 | 1,509 | 0.110% | 856 | 0.062% |
 
-**Implications for analysis.** The height channel cannot support any question about tall stature: its upper tail is absent, and a trajectory approaching the bound from below is distorted too. The percentile channels carry point masses at exactly 0 and 100 that are saturated rather than measured, so they are not continuous and should not be modelled as such. Because the four z channels do not share a support, a model consuming several of them together inherits the inconsistency silently. Recomputing from the raw measurement against a stated reference avoids all of this.
+The height row is the truncation again, one transform along. A z of 3 is the 99.87th percentile, so a channel bounded there cannot reach 100 — and it does not, on any of its 3,491,616 values, against 5,221 for weight. The bound propagates, which is the clearest evidence that it is a property of the derivation and not of how the z was summarised. Head circumference is listed here for completeness; its percentile inherits the defect 4.7 measures in its z, so its saturation counts describe that defect rather than the children.
+
+**Four channels carry mass the reference cannot produce**, counted in the `beyond` column above: head circ (16,663), weight-for-length (1,123), BMI (400), weight-for-stature (246). 4.7 takes up head circumference, where the cause is known and most of it is repairable. The other 3 are not explained anywhere in this report. Their extremes are reported so that a model consuming them does so knowingly; no mechanism has been established for them here.
+
+**Implications for analysis.** The height channel cannot support any question about tall stature: its upper tail is absent, and a trajectory approaching the bound from below is distorted too. The percentile channels carry point masses at exactly 0 and 100 that are saturated rather than measured, so they are not continuous and should not be modelled as such. Because the 6 z channels do not share a support, a model consuming several of them together inherits the inconsistency silently. Recomputing from the raw measurement against a stated reference avoids most of this — but not for head circumference, where 4.7 shows the z transform is defective independently of the measurement, so recomputation is necessary there and not sufficient.
 
 ### 4.7 Head circumference: a recoverable conversion defect
 

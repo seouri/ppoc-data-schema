@@ -11,7 +11,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "reports"))
 
 from ppoc_eda import charts
 from ppoc_eda.context import Context
-from ppoc_eda.findings import Finding, TemplateError
+from ppoc_eda.findings import Column, Finding, Table, TemplateError
+from ppoc_eda.render import markdown
 
 
 def test_template_resolves_from_values() -> None:
@@ -23,6 +24,24 @@ def test_template_rejects_an_unknown_name() -> None:
     f = Finding(id="t", part="1.1", title="t", values={"n": 1})
     with pytest.raises(TemplateError):
         f.render("{missing} rows")
+
+
+def test_markdown_escapes_pipes_so_a_row_keeps_its_columns() -> None:
+    """A pipe in a label or a value must not open an extra cell.
+
+    The committed report carried a `beyond |5|` column whose header rendered
+    seven cells over a five-cell separator, which drops the threshold from the
+    label in every Markdown viewer while leaving the HTML correct.
+    """
+    f = Finding(id="t", part="1.1", title="t", values={})
+    block = Table("t-x", "caption",
+                  [Column("a", "beyond |5|"), Column("b", "plain")],
+                  [{"a": "x|y", "b": "z"}])
+    lines = markdown._table(f, block)
+    header, separator, row = lines[2], lines[3], lines[4]
+    assert separator.count("|") == 3
+    assert header.count("|") - header.count("\\|") == 3
+    assert row.count("|") - row.count("\\|") == 3
 
 
 def test_suppression_hides_small_cells_but_keeps_zero() -> None:
