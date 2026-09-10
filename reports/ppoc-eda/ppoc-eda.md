@@ -1125,7 +1125,7 @@ The 25 most frequent of 1,326 distinct values; 1,301 more are not shown.
 
 ### 5.2 Laboratory results
 
-17,230,681 resulted components across 6,578,838 lab orders for 247,271 patients — 2.6 components per order. The grain is the component, not the order, which is the single most common source of double counting in this resource.
+17,230,681 rows across 6,578,838 lab orders for 247,271 patients, of which 14,947,495 are resulted components. The other 2,283,186 are orders that produced no result and still occupy one row each, so a row is not a component and 2.6 rows per order is not a count of results: 4,295,652 orders returned anything at all, at 3.5 components each. The grain is the component, not the order, which is the single most common source of double counting in this resource.
 
 **Most frequently ordered lab procedures**
 
@@ -1161,7 +1161,7 @@ The 25 most frequent of 3,742 distinct values, covering 75.9% of rows; the remai
 
 2,494,261 rows (14.5%) carry no result value at all, and 2,283,186 orders (34.7%) have no resulted component on any line. Both are expected rather than broken: the extract includes externally sourced labs that arrive without results. 3.6 covers how the values that do exist are shaped.
 
-**Implications for analysis.** Count orders when you mean tests and rows when you mean components, and never mix them in a rate. An order-with-no-result is a documented ordering event, not a missing result to impute.
+**Implications for analysis.** Count orders when you mean tests, rows filtered to a non-null `result_line_num` when you mean components, and never mix them in a rate — an unfiltered row count is neither. An order-with-no-result is a documented ordering event, not a missing result to impute.
 
 ### 5.3 Medications
 

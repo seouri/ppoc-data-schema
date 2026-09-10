@@ -194,19 +194,35 @@ def labs(ctx: Context) -> list[Finding]:
         WITH g AS (SELECT lab_order_id, count(result_component_name) AS c
                    FROM labs GROUP BY 1)
         SELECT count(*) FROM g WHERE c = 0""")
+    # A row is not the same thing as a resulted component: an order that produced
+    # nothing still occupies one row, with no result line on it. Calling every
+    # row a component overstates the resource by that difference and inflates
+    # anything divided by the order count.
+    components, resulted_orders = ctx.one(
+        "SELECT count(*) FILTER (WHERE result_line_num IS NOT NULL), "
+        "count(DISTINCT lab_order_id) FILTER (WHERE result_line_num IS NOT NULL) "
+        "FROM labs")
 
     f = Finding(
         id="domains.labs", part="5.2", title="Laboratory results",
         values={"rows": rows, "orders": orders, "pts": pts,
                 "per_order": rows / orders,
+                "components": components, "placeholders": rows - components,
+                "resulted_orders": resulted_orders,
+                "per_resulted_order": components / resulted_orders,
                 "no_result": no_result,
                 "no_result_share": 100.0 * no_result / rows,
                 "orphan_order": orphan_order,
                 "orphan_share": 100.0 * orphan_order / orders},
     )
     f.blocks = [
-        Para("{rows:,} resulted components across {orders:,} lab orders for "
-             "{pts:,} patients — {per_order:.1f} components per order. The grain is "
+        Para("{rows:,} rows across {orders:,} lab orders for {pts:,} patients, of "
+             "which {components:,} are resulted components. The other "
+             "{placeholders:,} are orders that produced no result and still occupy "
+             "one row each, so a row is not a component and {per_order:.1f} rows "
+             "per order is not a count of results: {resulted_orders:,} orders "
+             "returned anything at all, at {per_resulted_order:.1f} components "
+             "each. The grain is "
              "the component, not the order, which is the single most common source "
              "of double counting in this resource."),
         Table("t-labs-top", "Most frequently ordered lab procedures",
@@ -221,8 +237,10 @@ def labs(ctx: Context) -> list[Finding]:
              "resulted component on any line. Both are expected rather than broken: "
              "the extract includes externally sourced labs that arrive without "
              "results. 3.6 covers how the values that do exist are shaped."),
-        Para("**Implications for analysis.** Count orders when you mean tests and "
-             "rows when you mean components, and never mix them in a rate. An "
+        Para("**Implications for analysis.** Count orders when you mean tests, "
+             "rows filtered to a non-null `result_line_num` when you mean "
+             "components, and never mix them in a rate — an unfiltered row count "
+             "is neither. An "
              "order-with-no-result is a documented ordering event, not a missing "
              "result to impute.", role="implication"),
     ]

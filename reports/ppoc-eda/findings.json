@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-10T16:04:26Z",
+  "generated_at": "2026-09-10T16:07:38Z",
   "parts": [
     {
       "findings": [
@@ -5235,13 +5235,17 @@
           ],
           "title": "Laboratory results",
           "values": {
+            "components": 14947495,
             "no_result": 2494261,
             "no_result_share": 14.475696,
             "orders": 6578838,
             "orphan_order": 2283186,
             "orphan_share": 34.705004,
             "per_order": 2.6191071,
+            "per_resulted_order": 3.4796802,
+            "placeholders": 2283186,
             "pts": 247271,
+            "resulted_orders": 4295652,
             "rows": 17230681
           }
         },
