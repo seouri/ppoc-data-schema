@@ -5,7 +5,7 @@ A project-neutral reference for anyone analysing this extract. Every figure is m
 ## Contents
 
 - [0. How to use this report](#0-how-to-use-this-report)
-  - [0.1 Three ways in](#01-three-ways-in)
+  - [0.1 Ways in](#01-ways-in)
 - [1. The snapshot](#1-the-snapshot)
   - [1.1 Package identity and integrity](#11-package-identity-and-integrity)
   - [1.2 Resource map, grain, and keys](#12-resource-map-grain-and-keys)
@@ -61,11 +61,11 @@ A project-neutral reference for anyone analysing this extract. Every figure is m
 
 ## 0. How to use this report
 
-Three ways in, depending on what you came for.
+Where to start, depending on what you came for.
 
-### 0.1 Three ways in
+### 0.1 Ways in
 
-This report describes one snapshot of one pediatric primary-care EHR extract. Through Part 4 it belongs to no project: it states what the data are, what they support, and what they cannot answer, and it leaves the research question to you. From 5.9 it stops being neutral on purpose. The extract was assembled upstream around one question — identifying abnormal growth early — and those sections work that question through, because the label it implies is already shipped in the data as `growth_dx_flag` and its shortcuts are not visible from a field-by-field description. Read them as a worked example of auditing a label, not as the report choosing your outcome.
+This report describes one snapshot of one pediatric primary-care EHR extract. Through 5.8 it belongs to no project: it states what the data are, what they support, and what they cannot answer, and it leaves the research question to you. From 5.9 it stops being neutral on purpose. The extract was assembled upstream around one question — identifying abnormal growth early — and those sections work that question through, because the label it implies is already shipped in the data as `growth_dx_flag` and its shortcuts are not visible from a field-by-field description. Read them as a worked example of auditing a label, not as the report choosing your outcome.
 
 **Where to start**
 
@@ -77,9 +77,9 @@ This report describes one snapshot of one pediatric primary-care EHR extract. Th
 | Planning a study | Part 1.4 first. The cohort selection invalidates several whole classes of question, and it is not visible in any field. |
 | Building features or a model | 5.9 for whether the label can be predicted at all, then the shortcut screens in 5.14 and 5.15 before you fix a feature set. |
 
-Every number here was measured from the delivered bundle for snapshot `2026-08-24`; none is copied from another document without being recomputed. The cohort date and the extract cut are stated once, in 1.4, and referenced from everywhere else that needs them.
+Every number here that can be measured was measured, from the delivered bundle for snapshot `2026-08-24`. Where a delivery document also states a figure it is treated as a target rather than a source: 1.1 reconciles every row count and patient count against both the bundle manifest and the PPOC documents before anything else is computed. Two sets of figures cannot be measured at all and are reported as the documents give them — 1.4's exclusion funnel and its rarity vocabularies, because the patients and codes they count are the ones the extract does not contain. Those are the only numbers in this report that rest on a document. The cohort date and the extract cut are stated once, in 1.4, and referenced from everywhere else that needs them.
 
-**What this report is not.** It is not a clinical validation, not a registered analysis, and not a statement about any individual child. Every figure is an aggregate, and any cell resting on fewer than 10 records is suppressed.
+**What this report is not.** It is not a clinical validation, not a registered analysis, and not a statement about any individual child. Every figure is an aggregate, and no cell may rest on fewer than 10 records — a floor held by a shared helper and by review rather than by construction, as 8.1 explains.
 
 ## 1. The snapshot
 
@@ -237,7 +237,7 @@ Every item of the general EHR EDA checklist, mapped to what this snapshot can an
 
 ### 2.1 The checklist, item by item
 
-This part exists so that nobody has to wonder whether a standard check was skipped or was impossible. Of 45 items in the general EHR exploratory-analysis checklist, 32 are covered here, 4 are partially covered, and 9 cannot be run against this extract at all.
+This part exists so that nobody has to wonder whether a standard check was skipped or was impossible. The checklist is assembled here rather than taken from a standard — there is no canonical one for this — so its authority is that every item is visible and answered, not that it came from somewhere else. Of its 45 items, 32 are covered here, 4 are partially covered, and 9 cannot be run against this extract at all.
 
 **Checklist coverage**
 
@@ -258,7 +258,7 @@ This part exists so that nobody has to wonder whether a standard check was skipp
 | 2 Temporal | Impossible sequences | covered | 3.3 |
 | 2 Temporal | Batch-entry clustering | not applicable | Ages are integer days; there is no time of day — 1.5 |
 | 2 Temporal | System downtime gaps | not applicable | No calendar axis — 1.5 |
-| 2 Temporal | Coding or vendor transition | partial | Epic against converted is computable; ICD-9 to ICD-10 is not, without dates |
+| 2 Temporal | Coding or vendor transition | partial | Epic against converted is computable — 3.7; ICD-9 to ICD-10 is not, without dates |
 | 2 Temporal | Age sanity | covered | 3.3 |
 | 3 Missingness | Missingness per field | covered | 3.4 and the field index |
 | 3 Missingness | Missingness pattern | covered | By age — 3.4; by encounter type — 3.7 |
@@ -276,7 +276,7 @@ This part exists so that nobody has to wonder whether a standard check was skipp
 | 5 Terminology | Problem list staleness | covered | 3.5 |
 | 5 Terminology | Free text vs structured | covered | Laboratory result values are semi-structured text — 3.6 |
 | 5 Terminology | Local or custom codes | covered | 3.6 |
-| 6 Workflow | Copy-forward detection | partial | Detectable on measurements; no note text is included |
+| 6 Workflow | Copy-forward detection | partial | Detectable on measurements — zero-change rates in 4.5, identical same-day values in 3.8; no note text is included |
 | 6 Workflow | Template or boilerplate detection | not applicable | No note text — 1.5 |
 | 6 Workflow | Documentation timing | not applicable | No timestamps — 1.5 |
 | 6 Workflow | Order/result reconciliation | covered | 3.6 |
@@ -286,7 +286,7 @@ This part exists so that nobody has to wonder whether a standard check was skipp
 | 7 Population | Site or provider volume | not applicable | No such field — 1.5 |
 | 8 Longitudinal | Calendar trend breaks | not applicable | No calendar axis. Age-axis profiles are reported instead and are not the same thing — 1.5 |
 | 8 Longitudinal | Guideline or policy shift | not applicable | Requires calendar time — 1.5 |
-| 8 Longitudinal | Vendor changeover effects | partial | The Epic against converted contrast only |
+| 8 Longitudinal | Vendor changeover effects | partial | The Epic against converted contrast only — 3.7 |
 | 9 Label | Shortcut screen against the label | covered | Every value of seven categorical fields, scored again under a second index — 5.14; every numeric and constructed feature — 5.15 |
 
 The not-applicable list is the part worth reading before you start. Every entry is a consequence of de-identification or of what the extract simply does not carry, and no amount of analysis recovers any of them.
@@ -305,7 +305,7 @@ The not-applicable list is the part worth reading before you start. Every entry 
 | Calendar trend breaks | No calendar axis. Age-axis profiles are reported instead and are not the same thing — 1.5 |
 | Guideline or policy shift | Requires calendar time — 1.5 |
 
-**Implications for analysis.** Treat the second table as a design constraint rather than a gap to work around. A protocol that depends on provider variation, time-of-day effects, calendar trends, or deceased patients cannot be run on this extract, and discovering that after cohort construction is expensive.
+**Implications for analysis.** Treat the second table as a design constraint rather than a gap to work around. A protocol that depends on provider variation, time-of-day effects or calendar trends cannot be run on this extract, and discovering that after cohort construction is expensive. One further constraint of the same kind is not in that table because it comes from the cohort rule rather than from de-identification: the registry required living status alive, so there are no deceased patients and mortality is not an available outcome (1.4).
 
 ## 3. Integrity
 

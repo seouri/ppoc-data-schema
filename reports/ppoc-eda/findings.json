@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-10T18:08:24Z",
+  "generated_at": "2026-09-10T18:25:01Z",
   "parts": [
     {
       "findings": [
@@ -38,7 +38,7 @@
               ]
             }
           ],
-          "title": "Three ways in",
+          "title": "Ways in",
           "values": {
             "cohort_as_of": "31 Dec 2024",
             "extract_date": "03 Feb 2025",
@@ -702,7 +702,7 @@
                 },
                 {
                   "item": "Coding or vendor transition",
-                  "note": "Epic against converted is computable; ICD-9 to ICD-10 is not, without dates",
+                  "note": "Epic against converted is computable — 3.7; ICD-9 to ICD-10 is not, without dates",
                   "section": "2 Temporal",
                   "status": "partial"
                 },
@@ -810,7 +810,7 @@
                 },
                 {
                   "item": "Copy-forward detection",
-                  "note": "Detectable on measurements; no note text is included",
+                  "note": "Detectable on measurements — zero-change rates in 4.5, identical same-day values in 3.8; no note text is included",
                   "section": "6 Workflow",
                   "status": "partial"
                 },
@@ -870,7 +870,7 @@
                 },
                 {
                   "item": "Vendor changeover effects",
-                  "note": "The Epic against converted contrast only",
+                  "note": "The Epic against converted contrast only — 3.7",
                   "section": "8 Longitudinal",
                   "status": "partial"
                 },

@@ -38,7 +38,8 @@ ITEMS = [
      "Ages are integer days; there is no time of day — 1.5"),
     ("2 Temporal", "System downtime gaps", NA, "No calendar axis — 1.5"),
     ("2 Temporal", "Coding or vendor transition", PARTIAL,
-     "Epic against converted is computable; ICD-9 to ICD-10 is not, without dates"),
+     ("Epic against converted is computable — 3.7; ICD-9 to ICD-10 is not, "
+      "without dates")),
     ("2 Temporal", "Age sanity", COVERED, "3.3"),
     ("3 Missingness", "Missingness per field", COVERED, "3.4 and the field index"),
     ("3 Missingness", "Missingness pattern", COVERED,
@@ -63,7 +64,8 @@ ITEMS = [
      "Laboratory result values are semi-structured text — 3.6"),
     ("5 Terminology", "Local or custom codes", COVERED, "3.6"),
     ("6 Workflow", "Copy-forward detection", PARTIAL,
-     "Detectable on measurements; no note text is included"),
+     ("Detectable on measurements — zero-change rates in 4.5, identical same-day "
+      "values in 3.8; no note text is included")),
     ("6 Workflow", "Template or boilerplate detection", NA, "No note text — 1.5"),
     ("6 Workflow", "Documentation timing", NA, "No timestamps — 1.5"),
     ("6 Workflow", "Order/result reconciliation", COVERED, "3.6"),
@@ -78,7 +80,7 @@ ITEMS = [
      "same thing — 1.5")),
     ("8 Longitudinal", "Guideline or policy shift", NA, "Requires calendar time — 1.5"),
     ("8 Longitudinal", "Vendor changeover effects", PARTIAL,
-     "The Epic against converted contrast only"),
+     "The Epic against converted contrast only — 3.7"),
     ("9 Label", "Shortcut screen against the label", COVERED,
      ("Every value of seven categorical fields, scored again under a second "
      "index — 5.14; every numeric and constructed feature — 5.15")),
@@ -114,10 +116,12 @@ def coverage(ctx: Context) -> list[Finding]:
     )
     f.blocks = [
         Para("This part exists so that nobody has to wonder whether a standard check "
-             "was skipped or was impossible. Of {total} items in the general EHR "
-             "exploratory-analysis checklist, {covered} are covered here, {partial} "
-             "are partially covered, and {na} cannot be run against this extract at "
-             "all."),
+             "was skipped or was impossible. The checklist is assembled here rather "
+             "than taken from a standard — there is no canonical one for this — so "
+             "its authority is that every item is visible and answered, not that it "
+             "came from somewhere else. Of its {total} items, {covered} are covered "
+             "here, {partial} are partially covered, and {na} cannot be run against "
+             "this extract at all."),
         Table("t-coverage", "Checklist coverage",
               [Column("section", "checklist section"), Column("item", "item"),
                Column("status", "status"), Column("note", "where, or why not")], rows),
@@ -129,8 +133,12 @@ def coverage(ctx: Context) -> list[Finding]:
               [Column("item", "check"), Column("note", "why")], na_rows),
         Para("**Implications for analysis.** Treat the second table as a design "
              "constraint rather than a gap to work around. A protocol that depends "
-             "on provider variation, time-of-day effects, calendar trends, or "
-             "deceased patients cannot be run on this extract, and discovering that "
-             "after cohort construction is expensive.", role="implication"),
+             "on provider variation, time-of-day effects or calendar trends cannot "
+             "be run on this extract, and discovering that after cohort "
+             "construction is expensive. One further constraint of the same kind is "
+             "not in that table because it comes from the cohort rule rather than "
+             "from de-identification: the registry required living status alive, so "
+             "there are no deceased patients and mortality is not an available "
+             "outcome (1.4).", role="implication"),
     ]
     return [f]

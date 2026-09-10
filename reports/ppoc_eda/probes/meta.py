@@ -23,13 +23,13 @@ ENTRY_POINTS = [
 @probe("meta.howto", "0.1")
 def howto(ctx: Context) -> list[Finding]:
     f = Finding(
-        id="meta.howto", part="0.1", title="Three ways in",
+        id="meta.howto", part="0.1", title="Ways in",
         values={"snapshot": ctx.snapshot, "cohort_as_of": COHORT_AS_OF,
                 "extract_date": EXTRACT_DATE},
     )
     f.blocks = [
         Para("This report describes one snapshot of one pediatric primary-care EHR "
-             "extract. Through Part 4 it belongs to no project: it states what the "
+             "extract. Through 5.8 it belongs to no project: it states what the "
              "data are, what they support, and what they cannot answer, and it "
              "leaves the research question to you. From 5.9 it stops being neutral "
              "on purpose. The extract was assembled upstream around one question — "
@@ -41,10 +41,18 @@ def howto(ctx: Context) -> list[Finding]:
         Table("t-entry", "Where to start",
               [Column("if you are", "if you are"), Column("start", "start here")],
               [{"if you are": a, "start": b} for a, b in ENTRY_POINTS]),
-        Para("Every number here was measured from the delivered bundle for snapshot "
-             "`{snapshot}`; none is copied from another document without being "
-             "recomputed. The cohort date and the extract cut are stated once, in "
-             "1.4, and referenced from everywhere else that needs them."),
+        Para("Every number here that can be measured was measured, from the "
+             "delivered bundle for snapshot `{snapshot}`. Where a delivery document "
+             "also states a figure it is treated as a target rather than a source: "
+             "1.1 reconciles every row count and patient count against both the "
+             "bundle manifest and the PPOC documents before anything else is "
+             "computed. Two sets of figures cannot be measured at all and are "
+             "reported as the documents give them — 1.4's exclusion funnel and its "
+             "rarity vocabularies, because the patients and codes they count are "
+             "the ones the extract does not contain. Those are the only numbers in "
+             "this report that rest on a document. The cohort date and the extract "
+             "cut are stated once, in 1.4, and referenced from everywhere else that "
+             "needs them."),
         Para("**What this report is not.** It is not a clinical validation, not a "
              "registered analysis, and not a statement about any individual child. "
              "Every figure is an aggregate, and any cell resting on fewer than "
@@ -55,8 +63,9 @@ def howto(ctx: Context) -> list[Finding]:
     f.blocks[-1] = Para(
         "**What this report is not.** It is not a clinical validation, not a "
         "registered analysis, and not a statement about any individual child. Every "
-        "figure is an aggregate, and any cell resting on fewer than {suppress} "
-        "records is suppressed.", role="warning")
+        "figure is an aggregate, and no cell may rest on fewer than {suppress} "
+        "records — a floor held by a shared helper and by review rather than by "
+        "construction, as 8.1 explains.", role="warning")
     return [f]
 
 

@@ -20,7 +20,7 @@ from .findings import (
 
 PARTS: list[tuple[str, str, str]] = [
     ("0", "How to use this report",
-     "Three ways in, depending on what you came for."),
+     "Where to start, depending on what you came for."),
     ("1", "The snapshot",
      ("What this extract contains, how it was built, and what its construction "
       "forecloses.")),
