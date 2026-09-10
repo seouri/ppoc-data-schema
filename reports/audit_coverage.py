@@ -97,7 +97,10 @@ TOPICS: list[tuple[str, str, str | None]] = [
 ]
 
 # Figures the hand-maintained files quote, with the section each cites. Every one
-# must still appear in the data report; if it does not, that file has drifted.
+# must still appear in *that section*; if it does not, either the file has
+# drifted or the figure has moved and the attribution is stale. Checking the
+# whole report instead let a stale citation pass because another section
+# happened to print the same number.
 QUOTED_FIGURES = [
     ("0.925", "4.10", "lag-1 height-z autocorrelation"),
     ("0.822", "4.10", "intraclass correlation"),
@@ -111,7 +114,8 @@ QUOTED_FIGURES = [
     ("80.0", "4.2", "percent of heights on a quarter-inch grid"),
     ("0.663", "4.5", "long-interval decrease rate, all ages 2+"),
     ("0.083", "4.5", "the same rate restricted to ages 2-10"),
-    ("99.99", "4.8", "velocity reproduction under the interval rule"),
+    ("99.988", "4.8", "height delta reproduction under the interval rule"),
+    ("72.3", "4.8", "velocity recovered from the two published columns"),
     ("43.7", "4.8", "velocity reproduction under a naive lag"),
     ("335", "4.8", "longest minimum interval in the velocity rule"),
     ("99.7", "5.14", "recall of growth_dx_flag from visits_count_pre_dx"),
@@ -136,11 +140,36 @@ def haystack() -> str:
     return md[:start] + md[end:]
 
 
+def sections() -> dict[str, str]:
+    """The report split by subsection, keyed on the number in the heading.
+
+    A quoted figure is checked inside the section it is attributed to rather
+    than anywhere in the document. Searching the whole report let a figure go
+    stale where it was cited and still pass because a different section printed
+    it: `1,204` moved on in 3.9 and 5.1 kept it, and this check reported the
+    pair as backed.
+    """
+    md = NEW_MD.read_text(encoding="utf-8")
+    bounds = [(m.start(), m.group(1))
+              for m in re.finditer(r"^###\s+(\d+\.\d+)\s", md, re.MULTILINE)]
+    # A part heading ends the section before it, so a section never absorbs the
+    # next part's lede.
+    stops = sorted([m.start() for m in re.finditer(r"^##\s", md, re.MULTILINE)]
+                   + [len(md)])
+    out: dict[str, str] = {}
+    for i, (pos, num) in enumerate(bounds):
+        nxt = bounds[i + 1][0] if i + 1 < len(bounds) else len(md)
+        stop = min([s for s in stops if s > pos] + [nxt])
+        out[num] = md[pos:min(nxt, stop)]
+    return out
+
+
 def main() -> int:
     if not NEW_MD.is_file():
         print("the neutral report has not been built", file=sys.stderr)
         return 2
     hay = haystack()
+    secs = sections()
     quoting = "".join(f.read_text(encoding="utf-8")
                       for f in (OVERLAY, README, DATA_DESC))
 
@@ -164,19 +193,30 @@ def main() -> int:
             print(f"  MISSING   {section:6s} {name}  (looked for /{pattern}/)")
 
     print("\nQUOTED FIGURES  (every figure the overlay or README quotes must "
-          "still be in the data report)")
+          "still be in the section it is attributed to)")
     bad = 0
     for value, section, label in QUOTED_FIGURES:
         quoted = value in quoting
-        backed = value in hay
-        ok = (not quoted) or backed
-        bad += not ok
-        if not quoted:
-            state = "not quoted"
-        elif backed:
-            state = "ok"
+        body = secs.get(section)
+        if body is None:
+            state, ok = "NO SECTION", False
         else:
-            state = "UNBACKED"
+            backed = value in body
+            # Where else it turns up, so a failure says whether the figure moved
+            # section or left the report.
+            elsewhere = sorted(n for n, t in secs.items()
+                               if n != section and value in t)
+            ok = (not quoted) or backed
+            if not quoted:
+                state = "not quoted"
+            elif backed:
+                state = "ok"
+            elif elsewhere:
+                state = "MOVED"
+                label = f"{label}  (now in {', '.join(elsewhere)})"
+            else:
+                state = "UNBACKED"
+        bad += not ok
         print(f"  {state:11s} {value:>10s}  {section:5s} {label}")
 
     print()
@@ -185,7 +225,7 @@ def main() -> int:
               f"{bad} quoted figures unbacked")
         return 1
     print("RESULT  every analysis is in the data report or the overlay; "
-          "every quoted figure is backed by the data report")
+          "every quoted figure is backed by the section that cites it")
     return 0
 
 
