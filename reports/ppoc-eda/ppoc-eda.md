@@ -1017,7 +1017,7 @@ Diagnoses, laboratory results, medications, referrals, and demographics, then ho
 
 ### 5.1 Diagnoses
 
-Diagnoses arrive two ways: up to 33 coded slots per encounter, and a problem list that is not visit-linked. 14,714,503 encounter slots are filled across 250,563 patients, and 6,154,801 visits (94.8%) carry at least a first diagnosis.
+Diagnoses arrive two ways: up to 33 coded slots per encounter, and a problem list that is not visit-linked (3.2). 14,714,503 encounter slots are filled across 250,563 patients, and 6,154,801 visits (94.8%) carry at least a first diagnosis. The patient total is not the cohort: 25 children carry no encounter diagnosis anywhere in the extract.
 
 *Figure — Coded diagnoses per visit. Rendered in `index.html` at `#fig-dx-slots`.*
 
@@ -1053,7 +1053,7 @@ Diagnoses arrive two ways: up to 33 coded slots per encounter, and a problem lis
 
 The 25 most frequent of 8,029 distinct values, covering 52.8% of filled slots; the remaining 8,004 values hold the rest. Every count here is a recorded frequency within a selected cohort. Patients carrying any code that occurred fewer than 11 times were removed before delivery (1.4), so rare entries are absent by construction and nothing in this table is a population rate.
 
-The problem list holds 1,709,584 entries for 238,823 patients, of which 44.3% carry a resolved age. As 3.5 shows, the remainder are open problems rather than missing dates.
+The problem list holds 1,709,584 entries for 238,823 patients, of which 44.3% of entries carry a resolved age. There is exactly one entry per patient and code — the entry count and the patient count in the table below are identical on every row for that reason, not by coincidence — so the problem list cannot say that a condition recurred, and an entry count over it is a patient count. As 3.5 shows, the remainder are open problems rather than missing dates.
 
 **Most frequently recorded problem-list diagnoses**
 
@@ -1087,7 +1087,7 @@ The problem list holds 1,709,584 entries for 238,823 patients, of which 44.3% ca
 
 The 25 most frequent of 4,739 distinct values, covering 20.7% of entries; the remaining 4,714 values hold the rest.
 
-**Both tables above count literal codes**, which is the right unit for describing what gets typed but the wrong one for counting a condition. Rolling the same data up to the three-character category changes which diagnoses appear at all — see 3.9, and note that 1,203 of the 1,326 categories in this extract never appear as a bare code, so an exact-match query for them returns zero.
+**Both tables above count literal codes**, which is the right unit for describing what gets typed but the wrong one for counting a condition. Rolling the same data up to the three-character category changes which diagnoses appear at all — see 3.9, and note that 1,203 of the 1,326 categories in this extract never appear as a bare code, so an exact-match query for them returns zero. The two tables above keep the source EHR's proprietary placeholders because they describe what gets typed; the rollup below drops them, because a placeholder has no category to roll up to and 3.6 says to exclude it from code-based work.
 
 **The same diagnoses rolled up to their ICD-10 category**
 

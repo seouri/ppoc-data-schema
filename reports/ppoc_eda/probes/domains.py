@@ -91,9 +91,16 @@ def diagnoses(ctx: Context) -> list[Finding]:
         FROM f LEFT JOIN l ON f.cat = l.code ORDER BY f.n DESC, f.cat""")
     rollup = [{"category": c, "descr": d, "patients": n} for c, d, n in roll_raw]
 
-    pl_rows, pl_pts, pl_resolved = ctx.one(
+    pl_rows, pl_pts, pl_resolved, pl_pairs = ctx.one(
         "SELECT count(*), count(DISTINCT patient_id), "
-        "count(resolved_date_age_in_days) FROM problem_list")
+        "count(resolved_date_age_in_days), "
+        "count(DISTINCT (patient_id, pl_diag)) FROM problem_list")
+    # 25 patients carry no encounter diagnosis at all, which the slot count's
+    # patient total implies and nothing states.
+    no_dx = ctx.scalar(
+        "SELECT count(*) FROM patients p WHERE NOT EXISTS (SELECT 1 FROM "
+        "visits_augmented v WHERE v.patient_id = p.patient_id "
+        "AND v.enc_diag_1 IS NOT NULL)")
 
     f = Finding(
         id="domains.diagnoses", part="5.1", title="Diagnoses",
@@ -103,13 +110,18 @@ def diagnoses(ctx: Context) -> list[Finding]:
                     "SELECT count(*) FROM visits"),
                 "pl_rows": pl_rows, "pl_pts": pl_pts,
                 "pl_resolved_share": 100.0 * pl_resolved / pl_rows,
-                "cats": cats, "silent": silent},
+                "cats": cats, "silent": silent,
+                "pl_pairs": pl_pairs, "no_dx": no_dx,
+                "pl_one_per": ("exactly one" if pl_pairs == pl_rows
+                               else f"{pl_pairs:,} distinct"),},
     )
     f.blocks = [
         Para("Diagnoses arrive two ways: up to 33 coded slots per encounter, and a "
-             "problem list that is not visit-linked. {enc_total:,} encounter slots "
-             "are filled across {enc_pat:,} patients, and {with_any:,} visits "
-             "({with_any_share:.1f}%) carry at least a first diagnosis."),
+             "problem list that is not visit-linked (3.2). {enc_total:,} encounter "
+             "slots are filled across {enc_pat:,} patients, and {with_any:,} visits "
+             "({with_any_share:.1f}%) carry at least a first diagnosis. The patient "
+             "total is not the cohort: {no_dx:,} children carry no encounter "
+             "diagnosis anywhere in the extract."),
         Figure("fig-dx-slots", "Coded diagnoses per visit", "bar",
                {"categories": [str(n) for n, _ in slots],
                 "series": [{"name": "visits", "values": [c for _, c in slots]}],
@@ -123,8 +135,13 @@ def diagnoses(ctx: Context) -> list[Finding]:
                for c, d, s, p in top_enc],
               note=note(enc_distinct, enc_complete, enc_covered, "filled slots")
                    + " " + SELECTION_NOTE),
-        Para("The problem list holds {pl_rows:,} entries for {pl_pts:,} patients, of "
-             "which {pl_resolved_share:.1f}% carry a resolved age. As 3.5 shows, the "
+        Para("The problem list holds {pl_rows:,} entries for {pl_pts:,} patients, "
+             "of which {pl_resolved_share:.1f}% of entries carry a resolved age. "
+             "There is {pl_one_per} entry per patient and code — the entry count "
+             "and the patient count in the table below are identical on every row "
+             "for that reason, not by coincidence — so the problem list cannot say "
+             "that a condition recurred, and an entry count over it is a patient "
+             "count. As 3.5 shows, the "
              "remainder are open problems rather than missing dates."),
         Table("t-pl-dx", "Most frequently recorded problem-list diagnoses",
               [C("code", "ICD-10"), C("descr", "description"),
@@ -139,8 +156,11 @@ def diagnoses(ctx: Context) -> list[Finding]:
              "condition. Rolling the same data up to the three-character category "
              "changes which diagnoses appear at all — see 3.9, and note that "
              "{silent:,} of the {cats:,} categories in this extract never appear as "
-             "a bare code, so an exact-match query for them returns zero.",
-             role="warning"),
+             "a bare code, so an exact-match query for them returns zero. The two "
+             "tables above keep the source EHR's proprietary placeholders because "
+             "they describe what gets typed; the rollup below drops them, because a "
+             "placeholder has no category to roll up to and 3.6 says to exclude it "
+             "from code-based work.", role="warning"),
         Table("t-dx-rollup", "The same diagnoses rolled up to their ICD-10 category",
               [C("category", "category"), C("descr", "description"),
                C("patients", "patients", ",", align="right")], rollup,

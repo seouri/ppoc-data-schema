@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-10T15:16:35Z",
+  "generated_at": "2026-09-10T16:04:26Z",
   "parts": [
     {
       "findings": [
@@ -5081,6 +5081,9 @@
             "cats": 1326,
             "enc_pat": 250563,
             "enc_total": 14714503,
+            "no_dx": 25,
+            "pl_one_per": "exactly one",
+            "pl_pairs": 1709584,
             "pl_pts": 238823,
             "pl_resolved_share": 44.332832,
             "pl_rows": 1709584,
