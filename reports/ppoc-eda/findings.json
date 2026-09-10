@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-10T16:57:16Z",
+  "generated_at": "2026-09-10T17:00:33Z",
   "parts": [
     {
       "findings": [
@@ -6615,8 +6615,13 @@
             "band_hi": 3.261,
             "band_lo": 1.7985,
             "chrom_code": "Q90",
+            "early_contrib": 0.047164057,
+            "early_share": 82.858735,
             "late_cong_code": "Q87.1",
             "late_cong_med": 3.261,
+            "late_contrib": 1.4408315,
+            "late_pct": 96.830363,
+            "late_share": 17.141265,
             "malf_birth": 3,
             "malf_child": 3,
             "n_birth": 13,

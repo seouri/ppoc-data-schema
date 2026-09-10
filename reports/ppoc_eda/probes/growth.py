@@ -402,10 +402,19 @@ def ages(ctx: Context) -> list[Finding]:
     # The widest gap between mean and median: where a perinatal code also gets
     # recorded years later, the mean moves and the median does not.
     skewed = max(dated, key=lambda r: (r["mean"] - r["median"], r["code"]))
-    any_n, any_min, any_med, any_mean, any_max = ctx.one(
-        "SELECT count(dx_age_years), min(dx_age_years), "
-        "quantile_cont(dx_age_years, 0.5), avg(dx_age_years), max(dx_age_years) "
-        "FROM patients_augmented")
+    # The panel-wide mean is not a tail of outliers; it is this section's own
+    # split, and the contribution of each side to it is worth stating rather
+    # than gesturing at.
+    (any_n, any_min, any_med, any_mean, any_max,
+     early_n, early_mean, late_n, late_mean) = ctx.one(f"""
+        SELECT count(dx_age_years), min(dx_age_years),
+               quantile_cont(dx_age_years, 0.5), avg(dx_age_years),
+               max(dx_age_years),
+               count(*) FILTER (WHERE dx_age_years <= {PANEL_SPLIT_YEARS}),
+               avg(dx_age_years) FILTER (WHERE dx_age_years <= {PANEL_SPLIT_YEARS}),
+               count(*) FILTER (WHERE dx_age_years > {PANEL_SPLIT_YEARS}),
+               avg(dx_age_years) FILTER (WHERE dx_age_years > {PANEL_SPLIT_YEARS})
+        FROM patients_augmented""")
 
     f = Finding(
         id="growth.ages", part="5.8",
@@ -426,6 +435,11 @@ def ages(ctx: Context) -> list[Finding]:
             "skew_mean": skewed["mean"], "skew_max": skewed["max"],
             "any_n": any_n, "any_min": any_min, "any_med": any_med,
             "any_mean": any_mean, "any_max": any_max,
+            "early_share": 100.0 * early_n / any_n,
+            "late_share": 100.0 * late_n / any_n,
+            "early_contrib": early_n / any_n * early_mean,
+            "late_contrib": late_n / any_n * late_mean,
+            "late_pct": 100.0 * (late_n / any_n * late_mean) / any_mean,
         },
     )
     # A code with a patient total but no median cannot be assigned to either
@@ -564,7 +578,14 @@ def ages(ctx: Context) -> list[Finding]:
              "code was first recorded — is populated for {any_n:,} patients, with a "
              "median of {any_med:.3f} years against a mean of {any_mean:.3f}, a "
              "minimum of {any_min:.3f} and a maximum of {any_max:.3f}. The gap "
-             "between that median and that mean is the two panels above, summed."),
+             "between that median and that mean is not a tail of outliers; it is "
+             "the split this section draws, and the arithmetic says so. Patients "
+             "diagnosed after age {split:.0f} are {late_share:.1f}% of the panel "
+             "and contribute {late_contrib:.3f} of the {any_mean:.3f} mean — "
+             "{late_pct:.0f}% of it — while the {early_share:.1f}% diagnosed at or "
+             "before it contribute {early_contrib:.3f} between them. The mean is a "
+             "statistic about the minority; the median is a statistic about the "
+             "panel."),
         Para("**Implications for analysis.** These are ages at first record, so they "
              "date a coding event and not an onset; the difference matters most "
              "exactly where the median is smallest. If a design needs an index date "
