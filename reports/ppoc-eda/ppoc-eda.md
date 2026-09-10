@@ -618,7 +618,9 @@ The richest and most artifact-prone measurements in the extract.
 
 ### 4.1 Trajectory supply: how many heights each child has
 
-250,267 of 250,588 patients (99.9%) carry at least one derived height, 235,651 (94.0%) carry five or more, and 182,037 (72.6%) carry ten or more.
+250,267 of 250,588 patients (99.9%) carry at least one derived height, 235,594 (94.0%) carry five or more, and 181,970 (72.6%) carry ten or more.
+
+**What is being counted.** Days, not rows, and the derived channel, not the recorded one. A patient-day can hold more than one visit (3.1), so heights are counted once per day — 2,123 patients carry a day with more than one, and counting rows would credit them with observations a design could not use. And the count is over `height_cm`, which the augmentation bounds: 17,971 recorded heights have no derived value, 9,086 patients lose at least one, and 53 carry a recorded height and no derived one at all, so they appear here at zero. 4.4 shows what the bound removes and why most of it should be removed. A curve built from `height_in` would sit slightly above this one.
 
 *Figure — Patients retaining at least k height observations. Rendered in `index.html` at `#fig-supply`.*
 
@@ -627,26 +629,30 @@ The richest and most artifact-prone measurements in the extract.
 | at least k heights | patients | share of cohort |
 | --- | --- | --- |
 | 1 | 250,267 | 99.9% |
-| 3 | 245,449 | 97.9% |
-| 5 | 235,651 | 94.0% |
-| 10 | 182,037 | 72.6% |
-| 15 | 104,838 | 41.8% |
-| 20 | 43,501 | 17.4% |
-| 25 | 16,040 | 6.4% |
+| 3 | 245,438 | 97.9% |
+| 5 | 235,594 | 94.0% |
+| 10 | 181,970 | 72.6% |
+| 15 | 104,729 | 41.8% |
+| 20 | 43,326 | 17.3% |
+| 25 | 15,929 | 6.4% |
 
-**Implications for analysis.** Read this against 1.4 before treating it as a fact about pediatric care. Cohort entry required at least five growth measurements of *some* type, so a dense height series here is partly the selection rule and partly the underlying practice; the two cannot be separated within this extract. What the curve does support is a feasibility estimate: how many children remain if your design needs k observations.
+One height per patient-day. The most any patient carries is 138.
+
+**Implications for analysis.** Read this against 1.4 before treating it as a fact about pediatric care. Cohort entry required growth measurements, so a dense height series here is partly the selection rule and partly the underlying practice, and the two cannot be separated within this extract. They are not the same count, though, and the gap is worth holding: entry required five measurements **of one type** — which weight alone can satisfy — **on distinct dates spanning over 1095 days**, with the last within 400 days. This curve requires none of the span, none of the recency, and it counts one type rather than any. That is why 94% carrying five heights is not the entry rule restated. What the curve does support is a feasibility estimate: how many children remain if your design needs k observations of height.
 
 ### 4.2 Recording units and the measurement grid
 
-Height and weight are captured in imperial units, and the metric columns are exact conversions of them — measured, not assumed. Across 3,491,662 visits carrying both a raw and a derived height, 0 disagree with `height_in` times 2.54 by more than 0.01 cm; across 6,483,007 weight pairs, 0 disagree with `weight_oz` times 0.0283495. The arithmetic is clean, which matters because a value keyed in the wrong unit survives an exact conversion unchanged — 4.4 takes that up.
+Height and weight are captured in imperial units, and the metric columns are exact conversions of them — measured, not assumed. Across 3,491,662 visits carrying both a raw and a derived height, the largest disagreement with `height_in` times 2.54 is 0.0004 cm; across 6,483,007 weight pairs the largest disagreement with `weight_oz` times 0.0283495 is 0.00059 kg. Both sit inside the two-decimal rounding of the stored columns, which is why they are that small: there is no residue beyond the rounding for either channel.
 
-The recorded values are heaped on human-readable fractions: of 3,509,633 heights, 31.0% fall on a whole inch, 54.9% on a half inch and 80.0% on a quarter inch. Of 6,488,028 weights, 54.4% fall on a whole ounce and 24.6% on a whole pound.
+The arithmetic being clean is what makes 4.4's unit findings interpretable: a value keyed in the wrong unit survives an exact conversion unchanged, so a wrong unit is a wrong *recording* and not a conversion defect. The check can only speak for rows that have a derived value, though. 17,971 of the 3,509,633 recorded heights have none, because the augmentation bounded them away, and those are exactly the clusters 4.4 identifies — so the population the warning is about is the one this check cannot see.
+
+The recorded values are heaped on human-readable fractions, and the shares below nest rather than partition — every whole inch is also a half and a quarter inch, and every whole pound is also a whole ounce, so they are cumulative and do not sum. Of 3,509,633 heights, 80.0% fall on a quarter inch, 54.9% on a half inch and 31.0% on a whole inch. Of 6,488,028 weights, 54.4% fall on a whole ounce and 24.6% on a whole pound.
 
 *Figure — Share of measurements falling on the coarse grid, by age. Rendered in `index.html` at `#fig-grid`.*
 
 The two channels age in opposite directions. Height stays on its quarter-inch grid throughout childhood, while weight moves from ounce-level precision in infancy to whole pounds in adolescence, so the effective resolution of the weight channel degrades as children get older.
 
-**Implications for analysis.** One quarter inch is 0.635 cm, and the derived `height_cm` carries two decimals it has not earned. Any change smaller than roughly half the rounding interval is not distinguishable from the rounding itself, which sets a floor on the smallest trajectory deflection that can be detected at all. State the assumed precision wherever a measurement is written out, and set detection thresholds at or above the grid.
+**Implications for analysis.** The grid, in the units the derived columns are written in: one quarter inch is 0.635 cm, one ounce is 0.0283 kg and one pound is 0.4536 kg. Those are the floors, and the weight floor is the one that moves — a channel recorded to the pound in adolescence resolves nothing finer than 0.45 kg however many decimals it is stored with. Any change smaller than roughly half the interval is not distinguishable from the rounding itself, which sets a floor on the smallest trajectory deflection that can be detected at all. Set detection thresholds at or above the grid, and state the assumed precision wherever a measurement is written out — the two decimals on `height_cm` are an honest record of an exact conversion and not a claim about the measurement, which is 0.635 cm coarse.
 
 ### 4.3 Distributions and plausibility bounds
 

@@ -23,6 +23,14 @@ PCT_CHANNELS = [("height_percentile", "height"), ("weight_percentile", "weight")
                 ("weight_for_length_percentile", "weight-for-length"),
                 ("weight_for_stature_percentile", "weight-for-stature")]
 
+#: The conversion factors the derived columns are checked against, the tolerance
+#: the check uses, and the grid steps each channel is recorded on. The metric
+#: grid steps are reported because the implication tells a reader to set
+#: detection thresholds at or above the grid, and the weight channel is the one
+#: that coarsens with age.
+IN_TO_CM, OZ_TO_KG, CONV_TOL = 2.54, 0.0283495, 0.01
+GRID_IN, GRID_OZ, GRID_LB = 0.25, 1.0, 16.0
+
 #: The support the z channels are clamped to where they are clamped at all. The
 #: table's own "beyond" column is what shows it: zero on the clamped channels.
 Z_CLAMP = 5.0
@@ -33,47 +41,91 @@ AGE_BANDS = [(0, 2, "0-2"), (2, 5, "2-5"), (5, 10, "5-10"),
 @probe("anthro.supply", "4.1")
 def supply(ctx: Context) -> list[Finding]:
     total = ctx.scalar("SELECT count(*) FROM patients")
+    # Distinct days, not rows. A patient-day can carry more than one visit (3.1),
+    # and a design needing k observations needs k occasions; counting rows would
+    # credit a child measured once and recorded twice with two.
     counts = ctx.q(
-        "WITH per AS (SELECT patient_id, count(*) AS n FROM visits_augmented "
-        "             WHERE height_cm IS NOT NULL GROUP BY 1) "
+        "WITH per AS (SELECT patient_id, count(DISTINCT age_in_days) AS n "
+        "             FROM visits_augmented WHERE height_cm IS NOT NULL GROUP BY 1) "
         "SELECT n, count(*) FROM per GROUP BY 1 ORDER BY 1")
-    cum, running = [], 0
     lookup = dict(counts)
-    for k in range(1, 26):
-        running = sum(v for n, v in lookup.items() if n >= k)
-        cum.append((k, running))
-    rows = [{"k": k, "patients": v, "share": 100.0 * v / total}
-            for k, v in cum if k in (1, 3, 5, 10, 15, 20, 25)]
+    tail, cum = 0, []
+    for k in range(max(lookup, default=0), 0, -1):
+        tail += lookup.get(k, 0)
+        cum.append((k, tail))
+    cum.reverse()
+    at = {k: v for k, v in cum}
+    rows = [{"k": k, "patients": at.get(k, 0), "share": 100.0 * at.get(k, 0) / total}
+            for k in (1, 3, 5, 10, 15, 20, 25)]
+
+    # What counting rows instead of occasions would have added, and what the
+    # derived layer's bound takes out before any of this is counted.
+    infl = ctx.scalar(
+        "WITH per AS (SELECT patient_id, count(*) AS rows_n, "
+        "                    count(DISTINCT age_in_days) AS day_n "
+        "             FROM visits_augmented WHERE height_cm IS NOT NULL GROUP BY 1) "
+        "SELECT count(*) FILTER (WHERE rows_n > day_n) FROM per")
+    raw_pt, der_pt, raw_only, lost_some, removed = ctx.one("""
+        WITH per AS (SELECT patient_id, count(height_in) AS raw_n,
+                            count(height_cm) AS der_n
+                     FROM visits_augmented GROUP BY 1)
+        SELECT count(*) FILTER (WHERE raw_n > 0), count(*) FILTER (WHERE der_n > 0),
+               count(*) FILTER (WHERE raw_n > 0 AND der_n = 0),
+               count(*) FILTER (WHERE raw_n > der_n),
+               sum(raw_n) - sum(der_n)
+        FROM per""")
+
     f = Finding(
         id="anthro.supply", part="4.1",
         title="Trajectory supply: how many heights each child has",
-        values={"total": total,
-                "with_1": cum[0][1], "share_1": 100.0 * cum[0][1] / total,
-                "with_5": cum[4][1], "share_5": 100.0 * cum[4][1] / total,
-                "with_10": cum[9][1], "share_10": 100.0 * cum[9][1] / total},
+        values={"total": total, "kmax": max(lookup, default=0),
+                "with_1": at.get(1, 0), "share_1": 100.0 * at.get(1, 0) / total,
+                "with_5": at.get(5, 0), "share_5": 100.0 * at.get(5, 0) / total,
+                "with_10": at.get(10, 0), "share_10": 100.0 * at.get(10, 0) / total,
+                "infl": infl, "raw_pt": raw_pt, "der_pt": der_pt,
+                "raw_only": raw_only, "lost_some": lost_some, "removed": removed},
     )
     f.blocks = [
         Para("{with_1:,} of {total:,} patients ({share_1:.1f}%) carry at least one "
              "derived height, {with_5:,} ({share_5:.1f}%) carry five or more, and "
              "{with_10:,} ({share_10:.1f}%) carry ten or more."),
+        Para("**What is being counted.** Days, not rows, and the derived channel, "
+             "not the recorded one. A patient-day can hold more than one visit "
+             "(3.1), so heights are counted once per day — {infl:,} patients carry "
+             "a day with more than one, and counting rows would credit them with "
+             "observations a design could not use. And the count is over "
+             "`height_cm`, which the augmentation bounds: {removed:,} recorded "
+             "heights have no derived value, {lost_some:,} patients lose at least "
+             "one, and {raw_only:,} carry a recorded height and no derived one at "
+             "all, so they appear here at zero. 4.4 shows what the bound removes "
+             "and why most of it should be removed. A curve built from `height_in` "
+             "would sit slightly above this one.", role="method"),
         Figure("fig-supply",
                "Patients retaining at least k height observations",
                "step",
-               {"x": [str(k) for k, _ in cum],
-                "series": [{"name": "patients", "values": [v for _, v in cum]}],
+               {"x": [str(k) for k, _ in cum[:25]],
+                "series": [{"name": "patients", "values": [v for _, v in cum[:25]]}],
                 "title": "Height observations per patient", "height": 280},
                alt="A declining curve from all patients down to those with 25 heights."),
         Table("t-supply", "Height observations per patient",
               [Column("k", "at least k heights", align="right"),
                Column("patients", "patients", ",", align="right"),
-               Column("share", "share of cohort", ".1f", "%", align="right")], rows),
+               Column("share", "share of cohort", ".1f", "%", align="right")], rows,
+              note="One height per patient-day. The most any patient carries is "
+                   "{kmax}."),
         Para("**Implications for analysis.** Read this against 1.4 before treating "
-             "it as a fact about pediatric care. Cohort entry required at least five "
-             "growth measurements of *some* type, so a dense height series here is "
-             "partly the selection rule and partly the underlying practice; the two "
-             "cannot be separated within this extract. What the curve does support "
-             "is a feasibility estimate: how many children remain if your design "
-             "needs k observations.", role="implication"),
+             "it as a fact about pediatric care. Cohort entry required growth "
+             "measurements, so a dense height series here is partly the selection "
+             "rule and partly the underlying practice, and the two cannot be "
+             "separated within this extract. They are not the same count, though, "
+             "and the gap is worth holding: entry required five measurements **of "
+             "one type** — which weight alone can satisfy — **on distinct dates "
+             "spanning over 1095 days**, with the last within 400 days. This curve "
+             "requires none of the span, none of the recency, and it counts one "
+             "type rather than any. That is why 94% carrying five heights is not "
+             "the entry rule restated. What the curve does support is a feasibility "
+             "estimate: how many children remain if your design needs k "
+             "observations of height.", role="implication"),
     ]
     return [f]
 
@@ -107,14 +159,29 @@ def grid(ctx: Context) -> list[Finding]:
     # The claim that the metric columns are exact conversions is checked, not
     # asserted: a wrong unit survives an exact conversion unchanged, so knowing
     # the arithmetic is clean is what makes 4.4's unit findings interpretable.
-    h_pairs, h_bad = ctx.one(
-        "SELECT count(*), sum(CASE WHEN abs(height_cm - height_in * 2.54) > 0.01 "
-        "THEN 1 ELSE 0 END) FROM visits_augmented "
+    h_pairs, h_bad, h_worst = ctx.one(
+        f"SELECT count(*), "
+        f" sum(CASE WHEN abs(height_cm - height_in * {IN_TO_CM}) > {CONV_TOL} "
+        f"          THEN 1 ELSE 0 END), "
+        f" max(abs(height_cm - height_in * {IN_TO_CM})) FROM visits_augmented "
         "WHERE height_in IS NOT NULL AND height_cm IS NOT NULL")
-    w_pairs, w_bad = ctx.one(
-        "SELECT count(*), sum(CASE WHEN abs(weight_kg - weight_oz * 0.0283495) > 0.01 "
-        "THEN 1 ELSE 0 END) FROM visits_augmented "
+    w_pairs, w_bad, w_worst = ctx.one(
+        f"SELECT count(*), "
+        f" sum(CASE WHEN abs(weight_kg - weight_oz * {OZ_TO_KG}) > {CONV_TOL} "
+        f"          THEN 1 ELSE 0 END), "
+        f" max(abs(weight_kg - weight_oz * {OZ_TO_KG})) FROM visits_augmented "
         "WHERE weight_oz IS NOT NULL AND weight_kg IS NOT NULL")
+    # The maximum deviation is what the prose reports; the threshold count is kept
+    # as a guard, because a nonzero one would mean the sentence above is wrong.
+    if h_bad or w_bad:
+        raise ValueError(
+            f"conversion is not exact: {h_bad:,} height and {w_bad:,} weight pairs "
+            f"differ by more than {CONV_TOL}")
+    # The check can only cover rows that have a derived value. The ones it cannot
+    # see are the ones the bound removed, which is where 4.4's unit errors live.
+    h_unchecked = ctx.scalar(
+        "SELECT count(*) FROM visits_augmented "
+        "WHERE height_in IS NOT NULL AND height_cm IS NULL")
 
     f = Finding(
         id="anthro.grid", part="4.2",
@@ -126,7 +193,11 @@ def grid(ctx: Context) -> list[Finding]:
                 "h_half": 100.0 * h_half / h_total,
                 "h_quarter": 100.0 * h_quarter / h_total,
                 "w_oz": 100.0 * w_oz / w_total, "w_lb": 100.0 * w_lb / w_total,
-                "grid_cm": 2.54 / 4},
+                "grid_cm": GRID_IN * IN_TO_CM,
+                "grid_oz_kg": GRID_OZ * OZ_TO_KG, "grid_lb_kg": GRID_LB * OZ_TO_KG,
+                "h_worst": h_worst, "w_worst": w_worst,
+                "conv_in": IN_TO_CM, "conv_oz": OZ_TO_KG,
+                "h_unchecked": h_unchecked, "h_recorded": h_total},
         artifact=Artifact(
             name="Terminal-digit heaping on the imperial recording grid",
             kind="capture",
@@ -137,16 +208,27 @@ def grid(ctx: Context) -> list[Finding]:
     f.blocks = [
         Para("Height and weight are captured in imperial units, and the metric "
              "columns are exact conversions of them — measured, not assumed. Across "
-             "{h_pairs:,} visits carrying both a raw and a derived height, {h_bad:,} "
-             "disagree with `height_in` times 2.54 by more than 0.01 cm; across "
-             "{w_pairs:,} weight pairs, {w_bad:,} disagree with `weight_oz` times "
-             "0.0283495. The arithmetic is clean, which matters because a value "
-             "keyed in the wrong unit survives an exact conversion unchanged — 4.4 "
-             "takes that up."),
-        Para("The recorded values are heaped "
-             "on human-readable fractions: of {h_total:,} heights, {h_whole:.1f}% "
-             "fall on a whole inch, {h_half:.1f}% on a half inch and "
-             "{h_quarter:.1f}% on a quarter inch. Of {w_total:,} weights, "
+             "{h_pairs:,} visits carrying both a raw and a derived height, the "
+             "largest disagreement with `height_in` times {conv_in} is "
+             "{h_worst:.4f} cm; across {w_pairs:,} weight pairs the largest "
+             "disagreement with `weight_oz` times {conv_oz} is {w_worst:.5f} kg. "
+             "Both sit inside the two-decimal rounding of the stored columns, which "
+             "is why they are that small: there is no residue beyond the rounding "
+             "for either channel."),
+        Para("The arithmetic being clean is what makes 4.4's unit findings "
+             "interpretable: a value keyed in the wrong unit survives an exact "
+             "conversion unchanged, so a wrong unit is a wrong *recording* and not "
+             "a conversion defect. The check can only speak for rows that have a "
+             "derived value, though. {h_unchecked:,} of the {h_recorded:,} recorded "
+             "heights have none, because the augmentation bounded them away, and "
+             "those are exactly the clusters 4.4 identifies — so the population the "
+             "warning is about is the one this check cannot see."),
+        Para("The recorded values are heaped on human-readable fractions, and the "
+             "shares below nest rather than partition — every whole inch is also a "
+             "half and a quarter inch, and every whole pound is also a whole ounce, "
+             "so they are cumulative and do not sum. Of {h_total:,} heights, "
+             "{h_quarter:.1f}% fall on a quarter inch, {h_half:.1f}% on a half inch "
+             "and {h_whole:.1f}% on a whole inch. Of {w_total:,} weights, "
              "{w_oz:.1f}% fall on a whole ounce and {w_lb:.1f}% on a whole pound."),
         Figure("fig-grid", "Share of measurements falling on the coarse grid, by age",
                "grouped_bar",
@@ -160,13 +242,20 @@ def grid(ctx: Context) -> list[Finding]:
              "ounce-level precision in infancy to whole pounds in adolescence, so "
              "the effective resolution of the weight channel degrades as children "
              "get older."),
-        Para("**Implications for analysis.** One quarter inch is {grid_cm:.3f} cm, "
-             "and the derived `height_cm` carries two decimals it has not earned. "
-             "Any change smaller than roughly half the rounding interval is not "
-             "distinguishable from the rounding itself, which sets a floor on the "
-             "smallest trajectory deflection that can be detected at all. State the "
-             "assumed precision wherever a measurement is written out, and set "
-             "detection thresholds at or above the grid.", role="implication"),
+        Para("**Implications for analysis.** The grid, in the units the derived "
+             "columns are written in: one quarter inch is {grid_cm:.3f} cm, one "
+             "ounce is {grid_oz_kg:.4f} kg and one pound is {grid_lb_kg:.4f} kg. "
+             "Those are the floors, and the weight floor is the one that moves — a "
+             "channel recorded to the pound in adolescence resolves nothing finer "
+             "than {grid_lb_kg:.2f} kg however many decimals it is stored with. Any "
+             "change smaller than roughly half the interval is not distinguishable "
+             "from the rounding itself, which sets a floor on the smallest "
+             "trajectory deflection that can be detected at all. Set detection "
+             "thresholds at or above the grid, and state the assumed precision "
+             "wherever a measurement is written out — the two decimals on "
+             "`height_cm` are an honest record of an exact conversion and not a "
+             "claim about the measurement, which is {grid_cm:.3f} cm coarse.",
+             role="implication"),
     ]
     return [f]
 
