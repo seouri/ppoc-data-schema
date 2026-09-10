@@ -380,30 +380,32 @@ An em dash in the violating-rows column means the count is nonzero but below the
 
 ### 3.4 Missingness, by field and by age
 
-Population was measured for all 176 columns in the extract, counting the repeated diagnosis and race families once each. 0 columns are entirely empty. The full table is Part 6; the sixteen least-populated columns are below.
+Population was measured for all 176 columns in the extract, counting the repeated diagnosis and race families once each. 0 columns are entirely empty. The full table is Part 6; the 16 least-populated columns are below.
 
 **The least-populated columns**
 
-| resource | field | populated rows | missing |
-| --- | --- | --- | --- |
-| patients_augmented | dx_age_years_e24 | 1 | 100.0% |
-| patients_augmented | dx_age_years_e72_11 | 1 | 100.0% |
-| patients_augmented | dx_age_years_n25_0 | 1 | 100.0% |
-| patients_augmented | dx_age_years_q78_1 | 2 | 100.0% |
-| patients_augmented | dx_age_years_e22_0 | 3 | 100.0% |
-| patients_augmented | dx_age_years_q78_0 | 10 | 100.0% |
-| patients_augmented | dx_age_years_q77 | 15 | 100.0% |
-| patients_augmented | dx_age_years_q87_4 | 17 | 100.0% |
-| patients_augmented | dx_age_years_q98_5 | 17 | 100.0% |
-| patients_augmented | dx_age_years_q98_0 | 26 | 100.0% |
-| patients_augmented | dx_age_years_e23_6 | 31 | 100.0% |
-| patients_augmented | dx_age_years_q87_2 | 32 | 100.0% |
-| patients_augmented | dx_age_years_q96 | 36 | 100.0% |
-| patients_augmented | dx_age_years_q98_4 | 42 | 100.0% |
-| patients_augmented | dx_age_years_q87_3 | 46 | 100.0% |
-| patients_augmented | dx_age_years_p04_3 | 53 | 100.0% |
+| resource | field | populated rows |
+| --- | --- | --- |
+| patients_augmented | dx_age_years_e24 | 1 |
+| patients_augmented | dx_age_years_e72_11 | 1 |
+| patients_augmented | dx_age_years_n25_0 | 1 |
+| patients_augmented | dx_age_years_q78_1 | 2 |
+| patients_augmented | dx_age_years_e22_0 | 3 |
+| patients_augmented | dx_age_years_q78_0 | 10 |
+| patients_augmented | dx_age_years_q77 | 15 |
+| patients_augmented | dx_age_years_q87_4 | 17 |
+| patients_augmented | dx_age_years_q98_5 | 17 |
+| patients_augmented | dx_age_years_q98_0 | 26 |
+| patients_augmented | dx_age_years_e23_6 | 31 |
+| patients_augmented | dx_age_years_q87_2 | 32 |
+| patients_augmented | dx_age_years_q96 | 36 |
+| patients_augmented | dx_age_years_q98_4 | 42 |
+| patients_augmented | dx_age_years_q87_3 | 46 |
+| patients_augmented | dx_age_years_p04_3 | 53 |
 
-A single missingness rate hides the thing that matters most for a longitudinal extract: whether a field is missing *at random* or missing *by age*. For the measurement channels it is emphatically the latter.
+A share is not shown because it would mislead: each of these columns is populated on some rows, and every one of them rounds to 100% missing against a quarter of a million patients, which would read as the empty columns the sentence above says do not exist. And every one of the 16 rows belongs to one family — the 34 `dx_age_years_*` columns, one per tracked diagnosis code, so this is a list of rare codes rather than a description of missingness; 5.7 and 5.8 are where they mean something. The sparsest column outside that family is `labs.result_loinc_code` at 92.2% missing.
+
+A single missingness rate hides the thing that matters most for a longitudinal extract: whether a field is missing *at random* or missing *by age*. For the measurement channels it is emphatically the latter, and the size of it is worth having in words as well as in the figure below. Head circumference is on 57.1% of visits in the first year and 0.1% between 5 and 10. BMI is on 0.0% between 1 and 2 and 44.5% between 2 and 5, which is the age-2 floor of 1.3 rather than a change in practice. Height sits at 44.6% between 2 and 5 where weight sits at 99.8%, and that gap is the binding constraint 5.10 measures jointly.
 
 *Figure — Share of visits carrying each measurement, by age band. Rendered in `index.html` at `#fig-missing-age`.*
 

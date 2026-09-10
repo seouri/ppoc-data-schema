@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-10T14:10:13Z",
+  "generated_at": "2026-09-10T14:14:43Z",
   "parts": [
     {
       "findings": [
@@ -1316,8 +1316,7 @@
               "columns": [
                 "resource",
                 "field",
-                "present",
-                "missing"
+                "present"
               ],
               "id": "t-missing-worst",
               "rows": [
@@ -1470,10 +1469,22 @@
           ],
           "title": "Missingness, by field and by age",
           "values": {
+            "bmi_child": 44.48963,
+            "bmi_infant": 0.0,
+            "h_pre": 44.602687,
+            "hc_infant": 57.062851,
+            "hc_school": 0.051320036,
             "n_cols": 176,
             "n_empty": 0,
+            "n_fam": 34,
+            "n_shown": 16,
+            "outside_field": "result_loinc_code",
+            "outside_missing": 92.164546,
+            "outside_res": "labs",
+            "w_pre": 99.828048,
+            "worst_fam": "every one of the 16 rows belongs",
             "worst_field": "dx_age_years_e24",
-            "worst_share": 99.999601
+            "worst_present": 1
           }
         },
         {

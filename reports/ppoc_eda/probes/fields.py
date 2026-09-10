@@ -87,6 +87,22 @@ def missingness(ctx: Context) -> list[Finding]:
     ctx.field_profile = profile  # reused by the field index below
 
     worst = sorted(profile, key=lambda r: -r["missing"])[:16]
+    # Every one of them is a tracked-diagnosis age column, which makes the table
+    # a list of rare codes rather than a description of missingness. Say so, and
+    # name the sparsest column outside that family so the reader has a contrast.
+    fam = "dx_age_years"
+    worst_fam = sum(1 for r in worst if r["field"].startswith(fam))
+    outside = next(r for r in sorted(profile, key=lambda r: -r["missing"])
+                   if not r["field"].startswith(fam))
+    n_fam = sum(1 for r in profile if r["field"].startswith(fam))
+
+    # The section's central claim is missing-by-age, and its only evidence is a
+    # figure the Markdown mirror does not render. Carry the corners in prose.
+    def avail(col: str, lo: float, hi: float) -> float:
+        return ctx.scalar(
+            f"SELECT 100.0 * count({col}) / nullif(count(*), 0) "
+            f"FROM visits_augmented WHERE age_in_years >= {lo} AND age_in_years < {hi}"
+        ) or 0.0
     cells, rows = [], []
     for field, label in HEATMAP_FIELDS:
         rows.append(label)
@@ -105,21 +121,48 @@ def missingness(ctx: Context) -> list[Finding]:
         values={"n_cols": len(profile),
                 "n_empty": sum(1 for r in profile if r["present"] == 0),
                 "worst_field": worst[0]["field"],
-                "worst_share": worst[0]["missing"]},
+                "worst_present": worst[0]["present"],
+                "n_shown": len(worst), "n_fam": n_fam,
+                "worst_fam": (f"every one of the {len(worst)} rows belongs"
+                              if worst_fam == len(worst) else
+                              f"{worst_fam} of the {len(worst)} rows belong"),
+                "outside_res": outside["resource"], "outside_field": outside["field"],
+                "outside_missing": outside["missing"],
+                "hc_infant": avail("head_circ_cm", 0, 1),
+                "hc_school": avail("head_circ_cm", 5, 10),
+                "bmi_infant": avail("bmi", 1, 2), "bmi_child": avail("bmi", 2, 5),
+                "h_pre": avail("height_cm", 2, 5), "w_pre": avail("weight_kg", 2, 5)},
     )
     f.blocks = [
         Para("Population was measured for all {n_cols} columns in the extract, "
              "counting the repeated diagnosis and race families once each. "
              "{n_empty} columns are entirely empty. The full table is Part 6; the "
-             "sixteen least-populated columns are below."),
+             "{n_shown} least-populated columns are below."),
         Table("t-missing-worst", "The least-populated columns",
               [Column("resource", "resource"), Column("field", "field"),
-               Column("present", "populated rows", ",", align="right"),
-               Column("missing", "missing", ".1f", "%", align="right")], worst),
+               Column("present", "populated rows", ",", align="right")], worst,
+              note="A share is not shown because it would mislead: each of these "
+                   "columns is populated on some rows, and every one of them rounds "
+                   "to 100% missing against a quarter of a million patients, which "
+                   "would read as the empty columns the sentence above says do not "
+                   "exist. And {worst_fam} to one family — "
+                   "the {n_fam} `dx_age_years_*` columns, one per tracked diagnosis "
+                   "code, so this is a list of rare codes rather than a description "
+                   "of missingness; 5.7 and 5.8 are where they mean something. The "
+                   "sparsest column outside that family is "
+                   "`{outside_res}.{outside_field}` at {outside_missing:.1f}% "
+                   "missing."),
         Para("A single missingness rate hides the thing that matters most for a "
              "longitudinal extract: whether a field is missing *at random* or "
              "missing *by age*. For the measurement channels it is emphatically the "
-             "latter."),
+             "latter, and the size of it is worth having in words as well as in the "
+             "figure below. Head circumference is on {hc_infant:.1f}% of visits in "
+             "the first year and {hc_school:.1f}% between 5 and 10. BMI is on "
+             "{bmi_infant:.1f}% between 1 and 2 and {bmi_child:.1f}% between 2 and "
+             "5, which is the age-2 floor of 1.3 rather than a change in practice. "
+             "Height sits at {h_pre:.1f}% between 2 and 5 where weight sits at "
+             "{w_pre:.1f}%, and that gap is the binding constraint 5.10 measures "
+             "jointly."),
         Figure("fig-missing-age",
                "Share of visits carrying each measurement, by age band",
                "heatmap",
