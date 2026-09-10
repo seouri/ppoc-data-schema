@@ -343,7 +343,7 @@ What is *not* a key is the combination a longitudinal analysis reaches for first
 | medications | 3,823,049 | 0 | 1,592,437 | 41.65% |
 | referrals | 349,827 | 24,830 | 98,623 | 30.35% |
 
-The null column is a count, not a share: labs carries 805 rows with no `visit_id` at all and medications carries none, and at two decimal places both round to the same 0.00%. A null cannot be joined and does not pretend to be joinable, which makes it the one part of this that is not silent.
+The null column is a count rather than a share, because as a share the two cases were indistinguishable: labs carries 805 rows with no `visit_id` at all and medications carries none, and at two decimal places both rounded to zero. A null cannot be joined and does not pretend to be joinable, which makes it the one part of this that is not silent.
 
 The table covers every resource carrying a `visit_id`. `problem_list` carries none, so a problem-list entry cannot be tied to an encounter under any join — not partially, as above, but not at all. That matters for anyone building a per-visit feature from diagnoses; 5.1 works from the constraint and this is where it is measured.
 

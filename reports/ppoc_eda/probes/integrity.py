@@ -204,12 +204,12 @@ def links(ctx: Context) -> list[Finding]:
                Column("unresolved_share", "share of populated", ".2f", "%",
                       align="right")],
               rows,
-              note="The null column is a count, not a share: labs carries "
+              note="The null column is a count rather than a share, because as a "
+                   "share the two cases were indistinguishable: labs carries "
                    "{labs_null:,} rows with no `visit_id` at all and medications "
-                   "carries none, and at two decimal places both round to the same "
-                   "0.00%. A null cannot be joined and does not pretend to be "
-                   "joinable, which makes it the one part of this that is not "
-                   "silent."),
+                   "carries none, and at two decimal places both rounded to zero. "
+                   "A null cannot be joined and does not pretend to be joinable, "
+                   "which makes it the one part of this that is not silent."),
         Para("The table covers every resource carrying a `visit_id`. {no_visit} "
              "carries none, so a problem-list entry cannot be tied to an encounter "
              "under any join — not partially, as above, but not at all. That "
