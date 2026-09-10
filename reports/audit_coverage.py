@@ -59,7 +59,11 @@ TOPICS: list[tuple[str, str, str | None]] = [
     ("§6.1", "height z truncated at +3", r"truncated above at"),
     ("§6.1", "percentile saturation at 0 and 100", r"saturated rather than measured"),
     ("§6.2", "terminal-digit heaping", r"quarter inch"),
-    ("§6.3", "imperial-to-metric conversion exactness", r"disagree with .height_in. times 2\.54"),
+    # Third fragment-style sentinel to fire on a rewording rather than a
+    # deletion: this one broke when 4.2 began reporting the maximum deviation
+    # instead of a count beyond a tolerance. Points at the claim itself, which
+    # the analysis cannot make without.
+    ("§6.3", "imperial-to-metric conversion exactness", r"exact conversions"),
     ("§6.3", "head circumference double conversion", r"conversion a second time"),
     ("§6.3", "head-circ z defective on plausible values", r"still produce an extreme z"),
     ("§6.4", "zero growth and apparent shrinkage", r"Apparent height loss"),
