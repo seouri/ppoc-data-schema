@@ -391,8 +391,13 @@ def referrals(ctx: Context) -> list[Finding]:
                C("med_age", "median age", ".2f", " y", align="right")],
               [{"specialty": s, "n": n, "pts": p, "med_age": a}
                for s, n, p, a in top],
+              # The coverage share has to use the population the listing ranks.
+              # Taken over every referral it made "the remaining values hold the
+              # rest" false, because most of the rest is the referrals carrying
+              # no specialty at all rather than the tail of the vocabulary.
               note=note(spec_distinct, spec_complete,
-                        100.0 * sum(r[1] for r in top) / rows, "referrals")
+                        100.0 * sum(r[1] for r in top) / (rows - spec_missing),
+                        "referrals naming a specialty")
                    + " " + SELECTION_NOTE),
         Para("{spec_missing:,} referrals ({spec_share:.2f}%) carry no requested "
              "specialty and {visits_missing:,} ({visits_share:.1f}%) no requested "

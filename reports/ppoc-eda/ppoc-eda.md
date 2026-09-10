@@ -1250,7 +1250,7 @@ The 25 most frequent of 1,073 distinct values, covering 64.0% of records; the re
 | Podiatry | 2,863 | 2,608 | 11.48 y |
 | Neurosurgery | 2,415 | 2,302 | 0.40 y |
 
-The 25 most frequent of 119 distinct values, covering 85.4% of referrals; the remaining 94 values hold the rest. Every count here is a recorded frequency within a selected cohort. Patients carrying any code that occurred fewer than 11 times were removed before delivery (1.4), so rare entries are absent by construction and nothing in this table is a population rate.
+The 25 most frequent of 119 distinct values, covering 92.6% of referrals naming a specialty; the remaining 94 values hold the rest. Every count here is a recorded frequency within a selected cohort. Patients carrying any code that occurred fewer than 11 times were removed before delivery (1.4), so rare entries are absent by construction and nothing in this table is a population rate.
 
 27,452 referrals (7.85%) carry no requested specialty and 26,601 (7.6%) no requested visit count. The data dictionary also warns that referrals are not always documented in the source system, so absence of a referral is not evidence none was made.
 
