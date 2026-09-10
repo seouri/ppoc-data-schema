@@ -52,7 +52,11 @@ TOPICS: list[tuple[str, str, str | None]] = [
     ("§5", "review thresholds", r"outside review range"),
     ("§5", "BMI recomputed from height and weight", r"recomputing weight in kilograms"),
     ("§5", "BMI categories", r"Recorded BMI categories"),
-    ("§6.1", "height z truncated at +3", r"bounded above at exactly"),
+    # Was "bounded above at exactly", a sentence fragment, which broke when 4.6 was
+    # reworded to state the +-5 clamp alongside the +3 one. Points at the artifact
+    # name instead: it is rendered into Part 7 from this finding, so it disappears
+    # exactly when the analysis does rather than when a sentence is rephrased.
+    ("§6.1", "height z truncated at +3", r"truncated above at"),
     ("§6.1", "percentile saturation at 0 and 100", r"saturated rather than measured"),
     ("§6.2", "terminal-digit heaping", r"quarter inch"),
     ("§6.3", "imperial-to-metric conversion exactness", r"disagree with .height_in. times 2\.54"),
