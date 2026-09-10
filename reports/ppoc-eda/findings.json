@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-10T16:46:03Z",
+  "generated_at": "2026-09-10T16:51:10Z",
   "parts": [
     {
       "findings": [
@@ -5645,6 +5645,7 @@
               "caption": "Recorded sex",
               "columns": [
                 "category",
+                "kind",
                 "patients",
                 "share"
               ],
@@ -5652,18 +5653,21 @@
               "rows": [
                 {
                   "category": "M",
+                  "kind": "recorded",
                   "patients": 127699,
                   "share": 50.959743
                 },
                 {
                   "category": "F",
+                  "kind": "recorded",
                   "patients": 122883,
                   "share": 49.037863
                 },
                 {
                   "category": "U",
-                  "patients": 6,
-                  "share": 0.0023943684
+                  "kind": "no answer",
+                  "patients": null,
+                  "share": null
                 }
               ]
             },
@@ -5671,6 +5675,7 @@
               "caption": "Recorded ethnicity",
               "columns": [
                 "category",
+                "kind",
                 "patients",
                 "share"
               ],
@@ -5678,36 +5683,43 @@
               "rows": [
                 {
                   "category": "Not Hispanic or Latino",
+                  "kind": "recorded",
                   "patients": 170594,
                   "share": 68.077482
                 },
                 {
                   "category": "Hispanic or Latino",
+                  "kind": "recorded",
                   "patients": 28549,
                   "share": 11.392804
                 },
                 {
                   "category": "Choose not to Answer",
+                  "kind": "no answer",
                   "patients": 24566,
                   "share": 9.8033425
                 },
                 {
                   "category": "Unknown",
+                  "kind": "no answer",
                   "patients": 20834,
                   "share": 8.3140454
                 },
                 {
                   "category": "[blank]",
+                  "kind": "no answer",
                   "patients": 5464,
                   "share": 2.1804715
                 },
                 {
                   "category": "Unable to collect",
+                  "kind": "no answer",
                   "patients": 450,
                   "share": 0.17957763
                 },
                 {
                   "category": "Patient does not know",
+                  "kind": "no answer",
                   "patients": 131,
                   "share": 0.052277044
                 }
@@ -5717,6 +5729,7 @@
               "caption": "First recorded race",
               "columns": [
                 "category",
+                "kind",
                 "patients",
                 "share"
               ],
@@ -5724,61 +5737,73 @@
               "rows": [
                 {
                   "category": "White",
+                  "kind": "recorded",
                   "patients": 155375,
                   "share": 62.004166
                 },
                 {
                   "category": "Unknown",
+                  "kind": "no answer",
                   "patients": 23085,
                   "share": 9.2123326
                 },
                 {
                   "category": "Choose not to answer",
+                  "kind": "no answer",
                   "patients": 17534,
                   "share": 6.9971427
                 },
                 {
                   "category": "Another Race",
+                  "kind": "recorded",
                   "patients": 15950,
                   "share": 6.3650295
                 },
                 {
                   "category": "Asian",
+                  "kind": "recorded",
                   "patients": 15661,
                   "share": 6.2497007
                 },
                 {
                   "category": "Black or African American",
+                  "kind": "recorded",
                   "patients": 12162,
                   "share": 4.8533848
                 },
                 {
                   "category": "[blank]",
+                  "kind": "no answer",
                   "patients": 8818,
                   "share": 3.5189235
                 },
                 {
                   "category": "American Indian or Alaska Native",
+                  "kind": "recorded",
                   "patients": 625,
                   "share": 0.24941338
                 },
                 {
                   "category": "Middle Eastern or Northern African",
+                  "kind": "recorded",
                   "patients": 512,
                   "share": 0.20431944
                 },
                 {
                   "category": "Unable to collect",
+                  "kind": "no answer",
                   "patients": 492,
                   "share": 0.19633821
                 },
                 {
                   "category": "Native Hawaiian or Other Pacific Islander",
+                  "kind": "recorded",
                   "patients": 248,
                   "share": 0.098967229
                 },
                 {
                   "category": "Patient does not know",
+                  "kind": "no answer",
                   "patients": 126,
                   "share": 0.050281737
                 }
@@ -5787,12 +5812,17 @@
           ],
           "title": "Recorded identity and patient-level observation",
           "values": {
+            "eth_missing": 20.529714,
             "last": 8.2710472,
             "multi": 13191,
+            "multi3": 621,
             "multi_share": 5.264019,
+            "race_missing": 19.975019,
             "s25": 3.3100616,
             "s50": 7.0171116,
             "s75": 10.869268,
+            "sex_missing": 0.0023943684,
+            "suppress": 10,
             "total": 250588,
             "v25": 15.0,
             "v50": 23.0,

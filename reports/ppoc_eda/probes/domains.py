@@ -7,7 +7,7 @@ referral is an action, and 1.4 explains why no frequency here is a prevalence.
 
 from __future__ import annotations
 
-from ..context import Context
+from ..context import SUPPRESS_BELOW, Context
 from ..findings import Column as C
 from ..findings import Figure, Finding, Para, Table, probe
 from ..listing import listing, note
@@ -413,6 +413,14 @@ def referrals(ctx: Context) -> list[Finding]:
     return [f]
 
 
+#: Values that record the absence of an answer rather than an answer. The
+#: section promises to show these separately from substantive categories, and a
+#: single frequency-ordered list does not: "Unknown" lands second in the race
+#: table, above every recorded race but one.
+NON_RESPONSE = {"[blank]", "unknown", "choose not to answer", "unable to collect",
+                "patient does not know", "declined", "u"}
+
+
 @probe("domains.identity", "5.5")
 def identity(ctx: Context) -> list[Finding]:
     total = ctx.scalar("SELECT count(*) FROM patients")
@@ -423,14 +431,29 @@ def identity(ctx: Context) -> list[Finding]:
             SELECT coalesce(nullif(trim(CAST({col} AS VARCHAR)), ''), '[blank]') AS v,
                    count(*) AS n FROM patients GROUP BY 1 ORDER BY n DESC, v""")
 
-    sex_rows = [{"category": v, "patients": n, "share": 100.0 * n / total}
-                for v, n in dist("sex")]
-    eth_rows = [{"category": v, "patients": n, "share": 100.0 * n / total}
-                for v, n in dist("ethnicity")]
-    race_rows = [{"category": v, "patients": n, "share": 100.0 * n / total}
-                 for v, n in dist("race_1")]
+    def shaped(col: str) -> tuple[list[dict], float]:
+        """Rows with the suppression rule applied and non-response marked.
+
+        The counts used to bypass `suppress` entirely, which showed a sex cell
+        backed by six patients in a report that states a floor of ten twice.
+        """
+        out, missing = [], 0
+        for v, n in dist(col):
+            kind = "no answer" if v.strip().lower() in NON_RESPONSE else "recorded"
+            if kind == "no answer":
+                missing += n
+            shown = ctx.suppress(n)
+            out.append({"category": v, "kind": kind, "patients": shown,
+                        "share": 100.0 * n / total if shown is not None else None})
+        return out, 100.0 * missing / total
+
+    sex_rows, sex_missing = shaped("sex")
+    eth_rows, eth_missing = shaped("ethnicity")
+    race_rows, race_missing = shaped("race_1")
     multi = ctx.scalar("SELECT count(*) FROM patients WHERE race_2 IS NOT NULL "
                        "AND trim(race_2) <> ''")
+    multi3 = ctx.scalar("SELECT count(*) FROM patients WHERE race_3 IS NOT NULL "
+                        "AND trim(race_3) <> ''")
 
     vis = ctx.one("""
         SELECT quantile_cont(visits_count, 0.25), quantile_cont(visits_count, 0.5),
@@ -451,26 +474,44 @@ def identity(ctx: Context) -> list[Finding]:
                 "multi_share": 100.0 * multi / total,
                 "v25": vis[0], "v50": vis[1], "v75": vis[2], "v95": vis[3],
                 "vmean": vis[4], "vmax": vis[5],
-                "s25": span[0], "s50": span[1], "s75": span[2], "last": span[3]},
+                "s25": span[0], "s50": span[1], "s75": span[2], "last": span[3],
+                "multi3": multi3, "suppress": SUPPRESS_BELOW,
+                "sex_missing": sex_missing, "eth_missing": eth_missing,
+                "race_missing": race_missing},
     )
     f.blocks = [
         Para("Identity fields are recorded categories, not attributes of the "
-             "children. Non-response is shown separately from every substantive "
-             "category, because blank, unknown, and declined are not clinically "
-             "equivalent to a recorded value but are all missing for the purpose of "
-             "a subgroup comparison."),
+             "children. Blank, unknown and declined are not clinically equivalent "
+             "to a recorded value but are all missing for the purpose of a subgroup "
+             "comparison, so each table below marks them rather than leaving them "
+             "to be spotted in a frequency-ordered list — without the marking, "
+             "`Unknown` is simply the second-largest race. Together they come to "
+             "{eth_missing:.1f}% of ethnicity and {race_missing:.1f}% of first "
+             "race, which is the figure the implication below is about. That the "
+             "ethnicity figure matches the augmented layer's null share exactly is "
+             "not a coincidence: 1.3 shows the augmentation converts these values "
+             "and nothing else."),
         Table("t-sex", "Recorded sex",
-              [C("category", "category"), C("patients", "patients", ",", align="right"),
-               C("share", "share", ".1f", "%", align="right")], sex_rows),
+              [C("category", "category"), C("kind", "kind"),
+               C("patients", "patients", ",", align="right"),
+               C("share", "share", ".1f", "%", align="right")], sex_rows,
+              note="Cells backed by fewer than {suppress} patients are suppressed. "
+                   "Non-response totals {sex_missing:.1f}%."),
         Table("t-eth", "Recorded ethnicity",
-              [C("category", "category"), C("patients", "patients", ",", align="right"),
-               C("share", "share", ".1f", "%", align="right")], eth_rows),
+              [C("category", "category"), C("kind", "kind"),
+               C("patients", "patients", ",", align="right"),
+               C("share", "share", ".1f", "%", align="right")], eth_rows,
+              note="Cells backed by fewer than {suppress} patients are suppressed. "
+                   "Non-response totals {eth_missing:.1f}%."),
         Table("t-race", "First recorded race",
-              [C("category", "category"), C("patients", "patients", ",", align="right"),
+              [C("category", "category"), C("kind", "kind"),
+               C("patients", "patients", ",", align="right"),
                C("share", "share", ".1f", "%", align="right")], race_rows,
-              note="Race is a multi-select of up to eight slots; only the first is "
-                   "shown. {multi:,} patients ({multi_share:.1f}%) have a second "
-                   "race recorded, so this table understates multiracial identity."),
+              note="Non-response totals {race_missing:.1f}%. Race is a multi-select "
+                   "of up to eight slots and only the first is shown: {multi:,} "
+                   "patients ({multi_share:.1f}%) have a second race recorded and "
+                   "{multi3:,} a third, so this table understates multiracial "
+                   "identity."),
         Para("Observation per patient is dense, as the cohort rule in 1.4 requires. "
              "The median patient has {v50:,.0f} visits (quartiles {v25:,.0f} and "
              "{v75:,.0f}, 95th percentile {v95:,.0f}, maximum {vmax:,.0f}), spanning "

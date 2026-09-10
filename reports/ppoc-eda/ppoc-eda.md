@@ -1258,46 +1258,50 @@ The 25 most frequent of 119 distinct values, covering 92.6% of referrals naming 
 
 ### 5.5 Recorded identity and patient-level observation
 
-Identity fields are recorded categories, not attributes of the children. Non-response is shown separately from every substantive category, because blank, unknown, and declined are not clinically equivalent to a recorded value but are all missing for the purpose of a subgroup comparison.
+Identity fields are recorded categories, not attributes of the children. Blank, unknown and declined are not clinically equivalent to a recorded value but are all missing for the purpose of a subgroup comparison, so each table below marks them rather than leaving them to be spotted in a frequency-ordered list — without the marking, `Unknown` is simply the second-largest race. Together they come to 20.5% of ethnicity and 20.0% of first race, which is the figure the implication below is about. That the ethnicity figure matches the augmented layer's null share exactly is not a coincidence: 1.3 shows the augmentation converts these values and nothing else.
 
 **Recorded sex**
 
-| category | patients | share |
-| --- | --- | --- |
-| M | 127,699 | 51.0% |
-| F | 122,883 | 49.0% |
-| U | 6 | 0.0% |
+| category | kind | patients | share |
+| --- | --- | --- | --- |
+| M | recorded | 127,699 | 51.0% |
+| F | recorded | 122,883 | 49.0% |
+| U | no answer | — | — |
+
+Cells backed by fewer than 10 patients are suppressed. Non-response totals 0.0%.
 
 **Recorded ethnicity**
 
-| category | patients | share |
-| --- | --- | --- |
-| Not Hispanic or Latino | 170,594 | 68.1% |
-| Hispanic or Latino | 28,549 | 11.4% |
-| Choose not to Answer | 24,566 | 9.8% |
-| Unknown | 20,834 | 8.3% |
-| [blank] | 5,464 | 2.2% |
-| Unable to collect | 450 | 0.2% |
-| Patient does not know | 131 | 0.1% |
+| category | kind | patients | share |
+| --- | --- | --- | --- |
+| Not Hispanic or Latino | recorded | 170,594 | 68.1% |
+| Hispanic or Latino | recorded | 28,549 | 11.4% |
+| Choose not to Answer | no answer | 24,566 | 9.8% |
+| Unknown | no answer | 20,834 | 8.3% |
+| [blank] | no answer | 5,464 | 2.2% |
+| Unable to collect | no answer | 450 | 0.2% |
+| Patient does not know | no answer | 131 | 0.1% |
+
+Cells backed by fewer than 10 patients are suppressed. Non-response totals 20.5%.
 
 **First recorded race**
 
-| category | patients | share |
-| --- | --- | --- |
-| White | 155,375 | 62.0% |
-| Unknown | 23,085 | 9.2% |
-| Choose not to answer | 17,534 | 7.0% |
-| Another Race | 15,950 | 6.4% |
-| Asian | 15,661 | 6.2% |
-| Black or African American | 12,162 | 4.9% |
-| [blank] | 8,818 | 3.5% |
-| American Indian or Alaska Native | 625 | 0.2% |
-| Middle Eastern or Northern African | 512 | 0.2% |
-| Unable to collect | 492 | 0.2% |
-| Native Hawaiian or Other Pacific Islander | 248 | 0.1% |
-| Patient does not know | 126 | 0.1% |
+| category | kind | patients | share |
+| --- | --- | --- | --- |
+| White | recorded | 155,375 | 62.0% |
+| Unknown | no answer | 23,085 | 9.2% |
+| Choose not to answer | no answer | 17,534 | 7.0% |
+| Another Race | recorded | 15,950 | 6.4% |
+| Asian | recorded | 15,661 | 6.2% |
+| Black or African American | recorded | 12,162 | 4.9% |
+| [blank] | no answer | 8,818 | 3.5% |
+| American Indian or Alaska Native | recorded | 625 | 0.2% |
+| Middle Eastern or Northern African | recorded | 512 | 0.2% |
+| Unable to collect | no answer | 492 | 0.2% |
+| Native Hawaiian or Other Pacific Islander | recorded | 248 | 0.1% |
+| Patient does not know | no answer | 126 | 0.1% |
 
-Race is a multi-select of up to eight slots; only the first is shown. 13,191 patients (5.3%) have a second race recorded, so this table understates multiracial identity.
+Non-response totals 20.0%. Race is a multi-select of up to eight slots and only the first is shown: 13,191 patients (5.3%) have a second race recorded and 621 a third, so this table understates multiracial identity.
 
 Observation per patient is dense, as the cohort rule in 1.4 requires. The median patient has 23 visits (quartiles 15 and 34, 95th percentile 56, maximum 244), spanning a median of 7.0 years (quartiles 3.3 and 10.9). The median patient's last recorded visit is at age 8.3 years.
 
