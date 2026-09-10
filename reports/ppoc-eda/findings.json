@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-10T17:04:58Z",
+  "generated_at": "2026-09-10T18:08:24Z",
   "parts": [
     {
       "findings": [
@@ -236,7 +236,7 @@
                 },
                 {
                   "columns": 12,
-                  "grain": "one row per resulted component of a lab order",
+                  "grain": "one row per resulted component, or per order that returned none",
                   "key": "lab_order_id + result_line_num",
                   "links": "patients; visits (partial)",
                   "resource": "labs",
@@ -278,7 +278,8 @@
             "cols": 254,
             "delivered": 6,
             "generated": 2,
-            "n": 8
+            "n": 8,
+            "off_axis": 4
           }
         },
         {
@@ -468,7 +469,7 @@
                   "step": 2
                 },
                 {
-                  "criterion": "At least 5 growth measurements of one type on distinct dates, spanning over 1095 days, last measurement within 400 days",
+                  "criterion": "At least 5 growth measurements of one type on distinct dates, spanning over 1095 days, last measurement within 400 days, with the span requirement relaxed for children under three",
                   "excluded": "61,842 excluded",
                   "remaining": 290175,
                   "step": 3
@@ -515,7 +516,10 @@
           "title": "How this cohort was built",
           "values": {
             "cohort_as_of": "31 Dec 2024",
+            "dx_collateral": 2924,
+            "dx_expected": 11889,
             "dx_share": 61.010724,
+            "dx_survivors": 8965,
             "extract_date": "03 Feb 2025",
             "final": 250588,
             "lab_share": 71.787793,
@@ -553,11 +557,23 @@
                   "why": "no such column exists in any resource"
                 },
                 {
-                  "check": "Calendar trend breaks and policy shifts",
+                  "check": "Site or provider volume",
+                  "why": "no such column exists in any resource"
+                },
+                {
+                  "check": "Calendar trend breaks",
                   "why": "no calendar axis"
                 },
                 {
+                  "check": "Guideline or policy shift",
+                  "why": "no calendar axis to place a change on"
+                },
+                {
                   "check": "Copy-forward of note text",
+                  "why": "no note text is included"
+                },
+                {
+                  "check": "Template or boilerplate detection",
                   "why": "no note text is included"
                 },
                 {
@@ -571,7 +587,7 @@
           "values": {
             "cohort_as_of": "31 Dec 2024",
             "n_absent": 7,
-            "n_checks": 7
+            "n_checks": 10
           }
         }
       ],

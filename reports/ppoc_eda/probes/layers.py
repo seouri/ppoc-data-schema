@@ -11,7 +11,9 @@ GRAIN = {
     "patients_augmented": ("one row per patient", "patient_id", "patients"),
     "visits": ("one row per patient per encounter", "visit_id", "patients"),
     "visits_augmented": ("one row per patient per encounter", "visit_id", "visits"),
-    "labs": ("one row per resulted component of a lab order",
+    # Not simply "one row per resulted component": 5.2 measures 2.3 million rows
+    # that are orders which returned nothing and still occupy a row.
+    "labs": ("one row per resulted component, or per order that returned none",
              "lab_order_id + result_line_num", "patients; visits (partial)"),
     "medications": ("one row per medication order or historical record",
                     "med_record_id", "patients; visits (partial)"),
@@ -19,6 +21,23 @@ GRAIN = {
     "referrals": ("one row per referral order", "referral_id",
                   "patients; visits (partial)"),
 }
+
+#: Every check de-identification forecloses. 1.5 says this is stated once and
+#: referenced from Part 2, so it has to be the complete list: it used to hold
+#: seven while Part 2's not-applicable column held nine. `coverage.py` checks
+#: itself against this rather than keeping a second copy.
+DEIDENT_CHECKS = [
+    ("Duplicate-patient detection", "no name, birth date, or linkage key survives"),
+    ("Batch-entry clustering", "ages are integer days; there is no time of day"),
+    ("System downtime gaps", "no calendar axis on which a void could appear"),
+    ("Missingness by site or provider", "no such column exists in any resource"),
+    ("Site or provider volume", "no such column exists in any resource"),
+    ("Calendar trend breaks", "no calendar axis"),
+    ("Guideline or policy shift", "no calendar axis to place a change on"),
+    ("Copy-forward of note text", "no note text is included"),
+    ("Template or boilerplate detection", "no note text is included"),
+    ("Documentation timing", "no timestamps"),
+]
 
 # Fields carried by both the raw and the augmented visit layer under the same
 # meaning. `bmi` is compared case-insensitively: the raw column is `BMI`.
@@ -43,9 +62,13 @@ def resources(ctx: Context) -> list[Finding]:
             "columns": len(ctx.columns(name)),
             "grain": grain, "key": key, "links": links,
         })
+    # Counted from GRAIN rather than written into the sentence: it was "three"
+    # against a table showing four.
+    off_axis = sum(1 for _, (_, key, _) in GRAIN.items()
+                   if key not in ("patient_id", "visit_id"))
     f = Finding(
         id="layers.resources", part="1.2", title="Resource map, grain, and keys",
-        values={"n": len(rows),
+        values={"n": len(rows), "off_axis": off_axis,
                 "cols": sum(r["columns"] for r in rows),
                 "delivered": sum(1 for r in rows if r["source"] == "PPOC"),
                 "generated": sum(1 for r in rows if r["source"] != "PPOC")},
@@ -54,9 +77,9 @@ def resources(ctx: Context) -> list[Finding]:
         Para("The package is {n} tables carrying {cols} columns between them, but "
              "they do not share a provenance: {delivered} were delivered by PPOC and "
              "{generated} are generated locally (1.3). Grain matters more than row "
-             "count here: three of the resources are keyed on something other than "
-             "the patient or the visit, and one of them needs two columns to be "
-             "unique."),
+             "count here: {off_axis} of the resources are keyed on something other "
+             "than the patient or the visit, and one of them needs two columns to "
+             "be unique."),
         Table("t-resources", "The eight resources",
               [Column("resource", "resource"), Column("source", "source"),
                Column("rows", "rows", ",", align="right"),
@@ -218,15 +241,7 @@ def deident(ctx: Context) -> list[Finding]:
     absent = ["calendar dates", "time of day", "patient names or identifiers",
               "site, practice, department, or facility", "provider or clinician",
               "geography", "free-text notes"]
-    checks = [
-        ("Duplicate-patient detection", "no name, birth date, or linkage key survives"),
-        ("Batch-entry clustering", "ages are integer days; there is no time of day"),
-        ("System downtime gaps", "no calendar axis on which a void could appear"),
-        ("Missingness by site or provider", "no such column exists in any resource"),
-        ("Calendar trend breaks and policy shifts", "no calendar axis"),
-        ("Copy-forward of note text", "no note text is included"),
-        ("Documentation timing", "no timestamps"),
-    ]
+    checks = list(DEIDENT_CHECKS)
     f = Finding(
         id="layers.deident", part="1.5",
         title="The de-identification envelope",

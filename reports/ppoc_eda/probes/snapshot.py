@@ -29,7 +29,8 @@ FUNNEL = [
     (f"Age under 18 as of {COHORT_AS_OF}", 361_326, "76,670 excluded"),
     ("Excluding 2 practices that declined participation", 352_017, "9,309 excluded"),
     (("At least 5 growth measurements of one type on distinct dates, spanning "
-      "over 1095 days, last measurement within 400 days"), 290_175, "61,842 excluded"),
+      "over 1095 days, last measurement within 400 days, with the span "
+      "requirement relaxed for children under three"), 290_175, "61,842 excluded"),
     ("Carrying no rare diagnosis, medication, or lab", 250_588, "39,587 excluded"),
 ]
 #: Short stage names for the funnel figure; the table carries the full criteria.
@@ -123,6 +124,17 @@ def cohort(ctx: Context) -> list[Finding]:
                    for i, (c, n, x) in enumerate(FUNNEL)]
     rare_rows = [{"vocabulary": v, "total": t, "rare": r, "share": 100.0 * r / t}
                  for v, t, r in RARE]
+    # The rarity table describes what was classed rare. It does not describe what
+    # survived: a code common enough to pass the test still disappears if every
+    # patient carrying it also carried a rare one. Measure the surviving
+    # vocabulary and compare, because the difference is the collateral the
+    # section's own mechanism predicts and never counts.
+    dx_total, dx_rare = RARE[0][1], RARE[0][2]
+    dx_survivors = ctx.scalar("""
+        SELECT count(DISTINCT code) FROM (
+            SELECT unnest([""" + ", ".join(f"enc_diag_{i}" for i in range(1, 34))
+        + """]) AS code FROM visits_augmented
+            UNION ALL SELECT pl_diag FROM problem_list) WHERE code IS NOT NULL""")
 
     f = Finding(
         id="snapshot.cohort", part="1.4",
@@ -134,6 +146,8 @@ def cohort(ctx: Context) -> list[Finding]:
             "cohort_as_of": COHORT_AS_OF,
             "extract_date": EXTRACT_DATE,
             "dx_share": 100.0 * RARE[0][2] / RARE[0][1],
+            "dx_expected": dx_total - dx_rare, "dx_survivors": dx_survivors,
+            "dx_collateral": dx_total - dx_rare - dx_survivors,
             "med_share": 100.0 * RARE[1][2] / RARE[1][1],
             "lab_share": 100.0 * RARE[2][2] / RARE[2][1],
         },
@@ -190,12 +204,23 @@ def cohort(ctx: Context) -> list[Finding]:
              "fall within 400 days of the cohort date, the panel is right-censored "
              "by design. No frequency in this extract is a population prevalence.",
              role="implication"),
+        Para("**The vocabulary lost is larger than the rarity table shows.** Those "
+             "shares count values classed rare. They do not count what left with "
+             "the patients: a code common enough to survive the test still "
+             "disappears if every patient carrying it also carried a rare one. "
+             "{dx_expected:,} diagnosis codes should survive on the documents' own "
+             "figures and the extract carries {dx_survivors:,}, so roughly "
+             "{dx_collateral:,} went as collateral — codes that were never rare and "
+             "are absent anyway — a further quarter of what should have survived, "
+             "lost to an exclusion that was never about them."),
         Para("Two ambiguities in the source documents are recorded rather than "
-             "silently resolved. The cohort workbook describes the under-three "
-             "exemption as applying to the span requirement for children who already "
-             "have five measurements, while the extract diagram describes it as age "
-             "under three with at least one measurement. The same two documents give "
-             "the rarity threshold as \"fewer than 11 occurrences\" and \"under 10 "
-             "patients\".", role="method"),
+             "silently resolved, and the first is the exemption named in step 3 "
+             "above, which relaxes the three-year span for the youngest children. "
+             "The cohort workbook describes that exemption as applying to the span "
+             "requirement for children who already have five measurements, while "
+             "the extract diagram describes it as age under three with at least one "
+             "measurement — a materially different rule. The same two documents "
+             "give the rarity threshold as \"fewer than 11 occurrences\" and "
+             "\"under 10 patients\".", role="method"),
     ]
     return [f]

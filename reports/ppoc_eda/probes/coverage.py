@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from ..context import Context
 from ..findings import Column, Finding, Para, Table, probe
+from .layers import DEIDENT_CHECKS
 
 COVERED, PARTIAL, NA = "covered", "partial", "not applicable"
 
@@ -86,6 +87,21 @@ ITEMS = [
 
 @probe("coverage.map", "2.1")
 def coverage(ctx: Context) -> list[Finding]:
+    # 1.5 claims to state the foreclosed checks once. It can only claim that if
+    # this table names no check it does not cover, so the two are compared here
+    # rather than maintained as two lists that drifted to seven against nine.
+    def key(name: str) -> str:
+        # The two lists name the same checks in different registers — a
+        # checklist item against a sentence — so compare on the words.
+        return name.lower().replace("-", " ")
+
+    na_there = {key(name) for name, _ in DEIDENT_CHECKS}
+    stray = sorted(item for _, item, status, _ in ITEMS
+                   if status == NA and key(item) not in na_there)
+    if stray:
+        raise ValueError(
+            "1.5 says it states every foreclosed check, but Part 2 marks these "
+            f"not applicable and 1.5 does not list them: {', '.join(stray)}")
     counts = {s: sum(1 for *_, st, _ in ITEMS if st == s) for s in (COVERED, PARTIAL, NA)}
     rows = [{"section": sec, "item": item, "status": status, "note": note}
             for sec, item, status, note in ITEMS]

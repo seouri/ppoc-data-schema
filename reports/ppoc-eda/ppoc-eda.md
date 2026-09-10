@@ -120,7 +120,7 @@ The lab resource carries a second stated figure: 6,578,838 distinct lab orders b
 
 ### 1.2 Resource map, grain, and keys
 
-The package is 8 tables carrying 254 columns between them, but they do not share a provenance: 6 were delivered by PPOC and 2 are generated locally (1.3). Grain matters more than row count here: three of the resources are keyed on something other than the patient or the visit, and one of them needs two columns to be unique.
+The package is 8 tables carrying 254 columns between them, but they do not share a provenance: 6 were delivered by PPOC and 2 are generated locally (1.3). Grain matters more than row count here: 4 of the resources are keyed on something other than the patient or the visit, and one of them needs two columns to be unique.
 
 **The eight resources**
 
@@ -130,7 +130,7 @@ The package is 8 tables carrying 254 columns between them, but they do not share
 | patients_augmented | scripts/augment.py | 250,588 | 87 | one row per patient | patient_id | patients |
 | visits | PPOC | 6,494,473 | 43 | one row per patient per encounter | visit_id | patients |
 | visits_augmented | scripts/augment.py | 6,494,473 | 82 | one row per patient per encounter | visit_id | visits |
-| labs | PPOC | 17,230,681 | 12 | one row per resulted component of a lab order | lab_order_id + result_line_num | patients; visits (partial) |
+| labs | PPOC | 17,230,681 | 12 | one row per resulted component, or per order that returned none | lab_order_id + result_line_num | patients; visits (partial) |
 | medications | PPOC | 3,823,049 | 8 | one row per medication order or historical record | med_record_id | patients; visits (partial) |
 | problem_list | PPOC | 1,709,584 | 5 | one row per problem-list entry | problem_list_id | patients |
 | referrals | PPOC | 349,827 | 6 | one row per referral order | referral_id | patients; visits (partial) |
@@ -189,7 +189,7 @@ This is the most consequential section of the report, because it describes a pro
 | 0 | On the PPOC active-patient registry |  | 437,996 |
 | 1 | Age under 18 as of 31 Dec 2024 | 76,670 excluded | 361,326 |
 | 2 | Excluding 2 practices that declined participation | 9,309 excluded | 352,017 |
-| 3 | At least 5 growth measurements of one type on distinct dates, spanning over 1095 days, last measurement within 400 days | 61,842 excluded | 290,175 |
+| 3 | At least 5 growth measurements of one type on distinct dates, spanning over 1095 days, last measurement within 400 days, with the span requirement relaxed for children under three | 61,842 excluded | 290,175 |
 | 4 | Carrying no rare diagnosis, medication, or lab | 39,587 excluded | 250,588 |
 
 "Active" on that registry means living status alive, not flagged as a test or inactive record, an active PPOC primary-care association, and either a visit in the last three years or one scheduled in the next fifteen months. The cohort is pinned to 31 Dec 2024 and the extract was cut on 03 Feb 2025.
@@ -206,7 +206,9 @@ The fourth exclusion is the one most likely to be missed, because it removed *pa
 
 **Implications for analysis.** Rare conditions, rare exposures and uncommon labs are absent by construction, not merely sparse: a study of any of them returns a confident low rate rather than an obviously missing population. 61% of diagnosis codes, 56% of medications and 72% of lab procedures left with their patients. Because the registry requires living status alive, there are no deceased patients and mortality is not an available outcome. Because entry required at least five growth measurements, trajectory richness is an entry criterion and not a finding about pediatric care. And because the last measurement had to fall within 400 days of the cohort date, the panel is right-censored by design. No frequency in this extract is a population prevalence.
 
-Two ambiguities in the source documents are recorded rather than silently resolved. The cohort workbook describes the under-three exemption as applying to the span requirement for children who already have five measurements, while the extract diagram describes it as age under three with at least one measurement. The same two documents give the rarity threshold as "fewer than 11 occurrences" and "under 10 patients".
+**The vocabulary lost is larger than the rarity table shows.** Those shares count values classed rare. They do not count what left with the patients: a code common enough to survive the test still disappears if every patient carrying it also carried a rare one. 11,889 diagnosis codes should survive on the documents' own figures and the extract carries 8,965, so roughly 2,924 went as collateral — codes that were never rare and are absent anyway — a further quarter of what should have survived, lost to an exclusion that was never about them.
+
+Two ambiguities in the source documents are recorded rather than silently resolved, and the first is the exemption named in step 3 above, which relaxes the three-year span for the youngest children. The cohort workbook describes that exemption as applying to the span requirement for children who already have five measurements, while the extract diagram describes it as age under three with at least one measurement — a materially different rule. The same two documents give the rarity threshold as "fewer than 11 occurrences" and "under 10 patients".
 
 ### 1.5 The de-identification envelope
 
@@ -220,8 +222,11 @@ Two ambiguities in the source documents are recorded rather than silently resolv
 | Batch-entry clustering | ages are integer days; there is no time of day |
 | System downtime gaps | no calendar axis on which a void could appear |
 | Missingness by site or provider | no such column exists in any resource |
-| Calendar trend breaks and policy shifts | no calendar axis |
+| Site or provider volume | no such column exists in any resource |
+| Calendar trend breaks | no calendar axis |
+| Guideline or policy shift | no calendar axis to place a change on |
 | Copy-forward of note text | no note text is included |
+| Template or boilerplate detection | no note text is included |
 | Documentation timing | no timestamps |
 
 One qualification, because "no calendar axis" is easy to overstate: the cohort itself is pinned to a fixed date and the extract was cut shortly after it, both given in 1.4. Ages are relative to each child's birth, but the *window* is fixed and known, which is what makes the recency criterion in 1.4 a right-censoring rule rather than an unknown.
