@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-10T15:06:29Z",
+  "generated_at": "2026-09-10T15:16:35Z",
   "parts": [
     {
       "findings": [
@@ -2322,7 +2322,7 @@
             "kind": "capture",
             "name": "Diagnosis codes counted flat rather than as a hierarchy",
             "recoverable": "Yes — match on a prefix, or roll up before counting",
-            "scale": "1,204 of 1,327 categories never appear as a bare three-character code"
+            "scale": "1,203 of 1,326 categories never appear as a bare three-character code"
           },
           "id": "icd.hierarchy",
           "part": "3.9",
@@ -2415,14 +2415,19 @@
           ],
           "title": "Counting diagnosis codes: ICD-10 is a hierarchy",
           "values": {
-            "cats": 1327,
-            "distinct": 8965,
+            "cats": 1326,
+            "distinct": 8963,
             "ex_cat": "H66",
             "ex_flat": 0,
             "ex_tree": 132693,
-            "silent": 1204,
-            "silent_share": 90.730972,
-            "three_char": 123
+            "nonicd": 2,
+            "ratio_max": 52206.0,
+            "ratio_p50": 1.0,
+            "ratio_p90": 1.0,
+            "silent": 1203,
+            "silent_share": 90.723982,
+            "three_char": 123,
+            "visible": 123
           }
         }
       ],
@@ -5064,22 +5069,22 @@
                   "patients": 47456
                 },
                 {
-                  "category": "IMO",
-                  "descr": "[not in the ICD-10 lookup]",
-                  "patients": 45678
+                  "category": "J18",
+                  "descr": "Pneumonia, unspecified organism",
+                  "patients": 45528
                 }
               ]
             }
           ],
           "title": "Diagnoses",
           "values": {
-            "cats": 1327,
+            "cats": 1326,
             "enc_pat": 250563,
             "enc_total": 14714503,
             "pl_pts": 238823,
             "pl_resolved_share": 44.332832,
             "pl_rows": 1709584,
-            "silent": 1204,
+            "silent": 1203,
             "with_any": 6154801,
             "with_any_share": 94.76983
           }
@@ -10119,7 +10124,7 @@
                   "artifact": "Diagnosis codes counted flat rather than as a hierarchy",
                   "class": "capture",
                   "recoverable": "Yes — match on a prefix, or roll up before counting",
-                  "scale": "1,204 of 1,327 categories never appear as a bare three-character code",
+                  "scale": "1,203 of 1,326 categories never appear as a bare three-character code",
                   "where": "3.9"
                 },
                 {

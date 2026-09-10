@@ -605,7 +605,9 @@ The head-circumference row needs 4.7 beside it. Its maximum is not two people me
 
 ICD-10 is a tree, not a list. `E10` is type 1 diabetes and `E10.9` is type 1 diabetes without complications; a chart may carry either, and which one it carries is a coding decision rather than a clinical one. **A query that matches a code exactly therefore counts one node of the tree, not the concept.** This is the single most common way to undercount a diagnosis in this extract, and it fails silently — the query returns a number, just the wrong one.
 
-The extract carries 8,965 distinct codes across its two diagnosis resources, of which only 123 are bare three-character categories. Rolling every code up to its category gives 1,327 categories, and **1,204 of those (90.7%) never appear as a bare code at all**. For those, an exact-match query returns zero while the condition is present.
+The extract carries 8,963 distinct ICD-10-shaped codes across its two diagnosis resources — 2 further values are the source EHR's proprietary placeholders, which 3.6 says to exclude from code-based work and which are excluded from every figure here — of which only 123 are bare three-character categories. Rolling every code up to its category gives 1,326 categories, and **1,203 of those (90.7%) never appear as a bare code at all**. For those, an exact-match query returns zero while the condition is present.
+
+**The undercount is all-or-nothing rather than graded**, which decides how to guard against it. Either a category never appears as a bare code, in which case a flat count returns zero and rolling up is the only way to see it at all — that is 1,203 of 1,326 — or it does appear, in which case rolling up usually adds nothing: across the 123 visible categories the subtree count is 1.00 times the literal one at the median and 1.00 at the ninetieth percentile. A handful are enormous, up to 52,206 times. So there is no safe middle where a flat count is approximately right; it is either exact or it is zero.
 
 The effect is large enough to reorder a frequency table. Below, the six most common literal codes beside the six most common categories after rollup.
 
@@ -619,6 +621,8 @@ The effect is large enough to reorder a frequency table. Below, the six most com
 | 4 | J06.9 | 134,337 | J06 | 134,368 |
 | 5 | Z13.88 | 128,880 | H66 | 132,693 |
 | 6 | R50.9 | 116,527 | J02 | 131,194 |
+
+Two rankings side by side, not one: the rank column applies to each half separately, so a row pairs the nth literal code with the nth category and the two need have nothing to do with each other. Reordering is the point — read down the columns rather than across the rows.
 
 `H66` is the clearest case. Counted literally it has 0 patients, because clinicians code the laterality-specific children instead. Counted as a subtree it has 132,693 — enough to place it among the most common conditions in the extract, where a flat count makes it invisible.
 
@@ -1083,7 +1087,7 @@ The problem list holds 1,709,584 entries for 238,823 patients, of which 44.3% ca
 
 The 25 most frequent of 4,739 distinct values, covering 20.7% of entries; the remaining 4,714 values hold the rest.
 
-**Both tables above count literal codes**, which is the right unit for describing what gets typed but the wrong one for counting a condition. Rolling the same data up to the three-character category changes which diagnoses appear at all — see 3.9, and note that 1,204 of the 1,327 categories in this extract never appear as a bare code, so an exact-match query for them returns zero.
+**Both tables above count literal codes**, which is the right unit for describing what gets typed but the wrong one for counting a condition. Rolling the same data up to the three-character category changes which diagnoses appear at all — see 3.9, and note that 1,203 of the 1,326 categories in this extract never appear as a bare code, so an exact-match query for them returns zero.
 
 **The same diagnoses rolled up to their ICD-10 category**
 
@@ -1113,9 +1117,9 @@ The 25 most frequent of 4,739 distinct values, covering 20.7% of entries; the re
 | J30 | Vasomotor and allergic rhinitis | 48,747 |
 | R06 | Abnormalities of breathing | 48,551 |
 | Z28 | Immunization not carried out and underimmunization status | 47,456 |
-| IMO | [not in the ICD-10 lookup] | 45,678 |
+| J18 | Pneumonia, unspecified organism | 45,528 |
 
-The 25 most frequent of 1,327 distinct values; 1,302 more are not shown.
+The 25 most frequent of 1,326 distinct values; 1,301 more are not shown.
 
 **Implications for analysis.** Encounter diagnoses and problem-list entries answer different questions and should not be pooled without saying why: the first is what was coded at a contact, the second is what the chart asserts about the child, including resolved history. Neither is an adjudicated clinical truth, and a code's absence is not evidence a condition was absent.
 
@@ -2039,7 +2043,7 @@ One row per artifact, gathered from the findings that measured them. The class s
 | Laboratory results are semi-structured text | capture | 487,168 comparator-prefixed values; only 44.2% of rows parse as a number | Yes — parse comparators explicitly rather than casting | 3.6 |
 | Anthropometrics recorded on encounters with no physical contact | capture | weight present on 99% of 22,053 telephone encounters | Partly — restrict by encounter type before counting measurement occasions | 3.7 |
 | Two measurements of one channel on one patient-day that disagree | capture | 942 patient-days for height, median spread 3.17 cm | Partly — define an explicit tie rule before ordering by age | 3.8 |
-| Diagnosis codes counted flat rather than as a hierarchy | capture | 1,204 of 1,327 categories never appear as a bare three-character code | Yes — match on a prefix, or roll up before counting | 3.9 |
+| Diagnosis codes counted flat rather than as a hierarchy | capture | 1,203 of 1,326 categories never appear as a bare three-character code | Yes — match on a prefix, or roll up before counting | 3.9 |
 | Terminal-digit heaping on the imperial recording grid | capture | 80.0% of heights fall on a quarter inch | No — it is the precision the measurement actually has | 4.2 |
 | Wrong-unit and decimal-place entry in the typed measurement fields | capture | 1,371 whole-foot heights, 143 centimetre values in the inch field, and a weight decimal artifact enriched 17-fold | Yes — bound and repair the raw imperial columns before converting | 4.4 |
 | Apparent height loss from the recording grid on a flat trajectory | capture | 0.66% of pairs over a year apart, falling to 0.083% at ages 2 to 10 | Not a defect — do not filter it as an outlier | 4.5 |

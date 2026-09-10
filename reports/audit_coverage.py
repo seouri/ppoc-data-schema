@@ -124,8 +124,8 @@ QUOTED_FIGURES = [
     ("61%", "1.4", "of ICD-10 codes removed with their patients"),
     ("56%", "1.4", "of medications removed with their patients"),
     ("72%", "1.4", "of lab procedures removed with their patients"),
-    ("1,204", "3.9", "categories that never appear as a bare code"),
-    ("1,327", "3.9", "three-character categories after rollup"),
+    ("1,203", "3.9", "categories that never appear as a bare code"),
+    ("1,326", "3.9", "three-character categories after rollup"),
 ]
 
 

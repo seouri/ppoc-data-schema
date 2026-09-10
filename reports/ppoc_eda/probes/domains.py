@@ -11,7 +11,7 @@ from ..context import Context
 from ..findings import Column as C
 from ..findings import Figure, Finding, Para, Table, probe
 from ..listing import listing, note
-from .icd import patient_codes
+from .icd import ICD_SHAPE, patient_codes
 
 ENC_DIAG = ", ".join(f"enc_diag_{i}" for i in range(1, 34))
 ICD_CSV = "data/icd10cm-tabular-2026.csv"
@@ -71,17 +71,21 @@ def diagnoses(ctx: Context) -> list[Finding]:
         ORDER BY f.entries DESC, f.code""")
 
     pc = patient_codes(ctx)
+    # Same shape test as 3.9, imported rather than repeated: this section quotes
+    # 3.9's category counts in prose, and computing them independently let the
+    # two drift apart when 3.9 began excluding the proprietary placeholders.
+    shaped = f"regexp_matches(code, '{ICD_SHAPE}')"
     cats, silent = ctx.one(f"""
         SELECT count(DISTINCT substr(code, 1, 3)),
                (SELECT count(*) FROM (
-                   SELECT substr(code, 1, 3) AS c FROM {pc} GROUP BY 1
+                   SELECT substr(code, 1, 3) AS c FROM {pc} WHERE {shaped} GROUP BY 1
                    HAVING sum(CASE WHEN code = substr(code, 1, 3) THEN 1 ELSE 0 END) = 0))
-        FROM {pc}""")
+        FROM {pc} WHERE {shaped}""")
     roll_raw, roll_distinct, roll_complete = listing(ctx,
-        f"SELECT count(DISTINCT substr(code, 1, 3)) FROM {pc}",
+        f"SELECT count(DISTINCT substr(code, 1, 3)) FROM {pc} WHERE {shaped}",
         f"""WITH f AS (SELECT substr(code, 1, 3) AS cat,
                           count(DISTINCT patient_id) AS n
-                   FROM {pc} GROUP BY 1 ORDER BY n DESC, cat {{limit}}),
+                   FROM {pc} WHERE {shaped} GROUP BY 1 ORDER BY n DESC, cat {{limit}}),
         l AS ({ICD_LOOKUP})
         SELECT f.cat, coalesce(l.descr, '[not in the ICD-10 lookup]'), f.n
         FROM f LEFT JOIN l ON f.cat = l.code ORDER BY f.n DESC, f.cat""")
