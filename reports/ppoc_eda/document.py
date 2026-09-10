@@ -99,6 +99,12 @@ def _catalogue(found: list[Finding]) -> Finding | None:
              "the clinical record, a capture artifact cannot, a selection artifact is "
              "outside the extract entirely. {n} artifacts across {kinds} classes "
              "({kindlist})."),
+        Para("This is not everything the report found. A section contributes a row "
+             "here only if its probe declares one, so the catalogue lists the "
+             "artifacts worth carrying a repair note and not every defect, "
+             "mislabelled column or unstated threshold the sections discuss. Read "
+             "it as an index to the repairable, and the sections themselves for the "
+             "rest.", role="method"),
         Table("t-catalogue", "Artifact catalogue",
               [Column("artifact", "artifact"), Column("class", "class"),
                Column("scale", "scale in this snapshot"),

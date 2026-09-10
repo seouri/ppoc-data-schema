@@ -74,16 +74,23 @@ def methods(ctx: Context) -> list[Finding]:
              "typed bundle of `{package}` {version}, snapshot `{snapshot}`, sha256 "
              "`{digest}`, opened read-only. The bundle is never copied into this "
              "repository and no row-level identifier is read into any output."),
-        Para("**Privacy.** Output is aggregate only. Cells backed by fewer than "
-             "{suppress} records are suppressed centrally rather than probe by "
-             "probe, so a new probe inherits the rule without having to remember it."),
+        Para("**Privacy.** Output is aggregate only, and no cell may rest on fewer "
+             "than {suppress} records. The rule lives in one shared helper rather "
+             "than in a comparison repeated through every probe, but it is a helper "
+             "a probe has to call: a probe that reports a raw count does not inherit "
+             "the rule, and "
+             "one had to be corrected during review for exactly that — 5.5's "
+             "identity tables printed a category backed by six patients. Treat the "
+             "floor as enforced by that helper and by reading, not by construction."),
         Para("**Reproducibility.** The generator computes the finding set once and "
              "renders every output from it, so the HTML, the PDF, the Markdown "
              "mirror, and `findings.json` cannot disagree. Prose carries templates "
-             "rather than literals: a number reaches an output only by way of the "
-             "finding that measured it. Outputs are rewritten only when the finding "
-             "set changes, so rebuilding an unchanged snapshot leaves the committed "
-             "files untouched."),
+             "rather than literals, so a number reaches an output by way of the "
+             "finding that measured it; a test enforces that for decimal "
+             "percentages, which is the detectable form, and the rest is "
+             "convention. Outputs are rewritten only when the finding set changes, "
+             "so rebuilding an unchanged snapshot leaves the committed files "
+             "untouched."),
         Para("**Limitations.** Everything here is specific to this snapshot and "
              "would need recomputing for another extract. The report describes "
              "recording and derivation behaviour, not clinical truth: a value being "

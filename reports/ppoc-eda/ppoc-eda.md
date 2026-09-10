@@ -2045,6 +2045,8 @@ One row per known artifact, with its scale and whether it can be repaired.
 
 One row per artifact, gathered from the findings that measured them. The class says who produced the artifact, which decides whether it can be repaired: a derivation artifact can be recomputed without touching the clinical record, a capture artifact cannot, a selection artifact is outside the extract entirely. 22 artifacts across 4 classes (capture, derivation, linkage, selection).
 
+This is not everything the report found. A section contributes a row here only if its probe declares one, so the catalogue lists the artifacts worth carrying a repair note and not every defect, mislabelled column or unstated threshold the sections discuss. Read it as an index to the repairable, and the sections themselves for the rest.
+
 **Artifact catalogue**
 
 | artifact | class | scale in this snapshot | recoverable? | section |
@@ -2080,8 +2082,8 @@ How these figures were computed and what would invalidate them.
 
 **Computation.** Every figure was computed with DuckDB against the typed bundle of `ppoc-pediatric-ehr` 1.0.0, snapshot `2026-08-24`, sha256 `425c6f873cefc149344570561a03b33c69a6a6af7fa18bc777c0429579507116`, opened read-only. The bundle is never copied into this repository and no row-level identifier is read into any output.
 
-**Privacy.** Output is aggregate only. Cells backed by fewer than 10 records are suppressed centrally rather than probe by probe, so a new probe inherits the rule without having to remember it.
+**Privacy.** Output is aggregate only, and no cell may rest on fewer than 10 records. The rule lives in one shared helper rather than in a comparison repeated through every probe, but it is a helper a probe has to call: a probe that reports a raw count does not inherit the rule, and one had to be corrected during review for exactly that — 5.5's identity tables printed a category backed by six patients. Treat the floor as enforced by that helper and by reading, not by construction.
 
-**Reproducibility.** The generator computes the finding set once and renders every output from it, so the HTML, the PDF, the Markdown mirror, and `findings.json` cannot disagree. Prose carries templates rather than literals: a number reaches an output only by way of the finding that measured it. Outputs are rewritten only when the finding set changes, so rebuilding an unchanged snapshot leaves the committed files untouched.
+**Reproducibility.** The generator computes the finding set once and renders every output from it, so the HTML, the PDF, the Markdown mirror, and `findings.json` cannot disagree. Prose carries templates rather than literals, so a number reaches an output by way of the finding that measured it; a test enforces that for decimal percentages, which is the detectable form, and the rest is convention. Outputs are rewritten only when the finding set changes, so rebuilding an unchanged snapshot leaves the committed files untouched.
 
 **Limitations.** Everything here is specific to this snapshot and would need recomputing for another extract. The report describes recording and derivation behaviour, not clinical truth: a value being implausible does not establish what the child actually measured, and a value being plausible does not establish that it was measured at all. Where a mechanism is inferred rather than observed the report says so and shows the evidence.
