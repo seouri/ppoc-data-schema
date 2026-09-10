@@ -38,8 +38,54 @@ which appeared in roughly one build in six.
   the audit catches the omission, because it force-rebuilds and compares bytes
   against what is committed.
 - **Numbers live in `findings.json`, not in prose.** A probe supplies values and
-  a template; there is no code path that writes a literal figure into a
-  sentence. Keep it that way.
+  a template. Only part of that is enforced:
+  `test_no_probe_writes_a_measured_figure_into_prose` scans the probes for a
+  decimal percentage, which is the detectable form, and has caught two real
+  literals in one review pass — including one inside a code comment, so reword
+  the comment rather than loosening the test; its docstring records an earlier
+  one in 5.11. An integer literal passes, so 8.1 describes the rest as
+  convention and so should you.
+  A count written into a sentence is the case that keeps going wrong, because
+  the structure holding the answer is usually right there. Three of them
+  disagreed with the table immediately beneath: 1.2 said three resources are
+  keyed off the patient and visit axes when `GRAIN` holds four, 1.5 listed seven
+  foreclosed checks against Part 2's nine, and 0.1 was titled "Three ways in"
+  over five `ENTRY_POINTS`. Derive the number from the structure. Where you
+  cannot — a section title is not templated — drop the count instead of writing
+  it down.
+- **A correction in one section goes stale in another, and almost nothing
+  catches it.** This is the dominant failure mode in the report's history.
+  Every one of these happened: correcting the labs key in 3.1 left 3.6 advising
+  a join on a superkey; restricting 3.9 to ICD-10-shaped codes left 5.1 quoting
+  the old category pair from its own independent computation; separating rows
+  from resulted components in 5.2 left 1.2 describing a grain that is wrong for
+  13% of lab rows; changing 4.10's intraclass correlation left the
+  hand-maintained overlay quoting the old value; and rewriting 4.8 left the
+  overlay quoting a figure that survived only in the Part 7 catalogue row,
+  whose artifact scale rounds to two decimals.
+  Only some of that is guarded. `audit_coverage.py` checks each figure the
+  overlay, README and `docs/data_description.md` quote **inside the section that
+  cites it** — it used to search the whole report, which let a citation go stale
+  where it was made and pass because another section printed the same number.
+  Its completeness sentinels fire on reworded prose, not just deletion, so three
+  have been repointed at durable anchors (an artifact name, a rule name, a
+  claim) and the remaining fragment-style ones will keep firing on legitimate
+  rewrites. Where two sections genuinely share a definition, import it rather
+  than recomputing it: `PANEL_SPLIT_YEARS`, `WORKUP_INDEX`, `ICD_SHAPE` and
+  `DEIDENT_CHECKS` all exist for that reason, and the last one raises if Part 2
+  marks a check 1.5 does not list.
+  Nothing guards an advice sentence, a grain statement, or any prose in one
+  section that rests on another's measurement. After changing what a section
+  measures or concludes, `grep -n "<section number>" reports/ppoc-eda/ppoc-eda.md`
+  for its inbound references and read them.
+- **`ctx.suppress` is not automatic.** The floor of
+  `SUPPRESS_BELOW` records per cell is one shared helper, not a property of the
+  renderer: a probe that reports a raw count gets no suppression at all. 5.5's
+  identity tables did exactly that and published a category backed by six
+  patients, in a report that states the rule in both 0.1 and 8.1. Route every
+  count through `ctx.suppress`, and keep the row when the category existing is
+  itself informative — 3.7 and 5.5 both do, showing the label with an em dash
+  for the number.
 - **`scripts/augment.py` and `scripts/harrall_outliers.py` are vendored
   byte-identical** and pinned by SHA-256 in `data/augment-runtime-manifest.json`.
   Any edit, down to a trailing comment, fails `tests/test_augment_import.py`.
