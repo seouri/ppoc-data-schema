@@ -24,26 +24,35 @@ LAB_SUPERKEY = ["lab_order_id", "result_component_name", "result_line_num"]
 #: The combination an analysis reaches for instead, which is not a key.
 LAB_TRAP = ["lab_order_id", "result_component_name"]
 
+#: (label, resource, violation, denominator, how far it is violated by in days)
 ORDERING = [
     ("Lab result age earlier than lab order age", "labs",
      "lab_result_date_age_in_days < lab_order_date_age_in_days",
-     "lab_result_date_age_in_days IS NOT NULL AND lab_order_date_age_in_days IS NOT NULL"),
+     "lab_result_date_age_in_days IS NOT NULL AND lab_order_date_age_in_days IS NOT NULL",
+     "lab_order_date_age_in_days - lab_result_date_age_in_days"),
     ("Medication start age earlier than order age", "medications",
      "med_start_date_age_in_days < med_order_date_age_in_days",
-     "med_start_date_age_in_days IS NOT NULL AND med_order_date_age_in_days IS NOT NULL"),
+     "med_start_date_age_in_days IS NOT NULL AND med_order_date_age_in_days IS NOT NULL",
+     "med_order_date_age_in_days - med_start_date_age_in_days"),
     ("Medication end age earlier than start age", "medications",
      "med_end_date_age_in_days < med_start_date_age_in_days",
-     "med_end_date_age_in_days IS NOT NULL AND med_start_date_age_in_days IS NOT NULL"),
+     "med_end_date_age_in_days IS NOT NULL AND med_start_date_age_in_days IS NOT NULL",
+     "med_start_date_age_in_days - med_end_date_age_in_days"),
     ("Problem resolved age earlier than noted age", "problem_list",
      "resolved_date_age_in_days < noted_date_age_in_days",
-     "resolved_date_age_in_days IS NOT NULL AND noted_date_age_in_days IS NOT NULL"),
+     "resolved_date_age_in_days IS NOT NULL AND noted_date_age_in_days IS NOT NULL",
+     "noted_date_age_in_days - resolved_date_age_in_days"),
     ("Problem noted before birth", "problem_list",
-     "noted_date_age_in_days < 0", "noted_date_age_in_days IS NOT NULL"),
+     "noted_date_age_in_days < 0", "noted_date_age_in_days IS NOT NULL",
+     "-noted_date_age_in_days"),
     ("Lab ordered before birth", "labs",
-     "lab_order_date_age_in_days < 0", "lab_order_date_age_in_days IS NOT NULL"),
+     "lab_order_date_age_in_days < 0", "lab_order_date_age_in_days IS NOT NULL",
+     "-lab_order_date_age_in_days"),
     ("Medication ordered before birth", "medications",
-     "med_order_date_age_in_days < 0", "med_order_date_age_in_days IS NOT NULL"),
-    ("Visit recorded before birth", "visits", "age_in_days < 0", "TRUE"),
+     "med_order_date_age_in_days < 0", "med_order_date_age_in_days IS NOT NULL",
+     "-med_order_date_age_in_days"),
+    ("Visit recorded before birth", "visits", "age_in_days < 0", "TRUE",
+     "-age_in_days"),
 ]
 
 
@@ -245,19 +254,63 @@ def links(ctx: Context) -> list[Finding]:
 @probe("integrity.age", "3.3")
 def age_axis(ctx: Context) -> list[Finding]:
     rows = []
-    for label, table, bad, denom in ORDERING:
-        checked = ctx.scalar(f"SELECT count(*) FROM {table} WHERE {denom}")
-        violations = ctx.scalar(f"SELECT count(*) FROM {table} WHERE {denom} AND {bad}")
+    for label, table, bad, denom, gap in ORDERING:
+        checked, violations, med_gap, p95_gap = ctx.one(
+            f"SELECT count(*) FILTER (WHERE {denom}), "
+            f"       count(*) FILTER (WHERE {denom} AND {bad}), "
+            f"       quantile_cont(CASE WHEN {denom} AND {bad} THEN {gap} END, 0.5), "
+            f"       quantile_cont(CASE WHEN {denom} AND {bad} THEN {gap} END, 0.95) "
+            f"FROM {table}")
+        shown = ctx.suppress(violations)
         rows.append({
-            "check": label, "violations": ctx.suppress(violations),
-            "checked": checked,
+            "check": label, "violations": shown, "checked": checked,
             "share": (100.0 * violations / checked) if checked and
-                     ctx.suppress(violations) is not None else None,
+                     shown is not None else None,
+            # Suppressed counts get no magnitude either: a median over fewer than
+            # ten rows is close to reporting the rows.
+            "median": med_gap if shown else None,
+            "p95": p95_gap if shown else None,
         })
+    # Both mechanisms the section names make quantitative predictions, so test
+    # them. The record type is the one field that distinguishes a historically
+    # documented medication from an order placed at the practice (5.3).
+    ext_n, ext_v, int_n, int_v, in_month, viol_n = ctx.one("""
+        SELECT count(*) FILTER (WHERE med_record_type = 'External'),
+               count(*) FILTER (WHERE med_record_type = 'External' AND bad),
+               count(*) FILTER (WHERE med_record_type = 'Internal'),
+               count(*) FILTER (WHERE med_record_type = 'Internal' AND bad),
+               count(*) FILTER (WHERE bad AND gap <= 31),
+               count(*) FILTER (WHERE bad)
+        FROM (SELECT med_record_type,
+                     med_start_date_age_in_days < med_order_date_age_in_days AS bad,
+                     med_order_date_age_in_days - med_start_date_age_in_days AS gap
+              FROM medications
+              WHERE med_start_date_age_in_days IS NOT NULL
+                AND med_order_date_age_in_days IS NOT NULL)""")
+    # The resolved-before-noted check can only run where both dates exist, and a
+    # resolved problem with no noted date is not checkable at all.
+    unchecked_res = ctx.scalar(
+        "SELECT count(*) FROM problem_list WHERE resolved_date_age_in_days IS NOT NULL "
+        "AND noted_date_age_in_days IS NULL")
+
     f = Finding(
         id="integrity.age", part="3.3",
         title="Age-axis consistency and impossible sequences",
-        values={"suppress": SUPPRESS_BELOW},
+        values={"suppress": SUPPRESS_BELOW,
+                "ext_share": 100.0 * ext_v / ext_n, "int_share": 100.0 * int_v / int_n,
+                "ext_v": ext_v, "int_v": int_v,
+                "month_share": 100.0 * in_month / viol_n,
+                "unchecked_res": unchecked_res,
+                "lab_med": next(r["median"] for r in rows
+                                if r["check"].startswith("Lab result")),
+                "med_med": next(r["median"] for r in rows
+                                if r["check"].startswith("Medication start")),
+                "pre_lab": next(r["median"] for r in rows
+                                if r["check"].startswith("Lab ordered before")),
+                "pre_prob": next(r["median"] for r in rows
+                                 if r["check"].startswith("Problem noted before")),
+                "pre_prob_n": next(r["violations"] for r in rows
+                                   if r["check"].startswith("Problem noted before"))},
         artifact=Artifact(
             name="Age fields that violate their own ordering",
             kind="capture",
@@ -272,20 +325,56 @@ def age_axis(ctx: Context) -> list[Finding]:
               [Column("check", "check"),
                Column("violations", "violating rows", ",", align="right"),
                Column("checked", "rows checked", ",", align="right"),
-               Column("share", "share", ".3f", "%", align="right")], rows,
+               Column("share", "share", ".3f", "%", align="right"),
+               Column("median", "median violation", ",.0f", " d", align="right"),
+               Column("p95", "95th pct", ",.0f", " d", align="right")], rows,
               note="An em dash in the violating-rows column means the count is "
-                   "nonzero but below the suppression threshold."),
-        Para("The lab and medication violations are the substantial ones, and both "
-             "are documented at source. For a historically documented medication "
-             "the order date is the date the record was *written*, not when the "
-             "drug was started, and a charted approximation such as a month with no "
-             "day is stored as the first of that month. End dates may sit in the "
-             "future while a medication is active. Lab result and order ages derive "
-             "from different source timestamps.", role="body"),
+                   "nonzero but below the suppression threshold; a suppressed count "
+                   "gets no magnitude either. The last two columns are how far the "
+                   "violating rows are violated by, which a count alone does not "
+                   "say and which decides whether a check has found a rounding "
+                   "artifact or something else."),
+        Para("**The medication violations are explained, and the explanation is "
+             "measurable.** For a historically documented medication the order date "
+             "is the date the record was *written*, not when the drug was started, "
+             "so the start can precede it by as long as the history goes back. "
+             "5.3's record type separates those from orders placed at the practice, "
+             "and the violation is almost entirely theirs: {ext_share:.1f}% of "
+             "externally documented records violate the ordering against "
+             "{int_share:.2f}% of internal ones — {ext_v:,} rows against {int_v:,}. "
+             "The other mechanism at source, a charted approximation such as a "
+             "month with no day stored as the first of that month, cannot be the "
+             "main one: it would keep the gap inside a month, and only "
+             "{month_share:.0f}% of the violations are. End dates may sit in the "
+             "future while a medication is active, which is the third row."),
+        Para("**The two before-birth rows are not the same kind of thing**, which "
+             "only the magnitude shows. A lab ordered before birth sits a median of "
+             "{pre_lab:,.0f} days before it — a few months, which is what an order "
+             "placed during the pregnancy and filed against the child would look "
+             "like. A problem noted before birth sits a median of {pre_prob:,.0f} "
+             "days before it, decades rather than months, which no prenatal record "
+             "explains: those {pre_prob_n:,} rows carry a wrong date rather than an "
+             "early one. 5.12 excludes them from its lag comparison for exactly "
+             "that reason."),
+        Para("**The lab violation is not explained by what the source says about "
+             "it.** \"Lab result and order ages derive from different source "
+             "timestamps\" describes a granularity artifact, and a granularity "
+             "artifact does not have a median of {lab_med:,.0f} days. Whatever "
+             "produces it, a result age sitting years before its order age is not a "
+             "rounding difference, and this report cannot say what it is: no field "
+             "in the extract distinguishes an order re-used for a later result from "
+             "a mislinked one. Treat the pair as unordered rather than as nearly "
+             "ordered.", role="warning"),
         Para("**Implications for analysis.** Differences between two age fields in "
              "these resources are not reliable durations. Where you need an "
              "interval, take it from a single field across rows rather than between "
              "two fields on one row, and exclude historically documented medication "
-             "records from any start-to-end calculation.", role="implication"),
+             "records from any start-to-end calculation — {ext_share:.0f}% of them "
+             "fail the most basic ordering check, so the exclusion is not a "
+             "precaution. One limit on the checks themselves: a comparison can only "
+             "run where both fields exist, so the resolved-before-noted row speaks "
+             "for neither the {unchecked_res:,} problems that carry a resolution "
+             "date and no noted date nor any problem still open.",
+             role="implication"),
     ]
     return [f]

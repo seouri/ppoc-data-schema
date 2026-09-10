@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-10T13:37:36Z",
+  "generated_at": "2026-09-10T14:10:13Z",
   "parts": [
     {
       "findings": [
@@ -1114,55 +1114,73 @@
                 "check",
                 "violations",
                 "checked",
-                "share"
+                "share",
+                "median",
+                "p95"
               ],
               "id": "t-age",
               "rows": [
                 {
                   "check": "Lab result age earlier than lab order age",
                   "checked": 14947495,
+                  "median": 1229.0,
+                  "p95": 2465.0,
                   "share": 3.900687,
                   "violations": 583055
                 },
                 {
                   "check": "Medication start age earlier than order age",
                   "checked": 3539983,
+                  "median": 43.0,
+                  "p95": 728.7,
                   "share": 9.2968526,
                   "violations": 329107
                 },
                 {
                   "check": "Medication end age earlier than start age",
                   "checked": 3179759,
+                  "median": 2.0,
+                  "p95": 54.0,
                   "share": 0.39968438,
                   "violations": 12709
                 },
                 {
                   "check": "Problem resolved age earlier than noted age",
                   "checked": 754996,
+                  "median": null,
+                  "p95": null,
                   "share": 0.0,
                   "violations": 0
                 },
                 {
                   "check": "Problem noted before birth",
                   "checked": 1702300,
+                  "median": 7468.0,
+                  "p95": 42201.0,
                   "share": 0.038183634,
                   "violations": 650
                 },
                 {
                   "check": "Lab ordered before birth",
                   "checked": 17230681,
+                  "median": 129.0,
+                  "p95": 582.4,
                   "share": 0.00027276925,
                   "violations": 47
                 },
                 {
                   "check": "Medication ordered before birth",
                   "checked": 3823049,
+                  "median": null,
+                  "p95": null,
                   "share": null,
                   "violations": null
                 },
                 {
                   "check": "Visit recorded before birth",
                   "checked": 6494473,
+                  "median": null,
+                  "p95": null,
                   "share": 0.0,
                   "violations": 0
                 }
@@ -1171,7 +1189,18 @@
           ],
           "title": "Age-axis consistency and impossible sequences",
           "values": {
-            "suppress": 10
+            "ext_share": 97.851048,
+            "ext_v": 325707,
+            "int_share": 0.10601402,
+            "int_v": 3400,
+            "lab_med": 1229.0,
+            "med_med": 43.0,
+            "month_share": 43.655103,
+            "pre_lab": 129.0,
+            "pre_prob": 7468.0,
+            "pre_prob_n": 650,
+            "suppress": 10,
+            "unchecked_res": 2911
           }
         },
         {
