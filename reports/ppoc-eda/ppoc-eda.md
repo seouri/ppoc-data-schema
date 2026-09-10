@@ -308,9 +308,11 @@ Keys, linkage, the age axis, missingness, terminology, and capture.
 
 ### 3.1 Keys, grain, and uniqueness
 
-Every declared primary key holds. The labs resource needs all three of its declared columns to be unique, which is worth stating because joining on order and component alone will multiply rows.
+All 7 single-column primary keys the delivery documents declare hold exactly. Labs has no declared composite key — the data dictionary gives its grain as one row per result component and names no key — so the one below is reconstructed here, and it is minimal: `lab_order_id` + `result_line_num` is unique on its own across all 17,230,681 rows, and adding `result_component_name` changes nothing (17,230,681 groups either way).
 
-**Declared keys, measured**
+The combination to avoid is the one an analysis reaches for instead. Joining on the order and the component *without* the line number collapses to 17,093,224 groups, 33,879 of which hold more than one row, so that join multiplies rows rather than matching them. 3.6 measures how far the duplicated lines disagree and what the source system says produces them.
+
+**Primary keys, measured**
 
 | resource | key | rows | distinct keys | unique |
 | --- | --- | --- | --- | --- |
@@ -321,27 +323,33 @@ Every declared primary key holds. The labs resource needs all three of its decla
 | medications | med_record_id | 3,823,049 | 3,823,049 | yes |
 | problem_list | problem_list_id | 1,709,584 | 1,709,584 | yes |
 | referrals | referral_id | 349,827 | 349,827 | yes |
-| labs | lab_order_id + component + line | 17,230,681 | 17,230,681 | yes |
+| labs | lab_order_id + result_line_num | 17,230,681 | 17,230,681 | yes |
+
+Every row compares the table's rows against its distinct key values. The labs key is the report's own reconstruction; the other 7 come from the delivery documents.
 
 What is *not* a key is the combination a longitudinal analysis reaches for first. 5,478 patient-days (0.08% of 6,488,911) carry more than one visit, covering 11,040 visit rows (0.17% of all visits). `age_in_days` is therefore not unique within a patient.
 
-**Implications for analysis.** Any trajectory ordered by age alone has ties, and any window function partitioned by patient and ordered by age will resolve them arbitrarily unless you say how. Decide whether to take the first row, the mean, or the non-null value, and apply it before the analysis rather than inside it.
+**Implications for analysis.** Any trajectory ordered by age alone has ties, and any window function partitioned by patient and ordered by age will resolve them arbitrarily unless you say how. Decide whether to take the first row, the mean, or the non-null value, and apply it before the analysis rather than inside it — 3.8 measures how far the two values sit apart on the days that carry two, which is what makes that choice consequential rather than arbitrary.
 
 ### 3.2 Referential integrity and cross-resource linkage
 
-`patient_id` resolves everywhere. `visit_id` does not, and the shortfall is large enough that treating it as a complete foreign key will quietly drop or duplicate rows.
+`patient_id` resolves everywhere, measured on every one of the 7 resources that carry it: 0 rows across all of them reference a patient who is not in `patients`. `visit_id` does not, and the shortfall is large enough that treating it as a complete foreign key will quietly drop or duplicate rows.
 
 **Visit linkage by resource**
 
-| resource | rows | visit_id null | populated but unresolved | share of populated | unresolved patient_id |
-| --- | --- | --- | --- | --- | --- |
-| labs | 17,230,681 | 0.00% | 5,201,657 | 30.19% | 0 |
-| medications | 3,823,049 | 0.00% | 1,592,437 | 41.65% | 0 |
-| referrals | 349,827 | 7.10% | 98,623 | 30.35% | 0 |
+| resource | rows | visit_id null | populated but unresolved | share of populated |
+| --- | --- | --- | --- | --- |
+| labs | 17,230,681 | 805 | 5,201,657 | 30.19% |
+| medications | 3,823,049 | 0 | 1,592,437 | 41.65% |
+| referrals | 349,827 | 24,830 | 98,623 | 30.35% |
+
+The null column is a count, not a share: labs carries 805 rows with no `visit_id` at all and medications carries none, and at two decimal places both round to the same 0.00%. A null cannot be joined and does not pretend to be joinable, which makes it the one part of this that is not silent.
+
+The table covers every resource carrying a `visit_id`. `problem_list` carries none, so a problem-list entry cannot be tied to an encounter under any join — not partially, as above, but not at all. That matters for anyone building a per-visit feature from diagnoses; 5.1 works from the constraint and this is where it is measured.
 
 This is documented behaviour rather than corruption. The data dictionary states for each of these resources that the visit link "may not match to all" when the order was placed or the record documented outside a visit. The trap is that the column is populated on nearly every row, so a required-looking key silently fails to join.
 
-**Implications for analysis.** Join to visits with an explicit outer join and count what fails, rather than an inner join that hides the loss. Anything computed per visit — encounter type, visit-level anthropometrics — is unavailable for the unresolved share, and that share is not random: it concentrates in orders placed outside encounters.
+**Implications for analysis.** Join to visits with an explicit outer join and count what fails, rather than an inner join that hides the loss. Anything computed per visit — encounter type, visit-level anthropometrics — is unavailable for the unresolved share, and that share is not random. Medications carry the one field that makes the dictionary's explanation checkable, and it does not fall the way the explanation suggests: an externally documented record — 5.3's outside or historical medication — is unresolved 18.2% of the time, while an order placed by a practice clinician is unresolved 45.8% of the time, 1,488,168 rows. Whatever produces the shortfall, it lands on practice orders rather than on outside documentation, so filtering to internal records selects for the problem instead of away from it. The two are not the same distinction — an internal phone refill has no encounter either — which is why the mechanism is left as the dictionary states it and only its incidence is reported here.
 
 ### 3.3 Age-axis consistency and impossible sequences
 
@@ -2011,7 +2019,7 @@ One row per artifact, gathered from the findings that measured them. The class s
 | --- | --- | --- | --- | --- |
 | Raw and augmented BMI disagree on infants | derivation | 1,703,005 visits carry a raw BMI the augmented layer withholds; 536 differ outright | Yes — pick the layer deliberately and state which | 1.3 |
 | Cohort selected on growth-measurement density and code rarity | selection | 437,996 registry members reduced to 250,588; 61% of diagnosis codes, 56% of medications and 72% of lab procedures removed with their patients | No — the excluded patients are not in this extract | 1.4 |
-| A patient-day can carry more than one visit | capture | 5,478 patient-days holding 11,040 visits | Partly — define an explicit tie rule before ordering by age | 3.1 |
+| A patient-day can carry more than one visit | capture | 5,478 patient-days holding 11,040 visits, the rows 3.8 finds disagreeing and four Part 4 sections deduplicate | Partly — define an explicit tie rule before ordering by age | 3.1 |
 | Populated visit_id that resolves to no visit | linkage | up to 42% of populated values in a resource | No — treat visit linkage as partial by design | 3.2 |
 | Age fields that violate their own ordering | capture | lab result before order, and medication start before order | No — do not treat differences between them as durations | 3.3 |
 | Laboratory results are semi-structured text | capture | 487,168 comparator-prefixed values; only 44.2% of rows parse as a number | Yes — parse comparators explicitly rather than casting | 3.6 |

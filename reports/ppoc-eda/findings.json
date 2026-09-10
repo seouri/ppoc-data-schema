@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-10T12:24:26Z",
+  "generated_at": "2026-09-10T13:20:19Z",
   "parts": [
     {
       "findings": [
@@ -950,13 +950,13 @@
             "kind": "capture",
             "name": "A patient-day can carry more than one visit",
             "recoverable": "Partly — define an explicit tie rule before ordering by age",
-            "scale": "5,478 patient-days holding 11,040 visits"
+            "scale": "5,478 patient-days holding 11,040 visits, the rows 3.8 finds disagreeing and four Part 4 sections deduplicate"
           },
           "id": "integrity.keys",
           "part": "3.1",
           "tables": [
             {
-              "caption": "Declared keys, measured",
+              "caption": "Primary keys, measured",
               "columns": [
                 "resource",
                 "key",
@@ -1017,7 +1017,7 @@
                 },
                 {
                   "distinct": 17230681,
-                  "key": "lab_order_id + component + line",
+                  "key": "lab_order_id + result_line_num",
                   "resource": "labs",
                   "rows": 17230681,
                   "unique": "yes"
@@ -1027,6 +1027,13 @@
           ],
           "title": "Keys, grain, and uniqueness",
           "values": {
+            "lab_distinct": 17230681,
+            "lab_extra": "`result_component_name`",
+            "lab_key": "`lab_order_id` + `result_line_num`",
+            "lab_super": 17230681,
+            "n_declared": 7,
+            "trap_dupes": 33879,
+            "trap_groups": 17093224,
             "vday": 6488911,
             "vdup_days": 5478,
             "vdup_share": 0.084420945,
@@ -1049,32 +1056,28 @@
               "columns": [
                 "resource",
                 "rows",
-                "missing",
+                "null_ids",
                 "unresolved",
-                "unresolved_share",
-                "orphan_patients"
+                "unresolved_share"
               ],
               "id": "t-links",
               "rows": [
                 {
-                  "missing": 0.0046718989,
-                  "orphan_patients": 0,
+                  "null_ids": 805,
                   "resource": "labs",
                   "rows": 17230681,
                   "unresolved": 5201657,
                   "unresolved_share": 30.189753
                 },
                 {
-                  "missing": 0.0,
-                  "orphan_patients": 0,
+                  "null_ids": 0,
                   "resource": "medications",
                   "rows": 3823049,
                   "unresolved": 1592437,
                   "unresolved_share": 41.653586
                 },
                 {
-                  "missing": 7.0977941,
-                  "orphan_patients": 0,
+                  "null_ids": 24830,
                   "resource": "referrals",
                   "rows": 349827,
                   "unresolved": 98623,
@@ -1085,6 +1088,13 @@
           ],
           "title": "Referential integrity and cross-resource linkage",
           "values": {
+            "ext_share": 18.20736,
+            "int_share": 45.784516,
+            "int_unres": 1488168,
+            "labs_null": 805,
+            "n_checked": 7,
+            "no_visit": "`problem_list`",
+            "orphans": 0,
             "worst": 41.653586
           }
         },
@@ -9994,7 +10004,7 @@
                   "artifact": "A patient-day can carry more than one visit",
                   "class": "capture",
                   "recoverable": "Partly — define an explicit tie rule before ordering by age",
-                  "scale": "5,478 patient-days holding 11,040 visits",
+                  "scale": "5,478 patient-days holding 11,040 visits, the rows 3.8 finds disagreeing and four Part 4 sections deduplicate",
                   "where": "3.1"
                 },
                 {
