@@ -1309,7 +1309,9 @@ Observation per patient is dense, as the cohort rule in 1.4 requires. The median
 
 ### 5.6 Patient-level derived flags and summaries
 
-The augmented patient layer carries seven boolean flags and a block of per-patient z-score summaries. They are conveniences computed from the visit layer, not independent observations, and each inherits whatever the channel it summarises does — the height-z flags inherit the truncation of 4.6, the BMI flags inherit the age-2 floor of 1.3.
+The augmented patient layer carries seven boolean flags and a block of per-patient z-score summaries. They are conveniences computed from the visit layer, not independent observations, and each inherits whatever the channel it summarises does — the BMI flags inherit the age-2 floor of 1.3, so no visit under two can set one.
+
+**The thresholds are not documented anywhere, so they are recovered here.** A visit sets the stunting flag below a height z of -2, the underweight flag below a BMI percentile of 5 and the obesity flag at or above 95. Those last two are exactly 4.11's category cut points, so `ever_underweight_flag` and `ever_obesity_flag` are that section's underweight and obese categories read over a whole record — 33,608 and 49,998 patients, and the counts match exactly, as one rule read two ways must. Note what this means for 4.6: the stunting flag sits at -2, which neither the upper bound at +3 nor the clamp at -5 comes near, so the height-z flags do not inherit that truncation. A tall-stature flag would, and the layer does not carry one.
 
 **Patient-level flags**
 
@@ -1326,6 +1328,8 @@ The augmented patient layer carries seven boolean flags and a block of per-patie
 *Figure — Patients carrying each derived flag. Rendered in `index.html` at `#fig-flags`.*
 
 `growth_dx_flag` marks 35,907 patients. Where an age at diagnosis is observed (35,890 patients) its median is 0.027 years, and 25,208 of those (70.2%) are assigned their code within the first month of life. That is a statement about when the code was recorded, not about when a condition began.
+
+The per-patient summaries below are sample statistics of the kind 4.10 warns about rather than parameters: a patient's mean carries residual variation as well as the child's own level, and a standard deviation taken within a positively autocorrelated series understates the channel's marginal spread. Averaging them across patients does not remove either bias.
 
 **Per-patient z-score summaries, averaged over patients with more than one value**
 

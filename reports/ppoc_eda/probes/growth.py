@@ -81,6 +81,24 @@ def flags(ctx: Context) -> list[Finding]:
                avg(mean_bmi_z_score), avg(std_bmi_z_score)
         FROM patients_augmented WHERE count_bmi_z_score > 1""")
 
+    # None of the thresholds is documented, and the implication tells a reader to
+    # recompute against a stated rule — so recover them from the boundary between
+    # flagged and unflagged visits rather than leaving the rule unstated.
+    _, stunt_lo = ctx.one(
+        "SELECT max(height_z_score) FILTER (WHERE stunting_flag = 1), "
+        "       min(height_z_score) FILTER (WHERE stunting_flag = 0) "
+        "FROM visits_augmented WHERE height_z_score IS NOT NULL")
+    under_hi, obese_lo = ctx.one(
+        "SELECT max(bmi_percentile) FILTER (WHERE underweight_flag = 1), "
+        "       min(bmi_percentile) FILTER (WHERE obesity_flag = 1) "
+        "FROM visits_augmented WHERE bmi_percentile IS NOT NULL")
+    # The BMI flags are 4.11's categories applied over a whole record, which the
+    # matching patient counts confirm.
+    cat_under, cat_obese = ctx.one(
+        "SELECT count(DISTINCT patient_id) FILTER (WHERE bmi_category = 'underweight'), "
+        "       count(DISTINCT patient_id) FILTER (WHERE bmi_category = 'obese') "
+        "FROM visits_augmented")
+
     growth_n = next(r["patients"] for r in rows if r["flag"] == "growth_dx_flag")
     f = Finding(
         id="growth.flags", part="5.6",
@@ -89,14 +107,37 @@ def flags(ctx: Context) -> list[Finding]:
                 "dx_observed": dx_age[0], "dx_median": dx_age[1],
                 "dx_first_month": dx_age[2],
                 "dx_first_share": 100.0 * dx_age[2] / dx_age[0] if dx_age[0] else 0.0,
-                "dx_negative": ctx.suppress(dx_age[3]) or 0},
+                "dx_negative": ctx.suppress(dx_age[3]) or 0,
+                "stunt_z": stunt_lo, "under_cut": under_hi,
+                "obese_cut": obese_lo,
+                "cat_under": cat_under, "cat_obese": cat_obese,
+                "flags_match": (
+                    "and the counts match exactly, as one rule read two ways "
+                    "must"
+                    if cat_under == next(r["patients"] for r in rows
+                                         if r["flag"] == "ever_underweight_flag")
+                    and cat_obese == next(r["patients"] for r in rows
+                                          if r["flag"] == "ever_obesity_flag")
+                    else "though the counts differ")},
     )
     f.blocks = [
         Para("The augmented patient layer carries seven boolean flags and a block of "
              "per-patient z-score summaries. They are conveniences computed from the "
              "visit layer, not independent observations, and each inherits whatever "
-             "the channel it summarises does — the height-z flags inherit the "
-             "truncation of 4.6, the BMI flags inherit the age-2 floor of 1.3."),
+             "the channel it summarises does — the BMI flags inherit the age-2 "
+             "floor of 1.3, so no visit under two can set one."),
+        Para("**The thresholds are not documented anywhere, so they are recovered "
+             "here.** A visit sets the stunting flag below a height z of "
+             "{stunt_z:.0f}, the underweight flag below a BMI percentile of "
+             "{under_cut:.0f} and the obesity flag at or above {obese_cut:.0f}. "
+             "Those last two are exactly 4.11's category cut points, so "
+             "`ever_underweight_flag` and `ever_obesity_flag` are that section's "
+             "underweight and obese categories read over a whole record — "
+             "{cat_under:,} and {cat_obese:,} patients, {flags_match}. Note what "
+             "this means for 4.6: the stunting flag sits at {stunt_z:.0f}, which "
+             "neither the upper bound at +3 nor the clamp at -5 comes near, so the "
+             "height-z flags do not inherit that truncation. A tall-stature flag "
+             "would, and the layer does not carry one.", role="method"),
         Table("t-flags", "Patient-level flags",
               [C("flag", "flag"), C("meaning", "set when the patient"),
                C("patients", "patients", ",", align="right"),
@@ -113,6 +154,12 @@ def flags(ctx: Context) -> list[Finding]:
              "({dx_first_share:.1f}%) are assigned their code within the first month "
              "of life. That is a statement about when the code was recorded, not "
              "about when a condition began."),
+        Para("The per-patient summaries below are sample statistics of the kind "
+             "4.10 warns about rather than parameters: a patient's mean carries "
+             "residual variation as well as the child's own level, and a standard "
+             "deviation taken within a positively autocorrelated series understates "
+             "the channel's marginal spread. Averaging them across patients does "
+             "not remove either bias.", role="method"),
         Table("t-zsummary", "Per-patient z-score summaries, averaged over patients "
                             "with more than one value",
               [C("ch", "channel"), C("n", "patients", ",", align="right"),

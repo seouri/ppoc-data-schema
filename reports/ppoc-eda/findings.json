@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-10T16:51:10Z",
+  "generated_at": "2026-09-10T16:54:38Z",
   "parts": [
     {
       "findings": [
@@ -5957,13 +5957,19 @@
           ],
           "title": "Patient-level derived flags and summaries",
           "values": {
+            "cat_obese": 49998,
+            "cat_under": 33608,
             "dx_first_month": 25208,
             "dx_first_share": 70.236835,
             "dx_median": 0.027,
             "dx_negative": 35,
             "dx_observed": 35890,
+            "flags_match": "and the counts match exactly, as one rule read two ways must",
             "growth_n": 35907,
-            "total": 250588
+            "obese_cut": 95.0,
+            "stunt_z": -2.0,
+            "total": 250588,
+            "under_cut": 4.99
           }
         },
         {
