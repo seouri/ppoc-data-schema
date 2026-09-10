@@ -458,7 +458,7 @@ Two of the largest null populations in this extract are not missing data at all,
 
 All 36 distinct values are listed. The null is one of them; 6.1 reports 35 for this column because `count(DISTINCT)` drops it.
 
-The data dictionary defines `result_flag` as an HL7 abnormality category in which the value `(NONE)` means a normal result and anything else means abnormal. This extract contains 5,881 literal `(NONE)` values and 15,550,985 nulls — 90.3% of all lab rows. The sentinel became a null somewhere between the source system and delivery, so **a null flag means normal, not unknown**. The meaning column above applies that rule and nothing else: the null and the literal `(NONE)` are the normal ones, and every other value is abnormal *by the dictionary's definition* — including the literal `Normal` and `Negative`, which are result text the HL7 category does not exempt. Where that reading matters, treat those rows as an unresolved conflict between the value and its category rather than as settled either way.
+The data dictionary defines `result_flag` as an HL7 abnormality category in which the value `(NONE)` means a normal result and anything else means abnormal. This extract contains 5,881 literal `(NONE)` values and 15,550,985 nulls — 90.3% of all lab rows, or 88.8% of the 14,947,495 that were actually resulted, which is the denominator that matters because a row with no result cannot carry a flag. The sentinel became a null somewhere between the source system and delivery, so **a null flag means normal, not unknown**. The meaning column above applies that rule and nothing else: the null and the literal `(NONE)` are the normal ones, and every other value is abnormal *by the dictionary's definition* — including the literal `Normal` and `Negative`, which are result text the HL7 category does not exempt. Where that reading matters, treat those rows as an unresolved conflict between the value and its category rather than as settled either way.
 
 `problem_list.resolved_date_age_in_days` behaves the same way: the dictionary defines null as "problem currently active". 951,677 of 1,709,584 entries (55.7%) are null, which is a statement about 56% of problems being open, not about missing dates.
 
@@ -474,7 +474,9 @@ The data dictionary defines `result_flag` as an HL7 abnormality category in whic
 | patients | race_1 | blank race_1 | 8,818 |
 | patients | ethnicity | blank ethnicity | 5,464 |
 
-**Implications for analysis.** Never impute or drop on `result_flag` or `resolved_date_age_in_days` nullity. An abnormal-result rate computed as "non-null flags over non-null flags" will read as 100%; the correct denominator is all resulted rows. A problem-list resolution rate must count nulls as unresolved rather than excluding them.
+A zero means the pattern was looked for and is absent; an em dash means it is present on fewer than 10 rows. The two are different findings and the column holds both.
+
+**Implications for analysis.** Never impute or drop on `result_flag` or `resolved_date_age_in_days` nullity. The cost is easy to state: dividing the 1,673,815 abnormal flags by the rows that carry a flag at all gives an abnormal-result rate of 99.6%, and dividing them by the resulted rows gives 11.2%. The first is what dropping the nulls produces and it is wrong by a factor of nine. A problem-list resolution rate must count nulls as unresolved rather than excluding them, for the same reason.
 
 ### 3.6 Code systems, free text, and categorical hygiene
 

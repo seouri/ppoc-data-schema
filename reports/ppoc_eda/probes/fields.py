@@ -6,7 +6,7 @@ plus range or level summaries for the columns worth them.
 
 from __future__ import annotations
 
-from ..context import RESOURCES, Context
+from ..context import RESOURCES, SUPPRESS_BELOW, Context
 from ..findings import Column, Figure, Finding, Para, Table, probe
 from ..listing import listing, note
 
@@ -216,6 +216,17 @@ def sentinels(ctx: Context) -> list[Finding]:
         for v, n in flag_raw
     ]
     flag_values = ctx.scalar("SELECT count(DISTINCT result_flag) FROM labs")
+    # The advice below says the denominator is resulted rows, so measure the rate
+    # over resulted rows rather than over every lab row, and show what the wrong
+    # denominator does to it. A row never resulted cannot carry a flag.
+    resulted, resulted_null, non_null, abnormal = ctx.one("""
+        SELECT count(*) FILTER (WHERE result_line_num IS NOT NULL),
+               count(*) FILTER (WHERE result_line_num IS NOT NULL
+                                  AND result_flag IS NULL),
+               count(*) FILTER (WHERE result_flag IS NOT NULL),
+               count(*) FILTER (WHERE result_flag IS NOT NULL
+                                  AND result_flag <> '(NONE)')
+        FROM labs""")
     flag_null = ctx.scalar("SELECT count(*) FROM labs WHERE result_flag IS NULL")
     flag_none = ctx.scalar("SELECT count(*) FROM labs WHERE result_flag = '(NONE)'")
     pl_null = ctx.scalar(
@@ -227,9 +238,14 @@ def sentinels(ctx: Context) -> list[Finding]:
         title="Nulls that are not missing, and sentinels that are not data",
         values={"flag_null": flag_null, "flag_none": flag_none,
                 "flag_groups": flag_distinct, "flag_values": flag_values,
+                "resulted": resulted, "abnormal": abnormal,
+                "resulted_null_share": 100.0 * resulted_null / resulted,
+                "wrong_rate": 100.0 * abnormal / non_null,
+                "right_rate": 100.0 * abnormal / resulted,
                 "flag_share": 100.0 * flag_null / ctx.scalar("SELECT count(*) FROM labs"),
                 "pl_null": pl_null, "pl_total": pl_total,
-                "pl_share": 100.0 * pl_null / pl_total},
+                "pl_share": 100.0 * pl_null / pl_total,
+                "suppress": SUPPRESS_BELOW},
     )
     f.blocks = [
         Para("Two of the largest null populations in this extract are not missing "
@@ -245,7 +261,10 @@ def sentinels(ctx: Context) -> list[Finding]:
              "category in which the value `(NONE)` means a normal result and "
              "anything else means abnormal. This extract contains {flag_none:,} "
              "literal `(NONE)` values and {flag_null:,} nulls — {flag_share:.1f}% of "
-             "all lab rows. The sentinel became a null somewhere between the source "
+             "all lab rows, or {resulted_null_share:.1f}% of the {resulted:,} that "
+             "were actually resulted, which is the denominator that matters because "
+             "a row with no result cannot carry a flag. The sentinel became a null "
+             "somewhere between the source "
              "system and delivery, so **a null flag means normal, not unknown**. "
              "The meaning column above applies that rule and nothing else: the null "
              "and the literal `(NONE)` are the normal ones, and every other value is "
@@ -262,13 +281,19 @@ def sentinels(ctx: Context) -> list[Finding]:
         Table("t-sentinels", "Zero and blank values checked as possible sentinels",
               [Column("resource", "resource"), Column("field", "field"),
                Column("pattern", "pattern"), Column("rows", "rows", ",", align="right")],
-              rows),
+              rows,
+              note="A zero means the pattern was looked for and is absent; an em "
+                   "dash means it is present on fewer than {suppress} rows. The two "
+                   "are different findings and the column holds both."),
         Para("**Implications for analysis.** Never impute or drop on `result_flag` "
-             "or `resolved_date_age_in_days` nullity. An abnormal-result rate "
-             "computed as \"non-null flags over non-null flags\" will read as 100%; "
-             "the correct denominator is all resulted rows. A problem-list "
-             "resolution rate must count nulls as unresolved rather than excluding "
-             "them.", role="implication"),
+             "or `resolved_date_age_in_days` nullity. The cost is easy to state: "
+             "dividing the {abnormal:,} abnormal flags by the rows that carry a "
+             "flag at all gives an abnormal-result rate of {wrong_rate:.1f}%, and "
+             "dividing them by the resulted rows gives {right_rate:.1f}%. The "
+             "first is what dropping the nulls produces and it is wrong by a factor "
+             "of nine. A problem-list resolution rate must count nulls as "
+             "unresolved rather than excluding them, for the same reason.",
+             role="implication"),
     ]
     return [f]
 

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-10T14:14:43Z",
+  "generated_at": "2026-09-10T14:22:52Z",
   "parts": [
     {
       "findings": [
@@ -1739,6 +1739,7 @@
           ],
           "title": "Nulls that are not missing, and sentinels that are not data",
           "values": {
+            "abnormal": 1673815,
             "flag_groups": 36,
             "flag_none": 5881,
             "flag_null": 15550985,
@@ -1746,7 +1747,12 @@
             "flag_values": 35,
             "pl_null": 951677,
             "pl_share": 55.667168,
-            "pl_total": 1709584
+            "pl_total": 1709584,
+            "resulted": 14947495,
+            "resulted_null_share": 88.762692,
+            "right_rate": 11.197963,
+            "suppress": 10,
+            "wrong_rate": 99.649877
           }
         },
         {
