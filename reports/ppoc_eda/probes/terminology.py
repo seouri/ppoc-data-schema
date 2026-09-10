@@ -31,11 +31,14 @@ def codes(ctx: Context) -> list[Finding]:
 
     loinc_total, loinc_have = ctx.one(
         "SELECT count(*), count(result_loinc_code) FROM labs")
-    parsed, empty = ctx.one(
-        "SELECT sum(CASE WHEN try_cast(result_value AS DOUBLE) IS NOT NULL "
-        "              THEN 1 ELSE 0 END), "
-        "       sum(CASE WHEN result_value IS NULL OR trim(result_value) = '' "
-        "              THEN 1 ELSE 0 END) FROM labs")
+    # `populated` is the denominator a cast actually faces, and `resulted` the one
+    # a LOINC share should use: a row never resulted has no value to code.
+    parsed, empty, populated, resulted = ctx.one(
+        "SELECT count(*) FILTER (WHERE try_cast(result_value AS DOUBLE) IS NOT NULL), "
+        "       count(*) FILTER (WHERE result_value IS NULL "
+        "                          OR trim(result_value) = ''), "
+        "       count(result_value), "
+        "       count(*) FILTER (WHERE result_line_num IS NOT NULL) FROM labs")
     censored = ctx.scalar(
         "SELECT count(*) FROM labs WHERE regexp_matches(trim(result_value), '^[<>]')")
 
@@ -69,6 +72,10 @@ def codes(ctx: Context) -> list[Finding]:
             "loinc_total": loinc_total,
             "parsed": parsed, "parsed_share": 100.0 * parsed / loinc_total,
             "empty": empty, "empty_share": 100.0 * empty / loinc_total,
+            "populated": populated, "resulted": resulted,
+            "loinc_resulted": 100.0 * loinc_have / resulted,
+            "cast_lost": populated - parsed,
+            "cast_lost_share": 100.0 * (populated - parsed) / populated,
             "censored": censored,
             "dup_pairs": dup_pairs, "dup_disagree": dup_disagree,
             "dup_share": 100.0 * dup_disagree / dup_pairs if dup_pairs else 0.0,
@@ -96,12 +103,16 @@ def codes(ctx: Context) -> list[Finding]:
                    "definitions rather than treated as unmapped diagnoses."),
         Para("Laboratory results are the opposite case. `result_value` is a text "
              "column: of {loinc_total:,} rows, {parsed:,} ({parsed_share:.1f}%) "
-             "parse as a number and {empty:,} ({empty_share:.1f}%) are empty. Among "
+             "parse as a number and {empty:,} ({empty_share:.1f}%) hold no value at "
+             "all. Those are nulls, not empty strings — 3.5 looks for the empty "
+             "string and finds none, so the two sections are measuring different "
+             "things and agree. Among "
              "the rest, {censored:,} are censored results carrying a comparator "
              "prefix, and the remainder are qualitative results, specimen "
              "descriptors, and administrative non-results. A LOINC code is present "
-             "on only {loinc_share:.1f}% of rows."),
-        Para("The declared key holds, but {dup_pairs:,} order-and-component pairs "
+             "on {loinc_share:.1f}% of rows, or {loinc_resulted:.1f}% of the "
+             "{resulted:,} that were resulted."),
+        Para("The key of 3.1 holds, but {dup_pairs:,} order-and-component pairs "
              "appear on more than one result line and {dup_disagree:,} of those "
              "({dup_share:.1f}%) carry disagreeing values. The data dictionary "
              "records the cause: a result may fail to link back to its original "
@@ -113,9 +124,11 @@ def codes(ctx: Context) -> list[Finding]:
                C("normalized", "after normalising", ",", align="right"),
                C("collapse", "collapsed", ",", align="right")], vocab),
         Para("**Implications for analysis.** A naive numeric cast on `result_value` "
-             "silently discards more than half the populated values and turns a "
+             "silently discards {cast_lost:,} of the {populated:,} populated values "
+             "— {cast_lost_share:.1f}%, very nearly half — and turns a "
              "left-censored result into a missing one rather than a bound. Join labs "
-             "on order, component *and* line number, or the duplicate lines will "
+             "on order *and* line number, which 3.1 shows is the key, rather than "
+             "on order and component, or the duplicate lines will "
              "multiply rows and pick a value arbitrarily. The categorical "
              "vocabularies barely collapse under normalisation, so grouping by them "
              "is safe after trimming.", role="implication"),

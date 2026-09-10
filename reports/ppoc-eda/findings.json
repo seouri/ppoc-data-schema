@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-10T14:22:52Z",
+  "generated_at": "2026-09-10T14:28:37Z",
   "parts": [
     {
       "findings": [
@@ -1832,6 +1832,8 @@
           ],
           "title": "Code systems, free text, and categorical hygiene",
           "values": {
+            "cast_lost": 7114971,
+            "cast_lost_share": 48.281543,
             "censored": 487168,
             "dup_disagree": 23679,
             "dup_pairs": 33879,
@@ -1842,6 +1844,7 @@
             "enc_bad_share": 0.99216399,
             "enc_distinct": 8029,
             "enc_filled": 14714503,
+            "loinc_resulted": 9.032296,
             "loinc_share": 7.8354535,
             "loinc_total": 17230681,
             "parsed": 7621449,
@@ -1849,7 +1852,9 @@
             "pl_bad": 39860,
             "pl_bad_share": 2.3315614,
             "pl_distinct": 4739,
-            "pl_filled": 1709584
+            "pl_filled": 1709584,
+            "populated": 14736420,
+            "resulted": 14947495
           }
         },
         {

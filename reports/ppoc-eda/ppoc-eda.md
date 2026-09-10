@@ -494,9 +494,9 @@ Diagnosis coding is almost entirely well-formed ICD-10. Of 14,714,503 filled enc
 
 These are proprietary placeholders the source EHR emits when a clinical term has no ICD-10 equivalent. They carry no diagnostic meaning and should be excluded from code-based cohort definitions rather than treated as unmapped diagnoses.
 
-Laboratory results are the opposite case. `result_value` is a text column: of 17,230,681 rows, 7,621,449 (44.2%) parse as a number and 2,494,261 (14.5%) are empty. Among the rest, 487,168 are censored results carrying a comparator prefix, and the remainder are qualitative results, specimen descriptors, and administrative non-results. A LOINC code is present on only 7.8% of rows.
+Laboratory results are the opposite case. `result_value` is a text column: of 17,230,681 rows, 7,621,449 (44.2%) parse as a number and 2,494,261 (14.5%) hold no value at all. Those are nulls, not empty strings — 3.5 looks for the empty string and finds none, so the two sections are measuring different things and agree. Among the rest, 487,168 are censored results carrying a comparator prefix, and the remainder are qualitative results, specimen descriptors, and administrative non-results. A LOINC code is present on 7.8% of rows, or 9.0% of the 14,947,495 that were resulted.
 
-The declared key holds, but 33,879 order-and-component pairs appear on more than one result line and 23,679 of those (69.9%) carry disagreeing values. The data dictionary records the cause: a result may fail to link back to its original order, which duplicates the record.
+The key of 3.1 holds, but 33,879 order-and-component pairs appear on more than one result line and 23,679 of those (69.9%) carry disagreeing values. The data dictionary records the cause: a result may fail to link back to its original order, which duplicates the record.
 
 **Categorical vocabularies before and after normalising case and internal whitespace**
 
@@ -506,7 +506,7 @@ The declared key holds, but 33,879 order-and-component pairs appear on more than
 | medications | med_simple_generic_name | 1,073 | 1,073 | 0 |
 | referrals | requested_specialty | 119 | 119 | 0 |
 
-**Implications for analysis.** A naive numeric cast on `result_value` silently discards more than half the populated values and turns a left-censored result into a missing one rather than a bound. Join labs on order, component *and* line number, or the duplicate lines will multiply rows and pick a value arbitrarily. The categorical vocabularies barely collapse under normalisation, so grouping by them is safe after trimming.
+**Implications for analysis.** A naive numeric cast on `result_value` silently discards 7,114,971 of the 14,736,420 populated values — 48.3%, very nearly half — and turns a left-censored result into a missing one rather than a bound. Join labs on order *and* line number, which 3.1 shows is the key, rather than on order and component, or the duplicate lines will multiply rows and pick a value arbitrarily. The categorical vocabularies barely collapse under normalisation, so grouping by them is safe after trimming.
 
 ### 3.7 Capture: measurement presence is not measurement occurrence
 
