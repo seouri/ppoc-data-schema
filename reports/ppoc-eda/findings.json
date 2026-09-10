@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-10T11:41:38Z",
+  "generated_at": "2026-09-10T12:24:26Z",
   "parts": [
     {
       "findings": [
@@ -4351,17 +4351,17 @@
                 {
                   "meaning": "how far children sit from one another",
                   "quantity": "between-child SD of patient means",
-                  "value": 0.91399925
+                  "value": 0.91396029
                 },
                 {
                   "meaning": "how much one child's channel moves",
                   "quantity": "within-child SD about a patient's own mean",
-                  "value": 0.4261863
+                  "value": 0.42532113
                 },
                 {
                   "meaning": "share of variance that is between children",
                   "quantity": "implied intraclass correlation",
-                  "value": 0.82140658
+                  "value": 0.82198953
                 },
                 {
                   "meaning": "correlation of successive values, 1,744,631 pairs",
@@ -4373,13 +4373,17 @@
           ],
           "title": "Within-child dependence in the height channel",
           "values": {
-            "between": 0.91399925,
-            "eff": 1.2174239,
-            "icc": 0.82140658,
-            "n_pat": 199727,
+            "between": 0.91396029,
+            "eff": 1.2165605,
+            "eff_pooled": 1.2024609,
+            "icc": 0.82198953,
+            "icc_pooled": 0.83162789,
+            "n_pat": 199717,
+            "n_val": 1944348,
             "pairs": 1744631,
             "rho": 0.92490437,
-            "within": 0.4261863
+            "within": 0.42532113,
+            "within_pooled": 0.41124239
           }
         },
         {
@@ -4405,7 +4409,7 @@
                     ]
                   }
                 ],
-                "title": "BMI categories"
+                "title": "Recorded BMI category"
               },
               "id": "fig-bmi-cat",
               "kind": "bar"
@@ -4418,6 +4422,7 @@
               "caption": "Recorded BMI categories",
               "columns": [
                 "category",
+                "band",
                 "visits",
                 "share",
                 "patients"
@@ -4425,24 +4430,28 @@
               "id": "t-bmi-cat",
               "rows": [
                 {
+                  "band": "0.00 to 4.99",
                   "category": "underweight",
                   "patients": 33608,
                   "share": 4.2755801,
                   "visits": 83602
                 },
                 {
+                  "band": "5.00 to 84.99",
                   "category": "normal",
                   "patients": 193723,
                   "share": 68.44948,
                   "visits": 1338418
                 },
                 {
+                  "band": "85.00 to 94.99",
                   "category": "overweight",
                   "patients": 84669,
                   "share": 14.33134,
                   "visits": 280226
                 },
                 {
+                  "band": "95.00 to 100.00",
                   "category": "obese",
                   "patients": 49998,
                   "share": 12.9436,
@@ -4455,12 +4464,13 @@
           "values": {
             "med": 9.7236568e-07,
             "n": 1955339,
+            "no_cat": 2,
             "obese_share": 12.9436,
-            "off": 0,
-            "off_share": 0.0,
             "over_share": 14.33134,
-            "p95": 3.0034123e-06,
-            "total": 1955337
+            "pat_any": 213053,
+            "pat_sum": 361998,
+            "total": 1955337,
+            "worst": 2.4821978e-05
           }
         }
       ],

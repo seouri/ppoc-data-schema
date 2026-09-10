@@ -943,39 +943,47 @@ A reference table for anyone who needs to know what ordinary looks like in this 
 
 ### 4.10 Within-child dependence in the height channel
 
-Repeated measurements of one child are not independent observations, and the size of that dependence decides how much information a visit count actually carries. Measured on the height z-score at age 2 or later, across 199,727 patients with at least two values.
+Repeated measurements of one child are not independent observations, and the size of that dependence decides how much information a visit count actually carries. Measured on the height z-score at age 2 or later — the boundary 5.8 justifies from the reference standard, and the one 4.5 and 4.9 also use — across 199,717 patients carrying 1,944,348 values between them, one per patient-day, with at least two each.
 
 **Variance components and serial correlation**
 
 | quantity | value | what it says |
 | --- | --- | --- |
 | between-child SD of patient means | 0.9140 | how far children sit from one another |
-| within-child SD about a patient's own mean | 0.4262 | how much one child's channel moves |
-| implied intraclass correlation | 0.8214 | share of variance that is between children |
+| within-child SD about a patient's own mean | 0.4253 | how much one child's channel moves |
+| implied intraclass correlation | 0.8220 | share of variance that is between children |
 | lag-1 autocorrelation | 0.9249 | correlation of successive values, 1,744,631 pairs |
 
-A child's height z-score is strongly self-similar: successive values correlate at 0.925, and 82.1% of the total variance is between children rather than within them. The design-effect consequence is blunt: in the limit of many measurements a child contributes about 1.2 independent observations, not one per visit, however many visits are recorded.
+Every row is measured on the same 1,944,348 values. The within-child SD is the root mean square of the per-patient SDs, which weights a child with two values like a child with forty; pooling by degrees of freedom instead gives 0.4112 and an intraclass correlation of 0.8316.
 
-**Implications for analysis.** Resample and model at the patient level, not the visit level: a visit-level standard error on any quantity aggregated across this panel will be far too small. And treat these as sample statistics rather than the parameters of a process that would generate them — a patient's mean carries residual variation as well as the child's own level, so the between-child SD of patient means overstates the underlying channel SD, while the sample SD within a positively autocorrelated series understates its marginal SD. Calibrate a generative model against these by simulation rather than by setting its parameters equal to them.
+A child's height z-score is strongly self-similar: successive values correlate at 0.925, and 82.2% of the total variance is between children rather than within them. The design-effect consequence is blunt: where the dependence is a persistent difference between children, a child contributes about 1.2 independent observations in the limit of many measurements, not one per visit, however many visits are recorded. The two weightings above bracket that at 1.20 to 1.22, so the figure is not sensitive to the choice.
+
+**Which dependence, though.** 1.2 is the limit for a persistent between-child level; it is not what the lag-1 correlation alone would imply. A purely serial process with no between-child component keeps accumulating information as a series lengthens, however high its lag-1 correlation, so the two rows of this table are not two measurements of the same thing and the limit follows from the variance split rather than from 0.925.
+
+**Implications for analysis.** Resample and model at the patient level, not the visit level: a visit-level standard error on any quantity aggregated across this panel will be far too small. And treat these as sample statistics rather than the parameters of a process that would generate them — a patient's mean carries residual variation as well as the child's own level, so the between-child SD of patient means overstates the underlying channel SD, while the sample SD within a positively autocorrelated series understates its marginal SD. Both biases raise the intraclass correlation, so they lower 1.2: read it as a floor on what a child contributes rather than an estimate of it. Calibrate a generative model against these by simulation rather than by setting its parameters equal to them.
 
 ### 4.11 BMI: recomputation and recorded categories
 
-BMI is the one derived channel that can be checked against its own inputs. Across 1,955,339 visits carrying a BMI together with both a weight and a height, recomputing weight in kilograms over height in metres squared gives a median absolute difference of 9.7e-07 and a 95th percentile of 3.0e-06 — floating-point noise, nothing more. 0 visits differ by more than 0.1. The channel is internally consistent, so a BMI here disagreeing with your own calculation means you used a different height or weight, not that the field is wrong.
+BMI is the one derived channel that can be checked against its own inputs, and both halves of it check out. Across 1,955,339 visits carrying a BMI together with both a weight and a height, recomputing weight in kilograms over height in metres squared differs from the distributed value by a median of 9.7e-07 and never by more than 2.5e-05 — floating-point noise, nothing more. The channel is internally consistent, so a BMI here disagreeing with your own calculation means you used a different height or weight, not that the field is wrong.
+
+The recorded category is the other half, and it is a coarsening of `bmi_percentile` rather than an independent judgement. Its boundaries are not documented in the extract, so they are read off the data below and then applied back to it: cutting the percentile at 5, 85 and 95 reproduces the distributed category on every one of the 1,955,337 categorised rows. The cut points are the conventional pediatric ones, and they are now checked rather than assumed.
 
 **Recorded BMI categories**
 
-| category | visits | share of categorised visits | distinct patients |
-| --- | --- | --- | --- |
-| underweight | 83,602 | 4.3% | 33,608 |
-| normal | 1,338,418 | 68.4% | 193,723 |
-| overweight | 280,226 | 14.3% | 84,669 |
-| obese | 253,091 | 12.9% | 49,998 |
+| category | bmi_percentile | visits | share of categorised visits | patients ever in it |
+| --- | --- | --- | --- | --- |
+| underweight | 0.00 to 4.99 | 83,602 | 4.3% | 33,608 |
+| normal | 5.00 to 84.99 | 1,338,418 | 68.4% | 193,723 |
+| overweight | 85.00 to 94.99 | 280,226 | 14.3% | 84,669 |
+| obese | 95.00 to 100.00 | 253,091 | 12.9% | 49,998 |
+
+The last column does not partition the cohort: a child's category moves across childhood, so a patient is counted in every category they ever record. The four values sum to 361,998 over the 213,053 patients who carry any category at all.
 
 *Figure — Distribution of recorded BMI categories. Rendered in `index.html` at `#fig-bmi-cat`.*
 
-The category is present only where a BMI percentile is, which 1.3 and 3.4 show means age 2 or later. Of 1,955,337 categorised visits, 14.3% are overweight and 12.9% obese.
+The category is present only where a BMI percentile is, which 1.3 and 3.4 show means age 2 or later — 2 visits carry a BMI with neither, which is why this table's total is 1,955,337 against the 1,955,339 above.
 
-**Implications for analysis.** This is a distribution over recorded visits, not a prevalence: children with more visits contribute more rows, BMI is missing selectively by age and encounter type, and 1.4 shows the cohort is not a population sample. Aggregate to the patient before quoting any proportion, state the age window, and prefer the continuous percentile to the category where the analysis allows it, since the cut points discard most of the information.
+**Implications for analysis.** This is a distribution over recorded visits, not a prevalence: children with more visits contribute more rows, BMI is missing selectively by age and encounter type, and 1.4 shows the cohort is not a population sample. Aggregate to the patient before quoting any proportion, and note that the patient column here cannot be aggregated that way — it counts children ever in a category, so a proportion needs a category at a stated age or over a stated window, which is a choice this report does not make for you. State the age window, and prefer the continuous percentile to the category where the analysis allows it: the cut points above are the whole of what the category knows, so it discards everything between them.
 
 ## 5. Clinical domains and cross-resource structure
 

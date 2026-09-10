@@ -76,37 +76,49 @@ def profile(ctx: Context) -> list[Finding]:
 
 @probe("anthro.dependence", "4.10")
 def dependence(ctx: Context) -> list[Finding]:
-    n_pat, between, within = ctx.one("""
+    # One population for every row of the table. The variance components used to
+    # be measured over rows while the autocorrelation was measured over
+    # deduplicated patient-days, so the four numbers described two panels; the
+    # difference was immaterial (ICC 0.8214 against 0.8220) but the caption said
+    # otherwise. Days, as 4.1, 4.4 and 4.5 also count them.
+    ctx.con.execute("""
+        CREATE OR REPLACE TEMP VIEW _hz AS
+        SELECT patient_id, age_in_days, min(height_z_score) AS z
+        FROM visits_augmented
+        WHERE height_z_score IS NOT NULL AND age_in_years >= 2
+        GROUP BY 1, 2 HAVING count(DISTINCT height_z_score) = 1""")
+    n_pat, n_val, between, within, within_pooled = ctx.one("""
         WITH per AS (
-            SELECT patient_id, avg(height_z_score) AS m,
-                   stddev_samp(height_z_score) AS s, count(*) AS n
-            FROM visits_augmented
-            WHERE height_z_score IS NOT NULL AND age_in_years >= 2
-            GROUP BY 1 HAVING count(*) >= 2)
-        SELECT count(*), stddev_samp(m), sqrt(avg(s * s)) FROM per""")
+            SELECT patient_id, avg(z) AS m, stddev_samp(z) AS s, count(*) AS n
+            FROM _hz GROUP BY 1 HAVING count(*) >= 2)
+        SELECT count(*), sum(n), stddev_samp(m), sqrt(avg(s * s)),
+               sqrt(sum(s * s * (n - 1)) / sum(n - 1))
+        FROM per""")
     pairs, rho = ctx.one("""
-        WITH s AS (
-            SELECT patient_id, age_in_days, min(height_z_score) AS z
-            FROM visits_augmented
-            WHERE height_z_score IS NOT NULL AND age_in_years >= 2
-            GROUP BY 1, 2 HAVING count(DISTINCT height_z_score) = 1),
-        l AS (SELECT z, lag(z) OVER w AS pz FROM s
-              WINDOW w AS (PARTITION BY patient_id ORDER BY age_in_days))
+        WITH l AS (SELECT z, lag(z) OVER w AS pz FROM _hz
+                   WINDOW w AS (PARTITION BY patient_id ORDER BY age_in_days))
         SELECT count(*), corr(z, pz) FROM l WHERE pz IS NOT NULL""")
     icc = between ** 2 / (between ** 2 + within ** 2)
+    icc_pooled = between ** 2 / (between ** 2 + within_pooled ** 2)
 
     f = Finding(
         id="anthro.dependence", part="4.10",
         title="Within-child dependence in the height channel",
-        values={"n_pat": n_pat, "between": between, "within": within,
-                "icc": icc, "pairs": pairs, "rho": rho,
-                "eff": 1.0 / icc},
+        values={"n_pat": n_pat, "n_val": n_val,
+                "between": between, "within": within,
+                "within_pooled": within_pooled,
+                "icc": icc, "icc_pooled": icc_pooled,
+                "pairs": pairs, "rho": rho,
+                "eff": 1.0 / icc, "eff_pooled": 1.0 / icc_pooled},
     )
     f.blocks = [
         Para("Repeated measurements of one child are not independent observations, "
              "and the size of that dependence decides how much information a visit "
              "count actually carries. Measured on the height z-score at age 2 or "
-             "later, across {n_pat:,} patients with at least two values."),
+             "later — the boundary 5.8 justifies from the reference standard, and "
+             "the one 4.5 and 4.9 also use — across {n_pat:,} patients carrying "
+             "{n_val:,} values between them, one per patient-day, with at least two "
+             "each."),
         Table("t-dependence", "Variance components and serial correlation",
               [C("quantity", "quantity"), C("value", "value", ".4f", align="right"),
                C("meaning", "what it says")],
@@ -117,13 +129,28 @@ def dependence(ctx: Context) -> list[Finding]:
                {"quantity": "implied intraclass correlation", "value": icc,
                 "meaning": "share of variance that is between children"},
                {"quantity": "lag-1 autocorrelation", "value": rho,
-                "meaning": f"correlation of successive values, {pairs:,} pairs"}]),
+                "meaning": f"correlation of successive values, {pairs:,} pairs"}],
+              note="Every row is measured on the same {n_val:,} values. The "
+                   "within-child SD is the root mean square of the per-patient SDs, "
+                   "which weights a child with two values like a child with forty; "
+                   "pooling by degrees of freedom instead gives {within_pooled:.4f} "
+                   "and an intraclass correlation of {icc_pooled:.4f}."),
         Para("A child's height z-score is strongly self-similar: successive values "
              "correlate at {rho:.3f}, and {icc:.1%} of the total variance is "
              "between children rather than within them. The design-effect "
-             "consequence is blunt: in the limit of many measurements a child "
-             "contributes about {eff:.1f} independent observations, not one per "
-             "visit, however many visits are recorded."),
+             "consequence is blunt: where the dependence is a persistent difference "
+             "between children, a child contributes about {eff:.1f} independent "
+             "observations in the limit of many measurements, not one per visit, "
+             "however many visits are recorded. The two weightings above bracket "
+             "that at {eff_pooled:.2f} to {eff:.2f}, so the figure is not sensitive "
+             "to the choice."),
+        Para("**Which dependence, though.** {eff:.1f} is the limit for a persistent "
+             "between-child level; it is not what the lag-1 correlation alone would "
+             "imply. A purely serial process with no between-child component keeps "
+             "accumulating information as a series lengthens, however high its "
+             "lag-1 correlation, so the two rows of this table are not two "
+             "measurements of the same thing and the limit follows from the "
+             "variance split rather than from {rho:.3f}.", role="method"),
         Para("**Implications for analysis.** Resample and model at the patient "
              "level, not the visit level: a visit-level standard error on any "
              "quantity aggregated across this panel will be far too small. And "
@@ -132,75 +159,117 @@ def dependence(ctx: Context) -> list[Finding]:
              "variation as well as the child's own level, so the between-child SD of "
              "patient means overstates the underlying channel SD, while the sample "
              "SD within a positively autocorrelated series understates its marginal "
-             "SD. Calibrate a generative model against these by simulation rather "
-             "than by setting its parameters equal to them.", role="method"),
+             "SD. Both biases raise the intraclass correlation, so they lower "
+             "{eff:.1f}: read it as a floor on what a child contributes rather than "
+             "an estimate of it. Calibrate a generative model against these by "
+             "simulation rather than by setting its parameters equal to them.",
+             role="method"),
     ]
     return [f]
 
 
 @probe("anthro.bmi", "4.11")
 def bmi(ctx: Context) -> list[Finding]:
-    n, med, p95, off = ctx.one("""
+    # The maximum is the quantity; the threshold count is kept as a guard, since a
+    # nonzero one would mean the sentence reporting the maximum is wrong.
+    n, med, worst, off = ctx.one("""
         WITH q AS (
             SELECT abs(bmi - weight_kg / pow(height_cm / 100.0, 2)) AS d
             FROM visits_augmented
             WHERE bmi IS NOT NULL AND weight_kg IS NOT NULL
               AND height_cm IS NOT NULL AND height_cm > 0)
-        SELECT count(*), quantile_cont(d, 0.5), quantile_cont(d, 0.95),
-               sum(CASE WHEN d > 0.1 THEN 1 ELSE 0 END) FROM q""")
+        SELECT count(*), quantile_cont(d, 0.5), max(d),
+               count(*) FILTER (WHERE d > 0.1) FROM q""")
+    if off:
+        raise ValueError(f"{off:,} visits recompute a BMI more than 0.1 from the "
+                         f"distributed one; the channel is not self-consistent")
 
-    total = ctx.scalar("SELECT count(*) FROM visits_augmented "
-                       "WHERE bmi_category IS NOT NULL")
+    total, pat_any, no_cat = ctx.one("""
+        SELECT count(*) FILTER (WHERE bmi_category IS NOT NULL),
+               count(DISTINCT patient_id) FILTER (WHERE bmi_category IS NOT NULL),
+               count(*) FILTER (WHERE bmi IS NOT NULL AND bmi_category IS NULL)
+        FROM visits_augmented""")
+
+    # The category is a coarsening of the percentile, so it is checkable the same
+    # way `bmi` itself is. The boundaries are read off the data rather than
+    # assumed, and then the rule is applied back to every row.
     cats = []
     for name in CATEGORIES:
-        v, p = ctx.one("SELECT count(*), count(DISTINCT patient_id) "
-                       f"FROM visits_augmented WHERE bmi_category = '{name}'")
+        v, p, lo, hi = ctx.one(
+            "SELECT count(*), count(DISTINCT patient_id), min(bmi_percentile), "
+            f"max(bmi_percentile) FROM visits_augmented WHERE bmi_category = '{name}'")
         cats.append({"category": name, "visits": v, "patients": p,
-                     "share": 100.0 * v / total})
-    flag_rows = []
-    for col, label in (("underweight_flag", "underweight"),
-                       ("obesity_flag", "obesity")):
-        n_flag = ctx.scalar(f"SELECT count(*) FROM visits_augmented WHERE {col} = 1")
-        flag_rows.append({"flag": col, "label": label, "visits": n_flag})
+                     "share": 100.0 * v / total,
+                     "band": f"{lo:.2f} to {hi:.2f}"})
+    edges = [c["category"] for c in cats]
+    rule = (f"CASE WHEN bmi_percentile < 5 THEN '{edges[0]}' "
+            f"WHEN bmi_percentile < 85 THEN '{edges[1]}' "
+            f"WHEN bmi_percentile < 95 THEN '{edges[2]}' ELSE '{edges[3]}' END")
+    cat_bad = ctx.scalar(
+        f"SELECT count(*) FROM visits_augmented WHERE bmi_category IS NOT NULL "
+        f"AND bmi_category <> {rule}")
+    if cat_bad:
+        raise ValueError(
+            f"the percentile cut points reproduce the category on all but "
+            f"{cat_bad:,} rows; the prose claims they reproduce it exactly")
 
     f = Finding(
         id="anthro.bmi", part="4.11",
         title="BMI: recomputation and recorded categories",
-        values={"n": n, "med": med, "p95": p95, "off": off,
-                "off_share": 100.0 * off / n, "total": total,
+        values={"n": n, "med": med, "worst": worst, "total": total,
+                "pat_any": pat_any, "no_cat": no_cat,
+                "pat_sum": sum(c["patients"] for c in cats),
                 "obese_share": next(c["share"] for c in cats if c["category"] == "obese"),
                 "over_share": next(c["share"] for c in cats
                                    if c["category"] == "overweight")},
     )
     f.blocks = [
         Para("BMI is the one derived channel that can be checked against its own "
-             "inputs. Across {n:,} visits carrying a BMI together with both a weight "
-             "and a height, recomputing weight in kilograms over height in metres "
-             "squared gives a median absolute difference of {med:.1e} and a 95th "
-             "percentile of {p95:.1e} — floating-point noise, nothing more. "
-             "{off:,} visits differ by more than 0.1. The channel is internally "
-             "consistent, so a BMI here "
-             "disagreeing with your own calculation means you used a different "
-             "height or weight, not that the field is wrong."),
+             "inputs, and both halves of it check out. Across {n:,} visits carrying "
+             "a BMI together with both a weight and a height, recomputing weight in "
+             "kilograms over height in metres squared differs from the distributed "
+             "value by a median of {med:.1e} and never by more than {worst:.1e} — "
+             "floating-point noise, nothing more. The channel is internally "
+             "consistent, so a BMI here disagreeing with your own calculation means "
+             "you used a different height or weight, not that the field is wrong."),
+        Para("The recorded category is the other half, and it is a coarsening of "
+             "`bmi_percentile` rather than an independent judgement. Its boundaries "
+             "are not documented in the extract, so they are read off the data "
+             "below and then applied back to it: cutting the percentile at 5, 85 "
+             "and 95 reproduces the distributed category on every one of the "
+             "{total:,} categorised rows. The cut points are the conventional "
+             "pediatric ones, and they are now checked rather than assumed."),
         Table("t-bmi-cat", "Recorded BMI categories",
-              [C("category", "category"), C("visits", "visits", ",", align="right"),
+              [C("category", "category"), C("band", "bmi_percentile"),
+               C("visits", "visits", ",", align="right"),
                C("share", "share of categorised visits", ".1f", "%", align="right"),
-               C("patients", "distinct patients", ",", align="right")], cats),
+               C("patients", "patients ever in it", ",", align="right")], cats,
+              note="The last column does not partition the cohort: a child's "
+                   "category moves across childhood, so a patient is counted in "
+                   "every category they ever record. The four values sum to "
+                   "{pat_sum:,} over the {pat_any:,} patients who carry any "
+                   "category at all."),
         Figure("fig-bmi-cat", "Distribution of recorded BMI categories", "bar",
                {"categories": [c["category"] for c in cats],
                 "series": [{"name": "visits", "values": [c["visits"] for c in cats]}],
-                "height": 240, "title": "BMI categories"},
-               alt="Category counts across underweight, normal, overweight and obese."),
+                "height": 240, "title": "Recorded BMI category"},
+               alt="Most categorised visits are normal; overweight and obese are "
+                   "each about an eighth."),
         Para("The category is present only where a BMI percentile is, which 1.3 and "
-             "3.4 show means age 2 or later. Of {total:,} categorised visits, "
-             "{over_share:.1f}% are overweight and {obese_share:.1f}% obese."),
+             "3.4 show means age 2 or later — {no_cat:,} visits carry a BMI with "
+             "neither, which is why this table's total is {total:,} against the "
+             "{n:,} above."),
         Para("**Implications for analysis.** This is a distribution over recorded "
              "visits, not a prevalence: children with more visits contribute more "
              "rows, BMI is missing selectively by age and encounter type, and 1.4 "
              "shows the cohort is not a population sample. Aggregate to the patient "
-             "before quoting any proportion, state the age window, and prefer the "
-             "continuous percentile to the category where the analysis allows it, "
-             "since the cut points discard most of the information.",
-             role="implication"),
+             "before quoting any proportion, and note that the patient column here "
+             "cannot be aggregated that way — it counts children ever in a "
+             "category, so a proportion needs a category at a stated age or over a "
+             "stated window, which is a choice this report does not make for you. "
+             "State the age window, and prefer the continuous percentile to the "
+             "category where the analysis allows it: the cut points above are the "
+             "whole of what the category knows, so it discards everything between "
+             "them.", role="implication"),
     ]
     return [f]
