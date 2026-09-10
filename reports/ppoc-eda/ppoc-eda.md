@@ -593,9 +593,13 @@ Section 3.1 shows that a patient-day can carry more than one visit. Where those 
 
 Spread columns are in each channel's own unit and describe only the disagreeing days, not the panel.
 
-The height spread is the notable one. A median disagreement of 3.17 cm between two heights recorded for the same child on the same day is far larger in relative terms than the weight equivalent, and it is the size of difference expected when recumbent length and standing height are mixed, or when one value is carried from an earlier note. Section 4.5 finds the same effect across the length-to-height transition age, seen there across months rather than within a day.
+The height spread is the notable one. A median disagreement of 3.17 cm between two heights recorded for the same child on the same day is far larger in relative terms than the weight equivalent.
 
-**Implications for analysis.** These days need a tie rule chosen before the analysis, not left to whatever order the query returns. Taking the minimum, the maximum, the mean, or the first row are all defensible and they give different answers; what is not defensible is not knowing which one you took. Deduplicate the patient-day before any window function, since 4.8 shows the derivation layer's own ambiguity on exactly these rows.
+**It is not the length-to-height transition, which is the first explanation to reach for.** 4.5 locates that transition between two and three years, and mixing the two protocols on one day would concentrate the disagreements there. They are not concentrated there: 0.030% of patient-days in the transition window carry two heights that disagree, against 0.035% before it and 0.019% after. The largest group is the one the explanation cannot cover at all — 542 of the 942 disagreeing days fall under age two, where both values would have been recumbent lengths. What does change with age is the size rather than the frequency: a median of 1.91 cm under two against 6.34 cm from three, which is what a fixed relative error on a growing child looks like. A value carried from an earlier note remains a candidate; this report cannot test it.
+
+The head-circumference row needs 4.7 beside it. Its maximum is not two people measuring differently: 30 of the 837 disagreeing days hold a value above 65 cm, which 4.7 shows is an inch-to-centimetre conversion applied twice. Among the days whose values are all plausible the median spread is 0.50 cm, and that is the number to read as a recording disagreement.
+
+**Implications for analysis.** These days need a tie rule chosen before the analysis, not left to whatever order the query returns. Taking the minimum, the maximum, the mean, or the first row are all defensible and they give different answers; what is not defensible is not knowing which one you took. Deduplicate the patient-day before any window function, since 4.8 shows the derivation layer's own ambiguity on exactly these rows. Note that 4.5 takes the strongest rule available and drops these days from its panel entirely, which is one defensible answer and not the only one.
 
 ### 3.9 Counting diagnosis codes: ICD-10 is a hierarchy
 

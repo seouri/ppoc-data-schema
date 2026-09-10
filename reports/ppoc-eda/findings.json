@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-10T15:00:55Z",
+  "generated_at": "2026-09-10T15:06:29Z",
   "parts": [
     {
       "findings": [
@@ -2299,11 +2299,22 @@
           ],
           "title": "Same-day measurements that disagree",
           "values": {
+            "after_med": 6.3375,
+            "after_rate": 0.019176286,
+            "before_med": 1.905,
+            "before_n": 542,
+            "before_rate": 0.035450069,
+            "during_n": 68,
+            "during_rate": 0.029765162,
             "h_disagree": 942,
             "h_max": 34.925,
             "h_median": 3.175,
             "h_multi": 2958,
-            "h_share": 31.845842
+            "h_share": 31.845842,
+            "hc_days": 837,
+            "hc_hi": 65.0,
+            "hc_in_median": 0.5,
+            "hc_out": 30
           }
         },
         {
