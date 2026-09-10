@@ -100,7 +100,7 @@ TOPICS: list[tuple[str, str, str | None]] = [
 # must still appear in the data report; if it does not, that file has drifted.
 QUOTED_FIGURES = [
     ("0.925", "4.10", "lag-1 height-z autocorrelation"),
-    ("0.821", "4.10", "intraclass correlation"),
+    ("0.822", "4.10", "intraclass correlation"),
     ("1.2", "4.10", "independent observations per child in the limit"),
     ("35,907", "5.6", "patients carrying growth_dx_flag"),
     ("0.027", "5.6", "median age at growth diagnosis"),
