@@ -62,7 +62,10 @@ TOPICS: list[tuple[str, str, str | None]] = [
     ("§6.5", "transcription-error signatures", r"Transcription-error signatures"),
     ("§6.6", "same-day duplicate encounters", r"carry more than one visit"),
     ("§6.6", "same-day measurement disagreement", r"Same-day measurements that disagree"),
-    ("§6.7", "delta and velocity reproduction", r"interval rule, inferred"),
+    # Was "interval rule, inferred", which was the old table caption. 4.8 now
+    # states a rule per channel and evidences it, so the sentinel points at the
+    # phrase the analysis cannot lose rather than at one caption's wording.
+    ("§6.7", "delta and velocity reproduction", r"interval rule"),
     ("§6.8", "measurement presence is not occurrence", r"presence is not measurement occurrence"),
     ("§6.9", "cross-resource temporal integrity", r"Ordering and range checks"),
     ("§6.9", "visit linkage incompleteness", r"populated but unresolved"),
