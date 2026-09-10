@@ -675,7 +675,7 @@ The review range is a wide screening band, chosen to catch values no measurement
 
 ### 4.4 Transcription-error signatures in the typed fields
 
-**Method.** Each measurement is anchored by linear interpolation between the same child's previous and next measurement. Both neighbours must themselves be plausible and span no more than four years, so a bad neighbour cannot manufacture an anomaly. A height is anomalous more than 3 inches from that anchor, a weight more than 50% from it. A mechanism *reconciles* an anomaly when applying it to the recorded value lands back at the anchor.
+**Method.** Each measurement is anchored by linear interpolation between the same child's previous and next measurement. Both neighbours must themselves be plausible and span no more than four years, so a bad neighbour cannot manufacture an anomaly. A height is anomalous more than 3 inches from that anchor, a weight more than 50% from it. A mechanism *reconciles* an anomaly when applying it to the recorded value lands back at the anchor — within 1 inch for height, and within the larger of 5% and 2 ounces for weight. That window is wide, deliberately, because a transcription error need not be exact; the cost is that two mechanisms can land in the same place, and the dropped-digit row below is where that happens.
 
 **The null.** Each anomaly's anchor is replaced by the recorded value plus a deviation drawn from another anomaly in the same year-of-age band, 20 times. That preserves the distribution of deviations exactly and destroys only the arithmetic relationship between the recorded digits and the anchor, which is the thing under test. A mechanism that reconciles anomalies no more often than it reconciles these scrambled pairs has no evidence behind it, however many hits it returns.
 
@@ -697,7 +697,7 @@ The review range is a wide screening band, chosen to catch values no measurement
 
 Adjacent digit transposition — the classic keying error, and the one most often assumed — reconciles fewer height anomalies than chance alone. The unit error is real and it is directional: a centimetre value in the inch field is enriched, while the arithmetically opposite reading sits at or below the null. That asymmetry is what a one-way data-entry confusion looks like; a spurious mechanism would be symmetric.
 
-The dropped-digit row does not survive inspection, and it is worth showing why. Inserting a digit into a two-digit inch value always produces a three-digit one, which is never a plausible height, so the class can only fire on a value with a single-digit integer part. Among the 6,619 height anomalies whose integer part has two or more digits it reconciles 0. Its entire 5.47% is the whole-foot family reached by another route.
+The dropped-digit row is mostly borrowed from the row above it, and it is worth showing why. Inserting a digit into a two-digit inch value always produces a three-digit one, which is never a plausible height, so the class can only fire on a value with a single-digit integer part. Among the 6,619 height anomalies whose integer part has two or more digits it reconciles 0. That leaves the short values, and there the whole-foot class has already claimed most of them: of the 407 anomalies this class reconciles, 315 are whole-foot entries too, which the one-inch window above makes almost unavoidable. What is left is 92 anomalies against a null of 37 — still enriched 2.5 times, so a dropped digit is real on this channel, but it accounts for 92 of the 7,443 anomalies rather than the 407 the row reads as. An overlapping class is not a spurious one; it is one whose headline belongs to its neighbour.
 
 Two clusters are visible without any anchor at all. 1,371 visits record a `height_in` of 1 to 6 as an exact integer, median age 5.2 years — a height of 3 or 4 for a child three or four feet tall. And 143 record a `height_in` between 90 and 115, which read as inches is implausible and read as centimetres is an ordinary preschool stature at a median age of 3.1 years. The recording grid decides between the two readings: 35.0% of that cluster falls on the quarter-inch grid against 80.0% of all heights, so those values never passed through the inch-typing workflow.
 
@@ -716,20 +716,24 @@ Two clusters are visible without any anchor at all. 1,371 visits record a `heigh
 | one digit omitted | 927 | 14.96% | 8.63% | 1.7x |
 | one digit wrong (calibration class) | 795 | 12.83% | 25.39% | 0.5x |
 
-Transposition is again below chance, so neither channel shows evidence of digit swapping. A misplaced decimal point, which the height channel does not show at all, is the dominant weight artifact: 1,208 anomalies at 17 times the null rate, the strongest enrichment measured anywhere in this report. An ounce value has more digits than an inch value and no natural decimal point, so a factor of ten is both easy to key and hard to notice.
+Transposition is again below chance, so neither channel shows evidence of digit swapping. A misplaced decimal point, which the height channel does not show at all, is the dominant weight artifact: 1,208 anomalies at 17 times the null rate, the strongest enrichment against a null anywhere in this report. An ounce value has more digits than an inch value and no natural decimal point, so a factor of ten is both easy to key and hard to notice.
 
-The calibration row is why the null is not optional. Allowing any single digit to be wrong reconciles about half of all height anomalies and reconciles almost exactly as many randomly paired values. Reported without a null it would look like the largest finding here.
+The dropped-digit row does **not** reduce the same way on this channel, and the height argument does not transfer: an ounce value has three or four digits, so inserting one can still land on a plausible weight. Of the 927 weight anomalies the class reconciles, 642 are claimed by no better-evidenced mechanism, against 476 expected under the null — a ratio of 1.3. The class is weaker here than the 927 in the table suggests, and weaker than the height residual, but it is not disposed of by the argument that reduces the height row.
+
+The calibration row is why the null is not optional, and the two channels show why in opposite directions. Allowing any single digit to be wrong reconciles 54% of height anomalies against a 50% null, and 13% of weight anomalies against 25% — barely above chance on one channel and well below it on the other. Reported without a null the height row would look like the largest finding here.
 
 **How strong is the transposition negative?** Only as strong as the share of transpositions the anomaly gate could have caught. Applying every adjacent digit swap to a sample of measurements in the testable interior gives that share directly: 69.7% of height swaps would displace a value past the gate, against 31.6% of weight swaps. The height negative is well powered; the weight negative rules out only large swaps, since a four-digit ounce value can absorb a swap without moving far.
 
 **What the mechanisms account for**
 
-| channel | anomalies | a named mechanism fits | only the calibration class | nothing fits |
+| channel | anomalies | an enriched mechanism fits | only the calibration class | nothing beyond chance fits |
 | --- | --- | --- | --- | --- |
-| height | 7,443 | 939 | 3,989 | 2,515 |
-| weight | 6,196 | 1,987 | 742 | 3,467 |
+| height | 7,443 | 869 | 4,011 | 2,563 |
+| weight | 6,196 | 1,927 | 764 | 3,505 |
 
-**Implications for analysis.** Digit transposition can be dropped from the checklist for this extract at the magnitude that displaces a measurement from its own trajectory; for weight the same test is only about a third sensitive, so a small swap is not ruled out. Unit confusion and decimal placement do matter, and both are cheap to screen because both produce values implausible on their face. Bound `height_in` and `weight_oz` before any conversion, and check the recording grid rather than the value alone — the grid separates a tall adolescent from a centimetre in the wrong field where magnitude cannot. Note also that 1,371 of the whole-foot entries and 143 of the centimetre cluster already carry a null `height_cm`: the derived layer's own bound removes them as a side effect, so anyone reading the derived channels is protected and anyone reading the raw ones is not.
+Only classes reconciling more than their own null count as explanations here, so the first column does not contradict the tables above. Excluded on that test: inch value where a centimetre is expected, decimal point misplaced, adjacent digit transposition for height, and gram value in the ounce field, adjacent digit transposition for weight. A row in the last column may still have had one of those fire on it; a class at chance explains nothing it happens to fit.
+
+**Implications for analysis.** Digit transposition can be dropped from the checklist for this extract at the magnitude that displaces a measurement from its own trajectory; for weight the same test is only about a third sensitive, so a small swap is not ruled out. Unit confusion and decimal placement do matter, and both are cheap to screen because both produce values implausible on their face. Bound `height_in` and `weight_oz` before any conversion, and check the recording grid rather than the value alone — the grid separates a tall adolescent from a centimetre in the wrong field where magnitude cannot. Note also that 1,371 of the whole-foot entries and 143 of the centimetre cluster already carry a null `height_cm` — every value in both clusters: the derived layer's own bound removes them as a side effect, so anyone reading the derived channels is protected and anyone reading the raw ones is not.
 
 ### 4.5 Repeated measurements: zero growth and apparent height loss
 
@@ -844,24 +848,58 @@ This one defect explains most of the damage. Of 16,663 visits with an absolute h
 
 ### 4.8 The distributed delta and velocity fields
 
-The augmented visit layer distributes `delta_height_cm`, `delta_age_in_days_height`, and the velocity fields derived from them. These are **not** a lag over successive measurements, and reading them as one is the error this subsection exists to prevent. For each measurement the pipeline walks backwards to the most recent earlier measurement whose age gap meets an age-dependent minimum, skipping every measurement in between.
+The augmented visit layer distributes `delta_height_cm`, `delta_weight_kg`, their two interval columns, and the velocity fields derived from them. These are **not** a lag over successive measurements, and reading them as one is the error this subsection exists to prevent. For each measurement the pipeline walks backwards to the most recent earlier measurement whose age gap meets an age-dependent minimum, skipping every measurement in between.
 
-**The interval rule, inferred from the data**
+**Height and weight do not share a rule.** The minimum interval is shorter for weight in every band, which makes sense of a channel measured at nearly every visit, and it means the height rule carried across to the weight columns recovers the interval on 1,671,865 of 5,754,032 rows — 29%, against the 100% its own rule reaches.
 
-| age band | condition on current age | minimum interval |
-| --- | --- | --- |
-| birth to 12 months | up to 365 days | 90 days |
-| 1 to 2 years | up to 730 days | 180 days |
-| 2 to 12 years | up to 4380 days | 335 days |
-| 13 years and over | beyond 4380 days | 180 days |
+**The interval rule for each channel, and what pins it**
 
-Applying that rule reproduces the distributed fields. Across 2,786,770 visits carrying a nonmissing `delta_height_cm`, the recomputed age gap matches the distributed one on 2,786,770 rows (100.00%), the recomputed delta matches within one hundredth of a centimetre on 2,786,432 rows (99.988%), and the recomputed velocity matches on 99.68% of rows. A naive lag over successive height-bearing visits matches only 1,218,842 rows (43.7%) — which is what makes these fields look unreproducible when the rule is not known.
+| age band | height minimum | shortest height gap seen | weight minimum | shortest weight gap seen |
+| --- | --- | --- | --- | --- |
+| birth to 12 months | 90 days | 90 days | 30 days | 30 days |
+| 1 to 2 years | 180 days | 180 days | 90 days | 90 days |
+| 2 to 12 years | 335 days | 335 days | 180 days | 180 days |
+| 13 years and over | 180 days | 180 days | 180 days | 180 days |
+
+The rules were recovered rather than documented, so the evidence is beside them: inside each band the shortest interval the pipeline ever emits is exactly the minimum, which pins the floor from below. A floor the data never reach would not be identified at all, and none here is.
+
+Two features of the table are worth stating before the check, because both look like errors and neither is. The height minimum rises to 335 days through mid-childhood and then falls back to 180 from 13, so adolescent velocities are computed over roughly half the window that mid-childhood ones are — the reversal is the pipeline's, not a transcription slip here. And the boundaries are identified only to the nearest interval the data actually contain: a rule stated in days is confirmed by reproduction, not by having excluded every neighbouring value.
+
+Applying each rule reproduces that channel's fields. The recomputed age gap matches the distributed one on every row of both channels, and the population is not a subset chosen to make that true: the rule finds an earlier measurement for every row the pipeline gave a delta to, and for no other.
+
+**Reproducing each channel, by what a recomputation starts from**
+
+| channel | rows with a delta | interval matches | delta matches | velocity, from the measurement | velocity, from the published columns | delta under a naive lag |
+| --- | --- | --- | --- | --- | --- | --- |
+| height (cm) | 2,786,770 | 100.00% | 99.988% | 99.68% | 72.3% | 43.7% |
+| weight (kg) | 5,754,032 | 100.00% | 99.987% | 99.67% | 53.1% | 36.4% |
+
+Deltas match within one hundredth of a unit. The last column is the reading this section exists to rule out — a difference over successive measurement-bearing visits.
 
 *Figure — The most common recorded measurement intervals. Rendered in `index.html` at `#fig-delta-gap`.*
 
-Two residuals are worth recording. 372,482 rows differ by exactly one hundredth of a centimetre, because the pipeline rounds half to even while this check rounds half away from zero; heights come from a quarter-inch grid, so exact halfway cases are common rather than rare. Only 338 rows (0.012%) differ by more than that, and they sit on the duplicate patient-days of 3.1, where which earlier height was used is ambiguous.
+**The two published columns do not regenerate the third.** A reader holds `delta_height_cm` and `delta_age_in_days_height`, not the measurement behind them, and dividing one by the other recovers 2,015,006 of 2,786,770 velocities — 72.3%, against 99.68% when the unrounded difference is taken from `height_cm` instead. The delta is published rounded to two decimals and the velocity is not computed from the rounded value. Weight behaves the same way, at 53.1%. So the interval rule alone is not enough to recompute a velocity: the unrounded difference is needed too, and it is not distributed.
 
-**Implications for analysis.** The velocity channels are usable as distributed, which a distributional summary alone could not establish. What must travel with them is the definition: a velocity here is computed over an interval of at least 90 to 335 days depending on age, not between adjacent visits, so it is already smoothed relative to a visit-to-visit rate and cannot be compared with one. Any recomputation, and any synthetic series carrying a velocity, must use the same rule or the two are not on the same scale. The rounding to two decimals is part of what the distributed values are.
+**The year is 365 days, not 365.25.** Ages elsewhere in this extract convert at 365.25 and 5.8 says so explicitly; the velocity does not. The constant is worth more than a footnote because it is not recoverable by inspection — using 365.25 on the published columns drops the match from 72.3% to 40.1%, which is far enough from either figure to look like a different definition rather than a rounding choice.
+
+Three residuals, and they are different in kind. 372,482 height rows differ from the recomputed delta by exactly one hundredth of a centimetre and are *inside* the matching tolerance above, because the pipeline rounds half to even while this check rounds half away from zero; heights come from a quarter-inch grid, so exact halfway cases are common rather than rare. 338 rows (0.012%) fall outside it, and every one of them sits on a patient-day carrying more than one height, where which earlier value was used is ambiguous; 3.8 measures how far those pairs sit apart. The third is the velocity's own: 8,801 rows fail the velocity check and 8,463 of them (96%) have a delta that matched, so the velocity residual is very nearly disjoint from the delta residual rather than a consequence of it.
+
+**The velocity z-scores are a family of four, and the choice between them is not free.** The layer publishes the height velocity against 4 different pubertal-onset references, each with a matching percentile column, and nothing else in this report validates them.
+
+**The height-velocity z-score references**
+
+| reference | column | values |
+| --- | --- | --- |
+| no pubertal onset | `height_velocity_z_score` | 1,127,289 |
+| earlier pubertal onset | `height_velocity_z_score_ep` | 977,101 |
+| average pubertal onset | `height_velocity_z_score_ap` | 960,949 |
+| later pubertal onset | `height_velocity_z_score_lp` | 961,074 |
+
+Each has a `height_velocity_percentile` twin with the same population.
+
+On the 960,949 visits carrying all three pubertal variants, the spread between the highest and lowest is a median of 0.89 z and 2.63 at the 95th percentile — larger than most contrasts this report measures, for the same child at the same visit. A further 1,659,481 visits carry a velocity with no velocity z-score at all. Which reference a result was computed against therefore has to be stated, and results computed against different ones cannot be pooled.
+
+**Implications for analysis.** The delta and interval channels are usable as distributed, which a distributional summary alone could not establish. What must travel with them is the whole definition, and it has four parts: the channel's own interval rule, the 365-day year, the fact that the velocity divides the *unrounded* difference rather than the published delta, and the rounding of both to two decimals. Carry fewer than four and a recomputation disagrees — by a little if the rounding is missed, by a quarter of the rows if the published delta is divided, by more if the year is wrong. A velocity here is computed over an interval of at least 90 to 335 days depending on age and channel, not between adjacent visits, so it is already smoothed relative to a visit-to-visit rate and cannot be compared with one. Any synthetic series carrying a velocity must use the same rule or the two are not on the same scale. For the velocity z-scores, pick a pubertal-onset reference deliberately and say which.
 
 ### 4.9 Age- and sex-stratified growth profile
 
@@ -1960,7 +1998,7 @@ One row per artifact, gathered from the findings that measured them. The class s
 | Apparent height loss from the recording grid on a flat trajectory | capture | 0.66% of pairs over a year apart, falling to 0.083% at ages 2 to 10 | Not a defect — do not filter it as an outlier | 4.5 |
 | Height z-score truncated above at +3 while the lower tail runs to -5 | derivation | 21 visits at or above +3 where roughly 15,800 would be expected | Yes — recompute from the retained raw height | 4.6 |
 | Head circumference passed through an inch-to-centimetre conversion a second time | derivation | 13,467 visits, 90% of all out-of-range values | Yes — divide by 2.54 before applying a plausible range, rather than deleting | 4.7 |
-| Velocity computed over an age-dependent minimum interval, not between adjacent visits | derivation | 99.99% reproduced under the interval rule against 43.7% under a naive lag | Not a defect — carry the interval rule alongside the field | 4.8 |
+| Velocity computed over an age-dependent minimum interval, not between adjacent visits | derivation | 99.99% of height deltas reproduced under the interval rule against 43.7% under a naive lag; the two published columns regenerate only 72.3% of the velocity | Not a defect — carry the interval rule, the year length and the unrounded measurement alongside the field | 4.8 |
 | Diagnosis label precedes the growth trajectory it would be predicted from | selection | 51% of labelled patients have no height recorded before their diagnosis | No — use a different label or a different index date | 5.9 |
 | A derived flag that is disjoint from the diagnosis flag by construction | derivation | healthy_flag is set for 0.0% of growth-diagnosed patients | Yes — define the negative class explicitly instead | 5.10 |
 | Treatment and workup records reveal the diagnosis, and date it a decade later than the code | capture | growth hormone is 5.1 times enriched for the label; its median order age is 10.8 years against 0.027 for the code | Yes — exclude them as features, or index on them instead | 5.11 |

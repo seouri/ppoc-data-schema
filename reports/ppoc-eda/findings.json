@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-10T00:13:38Z",
+  "generated_at": "2026-09-10T01:06:44Z",
   "parts": [
     {
       "findings": [
@@ -3200,24 +3200,25 @@
               "id": "t-acct",
               "rows": [
                 {
-                  "cal": 3989,
+                  "cal": 4011,
                   "channel": "height",
                   "n": 7443,
-                  "named": 939,
-                  "none": 2515
+                  "named": 869,
+                  "none": 2563
                 },
                 {
-                  "cal": 742,
+                  "cal": 764,
                   "channel": "weight",
                   "n": 6196,
-                  "named": 1987,
-                  "none": 3467
+                  "named": 1927,
+                  "none": 3505
                 }
               ]
             }
           ],
           "title": "Transcription-error signatures in the typed fields",
           "values": {
+            "clusters_all": " — every value in both clusters",
             "cm_age": 3.138,
             "cm_grid": 34.965035,
             "cm_live": 143,
@@ -3226,27 +3227,44 @@
             "feet_live": 1371,
             "feet_n": 1371,
             "grid_base": 80.011215,
-            "h_cal": 3989,
+            "h_cal": 4011,
+            "h_cal_null": 50.154508,
+            "h_cal_share": 54.064221,
             "h_multi": 6619,
             "h_multi_hit": 0,
             "h_n": 7443,
-            "h_named": 939,
-            "h_none": 2515,
+            "h_named": 869,
+            "h_none": 2563,
             "h_omit": 407,
+            "h_omit_alone": 92,
+            "h_omit_alone_ratio": 2.4932249,
+            "h_omit_feet": 315,
+            "h_omit_null": 36.9,
             "h_omit_share": 5.4682252,
+            "h_rejected": "inch value where a centimetre is expected, decimal point misplaced, adjacent digit transposition",
             "h_sens": 69.703956,
             "h_sens_n": 200000,
             "hdev": 3.0,
+            "htol": 1.0,
             "reps": 20,
-            "w_cal": 742,
+            "w_cal": 764,
+            "w_cal_null": 25.388154,
+            "w_cal_share": 12.830859,
             "w_n": 6196,
-            "w_named": 1987,
-            "w_none": 3467,
+            "w_named": 1927,
+            "w_none": 3505,
+            "w_omit": 927,
+            "w_omit_alone": 642,
+            "w_omit_alone_ratio": 1.3498738,
+            "w_omit_null": 475.6,
+            "w_rejected": "gram value in the ounce field, adjacent digit transposition",
             "w_sens": 31.625162,
             "w_sens_n": 200000,
             "w_shift": 1208,
             "w_shift_ratio": 17.244825,
-            "wdev": 50.0
+            "wdev": 50.0,
+            "wtol": 5.0,
+            "wtol_floor": 2.0
           }
         },
         {
@@ -3901,8 +3919,8 @@
           "artifact": {
             "kind": "derivation",
             "name": "Velocity computed over an age-dependent minimum interval, not between adjacent visits",
-            "recoverable": "Not a defect — carry the interval rule alongside the field",
-            "scale": "99.99% reproduced under the interval rule against 43.7% under a naive lag"
+            "recoverable": "Not a defect — carry the interval rule, the year length and the unrounded measurement alongside the field",
+            "scale": "99.99% of height deltas reproduced under the interval rule against 43.7% under a naive lag; the two published columns regenerate only 72.3% of the velocity"
           },
           "figures": [
             {
@@ -3944,50 +3962,145 @@
           "part": "4.8",
           "tables": [
             {
-              "caption": "The interval rule, inferred from the data",
+              "caption": "The interval rule for each channel, and what pins it",
               "columns": [
                 "band",
-                "condition",
-                "gap"
+                "h_min",
+                "h_seen",
+                "w_min",
+                "w_seen"
               ],
               "id": "t-rule",
               "rows": [
                 {
                   "band": "birth to 12 months",
-                  "condition": "up to 365 days",
-                  "gap": 90
+                  "h_min": 90,
+                  "h_seen": 90,
+                  "w_min": 30,
+                  "w_seen": 30
                 },
                 {
                   "band": "1 to 2 years",
-                  "condition": "up to 730 days",
-                  "gap": 180
+                  "h_min": 180,
+                  "h_seen": 180,
+                  "w_min": 90,
+                  "w_seen": 90
                 },
                 {
                   "band": "2 to 12 years",
-                  "condition": "up to 4380 days",
-                  "gap": 335
+                  "h_min": 335,
+                  "h_seen": 335,
+                  "w_min": 180,
+                  "w_seen": 180
                 },
                 {
                   "band": "13 years and over",
-                  "condition": "beyond 4380 days",
-                  "gap": 180
+                  "h_min": 180,
+                  "h_seen": 180,
+                  "w_min": 180,
+                  "w_seen": 180
+                }
+              ]
+            },
+            {
+              "caption": "Reproducing each channel, by what a recomputation starts from",
+              "columns": [
+                "channel",
+                "n",
+                "gap",
+                "delta",
+                "vel_src",
+                "vel_pub",
+                "lag1"
+              ],
+              "id": "t-repro",
+              "rows": [
+                {
+                  "channel": "height (cm)",
+                  "delta": 99.987871,
+                  "gap": 100.0,
+                  "lag1": 43.736727,
+                  "n": 2786770,
+                  "vel_pub": 72.306147,
+                  "vel_src": 99.684186
+                },
+                {
+                  "channel": "weight (kg)",
+                  "delta": 99.987418,
+                  "gap": 100.0,
+                  "lag1": 36.449189,
+                  "n": 5754032,
+                  "vel_pub": 53.057108,
+                  "vel_src": 99.673151
+                }
+              ]
+            },
+            {
+              "caption": "The height-velocity z-score references",
+              "columns": [
+                "reference",
+                "column",
+                "values"
+              ],
+              "id": "t-vel-z",
+              "rows": [
+                {
+                  "column": "`height_velocity_z_score`",
+                  "reference": "no pubertal onset",
+                  "values": 1127289
+                },
+                {
+                  "column": "`height_velocity_z_score_ep`",
+                  "reference": "earlier pubertal onset",
+                  "values": 977101
+                },
+                {
+                  "column": "`height_velocity_z_score_ap`",
+                  "reference": "average pubertal onset",
+                  "values": 960949
+                },
+                {
+                  "column": "`height_velocity_z_score_lp`",
+                  "reference": "later pubertal onset",
+                  "values": 961074
                 }
               ]
             }
           ],
           "title": "The distributed delta and velocity fields",
           "values": {
-            "age_match": 2786770,
-            "age_share": 100.0,
-            "lag1": 1218842,
-            "lag1_share": 43.736727,
-            "n": 2786770,
-            "off": 338,
-            "off_share": 0.012128737,
-            "round_only": 372482,
-            "vel_share": 99.684186,
-            "within": 2786432,
-            "within_share": 99.987871
+            "cross": 1671865,
+            "cross_share": 29.055539,
+            "h_gap_share": 100.0,
+            "h_lag1": 1218842,
+            "h_lag1_share": 43.736727,
+            "h_mid": 335,
+            "h_min_hi": 335,
+            "h_min_lo": 90,
+            "h_n": 2786770,
+            "h_off": 338,
+            "h_off_dup_clause": ", and every one of them sits on a patient-day carrying more than one height",
+            "h_off_share": 0.012128737,
+            "h_round_only": 372482,
+            "h_teen": 180,
+            "h_vel_alt_share": 40.051637,
+            "h_vel_off": 8801,
+            "h_vel_off_delta_ok": 8463,
+            "h_vel_off_delta_share": 96.159527,
+            "h_vel_pub": 2015006,
+            "h_vel_pub_share": 72.306147,
+            "h_vel_src_share": 99.684186,
+            "h_within_share": 99.987871,
+            "n_puberty": 4,
+            "vel_no_z": 1659481,
+            "w_gap_share": 100.0,
+            "w_n": 5754032,
+            "w_vel_pub_share": 53.057108,
+            "year": 365,
+            "z_base": 1127289,
+            "z_med": 0.8905,
+            "z_n": 960949,
+            "z_p95": 2.6311
           }
         },
         {
@@ -9903,8 +10016,8 @@
                 {
                   "artifact": "Velocity computed over an age-dependent minimum interval, not between adjacent visits",
                   "class": "derivation",
-                  "recoverable": "Not a defect — carry the interval rule alongside the field",
-                  "scale": "99.99% reproduced under the interval rule against 43.7% under a naive lag",
+                  "recoverable": "Not a defect — carry the interval rule, the year length and the unrounded measurement alongside the field",
+                  "scale": "99.99% of height deltas reproduced under the interval rule against 43.7% under a naive lag; the two published columns regenerate only 72.3% of the velocity",
                   "where": "4.8"
                 },
                 {

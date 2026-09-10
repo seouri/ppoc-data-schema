@@ -18,8 +18,13 @@ from ..context import Context
 from ..findings import Artifact, Figure, Finding, Para, Table, probe
 from ..findings import Column as C
 
+#: DEV gates what counts as an anomaly; TOL is how close a mechanism has to land
+#: to count as reconciling one. TOL is reported in the section: at a window of an
+#: inch, "this is 3 feet" and "this is 33.5 with the leading digit dropped" land
+#: in the same place, which is why those two classes overlap rather than
+#: partition.
 HEIGHT_DEV, HEIGHT_TOL = 3.0, 1.0
-WEIGHT_DEV, WEIGHT_TOL = 0.5, 0.05
+WEIGHT_DEV, WEIGHT_TOL, W_TOL_FLOOR = 0.5, 0.05, 2.0
 NULL_REPS, NULL_SEED = 20, 20260905
 H_LO, H_HI, W_LO, W_HI, MAX_SPAN = 15.0, 80.0, 48.0, 6400.0, 1460
 SHIFTS = (0.01, 0.1, 10.0, 100.0)
@@ -106,24 +111,65 @@ def _mechanisms(rec: float, exp: float, tol: float, scales, feet: bool) -> set[s
     return found
 
 
-def _score(rows, tol_of, scales, feet, order):
+def _score(rows, tol_of, scales, feet):
     pool: dict[int, list[float]] = {}
     for value, expected, age in rows:
         pool.setdefault(min(age // 365, 17), []).append(expected - value)
     for deviations in pool.values():
         deviations.sort()
     rng = random.Random(NULL_SEED)
-    obs, null, excl = Counter(), Counter(), Counter()
+    obs, null, per_row, null_rows = Counter(), Counter(), [], []
     for value, expected, age in rows:
         hits = _mechanisms(value, expected, tol_of(expected), scales, feet)
         obs.update(hits)
-        excl[next((n for n in order if n in hits), "no mechanism reconciles it")] += 1
+        per_row.append(hits)
     for _ in range(NULL_REPS):
         for value, expected, age in rows:
             shuffled = value + rng.choice(pool[min(age // 365, 17)])
-            null.update(_mechanisms(value, shuffled, tol_of(shuffled), scales, feet))
-    return {"n": len(rows), "obs": obs,
-            "null": {k: v / NULL_REPS for k, v in null.items()}, "excl": excl}
+            hits = _mechanisms(value, shuffled, tol_of(shuffled), scales, feet)
+            null.update(hits)
+            null_rows.append(hits)
+    return {"n": len(rows), "obs": obs, "hits": per_row, "null_hits": null_rows,
+            "null": {k: v / NULL_REPS for k, v in null.items()}}
+
+
+def _credible(scored: dict, order: list[str]) -> list[str]:
+    """The named mechanisms that reconcile more than chance does.
+
+    A class at or below its null has no evidence behind it, so counting its hits
+    as explanations would contradict the tables above. The calibration class is
+    excluded here because it is reported in its own column.
+    """
+    return [n for n in order if n != CAL
+            and scored["obs"].get(n, 0) > scored["null"].get(n, 0.0)]
+
+
+def _account(scored: dict, credible: list[str]) -> dict:
+    """Split the anomalies three ways: enriched class, calibration only, neither."""
+    keep, out = set(credible), {"named": 0, "cal": 0, "none": 0}
+    for hits in scored["hits"]:
+        if hits & keep:
+            out["named"] += 1
+        elif CAL in hits:
+            out["cal"] += 1
+        else:
+            out["none"] += 1
+    return out
+
+
+def _alone(scored: dict, name: str, credible: list[str]) -> tuple[int, float]:
+    """Anomalies this class reconciles that no better-evidenced class claims.
+
+    Returned with its own null, not the whole class's: the overlap with a
+    stronger class is itself something the scrambled pairs reproduce, so
+    subtracting it from the observed count and not from the null would flatter
+    whatever is left.
+    """
+    others = set(credible) - {name}
+    obs = sum(1 for hits in scored["hits"] if name in hits and not hits & others)
+    null = sum(1 for hits in scored["null_hits"]
+               if name in hits and not hits & others) / NULL_REPS
+    return obs, null
 
 
 def _rows(scored: dict, order: list[str]) -> list[dict]:
@@ -182,20 +228,31 @@ def transcribe(ctx: Context) -> list[Finding]:
     h_multi = [r for r in h_rows if len(_canon(r[0]).split(".")[0]) > 1]
     h_multi_hit = sum(any(abs(c - e) <= HEIGHT_TOL for c in _edits(_canon(v))[1])
                       for v, e, _ in h_multi)
-    height = _score(h_rows, lambda e: HEIGHT_TOL, H_SCALES, True, h_order)
+    height = _score(h_rows, lambda e: HEIGHT_TOL, H_SCALES, True)
 
     _series(ctx, "weight_oz", W_LO, W_HI, "")
     w_rows = ctx.q(f"SELECT v, expect, age_in_days FROM _ser WHERE expect > 0 "
                    f"AND abs(v - expect) / expect > {WEIGHT_DEV} "
                    f"ORDER BY v, expect, age_in_days")
     w_sens = _sensitivity(ctx, WEIGHT_DEV, None)
-    weight = _score(w_rows, lambda e: max(WEIGHT_TOL * e, 2.0), W_SCALES, False, w_order)
+    weight = _score(w_rows, lambda e: max(WEIGHT_TOL * e, W_TOL_FLOOR), W_SCALES,
+                    False)
 
     feet_n, feet_cm = ctx.one(
         "SELECT count(*), count(height_cm) FROM visits_augmented "
         "WHERE height_in IN (1, 2, 3, 4, 5, 6)")
-    feet_age = ctx.scalar("SELECT quantile_cont(age_in_years, 0.5) FROM visits_augmented "
-                          "WHERE height_in IN (2, 3, 4, 5, 6)")
+    # Count and median over the same rows. They used to differ — the median
+    # excluded a bare 1 — which made the sentence describe two populations as
+    # one. No visit records a 1, so aligning them changes no number and removes
+    # the way this could silently become wrong.
+    feet_age_n, feet_age = ctx.one(
+        "SELECT count(*), quantile_cont(age_in_years, 0.5) FROM visits_augmented "
+        "WHERE height_in IN (1, 2, 3, 4, 5, 6)")
+    if feet_age_n != feet_n:
+        raise ValueError(
+            f"the whole-foot cluster counts {feet_n:,} visits but its median age is "
+            f"taken over {feet_age_n:,}; one sentence would be describing two "
+            f"populations")
     cm_n, cm_grid, cm_cm, cm_age = ctx.one(
         "SELECT count(*), sum(CASE WHEN height_in * 4 = floor(height_in * 4) "
         "THEN 1 ELSE 0 END), count(height_cm), quantile_cont(age_in_years, 0.5) "
@@ -204,12 +261,11 @@ def transcribe(ctx: Context) -> list[Finding]:
         "SELECT count(*), sum(CASE WHEN height_in * 4 = floor(height_in * 4) "
         "THEN 1 ELSE 0 END) FROM visits_augmented WHERE height_in IS NOT NULL")
 
-    def acct(g):
-        cal = g["excl"].get(CAL, 0)
-        none = g["excl"].get("no mechanism reconciles it", 0)
-        return {"named": g["n"] - cal - none, "cal": cal, "none": none}
-
-    h_acct, w_acct = acct(height), acct(weight)
+    h_cred, w_cred = _credible(height, h_order), _credible(weight, w_order)
+    h_acct, w_acct = _account(height, h_cred), _account(weight, w_cred)
+    h_alone, w_alone = _alone(height, OMIT, h_cred), _alone(weight, OMIT, w_cred)
+    h_rejected = [n for n in h_order if n != CAL and n not in h_cred]
+    w_rejected = [n for n in w_order if n != CAL and n not in w_cred]
     h_rows_t, w_rows_t = _rows(height, h_order), _rows(weight, w_order)
 
     f = Finding(
@@ -225,6 +281,21 @@ def transcribe(ctx: Context) -> list[Finding]:
             "h_multi": len(h_multi), "h_multi_hit": h_multi_hit,
             "h_omit": height["obs"].get(OMIT, 0),
             "h_omit_share": 100.0 * height["obs"].get(OMIT, 0) / height["n"],
+            "h_omit_feet": sum(1 for hits in height["hits"]
+                               if OMIT in hits and FEET in hits),
+            "h_omit_alone": h_alone[0], "h_omit_null": h_alone[1],
+            "h_omit_alone_ratio": h_alone[0] / max(h_alone[1], 1e-9),
+            "w_omit": weight["obs"].get(OMIT, 0),
+            "w_omit_alone": w_alone[0], "w_omit_null": w_alone[1],
+            "w_omit_alone_ratio": w_alone[0] / max(w_alone[1], 1e-9),
+            "htol": HEIGHT_TOL, "wtol": WEIGHT_TOL * 100, "wtol_floor": W_TOL_FLOOR,
+            "h_cal_share": 100.0 * height["obs"].get(CAL, 0) / height["n"],
+            "h_cal_null": 100.0 * height["null"].get(CAL, 0.0) / height["n"],
+            "w_cal_share": 100.0 * weight["obs"].get(CAL, 0) / weight["n"],
+            "w_cal_null": 100.0 * weight["null"].get(CAL, 0.0) / weight["n"],
+            "h_rejected": ", ".join(h_rejected), "w_rejected": ", ".join(w_rejected),
+            "clusters_all": (" — every value in both clusters"
+                             if feet_cm == 0 and cm_cm == 0 else ""),
             "w_shift": weight["obs"].get(SHIFT, 0),
             "w_shift_ratio": weight["obs"].get(SHIFT, 0) / max(weight["null"].get(SHIFT, 1e-9), 1e-9),
             "reps": NULL_REPS, "hdev": HEIGHT_DEV, "wdev": WEIGHT_DEV * 100,
@@ -248,8 +319,12 @@ def transcribe(ctx: Context) -> list[Finding]:
              "years, so a bad neighbour cannot manufacture an anomaly. A height is "
              "anomalous more than {hdev:.0f} inches from that anchor, a weight more "
              "than {wdev:.0f}% from it. A mechanism *reconciles* an anomaly when "
-             "applying it to the recorded value lands back at the anchor.",
-             role="method"),
+             "applying it to the recorded value lands back at the anchor — within "
+             "{htol:.0f} inch for height, and within the larger of {wtol:.0f}% and "
+             "{wtol_floor:.0f} ounces for weight. That window is wide, deliberately, "
+             "because a transcription error need not be exact; the cost is that two "
+             "mechanisms can land in the same place, and the dropped-digit row below "
+             "is where that happens.", role="method"),
         Para("**The null.** Each anomaly's anchor is replaced by the recorded value "
              "plus a deviation drawn from another anomaly in the same year-of-age "
              "band, {reps} times. That preserves the distribution of deviations "
@@ -280,13 +355,21 @@ def transcribe(ctx: Context) -> list[Finding]:
              "reading sits at or below the null. That asymmetry is what a one-way "
              "data-entry confusion looks like; a spurious mechanism would be "
              "symmetric."),
-        Para("The dropped-digit row does not survive inspection, and it is worth "
-             "showing why. Inserting a digit into a two-digit inch value always "
-             "produces a three-digit one, which is never a plausible height, so the "
-             "class can only fire on a value with a single-digit integer part. Among "
-             "the {h_multi:,} height anomalies whose integer part has two or more "
-             "digits it reconciles {h_multi_hit:,}. Its entire {h_omit_share:.2f}% "
-             "is the whole-foot family reached by another route."),
+        Para("The dropped-digit row is mostly borrowed from the row above it, and "
+             "it is worth showing why. Inserting a digit into a two-digit inch value "
+             "always produces a three-digit one, which is never a plausible height, "
+             "so the class can only fire on a value with a single-digit integer "
+             "part. Among the {h_multi:,} height anomalies whose integer part has "
+             "two or more digits it reconciles {h_multi_hit:,}. That leaves the short "
+             "values, and there the whole-foot class has already claimed most of "
+             "them: of the {h_omit:,} anomalies this class reconciles, "
+             "{h_omit_feet:,} are whole-foot entries too, which the one-inch window "
+             "above makes almost unavoidable. What is left is {h_omit_alone:,} "
+             "anomalies against a null of {h_omit_null:.0f} — still enriched "
+             "{h_omit_alone_ratio:.1f} times, so a dropped digit is real on this "
+             "channel, but it accounts for {h_omit_alone:,} of the {h_n:,} anomalies "
+             "rather than the {h_omit:,} the row reads as. An overlapping class is "
+             "not a spurious one; it is one whose headline belongs to its neighbour."),
         Para("Two clusters are visible without any anchor at all. {feet_n:,} visits "
              "record a `height_in` of 1 to 6 as an exact integer, median age "
              "{feet_age:.1f} years — a height of 3 or 4 for a child three or four "
@@ -306,13 +389,25 @@ def transcribe(ctx: Context) -> list[Finding]:
              "of digit swapping. A misplaced decimal point, which the height channel "
              "does not show at all, is the dominant weight artifact: {w_shift:,} "
              "anomalies at {w_shift_ratio:.0f} times the null rate, the strongest "
-             "enrichment measured anywhere in this report. An ounce value has more "
+             "enrichment against a null anywhere in this report. An ounce value has more "
              "digits than an inch value and no natural decimal point, so a factor of "
              "ten is both easy to key and hard to notice."),
-        Para("The calibration row is why the null is not optional. Allowing any "
-             "single digit to be wrong reconciles about half of all height anomalies "
-             "and reconciles almost exactly as many randomly paired values. Reported "
-             "without a null it would look like the largest finding here."),
+        Para("The dropped-digit row does **not** reduce the same way on this "
+             "channel, and the height argument does not transfer: an ounce value has "
+             "three or four digits, so inserting one can still land on a plausible "
+             "weight. Of the {w_omit:,} weight anomalies the class reconciles, "
+             "{w_omit_alone:,} are claimed by no better-evidenced mechanism, against "
+             "{w_omit_null:.0f} expected under the null — a ratio of "
+             "{w_omit_alone_ratio:.1f}. The class is weaker here than the "
+             "{w_omit:,} in the table suggests, and weaker than the height residual, "
+             "but it is not disposed of by the argument that reduces the height row."),
+        Para("The calibration row is why the null is not optional, and the two "
+             "channels show why in opposite directions. Allowing any single digit to "
+             "be wrong reconciles {h_cal_share:.0f}% of height anomalies against a "
+             "{h_cal_null:.0f}% null, and {w_cal_share:.0f}% of weight anomalies "
+             "against {w_cal_null:.0f}% — barely above chance on one channel and "
+             "well below it on the other. Reported without a null the height row "
+             "would look like the largest finding here."),
         Para("**How strong is the transposition negative?** Only as strong as the "
              "share of transpositions the anomaly gate could have caught. Applying "
              "every adjacent digit swap to a sample of measurements in the testable "
@@ -323,11 +418,17 @@ def transcribe(ctx: Context) -> list[Finding]:
              "without moving far.", role="method"),
         Table("t-acct", "What the mechanisms account for",
               [C("channel", "channel"), C("n", "anomalies", ",", align="right"),
-               C("named", "a named mechanism fits", ",", align="right"),
+               C("named", "an enriched mechanism fits", ",", align="right"),
                C("cal", "only the calibration class", ",", align="right"),
-               C("none", "nothing fits", ",", align="right")],
+               C("none", "nothing beyond chance fits", ",", align="right")],
               [{"channel": "height", "n": height["n"], **h_acct},
-               {"channel": "weight", "n": weight["n"], **w_acct}]),
+               {"channel": "weight", "n": weight["n"], **w_acct}],
+              note="Only classes reconciling more than their own null count as "
+                   "explanations here, so the first column does not contradict the "
+                   "tables above. Excluded on that test: {h_rejected} for height, "
+                   "and {w_rejected} for weight. A row in the last column may still "
+                   "have had one of those fire on it; a class at chance explains "
+                   "nothing it happens to fit."),
         Para("**Implications for analysis.** Digit transposition can be dropped from "
              "the checklist for this extract at the magnitude that displaces a "
              "measurement from its own trajectory; for weight the same test is only "
@@ -339,8 +440,8 @@ def transcribe(ctx: Context) -> list[Finding]:
              "adolescent from a centimetre in the wrong field where magnitude "
              "cannot. Note also that {feet_live:,} of the whole-foot entries and "
              "{cm_live:,} of the centimetre cluster already carry a null "
-             "`height_cm`: the derived layer's own bound removes them as a side "
-             "effect, so anyone reading the derived channels is protected and anyone "
-             "reading the raw ones is not.", role="implication"),
+             "`height_cm`{clusters_all}: the derived layer's own bound removes them "
+             "as a side effect, so anyone reading the derived channels is protected "
+             "and anyone reading the raw ones is not.", role="implication"),
     ]
     return [f]
